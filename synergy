@@ -86,7 +86,7 @@ sub last_relevant_nag {
   # before getting told to chill. -- rjbs, 2014-01-15
   my $last_nag = $self->last_nag;
   if ($last_nag and time - $last_nag->{time} > 2700) {
-    $self->info("It's been >2h since last nag.  Resetting nag state.");
+    $self->info("It's been >45min since last nag.  Resetting nag state.");
     $self->clear_last_nag;
     return undef;
   }
