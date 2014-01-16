@@ -1,0 +1,375 @@
+#!perl
+use 5.16.0;
+package Synergy;
+use Moses;
+use namespace::autoclean;
+
+use DateTime::Format::Natural;
+use JSON 2 ();
+use LWP::UserAgent;
+use MIME::Base64;
+use Time::Duration::Parse;
+use Time::Duration;
+use YAML::XS;
+
+my $JSON = JSON->new;
+
+die "no config file" unless -e $ENV{SYNERGY_CONFIG};
+my $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
+
+server   $config->{server};
+nickname $config->{nickname};
+username $config->{username};
+channels @{ $config->{channels} };
+
+
+my $WKSP_ID = $config->{workspace};
+my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
+
+has chilltill => (
+  is  => 'rw',
+  isa => 'Int',
+  predicate => 'has_chilltill',
+  clearer   => 'clear_chilltill',
+);
+
+sub chilling {
+  my ($self) = @_;
+  return unless $self->has_chilltill;
+  return time <= $self->chilltill;
+}
+
+sub is_business_hours {
+  my ($self) = @_;
+  my @time = localtime;
+
+  # Weekends off.
+  return if $time[6] == 0 or $time[6] == 6;
+
+  # Nagging starts at 10:30
+  return if $time[2] <  10
+         or $time[2] == 10 && $time[1] < 30;
+  #
+  # Nagging ends at 17:00
+  return if $time[2] >  16;
+}
+
+has last_nag => (
+  is  => 'rw',
+  isa => 'Int',
+  predicate => 'has_last_nag',
+  clearer   => 'clear_last_nag',
+);
+
+sub sms {
+  my ($self, $number, $msg) = @_;
+
+  my $ua = LWP::UserAgent->new;
+  my $res = $ua->post(
+    "https://api.twilio.com/2010-04-01/Accounts/$config->{twilio_sid}/SMS/Messages",
+    {
+      From => $config->{twilio_from},
+      To   => $number,
+      Body => $msg,
+    },
+    Authorization => "Basic $config->{twilio_auth}",
+  );
+}
+
+event nag => sub {
+  my ($self) = $_[OBJECT];
+
+  $self->info("considering nagging");
+
+  # If we had nagged, but haven't nagged in 45 minutes, let's start over.
+  # This could happen, for example, if we were nagging at the end of the
+  # business day and now it's morning, or if we were at high-severity nagging
+  # before getting told to chill. -- rjbs, 2014-01-15
+  my $last_nag = $self->last_nag;
+  if ($last_nag and time - $last_nag->{time} > 2700) {
+    $self->clear_last_nag;
+    undef $last_nag;
+  }
+
+  if ($self->is_business_hours && ! $self->chilling) {
+    my $timer = $self->current_timer;
+
+    if ($timer == -1) { warn "error retrieving timer\n"; return };
+    $self->clear_last_nag if $timer;
+
+    my $level = 0;
+    if (my $last_nag = $self->last_nag) {
+      next if time - $last_nag->{time} < 900;
+      $level = $last_nag->{level} + 1;
+    }
+
+    if ($level < 2) {
+      my $still = $level == 0 ? '' : ' still';
+      $self->privmsg(
+        $config->{channels}->[0],
+        "$config->{master}: LiquidPlanner$still timer isn't running",
+      );
+      $self->last_nag({ time => time, level => $level });
+    } else {
+      $self->sms($config->{master_ph}, "Your LiquidPlanner timer isn't running.");
+      $self->last_nag({ time => time, level => $level });
+    }
+  }
+
+  $self->delay(nag => 600);
+};
+
+sub current_timer {
+  my ($self) = @_;
+
+  my $ua = $self->lp_ua;
+  my $res = $ua->get("$LP_BASE/my_timers");
+  return -1 unless $res->is_success;
+
+  my ($timer) = grep {; $_->{running} }
+                @{ $JSON->decode( $res->decoded_content ) };
+
+  return $timer;
+}
+
+event irc_bot_addressed => sub {
+  my ($self, $nickstr, $channel, $msg) = @_[ OBJECT, ARG0, ARG1, ARG2 ];
+  my ($nick) = split /!/, $nickstr;
+
+  unless ($nick eq $config->{master}) {
+    $self->privmsg( $channel => "$nick: I only answer to $config->{master}." );
+    return;
+  }
+
+  my ($cmd, $rest) = split ' ', $msg, 2;
+  $cmd =~ tr/[A-Za-z0-9]//dc;
+  $cmd = lc $cmd;
+
+  my $method = "SAID_$cmd";
+  $self->info("looking to call ->$method(" . ($rest // '') . ")");
+
+  if ($self->can("SAID_$cmd")) {
+    my $result = $self->$method({
+      who   => $nick,
+      where => $channel,
+      what  => $rest,
+    });
+
+    return unless $result && $result == -1;
+  }
+
+  $self->privmsg( $channel => "$nick: Does not compute." );
+};
+
+sub reply {
+  my ($self, $reply, $arg) = @_;
+
+  $self->privmsg($arg->{where}, "$arg->{who}: $reply");
+}
+
+sub SAID_showtime {
+  my ($self, $arg) = @_;
+
+  if ($self->has_chilltill and $self->chilltill > time) {
+    if ($self->is_business_hours) {
+      $self->reply("Okay, back to work!", $arg);
+    } else {
+      $self->reply("Back to normal business hours, then.", $arg);
+    }
+  } elsif ($self->is_business_hours) {
+    return $self->reply("Sorry, we're outside of business hours.", $arg);
+  } else {
+    $self->reply("I thought it was already showtime!", $arg);
+  }
+
+  $self->clear_chilltill;
+  return;
+}
+
+sub SAID_shows {
+  my ($self, $arg) = @_;
+  return $self->SAID_chill({ %$arg, what => 'until tomorrow' })
+    if $arg->{what} eq 'over';
+  return -1;
+}
+
+has _date_parser => (
+  is => 'ro',
+  default => sub {
+    DateTime::Format::Natural->new(
+      prefer_future => 1,
+      time_zone     => 'America/New_York',
+    );
+  },
+);
+
+sub SAID_chill {
+  my ($self, $arg) = @_;
+  my ($prep, $rest) = split ' ', $arg->{what}, 2;
+
+  my $time;
+  if ($prep eq 'for') {
+    my $dur = eval { parse_duration($rest); };
+    return -1 unless $time;
+    $time = time + $dur;
+  } elsif ($prep eq 'until') {
+    my $dt = eval { $self->_date_parser->parse_datetime($rest) };
+    return -1 unless $dt;
+    if ($dt->epoch <= time) {
+      $self->reply("That sounded like you want to chill until the past.", $arg);
+      return;
+    }
+
+    $time = $dt->epoch;
+  } else {
+    return -1;
+  }
+
+  $self->chilltill($time);
+  $self->reply("Okay, no more nagging until " . localtime $time, $arg);
+}
+
+sub SAID_abort {
+  my ($self, $arg) = @_;
+
+  if ($arg->{what} eq 'timer') {
+    my $ua = $self->lp_ua;
+    my $res = $ua->get("$LP_BASE/my_timers");
+
+    return $self->reply("Something went wrong", $arg) unless $res->is_success;
+
+    my ($timer) = grep {; $_->{running} }
+                  @{ $JSON->decode( $res->decoded_content ) };
+
+    unless ($timer) {
+      $self->reply("You don't have an active timer to abort.", $arg);
+      return;
+    }
+
+    my $stop_res = $ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/stop");
+    my $clr_res  = $ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/clear");
+
+    if ($stop_res->is_success and $clr_res->is_success) {
+      $self->reply("Okay, I stopped and cleared your active timer.", $arg);
+    } else {
+      $self->reply("Something went wrong aborting your timer.", $arg);
+    }
+  } else {
+    $self->reply("I didn't understand your abort request.", $arg);
+  }
+}
+
+sub SAID_pause {
+  my ($self, $arg) = @_;
+
+  if ($arg->{what} eq 'timer') {
+    my $ua = $self->lp_ua;
+    my $res = $ua->get("$LP_BASE/my_timers");
+
+    return $self->reply("Something went wrong", $arg) unless $res->is_success;
+
+    my ($timer) = grep {; $_->{running} }
+                  @{ $JSON->decode( $res->decoded_content ) };
+
+    my $stop_res = $ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/stop");
+    unless ($stop_res->is_success) {
+      return $self->reply("I couldn't pause your active timer.", $arg);
+    }
+
+    $self->reply("Okay, I paused your active timer.", $arg);
+  } else {
+    $self->reply("I didn't understand your pause request.", $arg);
+  }
+}
+
+has lp_ua => (
+  is => 'ro',
+  lazy    => 1,
+  default => sub {
+    my $ua = LWP::UserAgent->new(keep_alive => 1);
+    my $token = $config->{lp_token};
+
+    $ua->default_header('Authorization' => "$token");
+    return $ua;
+  },
+);
+
+sub SAID_status {
+  my ($self, $arg) = @_;
+
+  my $ua = $self->lp_ua;
+  my $res = $ua->get("$LP_BASE/my_timers");
+
+  unless ($res->is_success) {
+    $self->reply("I couldn't get your timer.", $arg);
+    warn $res->as_string;
+    return;
+  }
+
+  my @timers = grep {; $_->{running} }
+               @{ $JSON->decode( $res->decoded_content ) };
+
+  unless (@timers) {
+    $self->reply("You don't have a running timer.", $arg);
+    return;
+  }
+
+  if (@timers > 1) {
+    $self->reply(
+      "Woah.  LiquidPlanner says you have more than one active timer!",
+      $arg,
+    );
+  }
+
+  my $timer = $timers[0];
+  my $time = concise( duration( $timer->{running_time} * 3600 ) );
+  my $task_res = $ua->get("$LP_BASE/tasks/$timer->{item_id}");
+
+  my $name = $task_res->is_success
+           ? $JSON->decode($task_res->decoded_content)->{name}
+           : '??';
+
+  $self->reply("Your timer has been running for $time, work on: $name", $arg);
+}
+
+sub SAID_page {
+  my ($self, $arg) = @_;
+  $arg->{what} =~ s/\A\s+//;
+  $arg->{what} =~ s/\s+\z//;
+
+  if ($arg->{what} =~ /\Q$config->{master}\E[.?!]*\z/) {
+    $self->sms(
+      $config->{master_ph},
+      "$arg->{who} just paged you on @{ $arg->{where} }",
+    );
+    $self->reply("Okay, I sent a page.", $arg);
+    return;
+  }
+
+  my ($who, $rest) = split /\s*:\s*/, $arg->{what}, 2;
+  unless ($arg->{what} and $arg->{what} =~ /\S/) {
+    return $self->reply(
+      "It goes:  <<page whoever>> or <<page whoever: message>>",
+      $arg,
+    );
+  }
+
+  unless ($who eq $config->{master}) {
+    return $self->reply("I can only page $config->{master}.", $arg);
+  }
+
+  $self->sms(
+    $config->{master_ph},
+    "$arg->{who} just paged you on @{ $arg->{where} }: $rest",
+  );
+  $self->reply("Okay, I sent a page.", $arg);
+  return;
+}
+
+sub BUILD {
+  my ($self) = @_;
+
+  $self->delay(nag => 60, qw(foo bar baz));
+}
+
+__PACKAGE__->run;
