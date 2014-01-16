@@ -77,12 +77,8 @@ sub sms {
   );
 }
 
-event nag => sub {
-  my ($self) = $_[OBJECT];
-
-  $self->info("considering nagging and setting up next nag");
-
-  $self->delay(nag => 600);
+sub last_relevant_nag {
+  my ($self) = @_;
 
   # If we had nagged, but haven't nagged in 45 minutes, let's start over.
   # This could happen, for example, if we were nagging at the end of the
@@ -92,8 +88,20 @@ event nag => sub {
   if ($last_nag and time - $last_nag->{time} > 2700) {
     $self->info("It's been >2h since last nag.  Resetting nag state.");
     $self->clear_last_nag;
-    undef $last_nag;
+    return undef;
   }
+
+  return $last_nag;
+}
+
+event nag => sub {
+  my ($self) = $_[OBJECT];
+
+  $self->info("considering nagging and setting up next nag");
+
+  $self->delay(nag => 600);
+
+  my $last_nag = $self->last_relevant_nag;
 
   if ($self->is_business_hours && ! $self->chilling) {
     my $timer = $self->current_timer;
@@ -118,7 +126,7 @@ event nag => sub {
       my $still = $level == 0 ? '' : ' still';
       $self->privmsg(
         $config->{channels}->[0],
-        "$config->{master}: Your LiquidPlanner$still timer isn't running",
+        "$config->{master}: Your LiquidPlanner timer$still isn't running",
       );
       $self->last_nag({ time => time, level => $level });
     } else {
@@ -259,6 +267,7 @@ sub SAID_abort {
     my $clr_res  = $ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/clear");
 
     if ($stop_res->is_success and $clr_res->is_success) {
+      $self->clear_last_nag;
       $self->reply("Okay, I stopped and cleared your active timer.", $arg);
     } else {
       $self->reply("Something went wrong aborting your timer.", $arg);
@@ -285,6 +294,7 @@ sub SAID_pause {
       return $self->reply("I couldn't pause your active timer.", $arg);
     }
 
+    $self->clear_last_nag;
     $self->reply("Okay, I paused your active timer.", $arg);
   } else {
     $self->reply("I didn't understand your pause request.", $arg);
@@ -319,8 +329,17 @@ sub SAID_status {
                @{ $JSON->decode( $res->decoded_content ) };
 
   unless (@timers) {
-    $self->reply("You don't have a running timer.", $arg);
-    return;
+    my $nag = $self->last_relevant_nag;
+    my $msg;
+    if (! $nag) {
+      $msg = "You don't have a running timer.";
+    } elsif ($nag->{level} == 0) {
+      $msg = "Like I said, you don't have a running timer.";
+    } else {
+      $msg = "Like I keep telling you, you don't have a running timer!";
+    }
+
+    return $self->reply($msg, $arg);
   }
 
   if (@timers > 1) {
