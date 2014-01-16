@@ -58,7 +58,6 @@ sub is_business_hours {
 
 has last_nag => (
   is  => 'rw',
-  isa => 'Int',
   predicate => 'has_last_nag',
   clearer   => 'clear_last_nag',
 );
@@ -100,7 +99,7 @@ event nag => sub {
     $self->clear_last_nag if $timer;
 
     my $level = 0;
-    if (my $last_nag = $self->last_nag) {
+    if ($last_nag) {
       next if time - $last_nag->{time} < 900;
       $level = $last_nag->{level} + 1;
     }
