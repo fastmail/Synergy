@@ -226,20 +226,21 @@ sub SAID_chill {
 
   my $time;
   if ($prep eq 'for') {
-    my $dur = eval { parse_duration($rest); };
-    return -1 unless $time;
+    my $dur;
+    my $ok = eval { $dur = parse_duration($rest); 1 };
+    return -1 unless $ok;
     $time = time + $dur;
   } elsif ($prep eq 'until') {
     my $dt = eval { $self->_date_parser->parse_datetime($rest) };
     return -1 unless $dt;
-    if ($dt->epoch <= time) {
-      $self->reply("That sounded like you want to chill until the past.", $arg);
-      return;
-    }
-
     $time = $dt->epoch;
   } else {
     return -1;
+  }
+
+  if ($time <= time) {
+    $self->reply("That sounded like you want to chill until the past.", $arg);
+    return;
   }
 
   $self->chilltill($time);
