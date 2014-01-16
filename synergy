@@ -227,6 +227,7 @@ sub SAID_chill {
   my $time;
   if ($prep eq 'for') {
     my $dur;
+    $rest =~ s/^an?\s+/1 /;
     my $ok = eval { $dur = parse_duration($rest); 1 };
     return -1 unless $ok;
     $time = time + $dur;
