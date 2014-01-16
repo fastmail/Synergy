@@ -153,11 +153,6 @@ event irc_bot_addressed => sub {
   my ($self, $nickstr, $channel, $msg) = @_[ OBJECT, ARG0, ARG1, ARG2 ];
   my ($nick) = split /!/, $nickstr;
 
-  unless ($nick eq $config->{master}) {
-    $self->privmsg( $channel => "$nick: I only answer to $config->{master}." );
-    return;
-  }
-
   my ($cmd, $rest) = split ' ', $msg, 2;
   $cmd =~ tr/[A-Za-z0-9]//dc;
   $cmd = lc $cmd;
@@ -166,6 +161,11 @@ event irc_bot_addressed => sub {
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
   if ($self->can("SAID_$cmd")) {
+    unless ($cmd eq 'page' or $nick eq $config->{master}) {
+      $self->privmsg( $channel => "$nick: Only $config->{master} can do that." );
+      return;
+    }
+
     my $result = $self->$method({
       who   => $nick,
       where => $channel,
