@@ -80,7 +80,9 @@ sub sms {
 event nag => sub {
   my ($self) = $_[OBJECT];
 
-  $self->info("considering nagging");
+  $self->info("considering nagging and setting up next nag");
+
+  $self->delay(nag => 600);
 
   # If we had nagged, but haven't nagged in 45 minutes, let's start over.
   # This could happen, for example, if we were nagging at the end of the
@@ -88,6 +90,7 @@ event nag => sub {
   # before getting told to chill. -- rjbs, 2014-01-15
   my $last_nag = $self->last_nag;
   if ($last_nag and time - $last_nag->{time} > 2700) {
+    $self->info("It's been >2h since last nag.  Resetting nag state.");
     $self->clear_last_nag;
     undef $last_nag;
   }
@@ -97,13 +100,17 @@ event nag => sub {
 
     if ($timer && $timer == -1) { warn "error retrieving timer\n"; return };
     if ($timer) {
+      $self->info("We're good: there's a timer.");
       $self->clear_last_nag;
       return;
     }
 
     my $level = 0;
     if ($last_nag) {
-      next if time - $last_nag->{time} < 900;
+      if (time - $last_nag->{time} < 900) {
+        $self->info("Won't nag, nagged within the last 15min.");
+        return;
+      }
       $level = $last_nag->{level} + 1;
     }
 
@@ -119,8 +126,6 @@ event nag => sub {
       $self->last_nag({ time => time, level => $level });
     }
   }
-
-  $self->delay(nag => 600);
 };
 
 sub current_timer {
