@@ -49,7 +49,6 @@ sub START {
 sub _build_httpd {
   my ($self) = @_;
   my $session_id = $self->get_session_id;
-  warn "SELF SESION ID: $session_id";
 
   POE::Component::Server::SimpleHTTP->new(
     ALIAS   => 'httpd',
@@ -75,7 +74,6 @@ event _http_sms => sub {
   my ($kernel, $self, $request, $response, $dirmatch)
     = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
 
-  warn "--> sms\n";
   # Check for errors
   if (! defined $request) {
     $kernel->call('httpd', 'DONE', $response );
