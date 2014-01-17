@@ -104,7 +104,7 @@ event _http_sms => sub {
 
   my $text = $body->param->{Body};
 
-  if ($text =~ /\Ashow'?s over\z/) {
+  if ($text =~ /\Ashow'?s over\z/i) {
     $text = 'chill until tomorrow';
   }
 
