@@ -103,6 +103,11 @@ event _http_sms => sub {
   }
 
   my $text = $body->param->{Body};
+
+  if ($text =~ /\Ashow'?s over\z/) {
+    $text = 'chill until tomorrow';
+  }
+
   if ($text =~ s/\Achill\s+//i) {
     my $reply;
     my $result = $self->SAID_chill({
