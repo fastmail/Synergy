@@ -57,11 +57,6 @@ sub _build_httpd {
     PORT    => $self->httpd_port,
     HANDLERS => [
       {
-        DIR => '^/$',
-        SESSION => 'Synergy',
-        EVENT => '_http_root',
-      },
-      {
         DIR => '^/sms$',
         SESSION => 'Synergy',
         EVENT => '_http_sms',
@@ -87,42 +82,48 @@ event _http_sms => sub {
     return;
   }
 
-  my $params = HTTP::Body->new(
-    scalar $request->headers('Content-Type'),
-    $request->tcontent,
+  my $body = HTTP::Body->new(
+    scalar $request->header('Content-Type'),
+    scalar $request->header('Content-Length'),
   );
+  $body->add( $request->content );
 
-  use Data::Dumper;
-  warn Dumper($params);
+  my $from = $body->param->{From} // '';
+  $from =~ s/\A\+1//;
 
-  # Do our stuff to HTTP::Response
-  $response->code(200);
-  $response->content( "Hi visitor from " . $response->connection->remote_ip . ", Page not found -> '" . $request->uri->path . "'\n\n" );
-
-  # We are done!
-  # For speed, you could use $_[KERNEL]->call( ... )
-  $kernel->call( 'httpd', 'DONE', $response );
-
-  $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
-};
-
-event _http_root => sub {
-  my ($kernel, $self, $request, $response, $dirmatch)
-    = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
-
-  warn "--> root\n";
-  # Check for errors
-  if (! defined $request) {
-    $kernel->call('httpd', 'DONE', $response );
+  unless (
+    $body->param->{AccountSid} eq $config->{twilio_sid}
+    and $from eq $config->{master_ph}
+  ) {
+    $response->code(400);
+    $response->content("Bad request");
+    $kernel->call( 'httpd', 'DONE', $response );
+    $self->info("Bad request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
     return;
   }
 
-  # Do our stuff to HTTP::Response
-  $response->code(200);
-  $response->content( "Hi visitor from " . $response->connection->remote_ip . ", Page not found -> '" . $request->uri->path . "'\n\n" );
+  my $text = $body->param->{Body};
+  if ($text =~ s/\Achill\s+//i) {
+    my $reply;
+    my $result = $self->SAID_chill({
+      how   => \$reply,
+      who   => $config->{master},
+      where => [ $from ],
+      what  => $text,
+    });
 
-  # We are done!
-  # For speed, you could use $_[KERNEL]->call( ... )
+    if ($result && $result eq -1) {
+      $response->code(200);
+      $response->content("Does not compute.");
+    } else {
+      $response->code(200);
+      $response->content($reply);
+    }
+  } else {
+    $response->code(200);
+    $response->content("Does not compute.");
+  }
+
   $kernel->call( 'httpd', 'DONE', $response );
 
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
@@ -132,8 +133,6 @@ event _http_404 => sub {
   my ($kernel, $self, $request, $response, $dirmatch)
     = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
 
-  warn "--> 404\n";
-  # Check for errors
   if (! defined $request) {
     $kernel->call('httpd', 'DONE', $response );
     return;
@@ -286,6 +285,7 @@ event irc_bot_addressed => sub {
     }
 
     my $result = $self->$method({
+      how   => 'irc',
       who   => $nick,
       where => $channel,
       what  => $rest,
@@ -300,7 +300,13 @@ event irc_bot_addressed => sub {
 sub reply {
   my ($self, $reply, $arg) = @_;
 
-  $self->privmsg($arg->{where}, "$arg->{who}: $reply");
+  if ($arg->{how} eq 'sms') {
+    $self->sms($arg->{where}[0], $reply);
+  } elsif (ref $arg->{how} eq 'SCALAR') {
+    ${ $arg->{how} } = $reply;
+  } else {
+    $self->privmsg($arg->{where}, "$arg->{who}: $reply");
+  }
 }
 
 sub SAID_showtime {
