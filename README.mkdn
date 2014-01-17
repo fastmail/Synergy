@@ -1,6 +1,7 @@
 # Synergy
 
-Synergy is an IRC bot mostly for interacting with LiquidPlanner.  Her primary
+Synergy is an [IRC bot](https://en.wikipedia.org/wiki/IRC_bot) mostly for
+interacting with [LiquidPlanner](http://www.liquidplanner.com/). Her primary
 purpose is to remind a user that they haven't got a timer running.  During
 business hours, she will pester her user if a timer isn't running, escalating
 from IRC to SMS.  She can be called off on IRC.  Commands via SMS are planned.
@@ -8,10 +9,10 @@ from IRC to SMS.  She can be called off on IRC.  Commands via SMS are planned.
 ## Caveats
 
 This code is a mess.  I banged it out mostly in one night, and with very poor
-command of POE.  It uses synchronous libraries for stuff where it should
-clearly not.  It probably has some stupid race conditions.  It assumes that you
-can trust nicknames never to be spoofed, which might be true on your work IRC,
-but certainly not on public servers.
+command of [POE](https://metacpan.org/pod/POE).  It uses synchronous libraries
+for stuff where it should clearly not.  It probably has some stupid race
+conditions.  It assumes that you can trust nicknames never to be spoofed,
+which might be true on your work IRC, but certainly not on public servers.
 
 If you use this, and something bad happens, don't say you weren't warned!
 
