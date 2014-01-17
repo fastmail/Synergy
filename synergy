@@ -5,6 +5,7 @@ use Moses;
 use namespace::autoclean;
 
 use DateTime::Format::Natural;
+use HTTP::Body;
 use JSON 2 ();
 use LWP::UserAgent;
 use MIME::Base64;
@@ -52,13 +53,18 @@ sub _build_httpd {
 
   POE::Component::Server::SimpleHTTP->new(
     ALIAS   => 'httpd',
-    ADDRESS => '127.0.0.1',
+    ADDRESS => 0,
     PORT    => $self->httpd_port,
     HANDLERS => [
       {
         DIR => '^/$',
         SESSION => 'Synergy',
         EVENT => '_http_root',
+      },
+      {
+        DIR => '^/sms$',
+        SESSION => 'Synergy',
+        EVENT => '_http_sms',
       },
       {
         DIR => '.*',
@@ -69,6 +75,36 @@ sub _build_httpd {
     HEADERS => { Server => 'Synergy' },
   );
 }
+
+event _http_sms => sub {
+  my ($kernel, $self, $request, $response, $dirmatch)
+    = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
+
+  warn "--> sms\n";
+  # Check for errors
+  if (! defined $request) {
+    $kernel->call('httpd', 'DONE', $response );
+    return;
+  }
+
+  my $params = HTTP::Body->new(
+    scalar $request->headers('Content-Type'),
+    $request->tcontent,
+  );
+
+  use Data::Dumper;
+  warn Dumper($params);
+
+  # Do our stuff to HTTP::Response
+  $response->code(200);
+  $response->content( "Hi visitor from " . $response->connection->remote_ip . ", Page not found -> '" . $request->uri->path . "'\n\n" );
+
+  # We are done!
+  # For speed, you could use $_[KERNEL]->call( ... )
+  $kernel->call( 'httpd', 'DONE', $response );
+
+  $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
+};
 
 event _http_root => sub {
   my ($kernel, $self, $request, $response, $dirmatch)
