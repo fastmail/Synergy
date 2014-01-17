@@ -22,7 +22,6 @@ nickname $config->{nickname};
 username $config->{username};
 channels @{ $config->{channels} };
 
-
 my $WKSP_ID = $config->{workspace};
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
 
@@ -160,8 +159,10 @@ event irc_bot_addressed => sub {
   my $method = "SAID_$cmd";
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
+  my %public = map {; $_ => 1 } qw(page task);
+
   if ($self->can("SAID_$cmd")) {
-    unless ($cmd eq 'page' or $nick eq $config->{master}) {
+    unless ($public{$cmd} or $nick eq $config->{master}) {
       $self->privmsg( $channel => "$nick: Only $config->{master} can do that." );
       return;
     }
@@ -360,6 +361,48 @@ sub SAID_status {
            : '??';
 
   $self->reply("Your timer has been running for $time, work on: $name", $arg);
+}
+
+sub SAID_task {
+  my ($self, $arg) = @_;
+
+  my ($target, $name) = $arg->{what} =~ /\s*for\s+(\S+?):?\s+(.+)\z/;
+
+  my $owner_id;
+  unless ($owner_id = $config->{lp_members}{$target}) {
+    return $self->reply("I don't know who $target id.", $arg);
+  }
+
+  my $payload = { task => {
+    name     => $name,
+    owner_id => $owner_id,
+    description => "created by " . $self->nickname . " on $arg->{where} "
+                .  "on behalf of $arg->{who}",
+  } };
+
+  my $res = $self->lp_ua->post(
+    "$LP_BASE/tasks",
+    Content_Type => 'application/json',
+    Content => $JSON->encode($payload),
+  );
+
+  unless ($res->is_success) {
+    warn ">>" . $res->decoded_content . "<<";
+    warn $res->as_string;
+    return $self->reply(
+      "Sorry, something went wrong when I tried to make that task.",
+      $arg,
+    );
+  }
+
+  $self->reply(
+    sprintf(
+      "Task created: https://app.liquidplanner.com/space/%s/projects/show/%s",
+      $config->{workspace},
+      $JSON->decode($res->decoded_content)->{id},
+    ),
+    $arg,
+  );
 }
 
 sub SAID_page {
