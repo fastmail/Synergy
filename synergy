@@ -70,6 +70,28 @@ sub _build_httpd {
   );
 }
 
+event _http_root => sub {
+  my ($kernel, $self, $request, $response, $dirmatch)
+    = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
+
+  warn "--> root\n";
+  # Check for errors
+  if (! defined $request) {
+    $kernel->call('httpd', 'DONE', $response );
+    return;
+  }
+
+  # Do our stuff to HTTP::Response
+  $response->code(200);
+  $response->content( "Hi visitor from " . $response->connection->remote_ip . ", Page not found -> '" . $request->uri->path . "'\n\n" );
+
+  # We are done!
+  # For speed, you could use $_[KERNEL]->call( ... )
+  $kernel->call( 'httpd', 'DONE', $response );
+
+  $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
+};
+
 event _http_404 => sub {
   my ($kernel, $self, $request, $response, $dirmatch)
     = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
