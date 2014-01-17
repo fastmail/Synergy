@@ -458,7 +458,7 @@ sub SAID_task {
   my $payload = { task => {
     name     => $name,
     owner_id => $owner_id,
-    description => "created by " . $self->get_nickname . " on $arg->{where} "
+    description => "created by " . $self->get_nickname . " on $arg->{where}[0] "
                 .  "on behalf of $arg->{who}",
   } };
 
