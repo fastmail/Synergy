@@ -8,6 +8,7 @@ use DateTime::Format::Natural;
 use JSON 2 ();
 use LWP::UserAgent;
 use MIME::Base64;
+use POE::Component::Server::SimpleHTTP;
 use Time::Duration::Parse;
 use Time::Duration;
 use YAML::XS;
@@ -31,6 +32,65 @@ has chilltill => (
   predicate => 'has_chilltill',
   clearer   => 'clear_chilltill',
 );
+
+has httpd => (
+  is => 'bare',
+  builder => '_build_httpd',
+);
+
+has httpd_port => (is => 'ro', lazy => 1, default => 8118);
+
+sub START {
+  my ($self, $kernel) = @_[ OBJECT, KERNEL ];
+  $kernel->alias_set('Synergy');
+}
+
+sub _build_httpd {
+  my ($self) = @_;
+  my $session_id = $self->get_session_id;
+  warn "SELF SESION ID: $session_id";
+
+  POE::Component::Server::SimpleHTTP->new(
+    ALIAS   => 'httpd',
+    ADDRESS => '127.0.0.1',
+    PORT    => $self->httpd_port,
+    HANDLERS => [
+      {
+        DIR => '^/$',
+        SESSION => 'Synergy',
+        EVENT => '_http_root',
+      },
+      {
+        DIR => '.*',
+        SESSION => 'Synergy',
+        EVENT => '_http_404',
+      },
+    ],
+    HEADERS => { Server => 'Synergy' },
+  );
+}
+
+event _http_404 => sub {
+  my ($kernel, $self, $request, $response, $dirmatch)
+    = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
+
+  warn "--> 404\n";
+  # Check for errors
+  if (! defined $request) {
+    $kernel->call('httpd', 'DONE', $response );
+    return;
+  }
+
+  # Do our stuff to HTTP::Response
+  $response->code(404);
+  $response->content( "Hi visitor from " . $response->connection->remote_ip . ", Page not found -> '" . $request->uri->path . "'\n\n" );
+
+  # We are done!
+  # For speed, you could use $_[KERNEL]->call( ... )
+  $kernel->call( 'httpd', 'DONE', $response );
+
+  $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
+};
 
 sub chilling {
   my ($self) = @_;
