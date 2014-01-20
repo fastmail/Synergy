@@ -131,6 +131,13 @@ event _http_sms => sub {
       $response->code(200);
       $response->content($reply);
     }
+  } elsif ($text =~ s/\A(?:announce|say)(?: that)?\s+//i) {
+    $self->privmsg(
+      $self->get_channels->[0],
+      "$config->{master} says: $text",
+    );
+    $response->code(200);
+    $response->content("Message relayed.");
   } else {
     $response->code(200);
     $response->content("Does not compute.");
