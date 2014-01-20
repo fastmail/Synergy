@@ -104,7 +104,8 @@ event _http_sms => sub {
     $response->code(400);
     $response->content("Bad request");
     $kernel->call( 'httpd', 'DONE', $response );
-    $self->info("Bad request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
+    $self->info("Bad request from "
+      . $response->connection->remote_ip . " " . $request->uri->path_query);
     return;
   }
 
