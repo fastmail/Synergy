@@ -33,7 +33,7 @@ use constant {
   TIME_BIZ_REAL =>  1,  # Real work hours.
   TIME_EARLY    =>  2,  # Definitely early.
   TIME_LATE     =>  3,  # Definitely late.
-}
+};
 
 has chilltill => (
   is  => 'rw',
@@ -175,6 +175,7 @@ sub chilling {
 }
 
 sub is_showtime {
+  my ($self) = @_;
   return if $self->chilling;
   return 1 if $self->showtime_is_set_manually;
   $self->clear_showtime, return 1 if $self->business_hours;
