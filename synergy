@@ -27,6 +27,14 @@ channels @{ $config->{channels} };
 my $WKSP_ID = $config->{workspace};
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
 
+use constant {
+  TIME_WEEKEND  => -1,  # Working on the weekend!
+  TIME_BIZ_SAFE =>  0,  # Should absolutely be working.
+  TIME_BIZ_REAL =>  1,  # Real work hours.
+  TIME_EARLY    =>  2,  # Definitely early.
+  TIME_LATE     =>  3,  # Definitely late.
+}
+
 has chilltill => (
   is  => 'rw',
   isa => 'Int',
@@ -158,6 +166,21 @@ sub chilling {
   return time <= $self->chilltill;
 }
 
+sub is_showtime {
+  return if $self->chilling;
+  return 1 if $self->showtime_is_set_manually;
+  $self->clear_showtime, return 1 if $self->business_hours;
+  return;
+}
+
+has showtime => (
+  isa => 'Bool',
+  traits  => [ 'Bool' ],
+  handles => { start_showtime => 'set' },
+  reader  => 'showtime_is_set_manually',
+  clearer => 'clear_showtime',
+);
+
 sub is_business_hours {
   my ($self) = @_;
   my @time = localtime;
@@ -173,6 +196,28 @@ sub is_business_hours {
   return if $time[2] >  16;
 
   return 1;
+}
+
+sub __hs { $_[0] * 3600 + $_[1] * 60 }
+
+sub _classify_now {
+  my ($self) = @_;
+  my @time = localtime;
+
+  # Weekends off.
+  return TIME_WEEKEND if $time[6] == 0 or $time[6] == 6;
+
+  my $daysecs = $time[0]
+              + $time[1] * 60
+              + $time[2] * 3600;
+
+  return TIME_BIZ_SAFE if $daysecs >= __hs(10,30) && $daysecs <= __hs(17,00);
+
+  return TIME_BIZ_REAL if $daysecs >= __hs( 9,00) && $daysecs <= __hs(17,30);
+
+  return TIME_LATE  if $daysecs >= __hs(17,30);
+  return TIME_LATE  if $daysecs <= __hs( 3,00);
+  return TIME_EARLY;
 }
 
 has last_nag => (
@@ -218,11 +263,11 @@ event nag => sub {
 
   $self->info("considering nagging and setting up next nag");
 
-  $self->delay(nag => 600);
+  $self->delay(nag => 300);
 
   my $last_nag = $self->last_relevant_nag;
 
-  if ($self->is_business_hours && ! $self->chilling) {
+  if ($self->is_showtime) {
     my $timer = $self->current_timer;
 
     if ($timer && $timer == -1) { warn "error retrieving timer\n"; return };
@@ -322,7 +367,8 @@ sub SAID_showtime {
       $self->reply("Back to normal business hours, then.", $arg);
     }
   } elsif ($self->is_business_hours) {
-    return $self->reply("Sorry, we're outside of business hours.", $arg);
+    $self->start_showtime;
+    return $self->reply("Okay, business hours extended!", $arg);
   } else {
     $self->reply("I thought it was already showtime!", $arg);
   }
