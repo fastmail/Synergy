@@ -178,7 +178,7 @@ sub is_showtime {
   my ($self) = @_;
   return if $self->chilling;
   return 1 if $self->showtime_is_set_manually;
-  $self->clear_showtime, return 1 if $self->business_hours;
+  $self->clear_showtime, return 1 if $self->is_business_hours;
   return;
 }
 
