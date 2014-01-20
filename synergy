@@ -297,8 +297,8 @@ event nag => sub {
     if ($level < 2) {
       my $still = $level == 0 ? '' : ' still';
       $self->privmsg(
-        $config->{channels}->[0],
-        "$config->{master}: Your LiquidPlanner timer$still isn't running",
+        $config->{master},
+        "Your LiquidPlanner timer$still isn't running",
       );
       $self->last_nag({ time => time, level => $level });
     } else {
