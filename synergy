@@ -333,7 +333,7 @@ event irc_bot_addressed => sub {
   my $method = "SAID_$cmd";
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
-  my %public = map {; $_ => 1 } qw(page task);
+  my %public = map {; $_ => 1 } qw(page task remind);
 
   if ($self->can("SAID_$cmd")) {
     unless ($public{$cmd} or $nick eq $config->{master}) {
@@ -430,6 +430,63 @@ sub SAID_chill {
   $self->chilltill($time);
   $self->reply("Okay, no more nagging until " . localtime $time, $arg);
 }
+
+sub SAID_remind {
+  my ($self, $arg) = @_;
+
+  my ($who, $prep, $dur_str, $rest) = $arg->{what} =~ qr/\A
+    \s*
+    (\S+)    # "me" or a nick
+    \s+
+    (in|at) # duration type
+    \s+
+    (.+?)    # duration
+    :\s+     # the space is vital:  "at 15:15: eat pie"
+    (.+)     # the reminder
+    \z
+  /x;
+
+  unless (length $who) {
+    $self->warn("couldn't parse <<$arg->{what}>>");
+    return -1;
+  }
+
+  my $time;
+  if ($prep eq 'in') {
+    my $dur;
+    $dur_str =~ s/^an?\s+/1 /;
+    my $ok = eval { $dur = parse_duration($dur_str); 1 };
+    return -1 unless $ok;
+    $time = time + $dur;
+  } elsif ($prep eq 'at') {
+    my $dt = eval { $self->_date_parser->parse_datetime($dur_str) };
+    return -1 unless $dt;
+    $time = $dt->epoch;
+  } else {
+    return -1;
+  }
+
+  if ($time <= time) {
+    $self->reply("That sounded like you want a reminder sent in the past.", $arg);
+    return;
+  }
+
+  $who = $arg->{who} if $who eq 'me';
+  my $target = $who eq $arg->{who} ? 'you' : $who;
+
+  $self->alarm_add(
+    send_reminder => $time,
+    { %$arg, who => $who },
+    DateTime->now(time_zone => 'America/New_York'),
+    $rest,
+  );
+  $self->reply("Okay, I'll remind $target at " . localtime $time, $arg);
+}
+
+event send_reminder => sub {
+  my ($self, $reply_arg, $requested_time, $msg) = @_[OBJECT, ARG0..ARG2];
+  $self->reply("Reminder from $requested_time: $msg", $reply_arg);
+};
 
 sub SAID_abort {
   my ($self, $arg) = @_;
