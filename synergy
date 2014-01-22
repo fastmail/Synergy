@@ -376,10 +376,10 @@ sub SAID_showtime {
       $self->reply("Back to normal business hours, then.", $arg);
     }
   } elsif ($self->is_business_hours) {
+    $self->reply("I thought it was already showtime!", $arg);
+  } else {
     $self->start_showtime;
     return $self->reply("Okay, business hours extended!", $arg);
-  } else {
-    $self->reply("I thought it was already showtime!", $arg);
   }
 
   $self->clear_chilltill;
