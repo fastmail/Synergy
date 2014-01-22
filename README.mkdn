@@ -46,16 +46,18 @@ auth system, one LP user is used to make every task, meaning that the "created
 by" field becomes less reliable.  The user who asked for the command is noted
 in the task's initial description.
 
+**remind USER [ at TIME | in DURATION ]: REMINDER**: This command schedules a
+message to be send to the given user on the current channel.  It doesn't check
+that the user is present now or later.
+
 **status**: Synergy will tell you whether you've got a timer running.
 
 **pause timer**:  Synergy will stop your timer, leaving its time in place.
 
 **abort timer**:  Synergy will stop your timer and clear your timer.
 
-**chill for DURATION**:  This tells Synergy not to nag you for the given
-duration.
-
-**chill until TIME**:  This tells Synergy not to nag you until the given time.
+**chill [ for DURATION | until TIME ]**:  This tells Synergy not to nag you
+until later.
 
 **showtime**: This tells Synergy to cancel any grace period.  In the future,
 this will be used to start nagging outside of normal business hours.
