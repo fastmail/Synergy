@@ -7,7 +7,7 @@ use namespace::autoclean;
 use DateTime::Format::Natural;
 use HTTP::Body;
 use JSON 2 ();
-use LWP::UserAgent;
+use LWP::UserAgent::POE;
 use MIME::Base64;
 use POE::Component::Server::SimpleHTTP;
 use Time::Duration::Parse;
@@ -238,7 +238,7 @@ has last_nag => (
 sub sms {
   my ($self, $number, $msg) = @_;
 
-  my $ua = LWP::UserAgent->new;
+  my $ua = LWP::UserAgent::POE->new;
   my $res = $ua->post(
     "https://api.twilio.com/2010-04-01/Accounts/$config->{twilio_sid}/SMS/Messages",
     {
@@ -547,7 +547,7 @@ has lp_ua => (
   is => 'ro',
   lazy    => 1,
   default => sub {
-    my $ua = LWP::UserAgent->new(keep_alive => 1);
+    my $ua = LWP::UserAgent::POE->new(keep_alive => 1);
     my $token = $config->{lp_token};
 
     $ua->default_header('Authorization' => "$token");
