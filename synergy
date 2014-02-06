@@ -282,6 +282,23 @@ event nag => sub {
     if ($timer && $timer == -1) { warn "error retrieving timer\n"; return };
     if ($timer) {
       $self->info("We're good: there's a timer.");
+
+      if ($timer->{running_time} > 3 * 3600) {
+        if ($last_nag && time - $last_nag->{time} < 900) {
+          $self->info("Won't nag, nagged within the last 15min.");
+          return;
+        }
+
+        $self->sms(
+          $config->{master_ph},
+          "Your timer has been running for "
+          . concise(duration($timer->{running_time}))
+          . ".  Maybe you should commit your work."
+        );
+        $self->last_nag({ time => time, level => 0 });
+        return;
+      }
+
       $self->clear_last_nag;
       return;
     }
