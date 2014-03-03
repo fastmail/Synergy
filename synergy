@@ -684,16 +684,22 @@ sub SAID_page {
   $arg->{what} =~ s/\A\s+//;
   $arg->{what} =~ s/\s+\z//;
 
-  if ($arg->{what} =~ /\Q$config->{master}\E[.?!]*\z/) {
-    $self->sms(
-      $config->{master_ph},
-      "$arg->{who} just paged you on @{ $arg->{where} }",
-    );
+  if ($arg->{what} =~ /\Q(\w+)\E[.?!]*\z/) {
+    my $who   = $1 eq 'me' ? $arg->{who} : $1;
+    my $phone = $self->phone_for_username($who);
+
+    unless ($phone) {
+      return $self->reply("I don't have a number for $who.", $arg);
+    }
+
+    $self->sms($phone, "$arg->{who} just paged you on @{ $arg->{where} }");
     $self->reply("Okay, I sent a page.", $arg);
     return;
   }
 
   my ($who, $rest) = split /\s*:\s*/, $arg->{what}, 2;
+  $who = $1 eq 'me' ? $arg->{who} : $1;
+
   unless ($arg->{what} and $arg->{what} =~ /\S/) {
     return $self->reply(
       "It goes:  <<page whoever>> or <<page whoever: message>>",
@@ -701,12 +707,13 @@ sub SAID_page {
     );
   }
 
-  unless ($who eq $config->{master}) {
-    return $self->reply("I can only page $config->{master}.", $arg);
+  my $phone = $self->phone_for_username($who);
+  unless ($phone) {
+    return $self->reply("I don't have a number for $who.", $arg);
   }
 
   $self->sms(
-    $config->{master_ph},
+    $phone,
     "$arg->{who} just paged you on @{ $arg->{where} }: $rest",
   );
   $self->reply("Okay, I sent a page.", $arg);
