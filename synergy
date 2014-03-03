@@ -115,9 +115,10 @@ event _http_sms => sub {
     $text = 'chill until tomorrow';
   }
 
-  if ($text =~ s/\Achill\s+//i) {
+  if ($text =~ s/\A(chill|task)\s+//i) {
     my $reply;
-    my $result = $self->SAID_chill({
+    my $method = "SAID_$1";
+    my $result = $self->$method({
       how   => \$reply,
       who   => $config->{master},
       where => [ $from ],
