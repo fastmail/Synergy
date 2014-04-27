@@ -23,6 +23,8 @@ server   $config->{server};
 nickname $config->{nickname};
 username $config->{username};
 channels @{ $config->{channels} };
+password $config->{password};
+poco_irc_args(UseSSL => 1);
 
 my $WKSP_ID = $config->{workspace};
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
