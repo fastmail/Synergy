@@ -650,9 +650,12 @@ sub SAID_task {
     return $self->reply("I don't know who $target is.", $arg);
   }
 
+  my $urgent = $name =~ s/\s*\(!+\)\s*\z//;
+
   my $payload = { task => {
     name     => $name,
     owner_id => $owner_id,
+    ($urgent ? (parent_id => $config->{lp_urgent}) : ()),
     description => "created by " . $self->get_nickname . " on $arg->{where}[0] "
                 .  "on behalf of $arg->{who}",
   } };
