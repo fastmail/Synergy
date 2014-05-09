@@ -67,6 +67,15 @@ has httpd => (
 
 has httpd_port => (is => 'ro', lazy => 1, default => 8118);
 
+sub resolve_name {
+  my ($self, $name, $who) = @_;
+  return $who if lc $name eq 'me';
+  return $who if lc $name eq 'myself';
+
+  return $config->{nicknames}{lc $name} if $config->{nicknames}{lc $name};
+  return lc $name;
+}
+
 sub START {
   my ($self, $kernel) = @_[ OBJECT, KERNEL ];
   $kernel->alias_set('Synergy');
@@ -488,6 +497,8 @@ sub SAID_remind {
     return -1;
   }
 
+  $who = $self->resolve_name($who, $arg->{who});
+
   my $time;
   if ($prep eq 'in') {
     my $dur;
@@ -508,7 +519,6 @@ sub SAID_remind {
     return;
   }
 
-  $who = $arg->{who} if $who eq 'me';
   my $target = $who eq $arg->{who} ? 'you' : $who;
 
   $self->alarm_add(
@@ -643,7 +653,7 @@ sub SAID_task {
   my ($self, $arg) = @_;
 
   my ($target, $name) = $arg->{what} =~ /\s*for\s+(\S+?):?\s+(.+)\z/;
-  $target = $arg->{who} if $target eq 'me';
+  $target = $self->resolve_name($target, $arg->{who});
 
   my $owner_id;
   unless ($owner_id = $config->{lp_members}{$target}) {
@@ -677,7 +687,7 @@ sub SAID_task {
 
   $self->reply(
     sprintf(
-      "Task created: https://app.liquidplanner.com/space/%s/projects/show/%s",
+      "Task for $target created: https://app.liquidplanner.com/space/%s/projects/show/%s",
       $config->{workspace},
       $JSON->decode($res->decoded_content)->{id},
     ),
@@ -691,7 +701,7 @@ sub SAID_page {
   $arg->{what} =~ s/\s+\z//;
 
   if ($arg->{what} =~ /\A(\w+)[.?!]*\z/) {
-    my $who   = $1 eq 'me' ? $arg->{who} : $1;
+    my $who   = $self->resolve_name("$1", $arg->{who});
     my $phone = $self->phone_for_username($who);
 
     unless ($phone) {
@@ -704,7 +714,7 @@ sub SAID_page {
   }
 
   my ($who, $rest) = split /\s*:\s*/, $arg->{what}, 2;
-  $who = $arg->{who} if $who eq 'me';
+  $who = $self->resolve_name($who, $arg->{who});
 
   unless ($arg->{what} and $arg->{what} =~ /\S/) {
     return $self->reply(
