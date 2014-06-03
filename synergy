@@ -706,10 +706,22 @@ sub SAID_status {
   $self->reply("Your timer has been running for $time, work on: $name", $arg);
 }
 
+sub SAID_plusplus {
+  my ($self, $arg) = @_;
+
+  return $self->SAID_task({
+    %$arg,
+    what => "for $arg->{who}: $arg->{what}",
+  });
+}
+
 sub SAID_task {
   my ($self, $arg) = @_;
 
-  my ($target, $name) = $arg->{what} =~ /\s*for\s+(\S+?):?\s+(.+)\z/;
+  # because of "new task for...";
+  my $what = $arg->{what} =~ s/\Atask\s+//r;
+
+  my ($target, $name) = $what =~ /\s*for\s+(\S+?):?\s+(.+)\z/;
   $target = $self->resolve_name($target, $arg->{who});
 
   my $owner_id;
