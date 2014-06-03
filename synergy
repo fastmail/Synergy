@@ -96,6 +96,11 @@ sub _build_httpd {
         EVENT => '_http_sms',
       },
       {
+        DIR => '^/alert.json$',
+        SESSION => 'Synergy',
+        EVENT => '_http_alert',
+      },
+      {
         DIR => '.*',
         SESSION => 'Synergy',
         EVENT => '_http_404',
@@ -103,6 +108,46 @@ sub _build_httpd {
     ],
     HEADERS => { Server => 'Synergy' },
   );
+}
+
+event _http_alert => sub {
+  my ($kernel, $self, $request, $response) = @_[ KERNEL, OBJECT, ARG0 .. ARG1 ];
+
+  # Check for errors
+  if (! defined $request) {
+    $kernel->call('httpd', 'DONE', $response );
+    return;
+  }
+
+  my $json = $request->content;
+
+  if ($json =~ /%20/) { # stupid check for not-json because circonus seems buggy
+    my $param = $self->_params_from_req($request);
+    $json = "(faked up) - " . JSON->new->encode($param);
+  }
+
+  $kernel->call( 'httpd', 'DONE', $response );
+
+  $response->code(204);
+
+  $self->privmsg(
+    $self->get_channels->[0],
+    "circonus alert: $json",
+  );
+
+  $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
+};
+
+sub _params_from_req {
+  my ($self, $req) = @_;
+
+  my $body = HTTP::Body->new(
+    scalar $req->header('Content-Type'),
+    scalar $req->header('Content-Length'),
+  );
+  $body->add( $req->content );
+
+  return $body->param;
 }
 
 event _http_sms => sub {
@@ -115,17 +160,13 @@ event _http_sms => sub {
     return;
   }
 
-  my $body = HTTP::Body->new(
-    scalar $request->header('Content-Type'),
-    scalar $request->header('Content-Length'),
-  );
-  $body->add( $request->content );
+  my $param = $self->_params_from_req($request);
 
-  my $from = $body->param->{From} // '';
+  my $from = $param->{From} // '';
   $from =~ s/\A\+1//;
 
   my $who = $self->username_for_phone($from);
-  unless ($body->param->{AccountSid} eq $config->{twilio_sid} and $who) {
+  unless ($param->{AccountSid} eq $config->{twilio_sid} and $who) {
     $response->code(400);
     $response->content("Bad request");
     $kernel->call( 'httpd', 'DONE', $response );
@@ -137,7 +178,7 @@ event _http_sms => sub {
     return;
   }
 
-  my $text = $body->param->{Body};
+  my $text = $param->{Body};
 
   if ($text =~ /\Ashow'?s over\z/i) {
     $text = 'chill until tomorrow';
@@ -178,8 +219,7 @@ event _http_sms => sub {
 };
 
 event _http_404 => sub {
-  my ($kernel, $self, $request, $response, $dirmatch)
-    = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
+  my ($kernel, $self, $request, $response) = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
 
   if (! defined $request) {
     $kernel->call('httpd', 'DONE', $response );
