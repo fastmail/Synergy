@@ -810,6 +810,26 @@ sub SAID_page {
   return;
 }
 
+sub SAID_whats {
+  my ($self, $arg) = @_;
+  return $self->SAID_what({ %$arg, what => "is $arg->{what}" });
+}
+
+sub SAID_what {
+  my ($self, $arg) = @_;
+  my $what = $arg->{what};
+  $what =~ s/\s+\?*//;
+  return -1 unless $what =~ s/\Ais //;
+  return -1 unless $what =~ /\Ayour (?:phone )?number\z/;
+
+  my ($c, $ac, $ex, $rest) = $config->{twilio_from} =~ m{
+    ([0-9]) ([0-9]{3}) ([0-9]{3}) ([0-9]{4})
+  }x;
+
+  my $num = "+$c $ac $ex-$rest";
+  $self->reply("You can text me at $num.", $arg);
+}
+
 sub BUILD {
   my ($self) = @_;
 
