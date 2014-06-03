@@ -438,9 +438,14 @@ sub _dispatch {
 
   my $msg = $arg->{what};
   my ($cmd, $rest) = split ' ', $msg, 2;
+
+  # First pass before stripping things down to alnum.
+  $cmd = $ALIAS{$cmd} if $ALIAS{$cmd};
+
   $cmd =~ tr/[A-Za-z0-9]//dc;
   $cmd = lc $cmd;
 
+  # Second pass for alnum aliases.
   $cmd = $ALIAS{$cmd} if $ALIAS{$cmd};
 
   my $method = "SAID_$cmd";
