@@ -204,7 +204,7 @@ event _http_sms => sub {
 sub SAID_announce {
   my ($self, $arg) = @_;
 
-  if (ref $arg->{how} eq 'irc') {
+  if ($arg->{how} eq 'irc') {
     return $self->reply(
       "Asking me to say something on IRC when you're on IRC is weird.",
       $arg,
