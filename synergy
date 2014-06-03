@@ -180,43 +180,42 @@ event _http_sms => sub {
 
   my $text = $param->{Body};
 
-  if ($text =~ /\Ashow'?s over\z/i) {
-    $text = 'chill until tomorrow';
-  }
+  my $reply;
+  my $result = $self->_dispatch({
+    how   => \$reply,
+    who   => $who,
+    where => [ $from ],
+    what  => $text,
+  });
 
-  if ($text =~ s/\A(chill|task)\s+//i) {
-    my $reply;
-    my $method = "SAID_\L$1";
-    my $result = $self->$method({
-      how   => \$reply,
-      who   => $who,
-      where => [ $from ],
-      what  => $text,
-    });
-
-    if ($result && $result eq -1) {
-      $response->code(200);
-      $response->content("Does not compute.");
-    } else {
-      $response->code(200);
-      $response->content($reply);
-    }
-  } elsif ($text =~ s/\A(?:announce|say)(?: that:?)?\s+//i) {
-    $self->privmsg(
-      $self->get_channels->[0],
-      "$who says: $text",
-    );
-    $response->code(200);
-    $response->content("Message relayed.");
-  } else {
+  if ($result && $result eq -1) {
     $response->code(200);
     $response->content("Does not compute.");
+  } else {
+    $response->code(200);
+    $response->content($reply);
   }
 
   $kernel->call( 'httpd', 'DONE', $response );
 
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
+
+sub SAID_say {
+  my ($self, $arg) = @_;
+
+  $self->privmsg(
+    $self->get_channels->[0],
+    "$arg->{who} says: $arg->{what}",
+  );
+
+  $self->reply("Message relayed", $arg);
+}
+
+BEGIN {
+  no warnings;
+  *SAID_announce = \&SAID_say;
+}
 
 event _http_404 => sub {
   my ($kernel, $self, $request, $response) = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
@@ -412,6 +411,22 @@ event irc_bot_addressed => sub {
   my ($self, $nickstr, $channel, $msg) = @_[ OBJECT, ARG0, ARG1, ARG2 ];
   my ($nick) = split /!/, $nickstr;
 
+  my $result = $self->_dispatch({
+    how   => 'irc',
+    who   => $nick,
+    where => $channel,
+    what  => $msg,
+  });
+
+  return unless $result && $result == -1;
+
+  $self->privmsg( $channel => "$nick: Does not compute." );
+};
+
+sub _dispatch {
+  my ($self, $arg) = @_;
+
+  my $msg = $arg->{what};
   my ($cmd, $rest) = split ' ', $msg, 2;
   $cmd =~ tr/[A-Za-z0-9]//dc;
   $cmd = lc $cmd;
@@ -421,24 +436,14 @@ event irc_bot_addressed => sub {
 
   my %public = map {; $_ => 1 } qw(page task remind);
 
-  if ($self->can("SAID_$cmd")) {
-    unless ($public{$cmd} or $nick eq $config->{master}) {
-      $self->privmsg( $channel => "$nick: Only $config->{master} can do that." );
-      return;
-    }
+  return -1 unless $self->can("SAID_$cmd");
 
-    my $result = $self->$method({
-      how   => 'irc',
-      who   => $nick,
-      where => $channel,
-      what  => $rest,
-    });
-
-    return unless $result && $result == -1;
+  unless ($public{$cmd} or $arg->{who} eq $config->{master}) {
+    return $self->reply("Only $config->{master} can do that.", $arg);
   }
 
-  $self->privmsg( $channel => "$nick: Does not compute." );
-};
+  return $self->$method({ %$arg, what => $rest });
+}
 
 sub reply {
   my ($self, $reply, $arg) = @_;
