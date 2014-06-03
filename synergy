@@ -201,20 +201,24 @@ event _http_sms => sub {
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
 
-sub SAID_say {
+sub SAID_announce {
   my ($self, $arg) = @_;
+
+  if (ref $arg->{how} eq 'irc') {
+    return $self->reply(
+      "Asking me to say something on IRC when you're on IRC is weird.",
+      $arg,
+    );
+  }
+
+  my $what = $arg->{what} =~ s/\Athat //r;
 
   $self->privmsg(
     $self->get_channels->[0],
-    "$arg->{who} says: $arg->{what}",
+    "$arg->{who} says: $what",
   );
 
   $self->reply("Message relayed", $arg);
-}
-
-BEGIN {
-  no warnings;
-  *SAID_announce = \&SAID_say;
 }
 
 event _http_404 => sub {
@@ -423,6 +427,12 @@ event irc_bot_addressed => sub {
   $self->privmsg( $channel => "$nick: Does not compute." );
 };
 
+my %ALIAS = (
+  say  => 'announce',
+  '++' => 'plusplus',
+  new  => 'task',
+);
+
 sub _dispatch {
   my ($self, $arg) = @_;
 
@@ -430,6 +440,8 @@ sub _dispatch {
   my ($cmd, $rest) = split ' ', $msg, 2;
   $cmd =~ tr/[A-Za-z0-9]//dc;
   $cmd = lc $cmd;
+
+  $cmd = $ALIAS{$cmd} if $ALIAS{$cmd};
 
   my $method = "SAID_$cmd";
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
