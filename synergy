@@ -7,6 +7,7 @@ use namespace::autoclean;
 use DateTime::Format::Natural;
 use HTTP::Body;
 use JSON 2 ();
+use JSON::PP qw(encode_json decode_json);
 use LWP::UserAgent::POE;
 use MIME::Base64;
 use POE::Component::Server::SimpleHTTP;
@@ -28,6 +29,7 @@ poco_irc_args(UseSSL => 1);
 
 my $WKSP_ID = $config->{workspace};
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
+my $CIRC_BASE = "https://api.circonus.com/";
 
 has phone_book => (
   isa => 'HashRef',
@@ -454,7 +456,7 @@ sub _dispatch {
   my $method = "SAID_$cmd";
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
-  my %public = map {; $_ => 1 } qw(page task remind);
+  my %public = map {; $_ => 1 } qw(page task remind alerts ack);
 
   return -1 unless $self->can("SAID_$cmd");
 
@@ -667,6 +669,20 @@ has lp_ua => (
   },
 );
 
+has cir_ua => (
+  is => 'ro',
+  lazy    => 1,
+  default => sub {
+    my $ua = LWP::UserAgent::POE->new(keep_alive => 1);
+    my $token = $config->{circonus_token};
+
+    $ua->default_header('X-Circonus-App-Name' => 'Synergy');
+    $ua->default_header('X-Circonus-Auth-Token' => $token);
+    $ua->default_header('Accept' => "application/json");
+
+    return $ua;
+  },
+);
 sub SAID_status {
   my ($self, $arg) = @_;
 
@@ -721,6 +737,52 @@ sub SAID_plusplus {
     %$arg,
     what => "for $arg->{who}: $arg->{what}",
   });
+}
+
+sub SAID_alerts {
+  my ($self, $arg) = @_;
+  my $ua = $self->cir_ua;
+
+  my $res = $ua->get("$CIRC_BASE/alert");
+  my $json = $res->decoded_content;
+  my $alerts = decode_json($json);
+  if (@$alerts[0]){
+    for my $event (@$alerts) {
+      my $response = $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
+      $self->reply($response, $arg);
+    }
+  } else {
+    $self->reply("nothing alerting", $arg);
+  }
+}
+
+sub SAID_ack {
+  my ($self, $arg) = @_;
+
+  my ($alert_id, $for, $period) = split(/ /, $arg->{what});
+
+  return $self->reply("Alert ids are numbers only.", $arg)
+    unless $alert_id =~ /\A[0-9]+\z/;
+  return $self->reply("Ack in minutes, hours, or days. (ex: 15m)", $arg)
+    unless $period =~ /\A[0-9]+[hmd]\z/;
+
+  my $content = encode_json({
+      'acknowledged_until' => "$period",
+      'alert'              => "/alert/$alert_id",
+    });
+  my $ua = $self->cir_ua;
+  my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
+  if ($check->{_rc} == 200) {
+    my $res = $ua->post(
+      "$CIRC_BASE/acknowledgement", 
+      Content => $content); 
+    my $json = $res->decoded_content;
+    return $self->reply("Alert $alert_id acked for $period", $arg);
+  } else {
+    return $self->reply(
+    "ID $alert_id is not valid. Try 'alerts' to see open alerts.", 
+    $arg);
+  }
 }
 
 sub SAID_task {
