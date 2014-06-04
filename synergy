@@ -664,6 +664,21 @@ has lp_ua => (
   },
 );
 
+has cir_ua => (
+  is => 'ro',
+  lazy    => 1,
+  default => sub {
+    my $ua = LWP::UserAgent::POE->new(keep_alive => 1);
+    my $token = $config->{circonus_token};
+
+    $ua->default_header({
+    'X-Circonus-App-Name' => 'Synergy',
+    'X-Circonus-Auth-Token' => $token,
+    'Accept' => "application/json",
+    });
+    return $ua;
+  },
+);
 sub SAID_status {
   my ($self, $arg) = @_;
 
@@ -718,6 +733,26 @@ sub SAID_plusplus {
     %$arg,
     what => "for $arg->{who}: $arg->{what}",
   });
+
+sub SAID_alerts {
+  my ($self, $arg) = @_;
+
+  my $ua = LWP::UserAgent::POE->new;
+
+  my $alert_json = $ua->get('...');
+  for my $alert (@{ $alert_json }) {
+    $self->reply($alert->{description}, $arg);
+  }
+}
+
+sub SAID_ack {
+  my ($self, $arg) = @_;
+
+  my $alert_id = $arg->{what};
+
+  return $self->reply("That doesn't look like a cromulent alert id!")
+    unless $alert_id =~ /\A[0-9]+\z/;
+
 }
 
 sub SAID_task {
