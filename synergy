@@ -362,7 +362,7 @@ event nag => sub {
         }
 
         $self->sms(
-          $config->{master_ph},
+          $self->phone_for_username($config->{master}),
           "Your timer has been running for "
           . concise(duration($timer->{running_time}))
           . ".  Maybe you should commit your work."
