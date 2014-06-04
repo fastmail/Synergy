@@ -14,7 +14,6 @@ use POE::Component::Server::SimpleHTTP;
 use Time::Duration::Parse;
 use Time::Duration;
 use YAML::XS;
-use Data::Dumper;
 
 my $JSON = JSON->new;
 
@@ -746,7 +745,6 @@ sub SAID_alerts {
   my $alerts = decode_json($json);
   if (@$alerts[0]){
     for my $event (@$alerts) {
-      warn Dumper($event);
       my $response = $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
       $self->reply($response, $arg);
     }
@@ -759,8 +757,6 @@ sub SAID_ack {
   my ($self, $arg) = @_;
 
   my ($alert_id, $for, $period) = split(/ /, $arg->{what});
-
-  warn "alert id $alert_id for period $period\n";
 
   return $self->reply("Alert ids are numbers only.", $arg)
     unless $alert_id =~ /\A[0-9]+\z/;
