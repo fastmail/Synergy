@@ -749,7 +749,8 @@ sub SAID_alerts {
   return $self->reply("nothing alerting", $arg) unless @$alerts;
 
   for my $event (@$alerts) {
-    my $response = $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
+    my $response = sprintf '%s %s %s',
+      $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
     $self->reply($response, $arg);
   }
 }
