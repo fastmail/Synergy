@@ -747,7 +747,7 @@ sub SAID_alerts {
   my $json = $res->decoded_content;
   my $alerts = $JSON->decode($json);
 
-  return $self->reply("nothing alerting", $arg) unless @$alerts;
+  return $self->reply("Everything's okay!", $arg) unless @$alerts;
 
   for my $event (@$alerts) {
     my $response = sprintf '%s %s %s',
@@ -782,7 +782,7 @@ sub SAID_ack {
     return $self->reply("Alert $alert_id acked for $period", $arg);
   } else {
     return $self->reply(
-      "ID $alert_id is not valid. Try 'alerts' to see open alerts.",
+      "Alert $alert_id doesn't seem to exist.  Maybe check 'alerts'?",
       $arg,
     );
   }
