@@ -7,7 +7,6 @@ use namespace::autoclean;
 use DateTime::Format::Natural;
 use HTTP::Body;
 use JSON 2 ();
-use JSON::PP qw(encode_json decode_json);
 use LWP::UserAgent::POE;
 use MIME::Base64;
 use POE::Component::Server::SimpleHTTP;
@@ -745,7 +744,7 @@ sub SAID_alerts {
 
   my $res = $ua->get("$CIRC_BASE/alert");
   my $json = $res->decoded_content;
-  my $alerts = decode_json($json);
+  my $alerts = $JSON->decode($json);
   if (@$alerts[0]){
     for my $event (@$alerts) {
       my $response = $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
@@ -766,7 +765,7 @@ sub SAID_ack {
   return $self->reply("Ack in minutes, hours, or days. (ex: 15m)", $arg)
     unless $period =~ /\A[0-9]+[hmd]\z/;
 
-  my $content = encode_json({
+  my $content = $JSON->encode({
     'acknowledged_until' => "$period",
     'alert'              => "/alert/$alert_id",
   });
