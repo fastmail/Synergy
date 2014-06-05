@@ -745,13 +745,12 @@ sub SAID_alerts {
   my $res = $ua->get("$CIRC_BASE/alert");
   my $json = $res->decoded_content;
   my $alerts = $JSON->decode($json);
-  if (@$alerts[0]){
-    for my $event (@$alerts) {
-      my $response = $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
-      $self->reply($response, $arg);
-    }
-  } else {
-    $self->reply("nothing alerting", $arg);
+
+  return $self->reply("nothing alerting", $arg) unless @$alerts;
+
+  for my $event (@$alerts) {
+    my $response = $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
+    $self->reply($response, $arg);
   }
 }
 
