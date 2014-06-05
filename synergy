@@ -760,7 +760,7 @@ sub SAID_ack {
   my ($self, $arg) = @_;
 
   return -1
-    unless my ($alert_id, $period) = $arg->{what} =~ /\A(\S+)\s+for\s+(.+)\z/;
+    unless my ($alert_id, $dur_str) = $arg->{what} =~ /\A(\S+)\s+for\s+(.+)\z/;
 
   unless ($alert_id =~ /\A[0-9]+\z/) {
     return $self->reply(
@@ -770,11 +770,19 @@ sub SAID_ack {
     );
   }
 
-  return $self->reply("Ack in minutes, hours, or days. (ex: 15m)", $arg)
-    unless $period =~ /\A[0-9]+[hmd]\z/;
+  my $dur;
+  my $ok = eval { $dur = parse_duration($dur_str); 1 };
+
+  return $self->reply("I didn't understand how long you wanted to ack it!", $arg)
+    unless $ok;
+
+  my $min = int($dur / 60);
+
+  return $self->reply("You can't ack something for less than a minute!", $arg)
+    unless $min;
 
   my $content = $JSON->encode({
-    acknowledged_until => "$period",
+    acknowledged_until => $min . 'm',
     alert              => "/alert/$alert_id",
   });
 
@@ -786,7 +794,8 @@ sub SAID_ack {
       Content => $content
     );
     my $json = $res->decoded_content;
-    return $self->reply("Alert $alert_id acked for $period", $arg);
+    my $long = concise(duration($dur - $dur % 60));
+    return $self->reply("Alert $alert_id acked for $long.", $arg);
   } else {
     return $self->reply(
       "Alert $alert_id doesn't seem to exist.  Maybe check 'alerts'?",
