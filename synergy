@@ -70,6 +70,7 @@ has httpd_port => (is => 'ro', lazy => 1, default => 8118);
 sub resolve_name {
   my ($self, $name, $who) = @_;
   return $who if lc $name eq 'me';
+  return $who if lc $name eq 'my';
   return $who if lc $name eq 'myself';
 
   return $config->{nicknames}{lc $name} if $config->{nicknames}{lc $name};
@@ -134,6 +135,8 @@ event _http_alert => sub {
     $self->get_channels->[0],
     "circonus alert: $json",
   );
+
+  warn "ALERT: $json\n";
 
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
@@ -815,19 +818,74 @@ sub SAID_whats {
   return $self->SAID_what({ %$arg, what => "is $arg->{what}" });
 }
 
+sub _fmt_ph {
+  my ($self, $ph) = @_;
+
+  my ($c, $ac, $ex, $rest) = $ph =~ m{
+    \A
+    ([0-9])? ([0-9]{3}) ([0-9]{3}) ([0-9]{4})
+    \z
+  }x;
+
+  $c //= 1;
+
+  return "+$c $ac $ex-$rest";
+}
+
 sub SAID_what {
   my ($self, $arg) = @_;
   my $what = $arg->{what};
-  $what =~ s/\s+\?*//;
+  $what =~ s/\s*\?*\z//;
   return -1 unless $what =~ s/\Ais //;
-  return -1 unless $what =~ /\Ayour (?:phone )?number\z/;
 
-  my ($c, $ac, $ex, $rest) = $config->{twilio_from} =~ m{
-    ([0-9]) ([0-9]{3}) ([0-9]{3}) ([0-9]{4})
-  }x;
+  if ($what =~ /\Ayour (?:phone )?number\z/) {
+    my $num = $self->_fmt_ph($config->{twilio_from});
+    return $self->reply("You can text me at $num.", $arg);
+  }
 
-  my $num = "+$c $ac $ex-$rest";
-  $self->reply("You can text me at $num.", $arg);
+  if ($what =~ /\A(\S+?)(?:'s)? (?:phone )?number\z/) {
+    my $who   = $self->resolve_name("$1", $arg->{who});
+    my $phone = $self->phone_for_username($who);
+
+    return $self->reply("I don't have a number on file for $who.", $arg)
+      unless $phone;
+
+    my $num = $self->_fmt_ph($phone);
+    return $self->reply("You can reach $who at $num.", $arg);
+  }
+
+  return -1;
+}
+
+sub SAID_reload {
+  my ($self, $arg) = @_;
+
+  return -1 unless $arg->{what} eq 'config';
+
+  $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
+  return $self->reply("Configuration reloaded.", $arg);
+}
+
+sub SAID_compose {
+  my ($self, $arg) = @_;
+
+  return -1 unless lc $arg->{what} =~ /\Aa haiku\s*(?:for (\S+)\s*)?\z/;
+  my $for = $1;
+
+  my $haiku;
+  my $ok = eval { require Haiku; $haiku = join q{ / }, Haiku::haiku(); 1 };
+
+  return $self->reply("The muse is not with me.", $arg) unless $ok;
+
+  if (my $for = $self->resolve_name($for, $arg->{who})) {
+    return $self->reply("I don't know two to reach $for.", $arg)
+      unless my $ph = $self->phone_for_username($config->{master});
+
+    $self->sms($ph, "A haiku from $arg->{who}: $haiku");
+    return $self->reply("Poem dispatched.", $arg);
+  }
+
+  return $self->reply($haiku, $arg);
 }
 
 sub BUILD {
