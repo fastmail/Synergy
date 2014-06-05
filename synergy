@@ -768,8 +768,8 @@ sub SAID_ack {
     unless $period =~ /\A[0-9]+[hmd]\z/;
 
   my $content = $JSON->encode({
-    'acknowledged_until' => "$period",
-    'alert'              => "/alert/$alert_id",
+    acknowledged_until => "$period",
+    alert              => "/alert/$alert_id",
   });
 
   my $ua = $self->cir_ua;
