@@ -682,6 +682,7 @@ has cir_ua => (
     return $ua;
   },
 );
+
 sub SAID_status {
   my ($self, $arg) = @_;
 
@@ -772,7 +773,7 @@ sub SAID_ack {
 
   my $ua = $self->cir_ua;
   my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
-  if ($check->{_rc} == 200) {
+  if ($check->is_success) {
     my $res = $ua->post(
       "$CIRC_BASE/acknowledgement",
       Content => $content
