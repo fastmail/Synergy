@@ -759,7 +759,8 @@ sub SAID_alerts {
 sub SAID_ack {
   my ($self, $arg) = @_;
 
-  my ($alert_id, $for, $period) = split(/ /, $arg->{what});
+  return -1
+    unless my ($alert_id, $period) = $arg->{what} =~ /\A(\S+)\s+for\s+(.+)\z/;
 
   return $self->reply("Alert ids are numbers only.", $arg)
     unless $alert_id =~ /\A[0-9]+\z/;
