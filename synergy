@@ -762,8 +762,14 @@ sub SAID_ack {
   return -1
     unless my ($alert_id, $period) = $arg->{what} =~ /\A(\S+)\s+for\s+(.+)\z/;
 
-  return $self->reply("Alert ids are numbers only.", $arg)
-    unless $alert_id =~ /\A[0-9]+\z/;
+  unless ($alert_id =~ /\A[0-9]+\z/) {
+    return $self->reply(
+      qq{"$alert_id" doesn't look like a cromulent alert id.  } .
+      qq{They're just numbers!},
+      $arg
+    );
+  }
+
   return $self->reply("Ack in minutes, hours, or days. (ex: 15m)", $arg)
     unless $period =~ /\A[0-9]+[hmd]\z/;
 
