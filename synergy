@@ -767,21 +767,24 @@ sub SAID_ack {
     unless $period =~ /\A[0-9]+[hmd]\z/;
 
   my $content = encode_json({
-      'acknowledged_until' => "$period",
-      'alert'              => "/alert/$alert_id",
-    });
+    'acknowledged_until' => "$period",
+    'alert'              => "/alert/$alert_id",
+  });
+
   my $ua = $self->cir_ua;
   my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
   if ($check->{_rc} == 200) {
     my $res = $ua->post(
-      "$CIRC_BASE/acknowledgement", 
-      Content => $content); 
+      "$CIRC_BASE/acknowledgement",
+      Content => $content
+    );
     my $json = $res->decoded_content;
     return $self->reply("Alert $alert_id acked for $period", $arg);
   } else {
     return $self->reply(
-    "ID $alert_id is not valid. Try 'alerts' to see open alerts.", 
-    $arg);
+      "ID $alert_id is not valid. Try 'alerts' to see open alerts.",
+      $arg,
+    );
   }
 }
 
