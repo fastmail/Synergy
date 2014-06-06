@@ -888,7 +888,9 @@ sub SAID_ack {
   my ($self, $arg) = @_;
 
   return -1
-    unless my ($alert_id, $dur_str) = $arg->{what} =~ /\A(\S+)\s+for\s+(.+)\z/;
+    unless my ($alert_id, $dur_str) = $arg->{what} =~ /\A(\S+)(?:\s+for\s+(.+?))?\s*\z/;
+
+  $dur_str = '15m' unless $dur_str;
 
   unless ($alert_id =~ /\A[0-9]+\z/) {
     return $self->reply(
