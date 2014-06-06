@@ -121,25 +121,38 @@ event _http_alert => sub {
     return;
   }
 
-  my $json = $request->content;
+  my @msgs;
 
-  if ($json =~ /%20/) { # stupid check for not-json because circonus seems buggy
-    my $param = $self->_params_from_req($request);
-    $json = "(faked up) - " . JSON->new->encode($param);
+  my $json = $request->content;
+  warn "CIRCONUS: $json\n";
+
+  my $data = eval { $JSON->decode($json); };
+
+  if ($data) {
+    for my $alert (@{ $data->{alerts} }) {
+      push @msgs, sprintf '[%s] %s - %s',
+        @$alert{qw( alert_id check_name alert_url )};
+    }
+  } else {
+    @msgs = ("Error decoding <$json>: $@");
   }
 
   $kernel->call( 'httpd', 'DONE', $response );
 
   $response->code(204);
 
-  $self->privmsg(
-    $self->get_channels->[0],
-    "circonus alert: $json",
+  for my $msg (@msgs) {
+    $self->privmsg(
+      $self->get_channels->[0],
+      "Circonus alert: $msg",
+    );
+  }
+
+  $self->info(
+    sprintf "Request from %s: %s",
+      $response->connection->remote_ip,
+      $request->uri->path_query
   );
-
-  warn "ALERT: $json\n";
-
-  $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
 
 sub _params_from_req {
