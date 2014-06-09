@@ -733,7 +733,7 @@ sub SAID_status {
 sub SAID_oncall {
   my ($self, $arg) = @_;
 
-  my ($flag, @users) = split / /, $arg->{what} if $arg->{what};
+  my ($flag, @users) = split / /, $arg->{what};
 
   if ($flag) {
     my @current;
