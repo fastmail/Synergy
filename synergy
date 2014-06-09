@@ -681,7 +681,7 @@ has lp_ua => (
   },
 );
 
-has cir_ua => (
+has circ_ua => (
   is => 'ro',
   lazy    => 1,
   default => sub {
@@ -774,7 +774,7 @@ sub _do_oncall_update {
 
   my @current;
 
-  my $ua = $self->cir_ua;
+  my $ua = $self->circ_ua;
   my $contact_group = $self->get_oncall_list;
 
   unless ($flag eq "set") {
@@ -803,7 +803,7 @@ sub _do_oncall_update {
 
 sub get_oncall_list {
   my ($self) = @_;
-  my $ua = $self->cir_ua;
+  my $ua = $self->circ_ua;
   my $res = $ua->get("$CIRC_BASE/contact_group/1298");
   my $json = $res->decoded_content;
   my $contacts = $JSON->decode($json);
@@ -813,7 +813,7 @@ sub get_oncall_list {
 sub update_oncall_list {
   my ($self, $external, @current) = @_;
 
-  my $ua = $self->cir_ua;
+  my $ua = $self->circ_ua;
   my @to_send;
     foreach my $person (@current) {
     my $res = $ua->get("$CIRC_BASE/user/$person");
@@ -873,7 +873,7 @@ sub SAID_plusplus {
 
 sub SAID_alerts {
   my ($self, $arg) = @_;
-  my $ua = $self->cir_ua;
+  my $ua = $self->circ_ua;
 
   my $res = $ua->get("$CIRC_BASE/alert");
   my $json = $res->decoded_content;
@@ -886,7 +886,6 @@ sub SAID_alerts {
       $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
     $self->reply($response, $arg);
   }
-  
 }
 
 sub SAID_ack {
@@ -921,7 +920,7 @@ sub SAID_ack {
     alert              => "/alert/$alert_id",
   });
 
-  my $ua = $self->cir_ua;
+  my $ua = $self->circ_ua;
   my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
   if ($check->is_success) {
     my $res = $ua->post(
