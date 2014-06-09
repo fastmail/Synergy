@@ -737,11 +737,13 @@ sub SAID_oncall {
 
   if ($flag) {
     my @current;
-      my $ua = $self->cir_ua;
-      my $res = $ua->get("$CIRC_BASE/contact_group/1298");
-      my $json = $res->decoded_content;
-      my $result = $JSON->decode($json);
-      my $contact_group = $result->{contacts};
+
+    my $ua = $self->cir_ua;
+    my $res = $ua->get("$CIRC_BASE/contact_group/1298");
+    my $json = $res->decoded_content;
+    my $result = $JSON->decode($json);
+    my $contact_group = $result->{contacts};
+
     unless ($flag eq "set") {
       foreach my $now (@{ $contact_group->{users} }){
         my ($foo, $user, $id) = split('/', $now->{user});
