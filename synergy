@@ -46,6 +46,22 @@ has reverse_phone_book => (
   handles => { username_for_phone => 'get' },
 );
 
+has circ_book => (
+  isa => 'HashRef',
+  traits  => [ 'Hash' ],
+  default => sub { $config->{circ_members} },
+  reader  => '_circ_book',
+  handles => { circ_id_for_username => 'get' },
+);
+
+has reverse_circ_book => (
+  isa  => 'HashRef',
+  lazy => 1,
+  traits  => [ 'Hash' ],
+  default => sub { my %hash = reverse %{ $_[0]->_circ_book }; \%hash },
+  handles => { username_for_circ_id => 'get' },
+);
+
 use constant {
   TIME_WEEKEND  => -1,  # Working on the weekend!
   TIME_BIZ_SAFE =>  0,  # Should absolutely be working.
