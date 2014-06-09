@@ -807,7 +807,7 @@ sub _do_oncall_update {
       return "I don't understand your command '$flag'"
         unless $self->can($method);
 
-      @current = $self->$method($id, @current);
+      $self->$method(\@current, $id);
     } else {
       return "$user is unknown. Try using another name, or use their contact ID number."
     }
@@ -860,23 +860,20 @@ sub update_oncall_list {
 }
 
 sub add_oncall {
-  my ($self, $id, @current) = @_;
-  push @current, $id unless grep { $_ == $id } @current;
-  return  @current;
+  my ($self, $current, $id) = @_;
+  push @$current, $id unless grep { $_ == $id } @$current;
 }
 
 sub remove_oncall {
-  my ($self, $id, @current) = @_;
+  my ($self, $current, $id) = @_;
 
-  @current = grep !/$id/, @current;
-  return @current;
+  @$current = grep !/$id/, @$current;
 }
 
 sub set_oncall {
-  my ($self, $id, @current) = @_;
+  my ($self, $current, $id) = @_;
 
-  push @current, $id;
-  return @current;
+  push @$current, $id;
 }
 
 sub SAID_plusplus {
