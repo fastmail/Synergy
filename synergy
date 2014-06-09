@@ -867,7 +867,7 @@ sub add_oncall {
 sub remove_oncall {
   my ($self, $current, $id) = @_;
 
-  @$current = grep !/$id/, @$current;
+  @$current = grep {; $_ != $id } @$current;
 }
 
 sub set_oncall {
