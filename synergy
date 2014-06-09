@@ -750,22 +750,19 @@ sub SAID_oncall {
         push @current, $id;
       }
     }
+
     foreach my $user (@users) {
       if ( my $id = $config->{circ_members}{$user} ) {
-        if ($flag eq "add") {
-          @current = $self->add_oncall($id, @current);
-        } elsif ($flag eq "remove") {
-          @current = $self->remove_oncall($id, @current);
-        } elsif ($flag eq "set") {
-          @current = $self->set_oncall($id, @current);
-        } else {
-          return $self->reply("I don't understand your command '$flag'", $arg);
-        }
+        my $method = "$flag\_oncall";
+
+        return $self->reply("I don't understand your command '$flag'", $arg)
+          unless $self->can($method);
+
+        @current = $self->$method($id, @current);
       } else {
-        return $self->reply("$user is unknown. Try using another name, or use their contact ID
-            #.", $arg);
+        return $self->reply("$user is unknown. Try using another name, or use their contact ID number.", $arg);
       }
-    } 
+    }
 
     $self->update_oncall_list($contact_group->{external}, @current);
   }
