@@ -831,30 +831,31 @@ sub update_oncall_list {
 
   my $ua = $self->circ_ua;
   my @to_send;
-    foreach my $person (@current) {
+  foreach my $person (@current) {
     my $res = $ua->get("$CIRC_BASE/user/$person");
     my $json = $res->decoded_content;
     my $contact_info = $JSON->decode($json);
-      push @to_send,
-        {
-          '_contact_info' => $contact_info->{contact_info}->{sms},
-          'user' => $contact_info->{_cid},
-          'method' => 'sms'
-        },
-        {
-          '_contact_info' => $contact_info->{email},
-          'user' => $contact_info->{_cid},
-          'method' => 'email'
-        }
-      ;
+    push @to_send, (
+      {
+        '_contact_info' => $contact_info->{contact_info}->{sms},
+        'user' => $contact_info->{_cid},
+        'method' => 'sms'
+      },
+      {
+        '_contact_info' => $contact_info->{email},
+        'user' => $contact_info->{_cid},
+        'method' => 'email'
+      }
+    );
+  }
 
-    }
   my $set_struct = $JSON->encode({
     contacts => {
       users => \@to_send,
       external => $external,
     },
   });
+
   my $result = $ua->put("$CIRC_BASE/contact_group/1298", Content => $set_struct);
 }
 
