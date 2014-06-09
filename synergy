@@ -758,7 +758,7 @@ sub SAID_oncall {
   my @current = @{ $self->get_oncall_list->{users} };
   foreach my $contact (@current) {
     my $urlstring = $contact->{user};
-    my $user_raw = $ua->get("$CIRC_BASE$urlstring");
+    my $user_raw = $self->circ_ua->get("$CIRC_BASE$urlstring");
     my $user_js = $user_raw->decoded_content;
     my $user = $JSON->decode($user_js);
     my @id = split("/", $user->{_cid});
