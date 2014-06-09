@@ -765,33 +765,45 @@ sub SAID_oncall {
   my ($flag, @users) = split / /, $arg->{what};
   s/,$//g for @users;
 
+  my $contact_group = $self->get_oncall_list;
+
   if ($flag) {
-    my @errors = $self->_do_oncall_update($flag, \@users);
+    my @errors = $self->_do_oncall_update($contact_group, $flag, \@users);
     $self->reply($_, $arg) for @errors;
     return if @errors;
+    $self->reply("Okay, oncall group updated!", $arg);
   }
 
-  my @current = @{ $self->get_oncall_list->{users} };
+  my $oncall = $self->_format_oncall_group($contact_group);
+  $self->reply("Now on call: $oncall", $arg);
+}
+
+sub _format_oncall_group {
+  my ($self, $group) = @_;
+
+  # Do we want to show externals here, too, just in case? -- rjbs, 2014-06-09
+  my @current = @{ $group->{users} };
+
+  my %user;
   foreach my $contact (@current) {
-    my $urlstring = $contact->{user};
-    my $user_raw = $self->circ_ua->get("$CIRC_BASE$urlstring");
-    my $user_js = $user_raw->decoded_content;
-    my $user = $JSON->decode($user_js);
-    my @id = split("/", $user->{_cid});
-    $self->reply(
-      "$user->{firstname} $user->{lastname} (user $id[2]): $contact->{method}",
-      $arg
-    );
+    my ($id) = $contact->{user} =~ m{/user/([0-9]+)\z};
+    my $username = $self->username_for_circ_id($id) // "#$id";
+    $user{$username}{$contact->{method}} = 1;
   }
+
+  my $str = join q{; },
+            map {; sprintf '%s (%s)', $_, (join q{, }, sort keys %{ $user{$_} }) }
+            sort keys %user;
+
+  return $str;
 }
 
 sub _do_oncall_update {
-  my ($self, $flag, $users) = @_;
+  my ($self, $contact_group, $flag, $users) = @_;
 
   my @current;
 
   my $ua = $self->circ_ua;
-  my $contact_group = $self->get_oncall_list;
 
   unless ($flag eq "set") {
     foreach my $now (@{ $contact_group->{users} }){
@@ -814,6 +826,10 @@ sub _do_oncall_update {
   }
 
   $self->update_oncall_list($contact_group->{external}, @current);
+
+  # We (presumably) updated the on-call list, so update the one we will print.
+  %$contact_group = %{ $self->get_oncall_list };
+
   return;
 }
 
