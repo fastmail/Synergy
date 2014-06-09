@@ -28,7 +28,7 @@ poco_irc_args(UseSSL => 1);
 
 my $WKSP_ID = $config->{workspace};
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
-my $CIRC_BASE = "https://api.circonus.com/";
+my $CIRC_BASE = "https://api.circonus.com";
 
 has phone_book => (
   isa => 'HashRef',
@@ -455,7 +455,7 @@ sub _dispatch {
   my $method = "SAID_$cmd";
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
-  my %public = map {; $_ => 1 } qw(page task remind alerts ack);
+  my %public = map {; $_ => 1 } qw(page task remind alerts ack oncall);
 
   return -1 unless $self->can("SAID_$cmd");
 
@@ -730,6 +730,117 @@ sub SAID_status {
   $self->reply("Your timer has been running for $time, work on: $name", $arg);
 }
 
+sub SAID_oncall {
+  my ($self, $arg) = @_;
+
+  my ($flag, @users) = split / /, $arg->{what} if $arg->{what};
+
+  if ($flag) {
+    my @current;
+      my $ua = $self->cir_ua;
+      my $res = $ua->get("$CIRC_BASE/contact_group/1298");
+      my $json = $res->decoded_content;
+      my $result = $JSON->decode($json);
+      my $contact_group = $result->{contacts};
+    unless ($flag eq "set") {
+      foreach my $now (@{ $contact_group->{users} }){
+        my ($foo, $user, $id) = split('/', $now->{user});
+        push @current, $id;
+      }
+    }
+    foreach my $user (@users) {
+      if ( my $id = $config->{circ_members}{$user} ) {
+        if ($flag eq "add") {
+          @current = $self->add_oncall($id, @current);
+        } elsif ($flag eq "remove") {
+          @current = $self->remove_oncall($id, @current);
+        } elsif ($flag eq "set") {
+          @current = $self->set_oncall($id, @current);
+        } else {
+          return $self->reply("I don't understand your command '$flag'", $arg);
+        }
+      } else {
+        return $self->reply("$user is unknown. Try using another name, or use their contact ID
+            #.", $arg);
+      }
+    } 
+
+    $self->update_oncall_list($contact_group->{external}, @current);
+  }
+
+  my $oncall = $self->get_oncall_list($arg);
+
+}
+
+
+sub get_oncall_list {
+  my ($self, $arg) = @_;
+  my $ua = $self->cir_ua;
+  my $res = $ua->get("$CIRC_BASE/contact_group/1298");
+  my $json = $res->decoded_content;
+  my $contacts = $JSON->decode($json);
+  foreach my $contact (@{$contacts->{contacts}->{users}}) {
+    my $urlstring = $contact->{user};
+    my $user_raw = $ua->get("$CIRC_BASE$urlstring");
+    my $user_js = $user_raw->decoded_content;
+    my $user = $JSON->decode($user_js);
+    my @id = split("/", $user->{_cid});
+    $self->reply("$user->{firstname} $user->{lastname} (user $id[2]): $contact->{method}", $arg); 
+  }
+}
+
+sub update_oncall_list {
+  my ($self, $external, @current) = @_;
+
+  my $ua = $self->cir_ua;
+  my @to_send;
+    foreach my $person (@current) {
+    my $res = $ua->get("$CIRC_BASE/user/$person");
+    my $json = $res->decoded_content;
+    my $contact_info = $JSON->decode($json);
+      push @to_send,
+        {
+          '_contact_info' => $contact_info->{contact_info}->{sms},
+          'user' => $contact_info->{_cid},
+          'method' => 'sms'
+        },
+        {
+          '_contact_info' => $contact_info->{email},
+          'user' => $contact_info->{_cid},
+          'method' => 'email'
+        }
+      ;
+
+    }
+  my $set_struct = $JSON->encode({
+    contacts => {
+      users => \@to_send,
+      external => $external,
+    },
+  });
+  my $result = $ua->put("$CIRC_BASE/contact_group/1298", Content => $set_struct);
+}
+
+sub add_oncall {
+  my ($self, $id, @current) = @_;
+  push @current, $id unless grep { $_ == $id } @current;
+  return  @current;
+}
+
+sub remove_oncall {
+  my ($self, $id, @current) = @_;
+  
+  @current = grep !/$id/, @current;
+  return @current;
+}
+
+sub set_oncall {
+  my ($self, $id, @current) = @_;
+  
+  push @current, $id;
+  return @current;
+}
+
 sub SAID_plusplus {
   my ($self, $arg) = @_;
 
@@ -754,6 +865,7 @@ sub SAID_alerts {
       $event->{_cid}, $event->{_check_name}, $event->{_alert_url};
     $self->reply($response, $arg);
   }
+  
 }
 
 sub SAID_ack {
