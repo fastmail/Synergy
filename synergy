@@ -739,10 +739,7 @@ sub SAID_oncall {
     my @current;
 
     my $ua = $self->cir_ua;
-    my $res = $ua->get("$CIRC_BASE/contact_group/1298");
-    my $json = $res->decoded_content;
-    my $result = $JSON->decode($json);
-    my $contact_group = $result->{contacts};
+    my $contact_group = $self->get_oncall_list;
 
     unless ($flag eq "set") {
       foreach my $now (@{ $contact_group->{users} }){
@@ -767,25 +764,27 @@ sub SAID_oncall {
     $self->update_oncall_list($contact_group->{external}, @current);
   }
 
-  my $oncall = $self->get_oncall_list($arg);
-
-}
-
-
-sub get_oncall_list {
-  my ($self, $arg) = @_;
-  my $ua = $self->cir_ua;
-  my $res = $ua->get("$CIRC_BASE/contact_group/1298");
-  my $json = $res->decoded_content;
-  my $contacts = $JSON->decode($json);
-  foreach my $contact (@{$contacts->{contacts}->{users}}) {
+  my @users = @{ $self->get_oncall_list->{users} };
+  foreach my $contact (@users) {
     my $urlstring = $contact->{user};
     my $user_raw = $ua->get("$CIRC_BASE$urlstring");
     my $user_js = $user_raw->decoded_content;
     my $user = $JSON->decode($user_js);
     my @id = split("/", $user->{_cid});
-    $self->reply("$user->{firstname} $user->{lastname} (user $id[2]): $contact->{method}", $arg); 
+    $self->reply(
+      "$user->{firstname} $user->{lastname} (user $id[2]): $contact->{method}",
+      $arg
+    );
   }
+}
+
+sub get_oncall_list {
+  my ($self) = @_;
+  my $ua = $self->cir_ua;
+  my $res = $ua->get("$CIRC_BASE/contact_group/1298");
+  my $json = $res->decoded_content;
+  my $contacts = $JSON->decode($json);
+  return $contacts->{contacts};
 }
 
 sub update_oncall_list {
