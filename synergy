@@ -735,37 +735,10 @@ sub SAID_oncall {
 
   my ($flag, @users) = split / /, $arg->{what};
 
-  if ($flag) {
-    my @current;
+  $self->_do_oncall_update($flag, \@users) if $flag;
 
-    my $ua = $self->cir_ua;
-    my $contact_group = $self->get_oncall_list;
-
-    unless ($flag eq "set") {
-      foreach my $now (@{ $contact_group->{users} }){
-        my ($foo, $user, $id) = split('/', $now->{user});
-        push @current, $id;
-      }
-    }
-
-    foreach my $user (@users) {
-      if ( my $id = $config->{circ_members}{$user} ) {
-        my $method = "$flag\_oncall";
-
-        return $self->reply("I don't understand your command '$flag'", $arg)
-          unless $self->can($method);
-
-        @current = $self->$method($id, @current);
-      } else {
-        return $self->reply("$user is unknown. Try using another name, or use their contact ID number.", $arg);
-      }
-    }
-
-    $self->update_oncall_list($contact_group->{external}, @current);
-  }
-
-  my @users = @{ $self->get_oncall_list->{users} };
-  foreach my $contact (@users) {
+  my @current = @{ $self->get_oncall_list->{users} };
+  foreach my $contact (@current) {
     my $urlstring = $contact->{user};
     my $user_raw = $ua->get("$CIRC_BASE$urlstring");
     my $user_js = $user_raw->decoded_content;
@@ -776,6 +749,37 @@ sub SAID_oncall {
       $arg
     );
   }
+}
+
+sub _do_uncall_update {
+  my ($self, $flag, $users) = @_;
+
+  my @current;
+
+  my $ua = $self->cir_ua;
+  my $contact_group = $self->get_oncall_list;
+
+  unless ($flag eq "set") {
+    foreach my $now (@{ $contact_group->{users} }){
+      my ($foo, $user, $id) = split('/', $now->{user});
+      push @current, $id;
+    }
+  }
+
+  foreach my $user (@$users) {
+    if ( my $id = $config->{circ_members}{$user} ) {
+      my $method = "$flag\_oncall";
+
+      return $self->reply("I don't understand your command '$flag'", $arg)
+        unless $self->can($method);
+
+      @current = $self->$method($id, @current);
+    } else {
+      return $self->reply("$user is unknown. Try using another name, or use their contact ID number.", $arg);
+    }
+  }
+
+  $self->update_oncall_list($contact_group->{external}, @current);
 }
 
 sub get_oncall_list {
@@ -827,14 +831,14 @@ sub add_oncall {
 
 sub remove_oncall {
   my ($self, $id, @current) = @_;
-  
+
   @current = grep !/$id/, @current;
   return @current;
 }
 
 sub set_oncall {
   my ($self, $id, @current) = @_;
-  
+
   push @current, $id;
   return @current;
 }
