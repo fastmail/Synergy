@@ -749,7 +749,11 @@ sub SAID_oncall {
   my ($flag, @users) = split / /, $arg->{what};
   s/,$//g for @users;
 
-  $self->_do_oncall_update($flag, \@users) if $flag;
+  if ($flag) {
+    my @errors = $self->_do_oncall_update($flag, \@users);
+    $self->reply($_, $arg) for @errors;
+    return if @errors;
+  }
 
   my @current = @{ $self->get_oncall_list->{users} };
   foreach my $contact (@current) {
@@ -765,7 +769,7 @@ sub SAID_oncall {
   }
 }
 
-sub _do_uncall_update {
+sub _do_oncall_update {
   my ($self, $flag, $users) = @_;
 
   my @current;
@@ -784,16 +788,17 @@ sub _do_uncall_update {
     if ( my $id = $config->{circ_members}{$user} ) {
       my $method = "$flag\_oncall";
 
-      return $self->reply("I don't understand your command '$flag'", $arg)
+      return "I don't understand your command '$flag'"
         unless $self->can($method);
 
       @current = $self->$method($id, @current);
     } else {
-      return $self->reply("$user is unknown. Try using another name, or use their contact ID number.", $arg);
+      return "$user is unknown. Try using another name, or use their contact ID number."
     }
   }
 
   $self->update_oncall_list($contact_group->{external}, @current);
+  return;
 }
 
 sub get_oncall_list {
