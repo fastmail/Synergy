@@ -768,7 +768,7 @@ sub SAID_oncall {
   my $contact_group = $self->get_oncall_list;
 
   if ($flag) {
-    my @errors = $self->_do_oncall_update($contact_group, $flag, \@users);
+    my @errors = $self->_do_oncall_update($arg->{who}, $contact_group, $flag, \@users);
     $self->reply($_, $arg) for @errors;
     return if @errors;
     $self->reply("Okay, oncall group updated!", $arg);
@@ -799,7 +799,7 @@ sub _format_oncall_group {
 }
 
 sub _do_oncall_update {
-  my ($self, $contact_group, $flag, $users) = @_;
+  my ($self, $who_said, $contact_group, $flag, $users) = @_;
 
   my @current;
 
@@ -812,7 +812,8 @@ sub _do_oncall_update {
     }
   }
 
-  foreach my $user (@$users) {
+  foreach my $who (@$users) {
+    my $user = $self->resolve_name($who, $who_said);
     if ( my $id = $config->{circ_members}{$user} ) {
       my $method = "$flag\_oncall";
 
@@ -821,7 +822,7 @@ sub _do_oncall_update {
 
       $self->$method(\@current, $id);
     } else {
-      return "$user is unknown. Try using another name, or use their contact ID number."
+      return "$who is unknown. Try using another name, or use their contact ID number."
     }
   }
 
