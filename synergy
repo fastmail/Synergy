@@ -32,9 +32,11 @@ my $CIRC_BASE = "https://api.circonus.com";
 
 has phone_book => (
   isa => 'HashRef',
+  lazy    => 1,
   traits  => [ 'Hash' ],
   default => sub { $config->{phone_book} },
   reader  => '_phone_book',
+  clearer => '_clear_phone_book',
   handles => { phone_for_username => 'get' },
 );
 
@@ -43,14 +45,17 @@ has reverse_phone_book => (
   lazy => 1,
   traits  => [ 'Hash' ],
   default => sub { my %hash = reverse %{ $_[0]->_phone_book }; \%hash },
+  clearer => '_clear_reverse_phone_book',
   handles => { username_for_phone => 'get' },
 );
 
 has circ_book => (
   isa => 'HashRef',
+  lazy    => 1,
   traits  => [ 'Hash' ],
   default => sub { $config->{circ_members} },
   reader  => '_circ_book',
+  clearer => '_clear_circ_book',
   handles => { circ_id_for_username => 'get' },
 );
 
@@ -59,6 +64,7 @@ has reverse_circ_book => (
   lazy => 1,
   traits  => [ 'Hash' ],
   default => sub { my %hash = reverse %{ $_[0]->_circ_book }; \%hash },
+  clearer => '_clear_reverse_circ_book',
   handles => { username_for_circ_id => 'get' },
 );
 
@@ -688,6 +694,7 @@ sub SAID_pause {
 has lp_ua => (
   is => 'ro',
   lazy    => 1,
+  clearer => '_clear_lp_ua',
   default => sub {
     my $ua = LWP::UserAgent::POE->new(keep_alive => 1);
     my $token = $config->{lp_token};
@@ -700,6 +707,7 @@ has lp_ua => (
 has circ_ua => (
   is => 'ro',
   lazy    => 1,
+  clearer => '_clear_circ_ua',
   default => sub {
     my $ua = LWP::UserAgent::POE->new(keep_alive => 1);
     my $token = $config->{circonus_token};
@@ -1111,6 +1119,16 @@ sub SAID_reload {
   return -1 unless $arg->{what} eq 'config';
 
   $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
+
+  # All of these are potentially invalidated by a config reload. -- rjbs,
+  # 2014-06-10
+  $self->_clear_phone_book;
+  $self->_clear_reverse_phone_book;
+  $self->_clear_circ_book;
+  $self->_clear_reverse_circ_book;
+  $self->_clear_lp_ua;
+  $self->_clear_circ_ua;
+
   return $self->reply("Configuration reloaded.", $arg);
 }
 
