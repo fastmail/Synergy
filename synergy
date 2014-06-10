@@ -767,15 +767,17 @@ sub SAID_oncall {
 
   my $contact_group = $self->get_oncall_list;
 
+  my @to_reply;
+
   if ($flag) {
     my @errors = $self->_do_oncall_update($arg->{who}, $contact_group, $flag, \@users);
     $self->reply($_, $arg) for @errors;
     return if @errors;
-    $self->reply("Okay, oncall group updated!", $arg);
+    push @to_reply, "Okay, oncall group updated!";
   }
 
   my $oncall = $self->_format_oncall_group($contact_group);
-  $self->reply("Now on call: $oncall", $arg);
+  $self->reply(join(q{  }, @to_reply, "Now on call: $oncall"), $arg);
 }
 
 sub _format_oncall_group {
