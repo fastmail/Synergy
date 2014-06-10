@@ -34,6 +34,8 @@ be nice to make Synergy handle LP status for more users, but LiquidPlanner
 doesn't offer any way to delegate rights to a third-party app other than
 password sharing.
 
+### Commands for Everyone
+
 **page USER**: This will send an SMS to the user, who must be the master user.
 **Anyone can use this command.**
 
@@ -50,6 +52,26 @@ in the task's initial description.
 message to be send to the given user on the current channel.  It doesn't check
 that the user is present now or later.
 
+**alerts**: This lists all active alerts in Circonus.
+
+**ack ALERTID for TIME**: This acks the identified alert for a while.
+
+**oncall**: This lists who is on call in Circonus.
+
+**oncall add USER [ USER... ]**: Add users to the list of on call users.
+
+**oncall remove USER [ USER... ]**: Remove users from the list of on call users.
+
+**oncall set USER [ USER... ]**: Totally replace the contents of the on call
+group.
+
+### Commands for the Master User
+
+Because LiquidPlanner doesn't for a token that can manipulate aspects of other
+users' timers, these commands only work for the user whose credentials are used
+for LiquidPlanner.  In the future, this could be tweaked to allow many sets of
+credentials to be stored.
+
 **status**: Synergy will tell you whether you've got a timer running.
 
 **pause timer**:  Synergy will stop your timer, leaving its time in place.
@@ -64,4 +86,3 @@ this will be used to start nagging outside of normal business hours.
 
 **show's over**: This tells Synergy that you're done for the day, and not to
 nag you until the next business day.
-
