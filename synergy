@@ -152,8 +152,7 @@ event _http_alert => sub {
 
   if ($data) {
     for my $alert (@{ $data->{alerts} }) {
-      push @msgs, sprintf '[%s] %s - %s',
-        @$alert{qw( alert_id check_name alert_url )};
+      push @msgs, $self->_fmt_alert($alert);
     }
   } else {
     @msgs = ("Error decoding <$json>: $@");
@@ -176,6 +175,20 @@ event _http_alert => sub {
       $request->uri->path_query
   );
 };
+
+sub _fmt_alert {
+  my ($self, $alert) = @_;
+
+  my $type   = $alert->{clear_time} ? 'recovery' : 'alert';
+  my $metric = $alert->{metric_name}
+             . ($alert->{metric_notes} ? " ($alert->{metric_notes})" : '');
+
+  sprintf '[%s] %s / %s <%s>',
+    uc $type,
+    $alert->{check_name},
+    $metric,
+    $alert->{alert_url};
+}
 
 sub _params_from_req {
   my ($self, $req) = @_;
