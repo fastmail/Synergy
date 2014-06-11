@@ -860,7 +860,7 @@ sub _do_oncall_update {
 sub get_oncall_list {
   my ($self) = @_;
   my $ua = $self->circ_ua;
-  my $res = $ua->get("$CIRC_BASE/contact_group/1298");
+  my $res = $ua->get("$CIRC_BASE/contact_group/$config->{circonus_oncall_group}");
   my $json = $res->decoded_content;
   my $contacts = $JSON->decode($json);
   return $contacts->{contacts};
@@ -896,7 +896,10 @@ sub update_oncall_list {
     },
   });
 
-  my $result = $ua->put("$CIRC_BASE/contact_group/1298", Content => $set_struct);
+  my $result = $ua->put(
+    "$CIRC_BASE/contact_group/$config->{circonus_oncall_group}",
+    Content => $set_struct,
+  );
 }
 
 sub add_oncall {
