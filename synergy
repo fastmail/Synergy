@@ -489,6 +489,10 @@ sub _dispatch {
   my ($self, $arg) = @_;
 
   my $msg = $arg->{what};
+
+  # Genericize this: -- rjbs, 2014-06-19
+  $msg = 'chill for 60 minutes' if lc $msg eq 'zzz';
+
   my ($cmd, $rest) = split ' ', $msg, 2;
 
   # First pass before stripping things down to alnum.
