@@ -180,6 +180,8 @@ sub _fmt_alert {
   my ($self, $alert) = @_;
 
   my $type   = $alert->{clear_time} ? 'recovery' : 'alert';
+  $type .= "-$alert->{severity}" unless $alert->{clear_time};
+
   my $metric = $alert->{metric_name}
              . ($alert->{metric_notes} ? " ($alert->{metric_notes})" : '');
 
