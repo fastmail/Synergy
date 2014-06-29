@@ -509,7 +509,7 @@ sub _dispatch {
   my $method = "SAID_$cmd";
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
-  my %public = map {; $_ => 1 } qw(page task remind alerts ack oncall);
+  my %public = map {; $_ => 1 } qw(page task remind alerts ack oncall plusplus);
 
   return -1 unless $self->can("SAID_$cmd");
 
