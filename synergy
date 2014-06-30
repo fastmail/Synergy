@@ -1176,6 +1176,35 @@ sub SAID_compose {
   return $self->reply($haiku, $arg);
 }
 
+my %HELP = (
+  abort    => "abort timer -- stop and clear the timer (master user only)",
+  ack      => "ack ALERTID [for DURATION] -- acknowledge an alert",
+  alerts   => "alerts -- list active Circonus alerts",
+  announce => "announce MESSAGE -- say something on IRC, for use via SMS",
+  chill    => "chill [until TIME | for DURATION] -- stop nagging for a while (master user only)",
+  oncall   => "oncall -- list on call users; also, (oncall add SOMEBODY, oncall remove SOMEBODY, oncall set SOMEBODY...)",
+  page     => "page SOMEBODY: message -- send an SMS to a user",
+  pause    => "pause timer -- pause the current timer (master user only)",
+  remind   => "remind SOMEBODY [at TIME | in DURATION] -- set up a reminder",
+  showtime => "showtime -- stop chilling, start nagging",
+  status   => "status -- show timer status (master user only)",
+  task     => "task for SOMEBODY: TASK -- make a new task in Liquid Planner",
+  what     => "what's SOMEBODY's number -- get a user's phone number",
+);
+
+sub SAID_help {
+  my ($self, $arg) = @_;
+
+  unless (length $arg->{what}) {
+    return $self->reply("known commands: " . (join q{, }, sort keys %HELP), $arg);
+  }
+
+  my $help = $HELP{$arg->{what}};
+
+  return $self->reply("unknown command", $arg) unless $help;
+  return $self->reply($help, $arg);
+}
+
 sub BUILD {
   my ($self) = @_;
 
