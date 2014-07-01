@@ -465,6 +465,25 @@ sub current_timer {
   return $timer;
 }
 
+event irc_msg => sub {
+  my ($self, $nickstr, $msg) = @_[ OBJECT, ARG0, ARG2 ];
+  my ($nick) = split /!/, $nickstr;
+
+  my $me = $self->get_nickname;
+  $msg =~ s/\A \s* [@%]? \Q$me\E \s* (?: [,:] \s+)?//ix;
+
+  my $result = $self->_dispatch({
+    how   => 'irc',
+    who   => $nick,
+    where => $nick,
+    what  => $msg,
+  });
+
+  return unless $result && $result == -1;
+
+  $self->privmsg( $nick => "$nick: Does not compute." );
+};
+
 event irc_bot_addressed => sub {
   my ($self, $nickstr, $channel, $msg) = @_[ OBJECT, ARG0, ARG1, ARG2 ];
   my ($nick) = split /!/, $nickstr;
