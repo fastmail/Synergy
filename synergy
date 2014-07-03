@@ -165,7 +165,7 @@ event _http_alert => sub {
   for my $msg (@msgs) {
     $self->privmsg(
       $self->get_channels->[0],
-      "Circonus alert: $msg",
+      $msg,
     );
   }
 
@@ -185,7 +185,8 @@ sub _fmt_alert {
   my $metric = $alert->{metric_name}
              . ($alert->{metric_notes} ? " ($alert->{metric_notes})" : '');
 
-  sprintf '[%s] %s / %s <%s>',
+  sprintf 'Circonus alert %u: [%s] %s / %s <%s>',
+    $alert->{alert_id},
     uc $type,
     $alert->{check_name},
     $metric,
