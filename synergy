@@ -407,7 +407,7 @@ event nag => sub {
   if ($timer && $timer == -1) { warn "error retrieving timer\n"; return };
 
   { # Timer running too long!
-    if ($timer->{running_time} > 3) {
+    if ($timer && $timer->{running_time} > 3) {
       if ($last_nag && time - $last_nag->{time} < 900) {
         $self->info("Won't nag, nagged within the last 15min.");
         return;
