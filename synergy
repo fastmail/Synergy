@@ -1037,7 +1037,12 @@ sub SAID_task {
     return $self->reply("I don't know who $target is.", $arg);
   }
 
-  my $urgent = $name =~ s/\s*\(!+\)\s*\z//;
+  my ($urgent, $start);
+  if ($name =~ s/\s*\(([!>]+)\)\s*\z//) {
+    my ($code) = $1;
+    $urgent = $code =~ /!/;
+    $start  = $code =~ />/;
+  }
 
   my $payload = { task => {
     name     => $name,
@@ -1062,14 +1067,31 @@ sub SAID_task {
     );
   }
 
+  my $task_id = $JSON->decode($res->decoded_content)->{id};
+
   $self->reply(
     sprintf(
       "Task for $target created: https://app.liquidplanner.com/space/%s/projects/show/%s",
       $config->{workspace},
-      $JSON->decode($res->decoded_content)->{id},
+      $task_id,
     ),
     $arg,
   );
+
+  if ($start) {
+    my $res = $self->lp_ua->post(
+      "$LP_BASE/tasks/$task_id/timer/start",
+      Content_Type => 'application/json',
+      Content => $JSON->encode($payload),
+    );
+
+    if ($res->is_success) {
+      $self->reply("Timer for new task has been begun.", $arg);
+    } else {
+      $self->reply("There was a problem starting your new task's timer.", $arg);
+    }
+  }
+
 }
 
 sub SAID_page {
