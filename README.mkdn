@@ -74,6 +74,11 @@ credentials to be stored.
 
 **status**: Synergy will tell you whether you've got a timer running.
 
+**commit: MESSAGE**: Synergy will commit your current timer's time and add a
+comment given in your message.  If it ends with "DONE", that will be removed
+and the task will be marked complete.  Otherwise, time timer will start running
+again from zero.
+
 **pause timer**:  Synergy will stop your timer, leaving its time in place.
 
 **abort timer**:  Synergy will stop your timer and clear your timer.
