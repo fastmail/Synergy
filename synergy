@@ -712,7 +712,7 @@ sub SAID_commit {
   my ($self, $arg) = @_;
 
   my $comment = $arg->{what};
-  my $done    = $comment =~ s/\S+DONE(?:[.!]+)?\z//;
+  my $done    = $comment =~ s/\s+DONE(?:[.!]+)?\z//;
 
   my $timer = $self->current_timer;
 
@@ -732,7 +732,7 @@ sub SAID_commit {
   my $content = $JSON->encode({
     is_done => $done ? \1 : \0,
     comment => $comment,
-    restart => 1,
+    restart => $done ? \0 : \1,
     activity_id => $activity_id,
   });
 
@@ -748,7 +748,8 @@ sub SAID_commit {
   }
 
   $self->clear_last_nag;
-  $self->reply("Okay, I've committed your work.", $arg);
+  my $also = $done ? ' and marked the task done' : '';
+  $self->reply("Okay, I've committed your work$also.", $arg);
 }
 
 sub SAID_pause {
