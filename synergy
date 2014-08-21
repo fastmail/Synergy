@@ -708,6 +708,49 @@ sub SAID_abort {
   }
 }
 
+sub SAID_commit {
+  my ($self, $arg) = @_;
+
+  my $comment = $arg->{what};
+  my $done    = $comment =~ s/\S+DONE(?:[.!]+)?\z//;
+
+  my $timer = $self->current_timer;
+
+  return $self->reply("You don't seem to have a running timer.", $arg)
+    unless $timer && ref $timer; # XXX <-- stupid return type
+
+  my $task_res = $self->lp_ua->get("$LP_BASE/tasks/$timer->{item_id}");
+
+  my $activity_id;
+  unless ($task_res->is_success) {
+    return $self->reply("I couldn't log the work because I couldn't find the current task's activity id.", $arg);
+  }
+
+  my $task = $JSON->decode($task_res->decoded_content);
+  $activity_id = $task->{activity_id};
+
+  my $content = $JSON->encode({
+    is_done => $done ? \1 : \0,
+    comment => $comment,
+    restart => 1,
+    activity_id => $activity_id,
+  });
+
+  my $commit_res = $self->lp_ua->post(
+    "$LP_BASE/tasks/$timer->{item_id}/timer/commit",
+    Content => $content,
+    Content_Type => 'application/json',
+  );
+
+  unless ($commit_res->is_success) {
+    warn $commit_res->as_string;
+    return $self->reply("I couldn't commit your work, sorry.", $arg);
+  }
+
+  $self->clear_last_nag;
+  $self->reply("Okay, I've committed your work.", $arg);
+}
+
 sub SAID_pause {
   my ($self, $arg) = @_;
 
@@ -741,6 +784,7 @@ has lp_ua => (
     my $token = $config->{lp_token};
 
     $ua->default_header('Authorization' => "$token");
+
     return $ua;
   },
 );
