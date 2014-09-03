@@ -712,7 +712,9 @@ sub SAID_commit {
   my ($self, $arg) = @_;
 
   my $comment = $arg->{what};
-  my $done    = $comment =~ s/\s+DONE(?:[.!]+)?\z//;
+  my $meta    = $comment =~ s/\s+(DONE|STOP)(?:[.!]+)?\z//;
+  my $done    = $1 && $1 eq 'DONE';
+  my $stop    = $1 && ($done || $1 eq 'STOP');
 
   my $timer = $self->current_timer;
 
@@ -732,7 +734,7 @@ sub SAID_commit {
   my $content = $JSON->encode({
     is_done => $done ? \1 : \0,
     comment => $comment,
-    restart => $done ? \0 : \1,
+    restart => $stop ? \0 : \1,
     activity_id => $activity_id,
   });
 
@@ -748,8 +750,12 @@ sub SAID_commit {
   }
 
   $self->clear_last_nag;
-  my $also = $done ? ' and marked the task done' : '';
-  $self->reply("Okay, I've committed your work$also.", $arg);
+  my $also = $done ? ' and marked the task done'
+           : $stop ? ' and stopped the timer'
+           :         '';
+
+  my $time = concise( duration( $timer->{running_time} * 3600 ) );
+  $self->reply("Okay, I've committed $time of work$also.", $arg);
 }
 
 sub SAID_pause {
