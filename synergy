@@ -708,6 +708,36 @@ sub SAID_abort {
   }
 }
 
+sub SAID_reset {
+  my ($self, $arg) = @_;
+
+  if ($arg->{what} eq 'timer') {
+    my $ua = $self->lp_ua;
+    my $res = $ua->get("$LP_BASE/my_timers");
+
+    return $self->reply("Something went wrong", $arg) unless $res->is_success;
+
+    my ($timer) = grep {; $_->{running} }
+                  @{ $JSON->decode( $res->decoded_content ) };
+
+    unless ($timer) {
+      $self->reply("You don't have an active timer to abort.", $arg);
+      return;
+    }
+
+    my $clr_res  = $ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/clear");
+
+    if ($clr_res->is_success) {
+      $self->clear_last_nag;
+      $self->reply("Okay, I cleared your active timer but left it running.", $arg);
+    } else {
+      $self->reply("Something went wrong resetting your timer.", $arg);
+    }
+  } else {
+    $self->reply("I didn't understand your reset request.", $arg);
+  }
+}
+
 sub SAID_commit {
   my ($self, $arg) = @_;
 
@@ -856,7 +886,14 @@ sub SAID_status {
            ? $JSON->decode($task_res->decoded_content)->{name}
            : '??';
 
-  $self->reply("Your timer has been running for $time, work on: $name", $arg);
+  my $url = sprintf "https://app.liquidplanner.com/space/%s/projects/show/%s",
+    $config->{workspace},
+    $timer->{task_id};
+
+  $self->reply(
+    "Your timer has been running for $time, work on: $name <$url>",
+    $arg,
+  );
 }
 
 sub SAID_oncall {
@@ -1282,6 +1319,7 @@ my %HELP = (
   page     => "page SOMEBODY: message -- send an SMS to a user",
   pause    => "pause timer -- pause the current timer (master user only)",
   remind   => "remind SOMEBODY [at TIME | in DURATION] -- set up a reminder",
+  reset    => "reset timer -- clear the timer, leave it running (master user only)",
   showtime => "showtime -- stop chilling, start nagging",
   status   => "status -- show timer status (master user only)",
   task     => "task for SOMEBODY: TASK -- make a new task in Liquid Planner",
