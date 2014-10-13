@@ -83,6 +83,13 @@ has chilltill => (
   clearer   => 'clear_chilltill',
 );
 
+has suppress_alerts_until => (
+  is  => 'rw',
+  isa => 'Int',
+  predicate => 'has_suppress_alerts_until',
+  clearer   => 'clear_suppress_alerts_until',
+);
+
 has httpd => (
   is => 'bare',
   builder => '_build_httpd',
@@ -162,11 +169,15 @@ event _http_alert => sub {
 
   $response->code(204);
 
-  for my $msg (@msgs) {
-    $self->privmsg(
-      $self->get_channels->[0],
-      $msg,
-    );
+  if ($self->has_suppress_alerts_until && time < $self->suppress_alerts_until) {
+    $self->info("Declining to relay alerts during suppression period.");
+  } else {
+    for my $msg (@msgs) {
+      $self->privmsg(
+        $self->get_channels->[0],
+        $msg,
+      );
+    }
   }
 
   $self->info(
@@ -591,24 +602,33 @@ has _date_parser => (
   },
 );
 
-sub SAID_chill {
-  my ($self, $arg) = @_;
-  my ($prep, $rest) = split ' ', $arg->{what}, 2;
+sub  _parse_time_hunk {
+  my ($self, $hunk) = @_;
 
-  my $time;
+  my ($prep, $rest) = split ' ', $hunk, 2;
+
   if ($prep eq 'for') {
     my $dur;
     $rest =~ s/^an?\s+/1 /;
     my $ok = eval { $dur = parse_duration($rest); 1 };
-    return -1 unless $ok;
-    $time = time + $dur;
-  } elsif ($prep eq 'until') {
-    my $dt = eval { $self->_date_parser->parse_datetime($rest) };
-    return -1 unless $dt;
-    $time = $dt->epoch;
-  } else {
-    return -1;
+    return unless $ok;
+    return time + $dur;
   }
+
+  if ($prep eq 'until') {
+    my $dt = eval { $self->_date_parser->parse_datetime($rest) };
+    return unless $dt;
+    return $dt->epoch;
+  }
+
+  return;
+}
+
+sub SAID_chill {
+  my ($self, $arg) = @_;
+
+  my $time = $self->_parse_time_hunk($arg->{what});
+  return -1 unless defined $time;
 
   if ($time <= time) {
     $self->reply("That sounded like you want to chill until the past.", $arg);
@@ -617,6 +637,17 @@ sub SAID_chill {
 
   $self->chilltill($time);
   $self->reply("Okay, no more nagging until " . localtime $time, $arg);
+}
+
+sub SAID_mute {
+  my ($self, $arg) = @_;
+  return -1 unless $arg->{what} =~ s/\A\s*alerts\s+//;
+
+  my $time = $self->_parse_time_hunk($arg->{what});
+  return -1 unless defined $time;
+
+  $self->suppress_alerts_until($time);
+  $self->reply("Okay, alerts won't be relayed until " . localtime $time, $arg);
 }
 
 sub SAID_remind {
