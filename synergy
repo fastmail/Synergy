@@ -452,17 +452,13 @@ event nag => sub {
       $level = $last_nag->{level} + 1;
     }
 
-    if ($level < 2) {
-      my $still = $level == 0 ? '' : ' still';
-      $self->privmsg(
-        $config->{master},
-        "Your LiquidPlanner timer$still isn't running",
-      );
-      $self->last_nag({ time => time, level => $level });
-    } else {
-      $self->sms($config->{master_ph}, "Your LiquidPlanner timer isn't running.");
-      $self->last_nag({ time => time, level => $level });
+    my $still = $level == 0 ? '' : ' still';
+    my $msg   = "Your LiquidPlanner timer$still isn't running";
+    $self->privmsg($config->{master}, $msg);
+    if ($level >= 2) {
+      $self->sms($config->{master_ph}, $msg);
     }
+    $self->last_nag({ time => time, level => $level });
   }
 };
 
