@@ -1270,6 +1270,25 @@ sub _fmt_ph {
   return "+$c $ac $ex-$rest";
 }
 
+sub SAID_who {
+  my ($self, $arg) = @_;
+  my $what = $arg->{what};
+  $what =~ s/\s*\?*\z//;
+  return -1 unless $what =~ s/\Ais\s+//;
+
+  my $who = $self->resolve_name($what, $arg->{who});
+  return $self->reply(qq!I don't know who "$what" is.!, $arg) if ! $who;
+
+  my $rn = $config->{realnames}{$who} // '';
+  $rn &&= " ($rn)";
+
+  if ($what eq $arg->{who}) {
+    return $self->reply(qq{"$who" is "$who$rn."  Obviously.}, $arg);
+  }
+
+  return $self->reply(qq["$what" is an alias for $who$rn.], $arg);
+}
+
 sub SAID_what {
   my ($self, $arg) = @_;
   my $what = $arg->{what};
