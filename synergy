@@ -788,6 +788,10 @@ sub SAID_commit {
   my $task = $JSON->decode($task_res->decoded_content);
   $activity_id = $task->{activity_id};
 
+  unless ($activity_id) {
+    return $self->reply("I couldn't log the work because the task doesn't have a defined activity.", $arg);
+  }
+
   my $content = $JSON->encode({
     is_done => $done ? \1 : \0,
     comment => $comment,
