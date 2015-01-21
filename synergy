@@ -267,6 +267,12 @@ event _http_sms => sub {
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
 
+sub SAID_eject {
+  my ($self, $arg) = @_;
+  return -1 unless $arg->{what} eq 'warp core';
+  kill 'INT', $$;
+}
+
 sub SAID_announce {
   my ($self, $arg) = @_;
 
