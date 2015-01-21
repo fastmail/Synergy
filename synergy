@@ -1175,8 +1175,8 @@ sub SAID_task {
   my $where = ref $arg->{where} ? $arg->{where}[0] : $arg->{where};
   my $payload = { task => {
     name     => $name,
-    owner_id => $owner_id,
     ($urgent ? (parent_id => $config->{lp_urgent}) : ()),
+    assignments => [ { person_id => $owner_id } ],
     description => "created by " . $self->get_nickname . " on $where "
                 .  "on behalf of $arg->{who}",
   } };
