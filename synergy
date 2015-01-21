@@ -1159,7 +1159,7 @@ sub SAID_task {
 
   my ($target, $name) = $what =~ /\s*for\s+(.+?):\s+(.+)\z/;
 
-  my @target_names = split /(?:\s*,\s*|\+and\+)/, $target;
+  my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
   my (@owner_ids, @owner_names, @unknown);
   my %seen;
   for my $name (@target_names) {
