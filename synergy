@@ -1099,6 +1099,10 @@ sub set_oncall {
 sub SAID_plusplus {
   my ($self, $arg) = @_;
 
+  if (! length $arg->{what}) {
+    return $self->reply("Thanks, but I'm only as awesome as my creators.", $arg);
+  }
+
   return $self->SAID_task({
     %$arg,
     what => "for $arg->{who}: $arg->{what}",
