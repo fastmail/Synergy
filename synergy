@@ -671,7 +671,7 @@ sub SAID_remind {
   /x;
 
   unless (length $who) {
-    $self->warn("couldn't parse <<$arg->{what}>>");
+    warn("couldn't parse <<$arg->{what}>>");
     return -1;
   }
 
