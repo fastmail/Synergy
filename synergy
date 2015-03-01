@@ -570,6 +570,27 @@ sub reply {
   }
 }
 
+sub SAID_pose {
+  my ($self, $arg) = @_;
+
+  unless ($arg->{who} eq $config->{master}) {
+    return -1;
+  }
+
+  my $what = $arg->{what};
+
+  if ($what =~ s{\A\s*/me\s+}{}g) {
+    # emote
+  }
+
+  $self->privmsg(
+    $self->get_channels->[0],
+    $what,
+  );
+
+  return;
+}
+
 sub SAID_showtime {
   my ($self, $arg) = @_;
 
