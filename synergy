@@ -83,6 +83,40 @@ has chilltill => (
   clearer   => 'clear_chilltill',
 );
 
+has _recent_alerts => (
+  is  => 'ro',
+  default => sub {  {}  },
+);
+
+sub recent_alerts {
+  my ($self) = @_;
+  my $stash = $self->_recent_alerts;
+  my $now = time;
+  for my $key (keys %$stash) {
+    delete $stash->{$key} if $now - $stash->{$key}{recorded_at} > 15*60;
+  }
+
+  return $stash;
+}
+
+sub record_alerts {
+  my ($self, $alerts) = @_;
+
+  my $now   = time;
+  my $stash = $self->recent_alerts;
+
+  for my $alert (@$alerts) {
+    $stash->{ $alert->{alert_id} } = {
+      recorded_at => $now,
+      metric_name => $alert->{metric_name},
+      host        => $alert->{host},
+      check_id    => $alert->{check_id},
+    };
+  }
+
+  return;
+}
+
 has suppress_alerts_until => (
   is  => 'rw',
   isa => 'Int',
@@ -154,6 +188,12 @@ event _http_alert => sub {
 
   my $json = $request->content;
   warn "CIRCONUS: $json\n";
+  # {
+  #   "alerts": [
+  #     {"check_name":"pb-wm1.int.icgroup.com basic","metric_link":null,"check_id":96848,"alert_value":null,"check_bundle_id":73559,"alert_url":"https://circonus.com/account/ic-group-inc/fault-detection?alert_id=19039695","host":"pb-wm1.int.icgroup.com","metric_notes":null,"alert_time":"Sun, 22 Mar 2015 20:01:02","clear_time":"Sun, 22 Mar 2015 20:07:22","metric_name":"service|-faults","clear_value":"0.0","agent":"Quonix","severity":"1","alert_id":"19039695"}
+  #   ],
+  #   "account_name":"IC Group, INC"
+  # }
 
   my $data = eval { $JSON->decode($json); };
 
@@ -172,6 +212,10 @@ event _http_alert => sub {
   if ($self->has_suppress_alerts_until && time < $self->suppress_alerts_until) {
     $self->info("Declining to relay alerts during suppression period.");
   } else {
+    # We only record the alerts when we mention them, because otherwise it
+    # might be weird to see no alerts, then "ack all those" doing something.
+    # -- rjbs, 2015-03-23
+    $self->record_alerts($data->{alerts});
     for my $msg (@msgs) {
       $self->privmsg(
         $self->get_channels->[0],
@@ -1134,7 +1178,9 @@ sub SAID_ack {
 
   $dur_str = '15m' unless $dur_str;
 
-  unless ($alert_id =~ /\A[0-9]+\z/) {
+  if ($alert_id eq '*') {
+    # We'll do multi-ack.
+  } elsif ($alert_id !~ /\A[0-9]+\z/) {
     return $self->reply(
       qq{"$alert_id" doesn't look like a cromulent alert id.  } .
       qq{They're just numbers!},
@@ -1150,8 +1196,54 @@ sub SAID_ack {
 
   my $min = int($dur / 60);
 
+  my $long = concise(duration($dur - $dur % 60));
+
   return $self->reply("You can't ack something for less than a minute!", $arg)
     unless $min;
+
+  if ($alert_id eq '*') {
+    my $stash = $self->recent_alerts;
+    unless (keys %$stash) {
+      return $self->reply("There are no recent alerts to ack!", $arg);
+    }
+
+    my @acked;
+    my @failed;
+
+    for my $alert_id (keys %$stash) {
+      my $alert = $stash->{$alert_id};
+      my $desc = sprintf "(%s on %s)", $alert->{metric_name}, $alert->{host};
+      if ($self->_ack_alert_for($alert_id, $min)) {
+        push @acked, $desc;
+      } else {
+        push @failed, $desc;
+      }
+    }
+
+    if (@acked) {
+      $self->reply("Acked for $long: " . join(q{, }, @acked), $arg);
+    }
+    if (@failed) {
+      $self->reply("Failed to ack: " . join(q{, }, @failed), $arg);
+    }
+
+    return;
+  } else {
+    my $acked = $self->_ack_alert_for($alert_id, $min);
+
+    if ($acked) {
+      return $self->reply("Alert $alert_id acked for $long.", $arg);
+    } else {
+      return $self->reply(
+        "Alert couldn't be acked.  Maybe check 'alerts'?",
+        $arg,
+      );
+    }
+  }
+}
+
+sub _ack_alert_for {
+  my ($self, $alert_id, $min) = @_;
 
   my $content = $JSON->encode({
     acknowledged_until => $min . 'm',
@@ -1160,20 +1252,15 @@ sub SAID_ack {
 
   my $ua = $self->circ_ua;
   my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
-  if ($check->is_success) {
-    my $res = $ua->post(
-      "$CIRC_BASE/acknowledgement",
-      Content => $content
-    );
-    my $json = $res->decoded_content;
-    my $long = concise(duration($dur - $dur % 60));
-    return $self->reply("Alert $alert_id acked for $long.", $arg);
-  } else {
-    return $self->reply(
-      "Alert $alert_id doesn't seem to exist.  Maybe check 'alerts'?",
-      $arg,
-    );
-  }
+
+  return unless $check->is_success;
+
+  my $res = $ua->post(
+    "$CIRC_BASE/acknowledgement",
+    Content => $content
+  );
+
+  return $res->is_success;
 }
 
 sub SAID_task {
