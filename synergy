@@ -1196,10 +1196,10 @@ sub SAID_ack {
 
   my $min = int($dur / 60);
 
-  my $long = concise(duration($dur - $dur % 60));
-
   return $self->reply("You can't ack something for less than a minute!", $arg)
     unless $min;
+
+  my $long = concise(duration($dur - $dur % 60));
 
   if ($alert_id eq '*') {
     my $stash = $self->recent_alerts;
@@ -1245,20 +1245,89 @@ sub SAID_ack {
 sub _ack_alert_for {
   my ($self, $alert_id, $min) = @_;
 
+  my $ua = $self->circ_ua;
+  my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
+
+  return unless $check->is_success;
+
   my $content = $JSON->encode({
     acknowledged_until => $min . 'm',
     alert              => "/alert/$alert_id",
   });
+
+  my $res = $ua->post(
+    "$CIRC_BASE/acknowledgement",
+    Content => $content
+  );
+
+  return $res->is_success;
+}
+
+sub SAID_maint {
+  my ($self, $arg) = @_;
+
+  return -1
+    unless my ($alert_id, $dur_str) = $arg->{what} =~ /\A(\S+)(?:\s+for\s+(.+?))?\s*\z/;
+
+  $dur_str = '15m' unless $dur_str;
+
+  if ($alert_id eq '*') {
+    # We'll do multi-ack.
+    return $self->reply("Multi-maint not yet implemented", $arg);
+  } elsif ($alert_id !~ /\A[0-9]+\z/) {
+    return $self->reply(
+      qq{"$alert_id" doesn't look like a cromulent alert id.  } .
+      qq{They're just numbers!},
+      $arg
+    );
+  }
+
+  my $dur;
+  my $ok = eval { $dur = parse_duration($dur_str); 1 };
+
+  return $self->reply("I didn't understand how long you wanted to ack it!", $arg)
+    unless $ok;
+
+  my $min = int($dur / 60);
+
+  return $self->reply("You can't maint something for less than a minute!", $arg)
+    unless $min;
+
+  my $long = concise(duration($dur - $dur % 60));
+
+  if ($self->_maint_alert_for($alert_id, $min)) {
+    return $self->reply("Maintenance begun!", $arg)
+  }
+
+  return $self->reply("Sorry, I couldn't start a maintenance window!", $arg)
+}
+
+sub _maint_alert_for {
+  my ($self, $alert_id, $min) = @_;
 
   my $ua = $self->circ_ua;
   my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
 
   return unless $check->is_success;
 
+  my $alert = $JSON->decode( $check->decoded_content );
+  my $check_path = $alert->{_check};
+
+  my $content = $JSON->encode({
+    item       => $check_path,
+    severities => [ 1..5 ],
+    start      => time,
+    stop       => time  +  $min * 60,
+    notes      => "requested via Synergy",
+    type       => 'check',
+  });
+
   my $res = $ua->post(
-    "$CIRC_BASE/acknowledgement",
+    "$CIRC_BASE/maintenance",
     Content => $content
   );
+
+  warn "MAINT FAIL: " . $res->as_string unless $res->is_success;
 
   return $res->is_success;
 }
