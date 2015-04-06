@@ -1267,19 +1267,21 @@ sub SAID_maint {
   my ($self, $arg) = @_;
 
   return -1
-    unless my ($alert_id, $dur_str) = $arg->{what} =~ /\A(\S+)(?:\s+for\s+(.+?))?\s*\z/;
+    unless my ($target, $dur_str) = $arg->{what} =~ /\A(\S+)(?:\s+for\s+(.+?))?\s*\z/;
 
   $dur_str = '15m' unless $dur_str;
 
-  if ($alert_id eq '*') {
+  my $is_host;
+
+  if ($target eq '*') {
     # We'll do multi-ack.
     return $self->reply("Multi-maint not yet implemented", $arg);
-  } elsif ($alert_id !~ /\A[0-9]+\z/) {
-    return $self->reply(
-      qq{"$alert_id" doesn't look like a cromulent alert id.  } .
-      qq{They're just numbers!},
-      $arg
-    );
+  } if ($target =~ /\A[0-9]+\z/) {
+    $is_host = 0;
+  } elsif ($target =~ /\A(?:[-0-9a-z]+\.)*[-0-9a-z]+\z/) {
+    $is_host = 1;
+  } else {
+    return $self->reply("I don't know what kind of maint $target is.", $arg);
   }
 
   my $dur;
@@ -1295,11 +1297,19 @@ sub SAID_maint {
 
   my $long = concise(duration($dur - $dur % 60));
 
-  if ($self->_maint_alert_for($alert_id, $min)) {
-    return $self->reply("Maintenance begun!", $arg)
+  if ($is_host) {
+    if ($self->_maint_host_for($target, $min)) {
+      return $self->reply("Maintenance for host $target begun!", $arg)
+    }
+
+    return $self->reply("Sorry, I couldn't start a maintenance window for host $target!", $arg)
   }
 
-  return $self->reply("Sorry, I couldn't start a maintenance window!", $arg)
+  if ($self->_maint_alert_for($target, $min)) {
+    return $self->reply("Maintenance for alert $target begun!", $arg)
+  }
+
+  return $self->reply("Sorry, I couldn't start a maintenance window for alert $target!", $arg)
 }
 
 sub _maint_alert_for {
@@ -1320,6 +1330,30 @@ sub _maint_alert_for {
     stop       => time  +  $min * 60,
     notes      => "requested via Synergy",
     type       => 'check',
+  });
+
+  my $res = $ua->post(
+    "$CIRC_BASE/maintenance",
+    Content => $content
+  );
+
+  warn "MAINT FAIL: " . $res->as_string unless $res->is_success;
+
+  return $res->is_success;
+}
+
+sub _maint_host_for {
+  my ($self, $host, $min) = @_;
+
+  my $ua = $self->circ_ua;
+
+  my $content = $JSON->encode({
+    item       => "$host",
+    severities => [ 1..5 ],
+    start      => time,
+    stop       => time  +  $min * 60,
+    notes      => "requested via Synergy",
+    type       => 'host',
   });
 
   my $res = $ua->post(
