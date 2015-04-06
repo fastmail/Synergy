@@ -590,7 +590,7 @@ sub _dispatch {
 
   my %public = map {; $_ => 1 } qw(
     mute
-    page task remind alerts ack oncall plusplus
+    page task remind alerts ack maint oncall plusplus
   );
 
   return -1 unless $self->can("SAID_$cmd");
@@ -1268,6 +1268,8 @@ sub SAID_maint {
 
   return -1
     unless my ($target, $dur_str) = $arg->{what} =~ /\A(\S+)(?:\s+for\s+(.+?))?\s*\z/;
+
+  $target =~ s{^http://}{}; # Slack, sometimes you suck. -- rjbs, 2015-04-06
 
   $dur_str = '15m' unless $dur_str;
 
