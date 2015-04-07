@@ -1015,7 +1015,7 @@ sub SAID_status {
 
   my $url = sprintf "https://app.liquidplanner.com/space/%s/projects/show/%s",
     $config->{workspace},
-    $timer->{task_id};
+    $timer->{item_id};
 
   $self->reply(
     "Your timer has been running for $time, work on: $name <$url>",
