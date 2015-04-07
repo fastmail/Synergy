@@ -1173,7 +1173,7 @@ sub SAID_alerts {
 sub SAID_ack {
   my ($self, $arg) = @_;
 
-  return -1
+  return $self->reply("ack in format '<alert id> for <time>'")
     unless my ($alert_id, $dur_str) = $arg->{what} =~ /\A(\S+)(?:\s+for\s+(.+?))?\s*\z/;
 
   $dur_str = '15m' unless $dur_str;
