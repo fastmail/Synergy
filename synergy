@@ -560,6 +560,12 @@ event irc_bot_addressed => sub {
   $self->privmsg( $channel => "$nick: Does not compute." );
 };
 
+has last_msgs => (
+  is => 'ro',
+  init_arg => undef,
+  default  => sub {  {}  },
+);
+
 my %ALIAS = (
   say  => 'announce',
   '++' => 'plusplus',
@@ -570,6 +576,22 @@ sub _dispatch {
   my ($self, $arg) = @_;
 
   my $msg = $arg->{what};
+
+  my $last_ref = ref $arg->{how}
+               ? \do { my $x }
+               : \($self->last_msgs->{ $arg->{who} }->{ $arg->{how} });
+
+  if ($msg eq 'commit that') {
+    return "Sorry, I don't see a previous message from you." unless $$last_ref;
+    local $arg->{what} = "commit: $$last_ref";
+    return $self->_dispatch($arg);
+  }
+
+  $$last_ref = $msg;
+
+  if (not ref $arg->{how}) {
+    $self->last_msgs->{ $arg->{who} }->{ $arg->{how} } = $arg->{what};
+  }
 
   # Genericize this: -- rjbs, 2014-06-19
   $msg = 'chill for 60 minutes' if lc $msg eq 'zzz';
