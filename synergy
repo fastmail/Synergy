@@ -895,6 +895,12 @@ sub SAID_commit {
     activity_id => $activity_id,
   });
 
+  if ($stop and ! $self->chilling) {
+    # Don't complain 30s after we stop work!  Give us a couple minutes to move
+    # on to the next task. -- rjbs, 2015-04-21
+    $self->chilltill(time + 300);
+  }
+
   my $commit_res = $self->lp_ua->post(
     "$LP_BASE/tasks/$timer->{item_id}/timer/commit",
     Content => $content,
