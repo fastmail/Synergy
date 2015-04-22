@@ -785,6 +785,11 @@ sub SAID_remind {
     return -1;
   }
 
+  unless ($prep) {
+    warn("try 'remind <person> in/at <time>: <reminder>'");
+    return -1;
+  }
+
   $who = $self->resolve_name($who, $arg->{who});
 
   my $time;
