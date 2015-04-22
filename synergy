@@ -611,6 +611,7 @@ sub _dispatch {
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
   my %public = map {; $_ => 1 } qw(
+    help
     mute
     page task remind alerts ack maint oncall plusplus
   );
