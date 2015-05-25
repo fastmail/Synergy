@@ -746,13 +746,14 @@ sub SAID_mute {
 sub SAID_remind {
   my ($self, $arg) = @_;
 
-  my ($who, $prep, $dur_str, $rest) = $arg->{what} =~ qr/\A
+  my ($who, $prep, $dur_str, $want_page, $rest) = $arg->{what} =~ qr/\A
     \s*
     (\S+)    # "me" or a nick
     \s+
     (in|at) # duration type
     \s+
     (.+?)    # duration
+    (\s+with\s+page\s*)?
     :\s+     # the space is vital:  "at 15:15: eat pie"
     (.+)     # the reminder
     \z
@@ -789,7 +790,7 @@ sub SAID_remind {
 
   $self->alarm_add(
     send_reminder => $time,
-    { %$arg, who => $who },
+    { %$arg, who => $who, page => !! $want_page },
     DateTime->now(time_zone => 'America/New_York'),
     $rest,
   );
@@ -798,6 +799,11 @@ sub SAID_remind {
 
 event send_reminder => sub {
   my ($self, $reply_arg, $requested_time, $msg) = @_[OBJECT, ARG0..ARG2];
+
+  if (my $phone = $self->phone_for_username($reply_arg->{who})) {
+    $self->sms($phone, "Reminder from $requested_time: $msg");
+  }
+
   $self->reply("Reminder from $requested_time: $msg", $reply_arg);
 };
 
