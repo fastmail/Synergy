@@ -76,6 +76,12 @@ use constant {
   TIME_LATE     =>  3,  # Definitely late.
 };
 
+has chill_until_active => (
+  is  => 'rw',
+  isa => 'Bool',
+  default => 0,
+);
+
 has chilltill => (
   is  => 'rw',
   isa => 'Int',
@@ -358,6 +364,7 @@ event _http_404 => sub {
 
 sub chilling {
   my ($self) = @_;
+  return 1 if $self->chill_until_active;
   return unless $self->has_chilltill;
   return time <= $self->chilltill;
 }
@@ -532,16 +539,42 @@ event irc_msg => sub {
   my $me = $self->get_nickname;
   $msg =~ s/\A \s* [@%]? \Q$me\E \s* (?: [,:] \s+)?//ix;
 
-  my $result = $self->_dispatch({
+  my $arg = {
     how   => 'irc',
     who   => $nick,
     where => $nick,
     what  => $msg,
-  });
+  };
+
+  if ($self->chill_until_active and $nick eq $config->{master}) {
+    $self->chill_until_active(0);
+    $self->clear_chilltill;
+    $self->reply("You're back!  No longer chilling.", $arg);
+  }
+
+  my $result = $self->_dispatch($arg);
 
   return unless $result && $result == -1;
 
   $self->privmsg( $nick => "$nick: Does not compute." );
+};
+
+event irc_public => sub {
+  my ($self, $nickstr, $channel, $msg) = @_[ OBJECT, ARG0, ARG1, ARG2 ];
+  my ($nick) = split /!/, $nickstr;
+
+  my $arg = {
+    how   => 'irc',
+    who   => $nick,
+    where => $channel,
+    what  => $msg,
+  };
+
+  if ($self->chill_until_active and $nick eq $config->{master}) {
+    $self->chill_until_active(0);
+    $self->clear_chilltill;
+    $self->reply("You're back!  No longer chilling.", $arg);
+  }
 };
 
 event irc_bot_addressed => sub {
@@ -719,6 +752,11 @@ sub  _parse_time_hunk {
 
 sub SAID_chill {
   my ($self, $arg) = @_;
+
+  if ($arg->{what} =~ /^until\s+I'm\s+back\s*$/) {
+    $self->chill_until_active(1);
+    return $self->reply("Okay, I'll stop pestering you until you've active again.", $arg);
+  }
 
   my $time = $self->_parse_time_hunk($arg->{what});
   return -1 unless defined $time;
