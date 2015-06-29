@@ -910,9 +910,11 @@ sub SAID_commit {
   my ($self, $arg) = @_;
 
   my $comment = $arg->{what};
-  my $meta    = $comment =~ s/\s+(DONE|STOP)(?:[.!]+)?\z//;
-  my $done    = $1 && $1 eq 'DONE';
-  my $stop    = $1 && ($done || $1 eq 'STOP');
+
+  $comment =~ s/\s+(DONE|STOP)(?:[.!]+)?\z//;
+  my $meta    = $1;
+  my $done    = ($meta && $meta eq 'DONE') || $comment =~ /\ADone[.!]?\z/i;
+  my $stop    = $done || ($meta && $meta eq 'STOP');
 
   my $timer = $self->current_timer;
 
