@@ -968,7 +968,7 @@ sub SAID_commit {
   $self->reply("Okay, I've committed $time of work$also.", $arg);
 }
 
-sub SAID_pause {
+sub SAID_stop {
   my ($self, $arg) = @_;
 
   if ($arg->{what} eq 'timer') {
@@ -982,13 +982,15 @@ sub SAID_pause {
 
     my $stop_res = $ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/stop");
     unless ($stop_res->is_success) {
-      return $self->reply("I couldn't pause your active timer.", $arg);
+      return $self->reply("I couldn't stop your active timer.", $arg);
     }
 
     $self->clear_last_nag;
-    $self->reply("Okay, I paused your active timer.", $arg);
+    $self->reply("Okay, I stopped your active timer.", $arg);
+  } elsif ($arg->{what} =~ /\Ahitting yourself[.!]*\z/) {
+    $self->reply("Quit it!  I'm telling mom!", $arg);
   } else {
-    $self->reply("I didn't understand your pause request.", $arg);
+    $self->reply("I didn't understand your stop request.", $arg);
   }
 }
 
@@ -1451,6 +1453,8 @@ sub SAID_task {
 
   my ($target, $name) = $what =~ /\s*for\s+(.+?):\s+(.+)\z/;
 
+  return -1 unless $target and $name;
+
   my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
   my (@owner_ids, @owner_names, @unknown);
   my %seen;
@@ -1688,11 +1692,11 @@ my %HELP = (
   chill    => "chill [until TIME | for DURATION] -- stop nagging for a while (master user only)",
   oncall   => "oncall -- list on call users; also, (oncall add SOMEBODY, oncall remove SOMEBODY, oncall set SOMEBODY...)",
   page     => "page SOMEBODY: message -- send an SMS to a user",
-  pause    => "pause timer -- pause the current timer (master user only)",
   remind   => "remind SOMEBODY [at TIME | in DURATION] -- set up a reminder",
   reset    => "reset timer -- clear the timer, leave it running (master user only)",
   showtime => "showtime -- stop chilling, start nagging",
   status   => "status -- show timer status (master user only)",
+  stop     => "stop timer -- stop the current timer (master user only)",
   task     => "task for SOMEBODY: TASK -- make a new task in Liquid Planner",
   what     => "what's SOMEBODY's number -- get a user's phone number",
 );

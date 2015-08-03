@@ -80,7 +80,7 @@ comment given in your message.  If it ends with "DONE", that will be removed
 and the task will be marked complete.  Otherwise, time timer will start running
 again from zero.
 
-**pause timer**:  Synergy will stop your timer, leaving its time in place.
+**stop timer**:  Synergy will stop your timer, leaving its time in place.
 
 **abort timer**:  Synergy will stop your timer and clear your timer.
 
