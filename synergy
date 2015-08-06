@@ -626,8 +626,9 @@ sub _dispatch {
     $self->last_msgs->{ $arg->{who} }->{ $arg->{how} } = $arg->{what};
   }
 
-  # Genericize this: -- rjbs, 2014-06-19
+  # Genericize these: -- rjbs, 2014-06-19 -- rjbs, 2015-08-06
   $msg = 'chill for 60 minutes' if lc $msg eq 'zzz';
+  $msg = 'commit done' if lc $msg eq 'done';
 
   my ($cmd, $rest) = split ' ', $msg, 2;
 
