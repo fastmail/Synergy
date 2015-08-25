@@ -773,13 +773,16 @@ sub SAID_chill {
 
 sub SAID_mute {
   my ($self, $arg) = @_;
-  return -1 unless $arg->{what} =~ s/\A\s*alerts\s+//;
+  return -1 unless $arg->{what} =~ s/\A\s*(alerts|all|\*)\s+//;
 
   my $time = $self->_parse_time_hunk($arg->{what});
   return -1 unless defined $time;
 
   $self->suppress_alerts_until($time);
-  $self->reply("Okay, alerts won't be relayed until " . localtime $time, $arg);
+  $self->reply(
+    "Okay, won't relay alerts received between now and " . localtime $time,
+    $arg
+  );
 }
 
 sub SAID_remind {
@@ -1256,8 +1259,9 @@ sub SAID_ack {
 
   $dur_str = '15m' unless $dur_str;
 
-  if ($alert_id eq '*') {
-    # We'll do multi-ack.
+  my $do_multi;
+  if ($alert_id eq '*' or $alert_id eq 'all') {
+    $do_multi = 1;
   } elsif ($alert_id !~ /\A[0-9]+\z/) {
     return $self->reply(
       qq{"$alert_id" doesn't look like a cromulent alert id.  } .
@@ -1279,7 +1283,7 @@ sub SAID_ack {
 
   my $long = concise(duration($dur - $dur % 60));
 
-  if ($alert_id eq '*') {
+  if ($do_multi) {
     my $stash = $self->recent_alerts;
     unless (keys %$stash) {
       return $self->reply("There are no recent alerts to ack!", $arg);
