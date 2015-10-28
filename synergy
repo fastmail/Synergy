@@ -1460,7 +1460,7 @@ sub SAID_task {
   # because of "new task for...";
   my $what = $arg->{what} =~ s/\Atask\s+//r;
 
-  my ($target, $name) = $what =~ /\s*for\s+(.+?):\s+(.+)\z/;
+  my ($target, $name) = $what =~ /\s*for\s+@?(.+?)\s*:\s+(.+)\z/;
 
   return -1 unless $target and $name;
 
