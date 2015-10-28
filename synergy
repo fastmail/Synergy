@@ -610,6 +610,10 @@ sub _dispatch {
 
   my $msg = $arg->{what};
 
+  if ($msg =~ s{\b(\S+) (?:http://|mailto:)\1 }{$1}g) {
+    $self->info("removed Slack-added link");
+  }
+
   my $last_ref = ref $arg->{how}
                ? \do { my $x }
                : \($self->last_msgs->{ $arg->{who} }->{ $arg->{how} });
