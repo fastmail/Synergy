@@ -1523,14 +1523,11 @@ sub SAID_task {
   my $task_id = $JSON->decode($res->decoded_content)->{id};
 
   my $rcpt = join q{ and }, @owner_names;
-  $self->reply(
-    sprintf(
-      "Task for $rcpt created: https://app.liquidplanner.com/space/%s/projects/show/%s",
-      $config->{workspace},
-      $task_id,
-    ),
-    $arg,
-  );
+
+  my $reply = sprintf
+    "Task for $rcpt created: https://app.liquidplanner.com/space/%s/projects/show/%s",
+    $config->{workspace},
+    $task_id;
 
   if ($start) {
     my $res = $self->lp_ua->post(
@@ -1540,12 +1537,13 @@ sub SAID_task {
     );
 
     if ($res->is_success) {
-      $self->reply("Timer for new task has been begun.", $arg);
+      $reply =~ s/created:/created, timer running:/;
     } else {
-      $self->reply("There was a problem starting your new task's timer.", $arg);
+      $reply =~ s/created:/created, timer couldn't be started:/;
     }
   }
 
+  $self->reply($reply, $arg);
 }
 
 sub SAID_page {
