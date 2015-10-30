@@ -919,10 +919,18 @@ sub SAID_commit {
 
   my $comment = $arg->{what};
 
-  $comment =~ s/\s+(DONE|STOP)(?:[.!]+)?\z//;
-  my $meta    = $1;
-  my $done    = ($meta && $meta eq 'DONE') || $comment =~ /\ADone[.!]?\z/i;
-  my $stop    = $done || ($meta && $meta eq 'STOP');
+  my $punc_re = qr/(?:[.!]+)/;
+  my $punc = $comment =~ s/($punc_re)\z// ? $1 : '';
+
+  my %meta;
+  while ($comment =~ s/\s+(DONE|STOP|CHILL)\z//) {
+    $meta{$1}++;
+  }
+
+  $meta{DONE} = 1 if $comment =~ /\Adone\z/i;
+  $meta{STOP} = 1 if $meta{DONE} or $meta{CHILL};
+
+  $comment .= $punc;
 
   my $timer = $self->current_timer;
 
@@ -944,16 +952,20 @@ sub SAID_commit {
   }
 
   my $content = $JSON->encode({
-    is_done => $done ? \1 : \0,
+    is_done => $meta{DONE} ? \1 : \0,
     comment => $comment,
-    restart => $stop ? \0 : \1,
+    restart => $meta{STOP} ? \0 : \1,
     activity_id => $activity_id,
   });
 
-  if ($stop and ! $self->chilling) {
-    # Don't complain 30s after we stop work!  Give us a couple minutes to move
-    # on to the next task. -- rjbs, 2015-04-21
-    $self->chilltill(time + 300);
+  if ($meta{STOP} and ! $self->chilling) {
+    if ($meta{CHILL}) {
+      $self->chill_until_active(1);
+    } else {
+      # Don't complain 30s after we stop work!  Give us a couple minutes to
+      # move on to the next task. -- rjbs, 2015-04-21
+      $self->chilltill(time + 300);
+    }
   }
 
   my $commit_res = $self->lp_ua->post(
@@ -968,9 +980,11 @@ sub SAID_commit {
   }
 
   $self->clear_last_nag;
-  my $also = $done ? ' and marked the task done'
-           : $stop ? ' and stopped the timer'
-           :         '';
+  my $also
+    = $meta{DONE}  ? " and marked the task done"
+    : $meta{CHILL} ? " stopped the timer, and will chill until you're back"
+    : $meta{STOP}  ? " and stopped the timer"
+    :                "";
 
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
   $self->reply("Okay, I've committed $time of work$also.", $arg);
