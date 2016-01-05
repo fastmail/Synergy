@@ -1736,6 +1736,23 @@ sub SAID_help {
   return $self->reply($help, $arg);
 }
 
+sub SAID_clox {
+  my ($self, $arg) = @_;
+  my $now = DateTime->now;
+
+  my $str = q{};
+  for my $tz_name (@{ $config->{time_zones}}) {
+    my $tz = DateTime::TimeZone->new(name => $tz_name);
+    my $tz_now = $now->clone;
+    $tz_now->set_time_zone($tz);
+
+    $str .= "; " if length $str;
+    $str .= $tz_now->day_name . ", " . $tz_now->format_cldr("H:mm vvv");
+  }
+
+  return $self->reply($str, $arg);
+}
+
 sub BUILD {
   my ($self) = @_;
 
