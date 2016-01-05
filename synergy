@@ -22,7 +22,7 @@ my $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
 server   $config->{server};
 nickname $config->{nickname};
 username $config->{username};
-channels @{ $config->{channels} };
+channels(values %{ $config->{channels} });
 password $config->{password};
 poco_irc_args(UseSSL => 1);
 
@@ -224,7 +224,7 @@ event _http_alert => sub {
     $self->record_alerts($data->{alerts});
     for my $msg (@msgs) {
       $self->privmsg(
-        $self->get_channels->[0],
+        $config->{channels}{alerts},
         $msg,
       );
     }
@@ -336,7 +336,7 @@ sub SAID_announce {
   my $what = $arg->{what} =~ s/\Athat:? //r;
 
   $self->privmsg(
-    $self->get_channels->[0],
+    $config->{channels}{general},
     "$arg->{who} says: $what",
   );
 
@@ -689,7 +689,7 @@ sub SAID_pose {
   }
 
   $self->privmsg(
-    $self->get_channels->[0],
+    $config->{channels}{general},
     $what,
   );
 
