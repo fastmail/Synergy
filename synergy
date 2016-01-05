@@ -764,7 +764,7 @@ sub  _parse_time_hunk {
 sub SAID_chill {
   my ($self, $arg) = @_;
 
-  if ($arg->{what} =~ /^until\s+I'm\s+back\s*$/) {
+  if ($arg->{what} =~ /^until\s+I'm\s+back\s*$/i) {
     $self->chill_until_active(1);
     return $self->reply("Okay, I'll stop pestering you until you've active again.", $arg);
   }
