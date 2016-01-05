@@ -1493,7 +1493,7 @@ sub SAID_task {
       push @owner_names, $target;
       push @owner_ids, $owner_id;
     } else {
-      push @unknown, $owner_id;
+      push @unknown, $target;
     }
   }
 
