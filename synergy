@@ -546,7 +546,10 @@ event irc_msg => sub {
     what  => $msg,
   };
 
-  if ($self->chill_until_active and $nick eq $config->{master}) {
+  if (  $self->chill_until_active
+    and $nick eq $config->{master}
+    and $arg->{what} !~ /\bzzz\b/i
+  ) {
     $self->chill_until_active(0);
     $self->clear_chilltill;
     $self->reply("You're back!  No longer chilling.", $arg);
@@ -570,7 +573,10 @@ event irc_public => sub {
     what  => $msg,
   };
 
-  if ($self->chill_until_active and $nick eq $config->{master}) {
+  if (  $self->chill_until_active
+    and $nick eq $config->{master}
+    and $arg->{what} !~ /\bzzz\b/i
+  ) {
     $self->chill_until_active(0);
     $self->clear_chilltill;
     $self->reply("You're back!  No longer chilling.", $arg);
