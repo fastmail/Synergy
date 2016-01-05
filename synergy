@@ -1279,7 +1279,7 @@ sub SAID_ack {
   $dur_str = '15m' unless $dur_str;
 
   my $do_multi;
-  if ($alert_id eq '*' or $alert_id eq 'all') {
+  if ($alert_id =~ /\A\*|all|that|those\z/) {
     $do_multi = 1;
   } elsif ($alert_id !~ /\A[0-9]+\z/) {
     return $self->reply(
