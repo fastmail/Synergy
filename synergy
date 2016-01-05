@@ -925,18 +925,13 @@ sub SAID_commit {
 
   my $comment = $arg->{what};
 
-  my $punc_re = qr/(?:[.!]+)/;
-  my $punc = $comment =~ s/($punc_re)\z// ? $1 : '';
-
   my %meta;
-  while ($comment =~ s/\s+(DONE|STOP|CHILL)\z//) {
+  while ($comment =~ s/(?:\A|\s+)(DONE|STOP|CHILL)\z//) {
     $meta{$1}++;
   }
 
   $meta{DONE} = 1 if $comment =~ /\Adone\z/i;
   $meta{STOP} = 1 if $meta{DONE} or $meta{CHILL};
-
-  $comment .= $punc;
 
   my $timer = $self->current_timer;
 
