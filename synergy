@@ -50,9 +50,17 @@ has users => (
   },
 );
 
-sub phone_for_username   { $_[0]->user_named($_[0])->phone }
-sub circ_id_for_username { $_[0]->user_named($_[0])->circonus_id }
-sub lp_id_for_username   { $_[0]->user_named($_[0])->lp_id }
+sub phone_for_username {
+  my ($self, $username) = @_;
+  return unless my $user = $self->user_named($username);
+  return $user->phone;
+}
+
+sub lp_id_for_username {
+  my ($self, $username) = @_;
+  return unless my $user = $self->user_named($username);
+  return $user->lp_id;
+}
 
 sub username_for_phone {
   my ($self, $phone) = @_;
@@ -60,7 +68,7 @@ sub username_for_phone {
   return $user;
 }
 
-sub username_for_circ_id {
+sub username_for_circonus_id {
   my ($self, $id) = @_;
   my ($user) = grep { $_->has_circonus_id && $_->circonus_id eq $id } $self->users;
   return $user;
@@ -1053,7 +1061,7 @@ sub _format_oncall_group {
   my %user;
   foreach my $contact (@current) {
     my ($id) = $contact->{user} =~ m{/user/([0-9]+)\z};
-    my $username = $self->username_for_circ_id($id) // "#$id";
+    my $username = $self->username_for_circonus_id($id) // "#$id";
     $user{$username}{$contact->{method}} = 1;
   }
 
