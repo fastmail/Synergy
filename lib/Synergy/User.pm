@@ -26,7 +26,7 @@ has timer => (
   lazy => 1,
   init_arg => undef,
   default  => sub {
-    return unless $_[0]->username eq 'rjbs';
+    return unless $_[0]->has_lp_token;
     return Synergy::Timer->new;
   },
 );
