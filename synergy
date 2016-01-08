@@ -528,6 +528,7 @@ has last_msgs => (
 my %ALIAS = (
   say  => 'announce',
   '++' => 'plusplus',
+  '+x' => 'addchecklist',
   new  => 'task',
 );
 
@@ -1184,6 +1185,41 @@ sub SAID_plusplus {
     %$arg,
     what => "for $arg->{who}: $arg->{what}",
   });
+}
+
+sub SAID_addchecklist {
+  my ($self, $arg) = @_;
+
+  my $user = $self->user_named($arg->{who});
+
+  return -1 unless $arg->{what} =~ /\S/;
+
+  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+    unless $user && $user->lp_token;
+
+  return $self->reply("You can't add checklist items unless you've got a running LiquidPlanner timer.", $arg)
+    unless my $lp_timer = $self->lp_timer_for_user($user);
+
+  my $desc = $arg->{what};
+
+  if ($desc =~ /^\s*for\s+\S+?:/) {
+    # XXX adding this should be easy -- rjbs, 2016-01-08
+    return $self->reply("Sorry, I can't make checklist items for other users yet.", $arg);
+  }
+
+  my $lp_ua = $user->lp_ua;
+
+  my $res = $lp_ua->post(
+    "$LP_BASE/tasks/$lp_timer->{item_id}/checklist_items",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({ checklist_item => { name => $desc } }),
+  );
+
+  my $reply = $res->is_success
+            ? "I've added the checklist item for you."
+            : "Sorry, I couldn't add that item... for... some reason.";
+
+  return $self->reply($reply, $arg);
 }
 
 sub SAID_alerts {
