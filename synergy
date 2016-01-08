@@ -124,6 +124,9 @@ has httpd_port => (is => 'ro', lazy => 1, default => 8118);
 
 sub resolve_name {
   my ($self, $name, $who) = @_;
+
+  return unless $name;
+
   $name = lc $name;
   $name = $who if $name eq 'me' || $name eq 'my' || $name eq 'myself';
 
