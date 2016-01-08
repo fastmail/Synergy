@@ -215,7 +215,7 @@ event _http_alert => sub {
     $self->record_alerts($data->{alerts});
     for my $msg (@msgs) {
       $self->privmsg(
-        $config->{channels}{alerts},
+        $config->{irc}{channels}{alerts},
         $msg,
       );
     }
