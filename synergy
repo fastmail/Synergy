@@ -1344,7 +1344,10 @@ sub _ack_alert_for {
   my $ua = $self->circ_ua;
   my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
 
-  return unless $check->is_success;
+  unless ($check->is_success) {
+    $self->info("Found no alert for id $alert_id");
+    return;
+  }
 
   my $content = $JSON->encode({
     acknowledged_until => $min . 'm',
@@ -1355,6 +1358,12 @@ sub _ack_alert_for {
     "$CIRC_BASE/acknowledgement",
     Content => $content
   );
+
+  unless ($res->is_success) {
+    $self->info("non-successful attempt to ack /alert/$alert_id for ${min}m");
+    warn $res->decoded_content;
+    return;
+  }
 
   return $res->is_success;
 }
