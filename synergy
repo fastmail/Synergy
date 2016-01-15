@@ -1660,7 +1660,7 @@ sub SAID_who {
   my $whois = sprintf "%s (%s)", $who->username, $who->realname;
 
   if ($what eq $who->username) {
-    return $self->reply(qq{"$what" is "$whois."  Obviously.}, $arg);
+    return $self->reply(qq{"$what" is $whois.}, $arg);
   }
 
   return $self->reply(qq["$what" is an alias for $whois.], $arg);
