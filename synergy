@@ -68,7 +68,7 @@ sub username_for_phone {
   return $user;
 }
 
-sub username_for_circonus_id {
+sub user_for_circonus_id {
   my ($self, $id) = @_;
   my ($user) = grep { $_->has_circonus_id && $_->circonus_id eq $id } $self->users;
   return $user;
@@ -1091,8 +1091,8 @@ sub _format_oncall_group {
   my %user;
   foreach my $contact (@current) {
     my ($id) = $contact->{user} =~ m{/user/([0-9]+)\z};
-    my $username = $self->username_for_circonus_id($id) // "#$id";
-    $user{$username}{$contact->{method}} = 1;
+    my $user = $self->user_for_circonus_id($id) // "#$id";
+    $user{$user->username}{$contact->{method}} = 1;
   }
 
   my $str = join q{; },
