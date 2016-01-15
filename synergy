@@ -1616,7 +1616,7 @@ sub SAID_page {
     );
   }
 
-  unless ($target->phone) {
+  unless ($target and $target->phone) {
     return $self->reply("I don't have a number for $who.", $arg);
   }
 
