@@ -450,6 +450,19 @@ sub lp_timer_for_user {
   return $timer;
 }
 
+sub lp_listing_for_user {
+  my ($self, $user) = @_;
+
+  return unless my $lp_ua = $user->lp_ua;
+
+  my $res = $lp_ua->get("$LP_BASE/upcoming_tasks?limit=5&flat=true");
+  return -1 unless $res->is_success;
+
+  my $tasks = $JSON->decode( $res->decoded_content );
+
+  return $tasks;
+}
+
 event irc_msg => sub {
   my ($self, $nickstr, $msg) = @_[ OBJECT, ARG0, ARG2 ];
   my ($nick) = split /!/, $nickstr;
@@ -972,6 +985,38 @@ sub SAID_stop {
   } else {
     $self->reply("I didn't understand your stop request.", $arg);
   }
+}
+
+sub SAID_tasks {
+  my ($self, $arg) = @_;
+
+  my $user  = $self->user_named($arg->{who});
+  my $lp_ua = $user ? $user->lp_ua : undef;
+
+  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+    unless $lp_ua;
+
+  my $lp_tasks = $self->lp_tasks_for_user($user);
+  my $link = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
+  if ($arg->{what} eq 'next') {
+    my $task = @{ $lp_tasks }[0];
+    my $start_res = $lp_ua->post("$LP_BASE/tasks/$task->{item_id}/timer/start");
+    if ($start_res->is_success) {
+      return $self->reply("Started task: $task->{name} ($link$task->{id})");
+    } else {
+      return $self->reply("I couldn't start your next task.", $arg);
+    }
+
+  } elsif ($arg->{what}=~/[1-9]/) {
+    foreach my $x (0..$arg->{what}-1){
+      my $task = @{ $lp_tasks }[$x];
+      return $self->reply("$task->{name} ($link$task->{id})");
+    } 
+  } else {
+    foreach my $x (0.. 5){
+      my $task = @{ $lp_tasks }[$x];
+      return $self->reply("$task->{name} ($link$task->{id})");
+    } 
 }
 
 sub master_lp_ua {
