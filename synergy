@@ -290,7 +290,7 @@ event _http_sms => sub {
   my $reply;
   my $result = $self->_dispatch({
     how   => \$reply,
-    who   => $who,
+    who   => $who->username,
     where => [ $from ],
     what  => $text,
   });
