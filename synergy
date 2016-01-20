@@ -403,7 +403,7 @@ event nag => sub {
         $self->privmsg($user->username, $msg);
         $self->sms($user->phone, $msg) if $user->has_phone;
 
-        $self->last_nag({ time => time, level => 0 });
+        $sy_timer->last_nag({ time => time, level => 0 });
         next USER;
       }
     }
