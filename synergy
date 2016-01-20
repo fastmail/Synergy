@@ -695,6 +695,17 @@ sub SAID_chill {
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
     unless $lp_ua;
 
+  my $res = $lp_ua->get("$LP_BASE/my_timers");
+
+  if ($res->is_success) {
+    my @timers = grep {; $_->{running} }
+                 @{ $JSON->decode( $res->decoded_content ) };
+
+    if (@timers) {
+      return $self->reply("You've got a running timer!  Use 'commit' instead.", $arg);
+    }
+  }
+
   my $sy_timer = $user->timer;
 
   if ($arg->{what} =~ /^until\s+I'm\s+back\s*$/i) {
