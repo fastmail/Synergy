@@ -832,7 +832,7 @@ sub SAID_abort {
   my $clr_res  = $lp_ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/clear");
 
   if ($stop_res->is_success and $clr_res->is_success) {
-    $self->clear_last_nag;
+    $user->timer->clear_last_nag;
     $self->reply("Okay, I stopped and cleared your active timer.", $arg);
   } else {
     $self->reply("Something went wrong aborting your timer.", $arg);
