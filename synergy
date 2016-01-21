@@ -1511,7 +1511,7 @@ sub SAID_task {
     } elsif ($target) {
       push @no_lp, $target->username;
     } else {
-      push @unknown, $target;
+      push @unknown, $name;
     }
   }
 
