@@ -1189,7 +1189,7 @@ sub update_oncall_list {
   });
 
   my $result = $ua->put(
-    "$CIRC_BASE/contact_group/$config->{circonus_oncall_group}",
+    "$CIRC_BASE/contact_group/$config->{circonus}{oncall_group}",
     Content => $set_struct,
   );
 }
