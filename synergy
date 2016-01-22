@@ -297,7 +297,7 @@ event _http_sms => sub {
 
   if ($result && $result eq -1) {
     $response->code(200);
-    $response->content("Does not compute.");
+    $response->content( $self->_does_not_compute($who) );
   } else {
     $response->code(200);
     $response->content($reply);
@@ -307,6 +307,17 @@ event _http_sms => sub {
 
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
+
+sub _does_not_compute {
+  my ($self, $user) = @_;
+
+  my @replies = $user ? $user->wtf_replies : ();
+  @replies = 'Does not compute.' unless @replies;
+
+  my $reply = $replies[ rand @replies ];
+
+  return $reply;
+}
 
 sub SAID_eject {
   my ($self, $arg) = @_;
@@ -479,7 +490,7 @@ event irc_msg => sub {
 
   return unless $result && $result == -1;
 
-  $self->privmsg( $nick => "$nick: Does not compute." );
+  $self->privmsg( $nick => "$nick: " . $self->_does_not_compute($user) );
 };
 
 event irc_public => sub {
@@ -518,7 +529,8 @@ event irc_bot_addressed => sub {
 
   return unless $result && $result == -1;
 
-  $self->privmsg( $channel => "$nick: Does not compute." );
+  my $user = $self->user_named($nick);
+  $self->privmsg( $channel => "$nick: " . $self->_does_not_compute($user) );
 };
 
 has last_msgs => (

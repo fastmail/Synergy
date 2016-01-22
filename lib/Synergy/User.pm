@@ -11,6 +11,12 @@ has [ qw(username realname) ] => (
   required => 1,
 );
 
+has wtf_replies => (
+  isa => 'ArrayRef',
+  traits  => [ qw(Array) ],
+  handles => { wtf_replies => 'elements' },
+);
+
 has circonus_id => (is => 'ro', isa => 'Int', predicate => 'has_circonus_id');
 has phone       => (is => 'ro', isa => 'Int', predicate => 'has_phone');
 
