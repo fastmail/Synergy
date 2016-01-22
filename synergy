@@ -30,6 +30,7 @@ poco_irc_args(UseSSL => 1);
 
 my $WKSP_ID = $config->{liquidplanner}{workspace};
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
+my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
 my $CIRC_BASE = "https://api.circonus.com";
 
 has users => (
@@ -461,6 +462,18 @@ sub lp_timer_for_user {
   return $timer;
 }
 
+sub lp_listing_for_user {
+  my ($self, $user, $count) = @_;
+  return unless my $lp_ua = $user->lp_ua;
+
+  my $res = $lp_ua->get("$LP_BASE/upcoming_tasks?limit=$count&flat=true");
+  return -1 unless $res->is_success;
+
+  my $tasks = $JSON->decode( $res->decoded_content );
+
+  return $tasks;
+}
+
 event irc_msg => sub {
   my ($self, $nickstr, $msg) = @_[ OBJECT, ARG0, ARG2 ];
   my ($nick) = split /!/, $nickstr;
@@ -772,6 +785,11 @@ sub SAID_remind {
     return -1;
   }
 
+  unless ($prep) {
+    warn("try 'remind <person> in/at <time>: <reminder>'");
+    return -1;
+  }
+
   $who = $self->resolve_name($who, $arg->{who});
 
   my $time;
@@ -966,6 +984,30 @@ sub SAID_commit {
   $self->reply("Okay, I've committed $time of work$also.", $arg);
 }
 
+sub SAID_start {
+  my ($self, $arg) = @_;
+  my $user  = $self->user_named($arg->{who});
+  my $lp_ua = $user ? $user->lp_ua : undef;
+
+  if ($arg->{what} =~ /[1-9]{8}/) {
+    my $start_res = $lp_ua->post("$LP_BASE/tasks/$arg->{what}/timer/start");
+    if ($start_res->{running}) {
+      return $self->reply("Started task: $start_res->{item_id} ($LINK_BASE$start_res->{item_id})");
+    } else {
+      return $self->reply("I don't think $arg->{what} is a task ID. Say 'tasks' to see your list.");
+    }
+  } else {
+    my $lp_tasks = $self->lp_tasks_for_user($user, 1);
+    my $task = @{ $lp_tasks }[0];
+    my $start_res = $lp_ua->post("$LP_BASE/tasks/$task->{item_id}/timer/start");
+    if ($start_res->{running}) {
+      return $self->reply("Started task: $task->{name} ($LINK_BASE$task->{id})");
+    } else {
+      return $self->reply("I couldn't start your next task.");
+    }
+  }
+}
+
 sub SAID_stop {
   my ($self, $arg) = @_;
 
@@ -995,6 +1037,25 @@ sub SAID_stop {
   } else {
     $self->reply("I didn't understand your stop request.", $arg);
   }
+}
+
+sub SAID_tasks {
+  my ($self, $arg) = @_;
+
+  my $user  = $self->user_named($arg->{who});
+  my $lp_ua = $user ? $user->lp_ua : undef;
+
+  my ($count, $inc) = 5; my $start = 0;
+  if ($arg->{what}=~/[1-9]/) {
+    $count = $arg->{what} * $inc;
+    $start = $count - $inc;
+  }
+  my $lp_tasks = $self->lp_tasks_for_user($user, $count);
+
+  foreach my $x ($start..$count){
+    my $task = @{ $lp_tasks }[$x];
+    return $self->reply("$task->{name} ($LINK_BASE$task->{id})");
+  } 
 }
 
 sub master_lp_ua {
@@ -1770,6 +1831,8 @@ my %HELP = (
   remind   => "remind SOMEBODY [at TIME | in DURATION] -- set up a reminder",
   reset    => "reset timer -- clear the timer, leave it running (LP user onlys)",
   showtime => "showtime -- stop chilling, start nagging",
+  start    => "start [TASKID] -- start next upcoming task, or task ID TASKID ",
+  tasks    => "tasks [ N ] -- see your upcoming 5 tasks, or 'page' N of your tasks ",
   timer    => "timer -- show timer status (LP users only)",
   stop     => "stop timer -- stop the current timer (LP users only)",
   task     => "task for SOMEBODY: TASK -- make a new task in Liquid Planner",
