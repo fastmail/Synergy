@@ -1068,6 +1068,11 @@ sub SAID_tasks {
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
     unless $lp_ua;
 
+  if ($arg->{how} eq 'irc' && $arg->{where} ne $arg->{who}) {
+    $self->reply("Responses to <tasks> are sent privately.", $arg);
+    $arg->{where} = $arg->{who};
+  }
+
   my $per_page = 5;
   my $page = $arg->{what} && $arg->{what} =~ /\A[0-9]+\z/ && $arg->{what} > 0
            ? $arg->{what}
