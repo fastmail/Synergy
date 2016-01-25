@@ -462,12 +462,12 @@ sub lp_timer_for_user {
   return $timer;
 }
 
-sub lp_listing_for_user {
+sub lp_tasks_for_user {
   my ($self, $user, $count) = @_;
   return unless my $lp_ua = $user->lp_ua;
 
   my $res = $lp_ua->get("$LP_BASE/upcoming_tasks?limit=$count&flat=true");
-  return -1 unless $res->is_success;
+  return unless $res->is_success;
 
   my $tasks = $JSON->decode( $res->decoded_content );
 
@@ -989,23 +989,43 @@ sub SAID_start {
   my $user  = $self->user_named($arg->{who});
   my $lp_ua = $user ? $user->lp_ua : undef;
 
-  if ($arg->{what} =~ /[1-9]{8}/) {
+  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+    unless $lp_ua;
+
+  if ($arg->{what} =~ /\A[0-9]+\z/) {
+    # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
+    # TODO: print the description of the task instead of its number -- rjbs,
+    # 2016-01-25
     my $start_res = $lp_ua->post("$LP_BASE/tasks/$arg->{what}/timer/start");
-    if ($start_res->{running}) {
-      return $self->reply("Started task: $start_res->{item_id} ($LINK_BASE$start_res->{item_id})");
+    my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
+    if ($start_res->is_success && $timer->{running}) {
+      return $self->reply(
+        "Started task: $timer->{item_id} ($LINK_BASE$timer->{item_id})",
+        $arg,
+      );
     } else {
-      return $self->reply("I don't think $arg->{what} is a task ID. Say 'tasks' to see your list.");
+      return $self->reply("I couldn't start the timer for $arg->{what}.", $arg);
     }
-  } else {
+  } elsif ($arg->{what} eq 'next') {
     my $lp_tasks = $self->lp_tasks_for_user($user, 1);
-    my $task = @{ $lp_tasks }[0];
+
+    unless ($lp_tasks && $lp_tasks->[0]) {
+      return $self->reply("I can't get your tasks.", $arg);
+    }
+
+    my $task = $lp_tasks->[0];
     my $start_res = $lp_ua->post("$LP_BASE/tasks/$task->{item_id}/timer/start");
     if ($start_res->{running}) {
-      return $self->reply("Started task: $task->{name} ($LINK_BASE$task->{id})");
+      return $self->reply(
+        "Started task: $task->{name} ($LINK_BASE$task->{id})",
+        $arg,
+      );
     } else {
-      return $self->reply("I couldn't start your next task.");
+      return $self->reply("I couldn't start your next task.", $arg);
     }
   }
+
+  return -1;
 }
 
 sub SAID_stop {
@@ -1045,17 +1065,31 @@ sub SAID_tasks {
   my $user  = $self->user_named($arg->{who});
   my $lp_ua = $user ? $user->lp_ua : undef;
 
-  my ($count, $inc) = 5; my $start = 0;
-  if ($arg->{what}=~/[1-9]/) {
-    $count = $arg->{what} * $inc;
-    $start = $count - $inc;
+  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+    unless $lp_ua;
+
+  my $per_page = 5;
+  my $page = $arg->{what} && $arg->{what} =~ /\A[0-9]+\z/ && $arg->{what} > 0
+           ? $arg->{what}
+           : 1;
+
+  unless ($page <= 10) {
+    return $self->reply(
+      "If it's not in your first ten pages, better go to the web.",
+      $arg,
+    );
   }
+
+  my $count = $per_page * $page;
+  my $start = $per_page * ($page - 1);
+
   my $lp_tasks = $self->lp_tasks_for_user($user, $count);
 
-  foreach my $x ($start..$count){
-    my $task = @{ $lp_tasks }[$x];
-    return $self->reply("$task->{name} ($LINK_BASE$task->{id})");
-  } 
+  for my $task (splice @$lp_tasks, $start, $per_page) {
+    $self->reply("$task->{name} ($LINK_BASE$task->{id})", $arg);
+  }
+
+  return;
 }
 
 sub master_lp_ua {
