@@ -1073,24 +1073,36 @@ sub SAID_tasks {
     $arg->{where} = $arg->{who};
   }
 
-  my $per_page = 5;
-  my $page = $arg->{what} && $arg->{what} =~ /\A[0-9]+\z/ && $arg->{what} > 0
-           ? $arg->{what}
-           : 1;
+  my @tasks;
+  my $what = $arg->{what} // 1;
 
-  unless ($page <= 10) {
-    return $self->reply(
-      "If it's not in your first ten pages, better go to the web.",
-      $arg,
-    );
+  if ($what =~ /\A[0-9]+\z/ && $what > 0) {
+    my $per_page = 5;
+    my $page = $what;
+
+    unless ($page <= 10) {
+      return $self->reply(
+        "If it's not in your first ten pages, better go to the web.",
+        $arg,
+      );
+    }
+
+    my $count = $per_page * $page;
+    my $start = $per_page * ($page - 1);
+
+    my $lp_tasks = $self->lp_tasks_for_user($user, $count);
+
+    @tasks = splice @$lp_tasks, $start, $per_page;
+  } elsif ($what =~ m{\A/(.+)/\z}) {
+    $what = $1;
+    my $lp_tasks = $self->lp_tasks_for_user($user, 50);
+    @tasks = grep {; $_->{name} =~ /$what/ } @$lp_tasks;
+    $#tasks = 4 if @tasks > 5;
+  } else {
+    return -1;
   }
 
-  my $count = $per_page * $page;
-  my $start = $per_page * ($page - 1);
-
-  my $lp_tasks = $self->lp_tasks_for_user($user, $count);
-
-  for my $task (splice @$lp_tasks, $start, $per_page) {
+  for my $task (@tasks) {
     $self->reply("$task->{name} ($LINK_BASE$task->{id})", $arg);
   }
 
