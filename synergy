@@ -614,8 +614,7 @@ sub _dispatch {
   }
 
   # Genericize these: -- rjbs, 2014-06-19 -- rjbs, 2015-08-06
-  $msg = 'chill for 60 minutes' if lc $msg eq 'zzz';
-  $msg = 'commit done' if lc $msg eq 'done';
+  $msg = "chill until I'm back" if lc $msg eq 'zzz';
 
   my ($cmd, $rest) = split ' ', $msg, 2;
 
@@ -652,6 +651,8 @@ sub reply {
   } else {
     $self->privmsg($arg->{where}, "$arg->{who}: $reply");
   }
+
+  return;
 }
 
 sub SAID_pose {
@@ -932,6 +933,37 @@ sub SAID_reset {
   }
 }
 
+sub SAID_done {
+  my ($self, $arg) = @_;
+
+  my $next;
+  my $chill;
+  if ($arg->{what}) {
+    my @things = split /\s*,\s*/, $arg->{what};
+    for (@things) {
+      if ($_ eq 'next')  { $next  = 1; next }
+      if ($_ eq 'chill') { $chill = 1; next }
+
+      return -1;
+    }
+
+    return $self->reply("No, it's nonsense to chill /and/ start a new task!", $arg)
+      if $chill && $next;
+  }
+
+  {
+    my %arg = (%$arg, what => "done");
+    my $rv = $self->SAID_commit(\%arg);
+
+    return -1 if $rv && $rv == -1;
+    return unless $rv;
+  }
+
+  $self->SAID_start({ %$arg, what => "next" }) if $next;
+  $self->SAID_chill({ %$arg, what => "until I'm back" }) if $chill;
+  return;
+}
+
 sub SAID_commit {
   my ($self, $arg) = @_;
 
@@ -1011,6 +1043,7 @@ sub SAID_commit {
 
   my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
   $self->reply("Okay, I've committed $time of work$also.", $arg);
+  return 1;
 }
 
 sub SAID_start {
