@@ -1767,11 +1767,7 @@ sub SAID_task {
 
   if ($start) {
     if ($lp_ua) {
-      my $res = $lp_ua->post(
-        "$LP_BASE/tasks/$task_id/timer/start",
-        Content_Type => 'application/json',
-        Content => $JSON->encode($payload),
-      );
+      my $res = $lp_ua->post("$LP_BASE/tasks/$task_id/timer/start");
 
       if ($res->is_success) {
         $reply =~ s/created:/created, timer running:/;
