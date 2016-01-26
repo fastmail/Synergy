@@ -4,7 +4,8 @@ Synergy is an [IRC bot](https://en.wikipedia.org/wiki/IRC_bot) mostly for
 interacting with [LiquidPlanner](http://www.liquidplanner.com/). Her primary
 purpose is to remind a user that they haven't got a timer running.  During
 business hours, she will pester her user if a timer isn't running, escalating
-from IRC to SMS.  She can be called off on IRC.  Commands via SMS are planned.
+from IRC to SMS.  She can be called off on IRC.  Synergy also responds to
+commands via SMS.
 
 ## Caveats
 
