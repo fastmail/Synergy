@@ -557,6 +557,7 @@ my %ALIAS = (
   '++' => 'plusplus',
   '+x' => 'addchecklist',
   new  => 'task',
+  expando => 'expand',
 );
 
 sub _dispatch {
@@ -1718,6 +1719,63 @@ sub SAID_task {
     } else {
       $reply =~ s/created:/created, timer couldn't be started:/;
     }
+  }
+
+  $self->reply($reply, $arg);
+}
+
+sub SAID_expand {
+  my ($self, $arg) = @_;
+
+  my $user  = $self->user_named($arg->{who});
+  my $lp_ua = $user ? $user->lp_ua : undef;
+
+  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+    unless $lp_ua;
+
+  my @tasks = $user->tasks_for_expando($arg->{what});
+
+  return $self->reply("You don't have an expando for: $arg->{what}", $arg)
+    unless @tasks;
+
+  my $parent = $config->{liquidplanner}{urgent};
+  my $where  = ref $arg->{where} ? $arg->{where}[0] : $arg->{where};
+
+  my (@ok, @fail);
+
+  for my $task (@tasks) {
+    my $payload = { task => {
+      name     => $task,
+      parent_id   => $parent,
+      assignments => [ { person_id => $user->lp_id } ],
+      description => "created by " . $self->get_nickname . " on $where "
+                  .  "on behalf of $arg->{who}",
+    } };
+
+    warn $JSON->encode($payload);
+
+    my $res = $lp_ua->post(
+      "$LP_BASE/tasks",
+      Content_Type => 'application/json',
+      Content => $JSON->encode($payload),
+    );
+
+    if ($res->is_success) {
+      push @ok, $task;
+    } else {
+      warn $res->decoded_content;
+      push @fail, $task;
+    }
+  }
+
+  my $reply;
+  if (@ok) {
+    $reply = "I created your $arg->{what} tasks: " . join(q{; }, @ok);
+    $reply .= "  Some tasks failed to create: " . join(q{; }, @fail) if @fail;
+  } elsif (@fail) {
+    $reply = "Your $arg->{what} tasks couldn't be created.  Sorry!";
+  } else {
+    $reply = "Something impossible happened.  How exciting!";
   }
 
   $self->reply($reply, $arg);

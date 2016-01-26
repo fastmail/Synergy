@@ -17,6 +17,21 @@ has wtf_replies => (
   handles => { wtf_replies => 'elements' },
 );
 
+has expandoes => (
+  reader  => '_expandoes',
+  isa     => 'HashRef',
+  traits  => [ 'Hash' ],
+  default => sub {  {}  },
+);
+
+sub tasks_for_expando {
+  my ($self, $name) = @_;
+
+  return unless my $expando = $self->_expandoes->{ $name };
+
+  return @$expando;
+}
+
 has circonus_id => (is => 'ro', isa => 'Int', predicate => 'has_circonus_id');
 has phone       => (is => 'ro', isa => 'Int', predicate => 'has_phone');
 
