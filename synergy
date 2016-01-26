@@ -560,6 +560,34 @@ my %ALIAS = (
   expando => 'expand',
 );
 
+sub SAID_good {
+  my ($self, $arg) = @_;
+
+  return -1 unless length $arg->{what};
+  my $what = lc $arg->{what};
+  my $user = $self->user_named($arg->{who});
+
+  my $reply;
+  my $expand;
+  if    ($what eq 'morning')   { $reply = "Good morning!"; $expand = 'morning' }
+  elsif ($what eq 'afternoon') { $reply = "You, too!"; }
+  elsif ($what eq 'day')       { $reply = "Long days and pleasant nights!"; }
+  elsif ($what eq 'evening')   { $reply = "I'll be here when you get back!"; }
+  elsif ($what eq 'night')     { $reply = "Sleep tight!"; }
+  elsif ($what eq 'riddance')  { $reply = "I'll outlive you all."; }
+  else                         { return; }
+
+  if ($reply) {
+    $self->reply($reply, $arg);
+  }
+
+  if ($expand && $user && $user->tasks_for_expando($expand)) {
+    $self->SAID_expand({ %$arg, what => $expand });
+  }
+
+  return;
+}
+
 sub _dispatch {
   my ($self, $arg) = @_;
 
