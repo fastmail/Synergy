@@ -1072,12 +1072,13 @@ sub SAID_start {
     my $lp_tasks = $self->lp_tasks_for_user($user, 1);
 
     unless ($lp_tasks && $lp_tasks->[0]) {
-      return $self->reply("I can't get your tasks.", $arg);
+      return $self->reply("I can't get your tasks to start the next one.", $arg);
     }
 
     my $task = $lp_tasks->[0];
-    my $start_res = $lp_ua->post("$LP_BASE/tasks/$task->{item_id}/timer/start");
-    if ($start_res->{running}) {
+    my $start_res = $lp_ua->post("$LP_BASE/tasks/$task->{id}/timer/start");
+    my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
+    if ($start_res->is_success && $timer->{running}) {
       return $self->reply(
         "Started task: $task->{name} ($LINK_BASE$task->{id})",
         $arg,
