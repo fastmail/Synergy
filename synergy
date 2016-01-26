@@ -1732,7 +1732,7 @@ sub SAID_task {
   my $where = ref $arg->{where} ? $arg->{where}[0] : $arg->{where};
   my $payload = { task => {
     name     => $name,
-    ($urgent ? (parent_id => $config->{lp_urgent}) : ()),
+    ($urgent ? (parent_id => $config->{liquidplanner}{urgent}) : ()),
     assignments => [ map {; { person_id => $_->lp_id } } @owners ],
     description => "created by " . $self->get_nickname . " on $where "
                 .  "on behalf of $arg->{who}",
