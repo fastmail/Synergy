@@ -1012,9 +1012,6 @@ sub SAID_commit {
     unless $lp_timer && ref $lp_timer; # XXX <-- stupid return type
 
   my $sy_timer = $user->timer;
-  return $self->reply("You don't timer-capable.", $arg)
-    unless $sy_timer;
-
   my $task_res = $lp_ua->get("$LP_BASE/tasks/$lp_timer->{item_id}");
 
   my $activity_id;
