@@ -955,6 +955,25 @@ sub SAID_done {
       if $chill && $next;
   }
 
+  if ($next) {
+    STRAW: {
+      my $user = $self->user_named($arg->{who});
+      last STRAW unless $user;
+
+      my $lp_timer = $self->lp_timer_for_user($user);
+      last STRAW unless $lp_timer && ref $lp_timer;
+
+      my $tasks = $self->lp_tasks_for_user($user, 50);
+      last STRAW unless $tasks and @$tasks;
+      my ($i) = grep { $tasks->[$_]{id} == $lp_timer->{item_id} }
+                (0 .. $#$tasks);
+
+      last STRAW unless defined $i and $i < $#$tasks;
+
+      $next = $tasks->[$i+1]{id};
+    }
+  }
+
   {
     my %arg = (%$arg, what => "done");
     my $rv = $self->SAID_commit(\%arg);
@@ -963,7 +982,7 @@ sub SAID_done {
     return unless $rv;
   }
 
-  $self->SAID_start({ %$arg, what => "next" }) if $next;
+  $self->SAID_start({ %$arg, what => $next }) if $next;
   $self->SAID_chill({ %$arg, what => "until I'm back" }) if $chill;
   return;
 }
@@ -1060,13 +1079,17 @@ sub SAID_start {
 
   if ($arg->{what} =~ /\A[0-9]+\z/) {
     # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
-    # TODO: print the description of the task instead of its number -- rjbs,
-    # 2016-01-25
     my $start_res = $lp_ua->post("$LP_BASE/tasks/$arg->{what}/timer/start");
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
     if ($start_res->is_success && $timer->{running}) {
+      my $task_res = $lp_ua->get("$LP_BASE/tasks/$timer->{item_id}");
+
+      my $name = $task_res->is_success
+               ? $JSON->decode($task_res->decoded_content)->{name}
+               : '??';
+
       return $self->reply(
-        "Started task: $timer->{item_id} ($LINK_BASE$timer->{item_id})",
+        "Started task: $name ($LINK_BASE$timer->{item_id})",
         $arg,
       );
     } else {
