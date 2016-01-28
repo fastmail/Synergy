@@ -288,7 +288,7 @@ event _http_sms => sub {
 
   my $text = $param->{Body};
 
-  my $reply;
+  my $reply = q{};
   my $result = $self->_dispatch({
     how   => \$reply,
     who   => $who->username,
@@ -567,7 +567,7 @@ sub SAID_good {
   my $what = lc $arg->{what};
   my $user = $self->user_named($arg->{who});
 
-  my $reply;
+  my $reply = q{};
   my $expand;
   if    ($what eq 'morning')   { $reply = "Good morning!"; $expand = 'morning' }
   elsif ($what eq 'afternoon') { $reply = "You, too!"; }
@@ -578,11 +578,15 @@ sub SAID_good {
   else                         { return; }
 
   if ($reply) {
-    $self->reply($reply, $arg);
+    $reply .= "  ";
   }
 
   if ($expand && $user && $user->tasks_for_expando($expand)) {
-    $self->SAID_expand({ %$arg, what => $expand });
+    $self->SAID_expand({ %$arg, what => $expand, how => \$reply });
+  }
+
+  if ($reply) {
+    $self->reply($reply, $arg);
   }
 
   return;
@@ -647,7 +651,7 @@ sub reply {
   if ($arg->{how} eq 'sms') {
     $self->sms($arg->{where}[0], $reply);
   } elsif (ref $arg->{how} eq 'SCALAR') {
-    ${ $arg->{how} } = $reply;
+    ${ $arg->{how} } .= $reply;
   } else {
     $self->privmsg($arg->{where}, "$arg->{who}: $reply");
   }
