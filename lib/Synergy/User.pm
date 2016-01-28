@@ -15,6 +15,7 @@ has wtf_replies => (
   isa => 'ArrayRef',
   traits  => [ qw(Array) ],
   handles => { wtf_replies => 'elements' },
+  default => sub {  []  },
 );
 
 has expandoes => (
