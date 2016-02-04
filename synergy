@@ -569,12 +569,19 @@ sub SAID_good {
 
   my $reply = q{};
   my $expand;
+  my $stop;
+
   if    ($what eq 'morning')   { $reply = "Good morning!"; $expand = 'morning' }
   elsif ($what eq 'afternoon') { $reply = "You, too!"; }
   elsif ($what eq 'day')       { $reply = "Long days and pleasant nights!"; }
-  elsif ($what eq 'evening')   { $reply = "I'll be here when you get back!"; }
-  elsif ($what eq 'night')     { $reply = "Sleep tight!"; }
-  elsif ($what eq 'riddance')  { $reply = "I'll outlive you all."; }
+  elsif ($what eq 'evening')   { $reply = "I'll be here when you get back!";
+                                 $stop = 1; }
+  elsif ($what eq 'night')     { $reply = "Sleep tight!";
+                                 $stop = 1; }
+  elsif ($what eq 'riddance')  { $reply = "I'll outlive you all.";
+                                 $stop = 1; }
+  elsif ($what eq 'bye')       { $reply = "See you later, aligator.";
+                                 $stop = 1; }
   else                         { return; }
 
   if ($reply) {
@@ -583,6 +590,19 @@ sub SAID_good {
 
   if ($expand && $user && $user->tasks_for_expando($expand)) {
     $self->SAID_expand({ %$arg, what => $expand, how => \$reply });
+  }
+
+  if ($stop && $user && $user->lp_ua) {
+    my $res = $user->lp_ua->get("$LP_BASE/my_timers");
+
+    if ($res->is_success) {
+      my @timers = grep {; $_->{running} }
+                   @{ $JSON->decode( $res->decoded_content ) };
+
+      if (@timers) {
+        return $self->reply("You've got a running timer!  You should commit it.", $arg);
+      }
+    }
   }
 
   if ($reply) {
@@ -619,6 +639,7 @@ sub _dispatch {
 
   # Genericize these: -- rjbs, 2014-06-19 -- rjbs, 2015-08-06
   $msg = "chill until I'm back" if lc $msg eq 'zzz';
+  $msg = "good bye" if lc $msg eq 'bye';
 
   my ($cmd, $rest) = split ' ', $msg, 2;
 
