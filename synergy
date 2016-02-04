@@ -705,7 +705,7 @@ sub SAID_showtime {
   my ($self, $arg) = @_;
 
   my $user  = $self->user_named($arg->{who});
-  my $timer = $user & $user->has_lp_id ? $user->timer : undef;
+  my $timer = $user && $user->has_lp_id ? $user->timer : undef;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
     unless $timer;
