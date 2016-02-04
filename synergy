@@ -309,15 +309,17 @@ event _http_sms => sub {
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
 
+sub __pick_one {
+  my ($opts) = @_;
+  return $opts->[ rand @$opts ];
+}
+
 sub _does_not_compute {
   my ($self, $user) = @_;
 
   my @replies = $user ? $user->wtf_replies : ();
   @replies = 'Does not compute.' unless @replies;
-
-  my $reply = $replies[ rand @replies ];
-
-  return $reply;
+  return __pick_one(\@replies);
 }
 
 sub SAID_eject {
@@ -560,6 +562,24 @@ my %ALIAS = (
   expando => 'expand',
 );
 
+my @BYE = (
+  "See you later, alligator.",
+  "After a while, crocodile.",
+  "Time to scoot, little newt.",
+  "See you soon, raccoon.",
+  "Auf wiedertippen!",
+  "Later.",
+  "Peace.",
+  "¡Adios!",
+  "Au revoir.",
+  "221 2.0.0 Bye",
+  "+++ATH0",
+  "Later, gator!",
+  "Pip pip.",
+  "Aloha.",
+  "Farewell, %n.",
+);
+
 sub SAID_good {
   my ($self, $arg) = @_;
 
@@ -580,11 +600,12 @@ sub SAID_good {
                                  $stop = 1; }
   elsif ($what eq 'riddance')  { $reply = "I'll outlive you all.";
                                  $stop = 1; }
-  elsif ($what eq 'bye')       { $reply = "See you later, aligator.";
+  elsif ($what eq 'bye')       { $reply = __pick_one(\@BYE);
                                  $stop = 1; }
   else                         { return; }
 
   if ($reply) {
+    $reply =~ s/%n/$arg->{who}/g;
     $reply .= "  ";
   }
 
