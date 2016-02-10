@@ -660,7 +660,8 @@ sub _dispatch {
 
   # Genericize these: -- rjbs, 2014-06-19 -- rjbs, 2015-08-06
   $msg = "chill until I'm back" if lc $msg eq 'zzz';
-  $msg = "good bye" if lc $msg eq 'bye';
+  $msg = "good bye" if lc $msg eq 'bye'
+                    or lc $msg eq 'adios';
 
   my ($cmd, $rest) = split ' ', $msg, 2;
 
