@@ -587,6 +587,8 @@ sub SAID_good {
   my $what = lc $arg->{what};
   my $user = $self->user_named($arg->{who});
 
+  $what =~ s/[\s1?!.]*\z//;
+
   my $reply = q{};
   my $expand;
   my $stop;
