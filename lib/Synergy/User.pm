@@ -34,7 +34,7 @@ sub tasks_for_expando {
 }
 
 has circonus_id => (is => 'ro', isa => 'Int', predicate => 'has_circonus_id');
-has phone       => (is => 'ro', isa => 'Int', predicate => 'has_phone');
+has phone       => (is => 'ro', isa => 'Str', predicate => 'has_phone');
 
 has nicknames => (
   isa     => 'ArrayRef[Str]',
