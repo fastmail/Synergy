@@ -656,6 +656,25 @@ sub _dispatch {
     return $self->_dispatch($arg);
   }
 
+  if ($msg eq '++ that') {
+    return "Sorry, I don't see a previous message from you." unless $$last_ref;
+    local $arg->{what} = "++ $$last_ref";
+    return $self->_dispatch($arg);
+  }
+
+  if ($msg =~ /\A\+\+ what (\S+) said\z/ && $arg->{how} eq 'irc') {
+    my $who = $1;
+    my $who_user = $self->resolve_name($who, $arg->{who});
+
+    my $prev = $who_user
+             ? $self->last_msgs->{ $who_user->username }->{ $arg->{how} }
+             : undef;
+
+    return "Sorry, I don't see a previous message from $who." unless $prev;
+    local $arg->{what} = "++ $prev";
+    return $self->_dispatch($arg);
+  }
+
   $$last_ref = $msg;
 
   if (not ref $arg->{how}) {
