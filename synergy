@@ -393,6 +393,7 @@ event nag => sub {
 
   USER: for my $user ($self->users) {
     next USER unless my $sy_timer = $user->timer;
+    next USER unless $user->should_nag;
     my $username = $user->username;
 
     my $last_nag = $sy_timer->last_relevant_nag;
