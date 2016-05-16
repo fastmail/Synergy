@@ -499,7 +499,8 @@ event irc_msg => sub {
   ) {
     $timer->chill_until_active(0);
     $timer->clear_chilltill;
-    $self->reply("You're back!  No longer chilling.", $arg);
+    $self->reply("You're back!  No longer chilling.", $arg)
+      if $timer->is_business_hours;
   }
 
   my $result = $self->_dispatch($arg);
