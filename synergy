@@ -2127,6 +2127,12 @@ sub SAID_clox {
     $str .= $tz_now->day_name . ", " . $tz_now->format_cldr("H:mm vvv");
   }
 
+  my $sit = $now->clone;
+  $sit->set_time_zone('+0100');
+
+  $str .= "; " . $sit->ymd('-') . '@'
+      . int(($sit->second + $sit->minute * 60 + $sit->hour * 3600) / 86.4);
+
   return $self->reply($str, $arg);
 }
 
