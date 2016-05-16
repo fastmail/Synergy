@@ -996,7 +996,7 @@ sub SAID_reset {
   my $clr_res  = $lp_ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/clear");
 
   if ($clr_res->is_success) {
-    $self->clear_last_nag;
+    $user->timer->clear_last_nag;
     $self->reply("Okay, I cleared your active timer but left it running.", $arg);
   } else {
     $self->reply("Something went wrong resetting your timer.", $arg);
