@@ -1985,6 +1985,9 @@ sub _fmt_ph {
     \z
   }x;
 
+  # not American-looking
+  return $ph unless $ac;
+
   $c //= 1;
 
   return "+$c $ac $ex-$rest";
