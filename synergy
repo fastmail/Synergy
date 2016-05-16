@@ -1352,7 +1352,7 @@ sub SAID_timer {
 sub SAID_oncall {
   my ($self, $arg) = @_;
 
-  my ($flag, @users) = split / /, $arg->{what};
+  my ($flag, @users) = split / /, ($arg->{what} // '');
   s/,$//g for @users;
 
   my $contact_group = $self->get_oncall_list;
