@@ -129,7 +129,7 @@ sub resolve_name {
   return unless $name;
 
   $name = lc $name;
-  $name = $who if $name eq 'me' || $name eq 'my' || $name eq 'myself';
+  $name = $who if $name eq 'me' || $name eq 'my' || $name eq 'myself' || $name eq 'i';
 
   my $user = $self->user_named($name);
   unless ($user) {
