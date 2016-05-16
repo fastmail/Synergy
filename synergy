@@ -1379,8 +1379,9 @@ sub _format_oncall_group {
   my %user;
   foreach my $contact (@current) {
     my ($id) = $contact->{user} =~ m{/user/([0-9]+)\z};
-    my $user = $self->user_for_circonus_id($id) // "#$id";
-    $user{$user->username}{$contact->{method}} = 1;
+    my $user = $self->user_for_circonus_id($id);
+    my $username = $user ? $user->username : "#$id";
+    $user{$username}{$contact->{method}} = 1;
   }
 
   my $str = join q{; },
