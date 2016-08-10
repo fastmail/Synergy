@@ -63,6 +63,12 @@ sub lp_id_for_username {
   return $user->lp_id;
 }
 
+sub want_page_for_username {
+  my ($self, $username) = @_;
+  return unless my $user = $self->user_named($username);
+  return $user->want_page;
+}
+
 sub username_for_phone {
   my ($self, $phone) = @_;
   my ($user) = grep { $_->has_phone && $_->phone eq $phone } $self->users;
@@ -874,7 +880,7 @@ sub SAID_remind {
     (in|at) # duration type
     \s+
     (.+?)    # duration
-    (\s+with\s+page\s*)?
+    (\s+with(?:out)?\s+page\s*)?
     :\s+     # the space is vital:  "at 15:15: eat pie"
     (.+)     # the reminder
     \z
@@ -891,6 +897,18 @@ sub SAID_remind {
   }
 
   $who = $self->resolve_name($who, $arg->{who});
+
+  if (defined $want_page) {
+    # Requested specific page behaviour?
+    if ($want_page =~ /out/) {
+      $want_page = 0;
+    } else {
+      $want_page = 1;
+    }
+  } else {
+    # User default (or page, if none specified)
+    $want_page = $self->want_page_for_username($who->username);
+  }
 
   my $time;
   if ($prep eq 'in') {
@@ -927,7 +945,10 @@ sub SAID_remind {
 event send_reminder => sub {
   my ($self, $reply_arg, $requested_time, $msg) = @_[OBJECT, ARG0..ARG2];
 
-  if (my $phone = $self->phone_for_username($reply_arg->{who})) {
+  if (
+       $reply_arg->{page}
+    && (my $phone = $self->phone_for_username($reply_arg->{who}))
+  ) {
     $self->sms($phone, "Reminder from $requested_time: $msg");
   }
 
