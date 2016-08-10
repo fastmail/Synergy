@@ -35,6 +35,7 @@ sub tasks_for_expando {
 
 has circonus_id => (is => 'ro', isa => 'Int', predicate => 'has_circonus_id');
 has phone       => (is => 'ro', isa => 'Str', predicate => 'has_phone');
+has want_page   => (is => 'ro', isa => 'Bool', default => 1);
 
 has should_nag  => (is => 'ro', isa => 'Bool', default => 0);
 
