@@ -597,6 +597,7 @@ sub SAID_good {
   my $reply = q{};
   my $expand;
   my $stop;
+  my $end_of_day;
 
   if    ($what eq 'morning')   { $reply = "Good morning!"; $expand = 'morning' }
   elsif ($what eq 'afternoon') { $reply = "You, too!"; }
@@ -604,11 +605,14 @@ sub SAID_good {
   elsif ($what eq 'evening')   { $reply = "I'll be here when you get back!";
                                  $stop = 1; }
   elsif ($what eq 'night')     { $reply = "Sleep tight!";
-                                 $stop = 1; }
+                                 $stop = 1;
+                                 $end_of_day = 1; }
   elsif ($what eq 'riddance')  { $reply = "I'll outlive you all.";
-                                 $stop = 1; }
+                                 $stop = 1;
+                                 $end_of_day = 1; }
   elsif ($what eq 'bye')       { $reply = __pick_one(\@BYE);
-                                 $stop = 1; }
+                                 $stop = 1;
+                                 $end_of_day = 1; }
   else                         { return; }
 
   if ($reply) {
@@ -631,6 +635,11 @@ sub SAID_good {
         return $self->reply("You've got a running timer!  You should commit it.", $arg);
       }
     }
+  }
+
+  if ($end_of_day && (my $sy_timer = $user->timer)) {
+    my $time = $self->_parse_time_hunk('until tomorrow');
+    $sy_timer->chilltill($time);
   }
 
   if ($reply) {
