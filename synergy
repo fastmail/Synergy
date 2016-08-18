@@ -404,6 +404,11 @@ event nag => sub {
       next USER;
     }
 
+    # Record the last time we saw a timer
+    if ($lp_timer) {
+      $sy_timer->last_saw_timer(time);
+    }
+
     { # Timer running too long!
       if ($lp_timer && $lp_timer->{running_time} > 3) {
         if ($last_nag && time - $last_nag->{time} < 900) {
@@ -438,6 +443,15 @@ event nag => sub {
           next USER;
         }
         $level = $last_nag->{level} + 1;
+      }
+
+      # Have we seen a timer recently? Give them a grace period
+      if (
+           $sy_timer->last_saw_timer
+        && $sy_timer->last_saw_timer > time - ($config->{nag_grace_period} || 900)
+      ) {
+        warn("$username: Not nagging, they only recently disabled a timer");
+        next USER;
       }
 
       my $still = $level == 0 ? '' : ' still';
