@@ -1140,7 +1140,11 @@ sub SAID_commit {
     :                "";
 
   my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
-  $self->reply("Okay, I've committed $time of work$also.", $arg);
+  $self->reply(
+    sprintf("Okay, I've committed $time of work$also.%s",
+      $meta{DONE} ? "  Task was: $task->{name}" : q{}),
+    $arg
+  );
   return 1;
 }
 
