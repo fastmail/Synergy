@@ -62,6 +62,10 @@ has last_nag => (
   clearer   => 'clear_last_nag',
 );
 
+has last_saw_timer => (
+  is => 'rw',
+);
+
 sub last_relevant_nag {
   my ($self) = @_;
 
