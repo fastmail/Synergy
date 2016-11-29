@@ -13,6 +13,7 @@ use POE::Component::Server::SimpleHTTP;
 use Time::Duration::Parse;
 use Time::Duration;
 use YAML::XS;
+use Data::Dumper;
 
 use Synergy::User;
 
@@ -32,6 +33,14 @@ my $WKSP_ID = $config->{liquidplanner}{workspace};
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
 my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
 my $CIRC_BASE = "https://api.circonus.com";
+
+has projects => (
+  isa => 'HashRef',
+  is => 'ro',
+  lazy => 1,
+  default => sub { {} },
+  predicate => 'has_projects',
+);
 
 has users => (
   isa  => 'HashRef',
@@ -1871,6 +1880,19 @@ sub SAID_task {
     $start  = $code =~ />/;
   }
 
+  my ($project_name, $project_id);
+
+  # Allow #project or #"some project"
+  if ($name =~ s/\s(?:#([^"]\w+)\s*|#"(.*?)")//) {
+    $project_name = lc ($1 // $2);
+
+    $project_id = $self->retrieve_projects($arg)->{$project_name};
+
+    unless ($project_id) {
+      return $self->reply("No project found called '$project_name'", $arg);
+    }
+  }
+
   my $where = ref $arg->{where} ? $arg->{where}[0] : $arg->{where};
   my $payload = { task => {
     name     => $name,
@@ -1878,6 +1900,7 @@ sub SAID_task {
     assignments => [ map {; { person_id => $_->lp_id } } @owners ],
     description => "created by " . $self->get_nickname . " on $where "
                 .  "on behalf of $arg->{who}",
+    ($project_id ? (parent_id => $project_id) : ()),
   } };
 
   my $user  = $self->user_named($arg->{who});
@@ -1902,8 +1925,9 @@ sub SAID_task {
 
   my $rcpt = join q{ and }, map {; $_->username } @owners;
 
+  my $in_project = $project_name ? " in project $project_name" : "";
   my $reply = sprintf
-    "Task for $rcpt created: https://app.liquidplanner.com/space/%s/projects/show/%s",
+    "Task for $rcpt created$in_project: https://app.liquidplanner.com/space/%s/projects/show/%s",
     $config->{liquidplanner}{workspace},
     $task_id;
 
@@ -2191,6 +2215,31 @@ sub BUILD {
   my ($self) = @_;
 
   $self->delay(nag => 60, qw(foo bar baz));
+
+}
+
+sub retrieve_projects {
+  my ($self, $arg) = @_;
+
+  return $self->projects if $self->has_projects;
+
+  my $user = $self->user_named($arg->{who});
+
+  return {} unless my $lp_ua = $user->lp_ua;
+
+  my $res = $lp_ua->get("$LP_BASE/projects");
+  unless ($res->is_success) {
+    warn "Failed to get projects: " . Dumper($res->decoded_content) . "\n";
+    $self->reply("failed to get list of projects, sorry", $arg);
+    return {};
+  }
+
+  my $data = $JSON->decode( $res->decoded_content );
+  for my $project (@$data) {
+    $self->projects->{lc $project->{name}} = $project->{id};
+  }
+
+  return $self->projects;
 }
 
 __PACKAGE__->run;
