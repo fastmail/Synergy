@@ -897,6 +897,11 @@ sub SAID_mute {
   );
 }
 
+has reminders => (
+  reader  => '_reminders',
+  default => sub {  []  },
+);
+
 sub SAID_remind {
   my ($self, $arg) = @_;
 
@@ -959,27 +964,59 @@ sub SAID_remind {
 
   my $target = $who->username eq $arg->{who} ? 'you' : $who->username;
 
-  $self->alarm_add(
-    send_reminder => $time,
-    { %$arg, who => $who->username, page => !! $want_page },
-    DateTime->now(time_zone => 'America/New_York'),
-    $rest,
-  );
+  push @{ $self->_reminders}, {
+    %$arg,
+    when => $time,
+    who  => $who->username,
+    page => !! $want_page,
+    what => $rest,
+    requested_at => time,
+  };
 
   $self->reply("Okay, I'll remind $target at " . localtime $time, $arg);
 }
 
-event send_reminder => sub {
-  my ($self, $reply_arg, $requested_time, $msg) = @_[OBJECT, ARG0..ARG2];
+event check_reminders => sub {
+  my ($self, $kernel) = @_[OBJECT, KERNEL];
 
-  if (
-       $reply_arg->{page}
-    && (my $phone = $self->phone_for_username($reply_arg->{who}))
-  ) {
-    $self->sms($phone, "Reminder from $requested_time: $msg");
+  $self->info("checking for reminders");
+
+  $self->delay(check_reminders => 30);
+
+  my $reminders = $self->_reminders;
+
+  for my $i (reverse 0 .. $#$reminders) {
+    my $reminder = $reminders->[$i];
+    next unless $reminder->{when} <= time;
+
+    $kernel->yield(send_reminder => $reminder);
+
+    splice @$reminders, $i, 1;
   }
 
-  $self->reply("Reminder from $requested_time: $msg", $reply_arg);
+  return;
+};
+
+event send_reminder => sub {
+  my ($self, $reminder) = @_[OBJECT, ARG0];
+
+  my $target = $self->resolve_name($reminder->{who});
+  unless ($target) {
+    # XXX real error reporting -- rjbs, 2016-12-26
+    warn "UNKNOWN TARGET: $reminder->{who}";
+    return;
+  }
+
+  my $when = DateTime->from_epoch(
+    time_zone => 'local',
+    epoch     => $reminder->{requested_at},
+  )->iso8601;
+
+  if ($reminder->{page}) {
+    $self->sms($target->phone, "Reminder from $when: $reminder->{what}");
+  }
+
+  $self->reply("Reminder from $when: $reminder->{what}", $reminder);
 };
 
 sub SAID_abort {
@@ -2191,7 +2228,8 @@ sub SAID_clox {
 sub BUILD {
   my ($self) = @_;
 
-  $self->delay(nag => 60, qw(foo bar baz));
+  $self->delay(nag => 60);
+  $self->delay(check_reminders => 60);
 }
 
 __PACKAGE__->run;
