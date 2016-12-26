@@ -229,8 +229,9 @@ event _http_alert => sub {
   }
 
   $self->info(
-    sprintf "Request from %s: %s",
+    sprintf "Request from %s: %s %s",
       $response->connection->remote_ip,
+      $request->method,
       $request->uri->path_query
   );
 };
