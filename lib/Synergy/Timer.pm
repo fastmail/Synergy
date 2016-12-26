@@ -16,6 +16,10 @@ has chilltill => (
   clearer   => 'clear_chilltill',
 );
 
+after clear_chilltill => sub {
+  POE::Kernel->yield('save_state');
+};
+
 sub chilling {
   my ($self) = @_;
   return 1 if $self->chill_until_active;
@@ -29,6 +33,18 @@ sub is_showtime {
   return 1 if $self->showtime_is_set_manually;
   $self->clear_showtime, return 1 if $self->is_business_hours;
   return;
+}
+
+sub as_hash {
+  my ($self) = @_;
+
+  return {} unless $self->chilling;
+
+  if ($self->chill_until_active) {
+    return { chill => { type => 'until_active' } };
+  }
+
+  return { chill => { type => 'until_time', until => $self->chilltill } };
 }
 
 has showtime => (
