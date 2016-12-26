@@ -9,6 +9,7 @@ use HTTP::Body;
 use JSON 2 ();
 use LWP::UserAgent::POE;
 use MIME::Base64;
+use Path::Tiny;
 use POE::Component::Server::SimpleHTTP;
 use Time::Duration::Parse;
 use Time::Duration;
@@ -973,6 +974,8 @@ sub SAID_remind {
     requested_at => time,
   };
 
+  POE::Kernel->yield('save_state');
+
   $self->reply("Okay, I'll remind $target at " . localtime $time, $arg);
 }
 
@@ -985,6 +988,8 @@ event check_reminders => sub {
 
   my $reminders = $self->_reminders;
 
+  my $changed;
+
   for my $i (reverse 0 .. $#$reminders) {
     my $reminder = $reminders->[$i];
     next unless $reminder->{when} <= time;
@@ -992,8 +997,10 @@ event check_reminders => sub {
     $kernel->yield(send_reminder => $reminder);
 
     splice @$reminders, $i, 1;
+    $changed = 1;
   }
 
+  POE::Kernel->yield('save_state') if $changed;
   return;
 };
 
@@ -2225,11 +2232,38 @@ sub SAID_clox {
   return $self->reply($str, $arg);
 }
 
+sub state {
+  my ($self) = @_;
+  my %state = (reminders => $self->_reminders);
+
+  return \%state;
+}
+
+event save_state => sub {
+  my ($self) = @_[OBJECT,];
+
+  return unless $config->{state_file};
+
+  my $state = $self->state;
+  path($config->{state_file})->spew_utf8( $JSON->encode($state) );
+  return;
+};
+
+sub load_state {
+  my ($self) = @_;
+
+  return unless $config->{state_file} and -r $config->{state_file};
+  my $state = $JSON->decode( path($config->{state_file})->slurp_utf8 );
+
+  @{ $self->_reminders } = @{ $state->{reminders} };
+}
+
 sub BUILD {
   my ($self) = @_;
 
   $self->delay(nag => 60);
   $self->delay(check_reminders => 60);
+  $self->load_state;
 }
 
 __PACKAGE__->run;
