@@ -821,7 +821,7 @@ sub date_parser_for {
 
   DateTime::Format::Natural->new(
     prefer_future => 1,
-    time_zone     => 'America/New_York',
+    time_zone     => $tz,
   );
 }
 
