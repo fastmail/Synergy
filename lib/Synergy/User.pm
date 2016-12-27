@@ -18,6 +18,11 @@ has wtf_replies => (
   default => sub {  []  },
 );
 
+has time_zone => (
+  is => 'ro',
+  default => 'America/New_York',
+);
+
 has expandoes => (
   reader  => '_expandoes',
   isa     => 'HashRef',

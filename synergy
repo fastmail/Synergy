@@ -661,7 +661,7 @@ sub SAID_good {
   }
 
   if ($end_of_day && (my $sy_timer = $user->timer)) {
-    my $time = $self->_parse_time_hunk('until tomorrow');
+    my $time = $self->_parse_time_hunk('until tomorrow', $user);
     $sy_timer->chilltill($time);
   }
 
@@ -814,18 +814,19 @@ sub SAID_shows {
   return -1;
 }
 
-has _date_parser => (
-  is => 'ro',
-  default => sub {
-    DateTime::Format::Natural->new(
-      prefer_future => 1,
-      time_zone     => 'America/New_York',
-    );
-  },
-);
+sub date_parser_for {
+  my ($self, $user) = @_;
+
+  my $tz = $user ? $user->time_zone : 'America/New_York';
+
+  DateTime::Format::Natural->new(
+    prefer_future => 1,
+    time_zone     => 'America/New_York',
+  );
+}
 
 sub  _parse_time_hunk {
-  my ($self, $hunk) = @_;
+  my ($self, $hunk, $user) = @_;
 
   my ($prep, $rest) = split ' ', $hunk, 2;
 
@@ -838,7 +839,8 @@ sub  _parse_time_hunk {
   }
 
   if ($prep eq 'until') {
-    my $dt = eval { $self->_date_parser->parse_datetime($rest) };
+    # XXX get the user in here -- rjbs, 2016-12-26
+    my $dt = eval { $self->date_parser_for($user)->parse_datetime($rest) };
     return unless $dt;
     return $dt->epoch;
   }
@@ -876,7 +878,7 @@ sub SAID_chill {
     return $self->reply("Okay, I'll stop pestering you until you've active again.", $arg);
   }
 
-  my $time = $self->_parse_time_hunk($arg->{what});
+  my $time = $self->_parse_time_hunk($arg->{what}, $user);
   return -1 unless defined $time;
 
   if ($time <= time) {
@@ -884,21 +886,32 @@ sub SAID_chill {
     return;
   }
 
+  my $when = DateTime->from_epoch(
+    time_zone => $user->time_zone,
+    epoch     => $time,
+  )->format_cldr("yyyy-MM-dd hh:mm zzz");
+
   $sy_timer->chilltill($time);
   POE::Kernel->yield('save_state');
-  $self->reply("Okay, no more nagging until " . localtime $time, $arg);
+  $self->reply("Okay, no more nagging until $when", $arg);
 }
 
 sub SAID_mute {
   my ($self, $arg) = @_;
   return -1 unless $arg->{what} =~ s/\A\s*(alerts|all|\*)\s+//;
 
+  my $user = $self->resolve_name($arg->{who});
   my $time = $self->_parse_time_hunk($arg->{what});
   return -1 unless defined $time;
 
+  my $when = DateTime->from_epoch(
+    time_zone => $user->time_zone,
+    epoch     => $time,
+  )->format_cldr("yyyy-MM-dd hh:mm zzz");
+
   $self->suppress_alerts_until($time);
   $self->reply(
-    "Okay, won't relay alerts received between now and " . localtime $time,
+    "Okay, won't relay alerts received between now and $when",
     $arg
   );
 }
@@ -936,6 +949,8 @@ sub SAID_remind {
 
   $who = $self->resolve_name($who, $arg->{who});
 
+  my $speaker = $self->resolve_name($arg->{who});
+
   if (defined $want_page) {
     # Requested specific page behaviour?
     if ($want_page =~ /out/) {
@@ -956,7 +971,7 @@ sub SAID_remind {
     return -1 unless $ok;
     $time = time + $dur;
   } elsif ($prep eq 'at') {
-    my $dt = eval { $self->_date_parser->parse_datetime($dur_str) };
+    my $dt = eval { $self->date_parser_for($speaker)->parse_datetime($dur_str) };
     return -1 unless $dt;
     $time = $dt->epoch;
   } else {
@@ -981,7 +996,12 @@ sub SAID_remind {
 
   POE::Kernel->yield('save_state');
 
-  $self->reply("Okay, I'll remind $target at " . localtime $time, $arg);
+  my $when = DateTime->from_epoch(
+    time_zone => $who->time_zone,
+    epoch     => $time,
+  )->format_cldr("yyyy-MM-dd hh:mm zzz");
+
+  $self->reply("Okay, I'll remind $target at $when.", $arg);
 }
 
 event check_reminders => sub {
@@ -1020,9 +1040,9 @@ event send_reminder => sub {
   }
 
   my $when = DateTime->from_epoch(
-    time_zone => 'local',
+    time_zone => $target->time_zone,
     epoch     => $reminder->{requested_at},
-  )->iso8601;
+  )->format_cldr("yyyy-MM-dd hh:mm zzz");
 
   if ($reminder->{page}) {
     $self->sms($target->phone, "Reminder from $when: $reminder->{what}");
