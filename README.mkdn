@@ -19,14 +19,15 @@ If you use this, and something bad happens, don't say you weren't warned!
 
 ## Installation and Usage
 
-Install all the prereqs.  Figure them out yourself, because they're not
-documented.
+Install all the prereqs.  This is mostly easily done with Carton.
 
-You need to set up a configuration file in YAML format.  Look at the source to
-see what config options are expected, because they're not documented yet.  Run
-the program like this, more or less:
+    $ carton install
 
-    $ SYNERGY_CONFIG=/path/to/config perl synergy
+You need to set up a configuration file in YAML format.  Look at the example
+file to see what config options are expected, because they're not documented
+yet.  Run the program like this, more or less:
+
+    $ SYNERGY_CONFIG=/path/to/config carton exec perl synergy
 
 ## Commands
 
