@@ -350,7 +350,7 @@ sub SAID_announce {
   my $what = $arg->{what} =~ s/\Athat:? //r;
 
   $self->privmsg(
-    $config->{channels}{general},
+    $config->{irc}{channels}{general},
     "$arg->{who} says: $what",
   );
 
