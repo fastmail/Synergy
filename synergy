@@ -1054,8 +1054,8 @@ event send_reminder => sub {
 sub SAID_abort {
   my ($self, $arg) = @_;
 
-  $self->reply("I didn't understand your abort request.", $arg)
-    unless $arg->{what} eq 'timer';
+  return $self->reply("I didn't understand your abort request. (try 'abort timer')", $arg)
+    unless ($arg->{what} // 'timer') eq 'timer';
 
   my $user  = $self->user_named($arg->{who});
   my $lp_ua = $user ? $user->lp_ua : undef;
@@ -1089,8 +1089,8 @@ sub SAID_abort {
 sub SAID_reset {
   my ($self, $arg) = @_;
 
-  $self->reply("I didn't understand your abort request.", $arg)
-    unless $arg->{what} eq 'timer';
+  return $self->reply("I didn't understand your reset request. (try 'reset timer')", $arg)
+    unless ($arg->{what} // 'timer') eq 'timer';
 
   my $user  = $self->user_named($arg->{who});
   my $lp_ua = $user ? $user->lp_ua : undef;
