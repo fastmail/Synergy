@@ -19,7 +19,12 @@ use Synergy::User;
 
 my $JSON = JSON->new;
 
-die "no config file" unless -e $ENV{SYNERGY_CONFIG};
+my $cname = 'SYNERGY_CONFIG';
+
+die "Usage: $cname=<config> $0\n" unless defined $ENV{$cname};
+
+die "Config file '$ENV{$cname}' not found" unless -e $ENV{$cname};
+
 my $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
 
 server   $config->{irc}{server};
