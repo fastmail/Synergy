@@ -21,7 +21,8 @@ my $JSON = JSON->new;
 
 my $cname = 'SYNERGY_CONFIG';
 
-die "Usage: $cname=<config> $0\n" unless defined $ENV{$cname};
+die "You must set \$$cname to the Synergy config file.\n"
+  unless defined $ENV{$cname};
 
 die "Config file '$ENV{$cname}' not found" unless -e $ENV{$cname};
 
