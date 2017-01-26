@@ -895,7 +895,7 @@ sub SAID_chill {
   my $when = DateTime->from_epoch(
     time_zone => $user->time_zone,
     epoch     => $time,
-  )->format_cldr("yyyy-MM-dd hh:mm zzz");
+  )->format_cldr("yyyy-MM-dd HH:mm zzz");
 
   $sy_timer->chilltill($time);
   POE::Kernel->yield('save_state');
@@ -913,7 +913,7 @@ sub SAID_mute {
   my $when = DateTime->from_epoch(
     time_zone => $user->time_zone,
     epoch     => $time,
-  )->format_cldr("yyyy-MM-dd hh:mm zzz");
+  )->format_cldr("yyyy-MM-dd HH:mm zzz");
 
   $self->suppress_alerts_until($time);
   $self->reply(
@@ -1005,7 +1005,7 @@ sub SAID_remind {
   my $when = DateTime->from_epoch(
     time_zone => $who->time_zone,
     epoch     => $time,
-  )->format_cldr("yyyy-MM-dd hh:mm zzz");
+  )->format_cldr("yyyy-MM-dd HH:mm zzz");
 
   $self->reply("Okay, I'll remind $target at $when.", $arg);
 }
@@ -1048,7 +1048,7 @@ event send_reminder => sub {
   my $when = DateTime->from_epoch(
     time_zone => $target->time_zone,
     epoch     => $reminder->{requested_at},
-  )->format_cldr("yyyy-MM-dd hh:mm zzz");
+  )->format_cldr("yyyy-MM-dd HH:mm zzz");
 
   if ($reminder->{page}) {
     $self->sms($target->phone, "Reminder from $when: $reminder->{what}");
