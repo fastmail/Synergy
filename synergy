@@ -1054,7 +1054,10 @@ event send_reminder => sub {
     $self->sms($target->phone, "Reminder from $when: $reminder->{what}");
   }
 
-  $self->reply("Reminder from $when: $reminder->{what}", $reminder);
+  $self->reply(
+    "Reminder from $when: $reminder->{what}",
+    { where => $target->username},
+  );
 };
 
 sub SAID_abort {
