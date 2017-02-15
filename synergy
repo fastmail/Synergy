@@ -499,7 +499,11 @@ sub lp_tasks_for_user {
   return unless my $lp_ua = $user->lp_ua;
 
   my $res = $lp_ua->get("$LP_BASE/upcoming_tasks?limit=$count&flat=true");
-  return unless $res->is_success;
+
+  unless ($res->is_success) {
+    warn "failed to get tasks from LiquidPlanner: " . $res->as_string;
+    return;
+  }
 
   my $tasks = $JSON->decode( $res->decoded_content );
 
