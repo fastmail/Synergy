@@ -2138,6 +2138,14 @@ sub SAID_who {
   my ($self, $arg) = @_;
   my $what = $arg->{what};
   $what =~ s/\s*\?*\z//;
+
+  if ($what =~ /\A\s*(is|are)\s+(you|synergy)\s*\z/) {
+    return $self->reply(
+      qq!I am Synergy, a holographic computer designed to be the ultimate audio-visual entertainment synthesizer.  I also help out with the timekeeping.!,
+      $arg,
+    );
+  }
+
   return -1 unless $what =~ s/\Ais\s+//;
 
   my $who = $self->resolve_name($what, $arg->{who});
