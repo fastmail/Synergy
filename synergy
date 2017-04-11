@@ -2193,7 +2193,7 @@ sub SAID_compose {
   my $for = $1;
 
   my $haiku;
-  my $ok = eval { require Haiku; $haiku = join q{ / }, Haiku::haiku(); 1 };
+  my $ok = eval { require Haiku; $haiku = join q{ / }, Haiku::haiku(); 1};
 
   return $self->reply("The muse is not with me.", $arg) unless $ok;
 
@@ -2213,22 +2213,31 @@ sub SAID_compose {
 }
 
 my %HELP = (
+  "++"     => "++ == task for me", 
+  ">>"     => ">> <person> == task for <person>",
   abort    => "abort timer -- stop and clear the timer (LP users only)",
   ack      => "ack ALERTID [for DURATION] -- acknowledge an alert",
+  addchecklist => "add checklist items to your currently running task",
   alerts   => "alerts -- list active Circonus alerts",
   announce => "announce MESSAGE -- say something on IRC, for use via SMS",
   chill    => "chill [until TIME | for DURATION] -- stop nagging for a while (LP users only)",
+  clox     => "what time is it in PHL and MEL right now?",
+  commit   => "commit work on your current timer; pair with STOP or DONE",
+  good     => "set up recurring tasks with good [morning|afternoon|etc]",
+  maint    => "maint <ALERTID> [for DURATION] -- set a maintenance window for an alert",
   oncall   => "oncall -- list on call users; also, (oncall add SOMEBODY, oncall remove SOMEBODY, oncall set SOMEBODY...)",
   page     => "page SOMEBODY: message -- send an SMS to a user",
   remind   => "remind SOMEBODY [at TIME | in DURATION]: WHAT -- set up a reminder",
   reset    => "reset timer -- clear the timer, leave it running (LP user onlys)",
   showtime => "showtime -- stop chilling, start nagging",
-  start    => "start [TASKID] -- start the given task, or use 'next' for the next one",
+  "show's over" => "show's over -- chill for the rest of the day",
+  start    => "start [TASKID] -- start next upcoming task, or task ID TASKID ",
   tasks    => "tasks [ N ] -- see your upcoming 5 tasks, or 'page' N of your tasks ",
   timer    => "timer -- show timer status (LP users only)",
   stop     => "stop timer -- stop the current timer (LP users only)",
   task     => "task for SOMEBODY: TASK -- make a new task in Liquid Planner",
-  what     => "what's SOMEBODY's number -- get a user's phone number",
+  what     => "what's SOMEBODY number -- get a user's phone number",
+  who      => "who is SOMEBODY -- get a user or alias's identity",
 );
 
 sub SAID_help {
