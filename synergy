@@ -514,6 +514,8 @@ event irc_msg => sub {
   my ($self, $nickstr, $msg) = @_[ OBJECT, ARG0, ARG2 ];
   my ($nick) = split /!/, $nickstr;
   return if lc $nick eq 'slackbot';
+  return if lc $nick eq 'bort';
+  return if lc $nick eq 'trob';
 
   my $me = $self->get_nickname;
   $msg =~ s/\A \s* [@%]? \Q$me\E \s* (?: [,:] \s+)?//ix;
@@ -548,6 +550,8 @@ event irc_public => sub {
   my ($self, $nickstr, $channel, $msg) = @_[ OBJECT, ARG0, ARG1, ARG2 ];
   my ($nick) = split /!/, $nickstr;
   return if lc $nick eq 'slackbot';
+  return if lc $nick eq 'bort';
+  return if lc $nick eq 'trob';
 
   my $arg = {
     how   => 'irc',
@@ -572,6 +576,8 @@ event irc_bot_addressed => sub {
   my ($self, $nickstr, $channel, $msg) = @_[ OBJECT, ARG0, ARG1, ARG2 ];
   my ($nick) = split /!/, $nickstr;
   return if lc $nick eq 'slackbot';
+  return if lc $nick eq 'bort';
+  return if lc $nick eq 'trob';
 
   my $result = $self->_dispatch({
     how   => 'irc',
