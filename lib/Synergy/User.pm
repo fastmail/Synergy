@@ -73,7 +73,11 @@ has lp_ua => (
 
     my $ua = LWP::UserAgent::POE->new(keep_alive => 1);
 
-    $ua->default_header('Authorization' => $self->lp_token);
+    if ($self->lp_token =~ /-/) {
+      $ua->default_header('Authorization' => "Bearer " . $self->lp_token);
+    } else {
+      $ua->default_header('Authorization' => $self->lp_token);
+    }
 
     return $ua;
   },
