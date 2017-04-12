@@ -601,6 +601,7 @@ has last_msgs => (
 my %ALIAS = (
   say  => 'announce',
   '++' => 'plusplus',
+  '>>' => 'angleangle',
   '+x' => 'addchecklist',
   new  => 'task',
   expando => 'expand',
@@ -1639,6 +1640,23 @@ sub SAID_plusplus {
   return $self->SAID_task({
     %$arg,
     what => "for $arg->{who}: $arg->{what}",
+  });
+}
+
+sub SAID_angleangle {
+  my ($self, $arg) = @_;
+  my $what = $arg->{what};
+
+  if (! length $what) {
+    return -1;
+  }
+
+  $what =~ s/\A\s*(\S+?):?\s+//;
+  my $who = $1;
+
+  return $self->SAID_task({
+    %$arg,
+    what => "for $who: $what",
   });
 }
 
