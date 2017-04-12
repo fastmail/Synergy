@@ -2253,7 +2253,7 @@ my %HELP = (
   ">>"     => ">> <person> == task for <person>",
   abort    => "abort timer -- stop and clear the timer (LP users only)",
   ack      => "ack ALERTID [for DURATION] -- acknowledge an alert",
-  addchecklist => "add checklist items to your currently running task",
+  # addchecklist => "add checklist items to your currently running task",
   alerts   => "alerts -- list active Circonus alerts",
   announce => "announce MESSAGE -- say something on IRC, for use via SMS",
   chill    => "chill [until TIME | for DURATION] -- stop nagging for a while (LP users only)",
