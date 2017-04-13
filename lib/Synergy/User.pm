@@ -64,23 +64,16 @@ has timer => (
 has lp_id    => (is => 'ro', isa => 'Int', predicate => 'has_lp_id');
 has lp_token => (is => 'ro', isa => 'Str', predicate => 'has_lp_token');
 
-has lp_ua => (
-  is => 'ro',
-  lazy    => 1,
-  default => sub {
-    my ($self) = @_;
-    return unless $self->has_lp_token;
+sub lp_auth_header {
+  my $self = shift;
 
-    my $ua = LWP::UserAgent::POE->new(keep_alive => 1);
+  return unless $self->has_lp_token;
 
-    if ($self->lp_token =~ /-/) {
-      $ua->default_header('Authorization' => "Bearer " . $self->lp_token);
-    } else {
-      $ua->default_header('Authorization' => $self->lp_token);
-    }
-
-    return $ua;
-  },
-);
+  if ($self->lp_token =~ /-/) {
+    return "Bearer " . $self->lp_token;
+  } else {
+    return $self->lp_token;
+  }
+}
 
 1;

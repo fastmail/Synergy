@@ -7,13 +7,15 @@ use namespace::autoclean;
 use DateTime::Format::Natural;
 use HTTP::Body;
 use JSON 2 ();
-use LWP::UserAgent::POE;
 use MIME::Base64;
 use Path::Tiny;
 use POE::Component::Server::SimpleHTTP;
 use Time::Duration::Parse;
 use Time::Duration;
 use YAML::XS;
+use IO::Async::Loop::POE;
+use Net::Async::HTTP;
+use URI;
 
 use Synergy::User;
 
@@ -39,6 +41,25 @@ my $WKSP_ID = $config->{liquidplanner}{workspace};
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
 my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
 my $CIRC_BASE = "https://api.circonus.com";
+
+has io_loop => (
+  is => 'ro',
+  isa => 'IO::Async::Loop::POE',
+  default => sub { IO::Async::Loop::POE->new() },
+);
+
+has http => (
+  is => 'ro',
+  isa => 'Net::Async::HTTP',
+  lazy => 1,
+  default => sub {
+    my $http = Net::Async::HTTP->new();
+
+    shift->io_loop->add($http);
+
+    return $http;
+  },
+);
 
 has users => (
   isa  => 'HashRef',
@@ -387,8 +408,7 @@ sub __hs { $_[0] * 3600 + $_[1] * 60 }
 sub sms {
   my ($self, $number, $msg) = @_;
 
-  my $ua = LWP::UserAgent::POE->new;
-  my $res = $ua->post(
+  my $res = $self->http_post(
     "https://api.twilio.com/2010-04-01/Accounts/$config->{twilio}{sid}/SMS/Messages",
     {
       From => $config->{twilio}{from},
@@ -483,9 +503,9 @@ event nag => sub {
 sub lp_timer_for_user {
   my ($self, $user) = @_;
 
-  return unless my $lp_ua = $user->lp_ua;
+  return unless $user->lp_auth_header;
 
-  my $res = $lp_ua->get("$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
   return -1 unless $res->is_success;
 
   my ($timer) = grep {; $_->{running} }
@@ -494,11 +514,110 @@ sub lp_timer_for_user {
   return $timer;
 }
 
+sub http_get_for_user {
+  my $self = shift;
+  my $user = shift;
+
+  return $self->http_get(@_,
+    Authorization => $user->lp_auth_header,
+  );
+}
+
+sub http_post_for_user {
+  my $self = shift;
+  my $user = shift;
+
+  return $self->http_post(@_,
+    Authorization => $user->lp_auth_header,
+  );
+}
+
+sub circ_get {
+  my $self = shift;
+
+  my $token = $config->{circonus}{token};
+
+  return $self->http_get(@_,
+    'X-Circonus-App-Name' => 'Synergy',
+    'X-Circonus-Auth-Token' => $token,
+    'Accept' => "application/json",
+  );
+}
+
+sub circ_post {
+  my $self = shift;
+
+  my $token = $config->{circonus}{token};
+
+  return $self->http_post(@_,
+    'X-Circonus-App-Name' => 'Synergy',
+    'X-Circonus-Auth-Token' => $token,
+    'Accept' => "application/json",
+  );
+}
+
+sub circ_put {
+  my $self = shift;
+
+  my $token = $config->{circonus}{token};
+
+  return $self->http_put(@_,
+    'X-Circonus-App-Name' => 'Synergy',
+    'X-Circonus-Auth-Token' => $token,
+    'Accept' => "application/json",
+  );
+}
+
+sub http_get {
+  return shift->http_request('GET' => @_);
+}
+
+sub http_post {
+  return shift->http_request('POST' => @_);
+}
+
+sub http_put {
+  return shift->http_request('PUT' => @_);
+}
+
+sub http_request {
+  my ($self, $method, $url, %args) = @_;
+
+  my $content = delete $args{Content};
+  my $content_type = delete $args{Content_Type};
+
+  my @args = $url;
+
+  if ($method ne 'GET' && $method ne 'HEAD') {
+    push @args, $content // [];
+  }
+
+  if ($content_type) {
+    push @args, content_type => $content_type;
+  }
+
+  push @args, headers => \%args;
+
+  # The returned future will run the loop for us until we return. This makes
+  # it asynchronous as far as the rest of the code is concerned, but
+  # sychronous as far as the caller is concerned.
+  return $self->http->$method(
+    @args
+  )->on_fail( sub {
+    my $failure = shift;
+    warn "Failed to $method $url: $failure\n";
+  } )->get;
+}
+
 sub lp_tasks_for_user {
   my ($self, $user, $count) = @_;
-  return unless my $lp_ua = $user->lp_ua;
 
-  my $res = $lp_ua->get("$LP_BASE/upcoming_tasks?limit=$count&flat=true");
+  return unless $user && $user->lp_auth_header;
+
+  my $res = $self->http_get_for_user(
+    $user,
+    "$LP_BASE/upcoming_tasks?limit=$count&flat=true",
+  );
 
   unless ($res->is_success) {
     warn "failed to get tasks from LiquidPlanner: " . $res->as_string;
@@ -664,8 +783,8 @@ sub SAID_good {
     $self->SAID_expand({ %$arg, what => $expand, how => \$reply });
   }
 
-  if ($stop && $user && $user->lp_ua) {
-    my $res = $user->lp_ua->get("$LP_BASE/my_timers");
+  if ($stop && $user && $user->lp_auth_header) {
+    my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
 
     if ($res->is_success) {
       my @timers = grep {; $_->{running} }
@@ -869,12 +988,11 @@ sub SAID_chill {
   my ($self, $arg) = @_;
 
   my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
-  my $res = $lp_ua->get("$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
 
   if ($res->is_success) {
     my @timers = grep {; $_->{running} }
@@ -1078,12 +1196,11 @@ sub SAID_abort {
     unless ($arg->{what} // 'timer') eq 'timer';
 
   my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
-  my $res = $lp_ua->get("$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
 
   return $self->reply("Something went wrong", $arg) unless $res->is_success;
 
@@ -1095,8 +1212,8 @@ sub SAID_abort {
     return;
   }
 
-  my $stop_res = $lp_ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/stop");
-  my $clr_res  = $lp_ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/clear");
+  my $stop_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/stop");
+  my $clr_res  = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/clear");
 
   if ($stop_res->is_success and $clr_res->is_success) {
     $user->timer->clear_last_nag;
@@ -1113,12 +1230,11 @@ sub SAID_reset {
     unless ($arg->{what} // 'timer') eq 'timer';
 
   my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
-  my $res = $lp_ua->get("$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
 
   return $self->reply("Something went wrong", $arg) unless $res->is_success;
 
@@ -1130,7 +1246,7 @@ sub SAID_reset {
     return;
   }
 
-  my $clr_res  = $lp_ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/clear");
+  my $clr_res  = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/clear");
 
   if ($clr_res->is_success) {
     $user->timer->clear_last_nag;
@@ -1196,10 +1312,9 @@ sub SAID_commit {
   my $comment = $arg->{what};
 
   my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
   my %meta;
   while ($comment =~ s/(?:\A|\s+)(DONE|STOP|CHILL)\z//) {
@@ -1215,7 +1330,7 @@ sub SAID_commit {
     unless $lp_timer && ref $lp_timer; # XXX <-- stupid return type
 
   my $sy_timer = $user->timer;
-  my $task_res = $lp_ua->get("$LP_BASE/tasks/$lp_timer->{item_id}");
+  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$lp_timer->{item_id}");
 
   my $activity_id;
   unless ($task_res->is_success) {
@@ -1246,7 +1361,7 @@ sub SAID_commit {
     }
   }
 
-  my $commit_res = $lp_ua->post(
+  my $commit_res = $self->http_post_for_user($user,
     "$LP_BASE/tasks/$lp_timer->{item_id}/timer/commit",
     Content => $content,
     Content_Type => 'application/json',
@@ -1276,17 +1391,16 @@ sub SAID_commit {
 sub SAID_start {
   my ($self, $arg) = @_;
   my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
   if ($arg->{what} =~ /\A[0-9]+\z/) {
     # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
-    my $start_res = $lp_ua->post("$LP_BASE/tasks/$arg->{what}/timer/start");
+    my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$arg->{what}/timer/start");
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
     if ($start_res->is_success && $timer->{running}) {
-      my $task_res = $lp_ua->get("$LP_BASE/tasks/$timer->{item_id}");
+      my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$timer->{item_id}");
 
       my $name = $task_res->is_success
                ? $JSON->decode($task_res->decoded_content)->{name}
@@ -1307,7 +1421,7 @@ sub SAID_start {
     }
 
     my $task = $lp_tasks->[0];
-    my $start_res = $lp_ua->post("$LP_BASE/tasks/$task->{id}/timer/start");
+    my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
     if ($start_res->is_success && $timer->{running}) {
       return $self->reply(
@@ -1326,20 +1440,19 @@ sub SAID_stop {
   my ($self, $arg) = @_;
 
   my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
   if ($arg->{what} eq 'timer') {
-    my $res = $lp_ua->get("$LP_BASE/my_timers");
+    my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
 
     return $self->reply("Something went wrong", $arg) unless $res->is_success;
 
     my ($timer) = grep {; $_->{running} }
                   @{ $JSON->decode( $res->decoded_content ) };
 
-    my $stop_res = $lp_ua->post("$LP_BASE/tasks/$timer->{item_id}/timer/stop");
+    my $stop_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/stop");
     unless ($stop_res->is_success) {
       return $self->reply("I couldn't stop your active timer.", $arg);
     }
@@ -1357,10 +1470,9 @@ sub SAID_tasks {
   my ($self, $arg) = @_;
 
   my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
   if ($arg->{how} eq 'irc' && $arg->{where} ne $arg->{who}) {
     $self->reply("Responses to <tasks> are sent privately.", $arg);
@@ -1385,7 +1497,6 @@ sub SAID_tasks {
     my $start = $per_page * ($page - 1);
 
     my $lp_tasks = $self->lp_tasks_for_user($user, $count);
-
     @tasks = splice @$lp_tasks, $start, $per_page;
   } elsif ($what =~ m{\A/(.+)/\z}) {
     $what = $1;
@@ -1403,25 +1514,9 @@ sub SAID_tasks {
   return;
 }
 
-sub master_lp_ua {
-  $_[0]->user_named( $config->{master} )->lp_ua;
+sub master_lp_user {
+  $_[0]->user_named( $config->{master} );
 }
-
-has circ_ua => (
-  is => 'ro',
-  lazy    => 1,
-  clearer => '_clear_circ_ua',
-  default => sub {
-    my $ua = LWP::UserAgent::POE->new(keep_alive => 1);
-    my $token = $config->{circonus}{token};
-
-    $ua->default_header('X-Circonus-App-Name' => 'Synergy');
-    $ua->default_header('X-Circonus-Auth-Token' => $token);
-    $ua->default_header('Accept' => "application/json");
-
-    return $ua;
-  },
-);
 
 sub SAID_status {
   my ($self, $arg) = @_;
@@ -1432,13 +1527,12 @@ sub SAID_status {
 sub SAID_timer {
   my ($self, $arg) = @_;
 
-  my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
+  my $user = $self->user_named($arg->{who});
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
-  my $res = $lp_ua->get("$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
 
   unless ($res->is_success) {
     $self->reply("I couldn't get your timer.", $arg);
@@ -1474,7 +1568,7 @@ sub SAID_timer {
 
   my $timer = $timers[0];
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
-  my $task_res = $lp_ua->get("$LP_BASE/tasks/$timer->{item_id}");
+  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$timer->{item_id}");
 
   my $name = $task_res->is_success
            ? $JSON->decode($task_res->decoded_content)->{name}
@@ -1537,8 +1631,6 @@ sub _do_oncall_update {
 
   my @current;
 
-  my $ua = $self->circ_ua;
-
   unless ($flag eq "set") {
     foreach my $now (@{ $contact_group->{users} }){
       my ($foo, $user, $id) = split('/', $now->{user});
@@ -1570,8 +1662,7 @@ sub _do_oncall_update {
 
 sub get_oncall_list {
   my ($self) = @_;
-  my $ua = $self->circ_ua;
-  my $res = $ua->get("$CIRC_BASE/contact_group/$config->{circonus}{oncall_group}");
+  my $res = $self->circ_get("$CIRC_BASE/contact_group/$config->{circonus}{oncall_group}");
   my $json = $res->decoded_content;
   my $contacts = $JSON->decode($json);
   return $contacts->{contacts};
@@ -1580,10 +1671,9 @@ sub get_oncall_list {
 sub update_oncall_list {
   my ($self, $external, @current) = @_;
 
-  my $ua = $self->circ_ua;
   my @to_send;
   foreach my $person (@current) {
-    my $res = $ua->get("$CIRC_BASE/user/$person");
+    my $res = $self->circ_get("$CIRC_BASE/user/$person");
     my $json = $res->decoded_content;
     my $contact_info = $JSON->decode($json);
     push @to_send, (
@@ -1607,9 +1697,10 @@ sub update_oncall_list {
     },
   });
 
-  my $result = $ua->put(
+  my $result = $self->circ_put(
     "$CIRC_BASE/contact_group/$config->{circonus}{oncall_group}",
     Content => $set_struct,
+    Content_Type => 'application/json',
   );
 }
 
@@ -1668,7 +1759,7 @@ sub SAID_addchecklist {
   return -1 unless $arg->{what} =~ /\S/;
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $user && $user->lp_token;
+    unless $user && $user->lp_auth_header;
 
   return $self->reply("You can't add checklist items unless you've got a running LiquidPlanner timer.", $arg)
     unless my $lp_timer = $self->lp_timer_for_user($user);
@@ -1680,9 +1771,7 @@ sub SAID_addchecklist {
     return $self->reply("Sorry, I can't make checklist items for other users yet.", $arg);
   }
 
-  my $lp_ua = $user->lp_ua;
-
-  my $res = $lp_ua->post(
+  my $res = $self->http_post_for_user($user,
     "$LP_BASE/tasks/$lp_timer->{item_id}/checklist_items",
     Content_Type => 'application/json',
     Content => $JSON->encode({ checklist_item => { name => $desc } }),
@@ -1697,9 +1786,8 @@ sub SAID_addchecklist {
 
 sub SAID_alerts {
   my ($self, $arg) = @_;
-  my $ua = $self->circ_ua;
 
-  my $res = $ua->get("$CIRC_BASE/alert");
+  my $res = $self->circ_get("$CIRC_BASE/alert");
   my $json = $res->decoded_content;
   my $alerts = $JSON->decode($json);
 
@@ -1788,8 +1876,7 @@ sub SAID_ack {
 sub _ack_alert_for {
   my ($self, $alert_id, $min) = @_;
 
-  my $ua = $self->circ_ua;
-  my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
+  my $check = $self->circ_get("$CIRC_BASE/alert/$alert_id");
 
   unless ($check->is_success) {
     $self->info("Found no alert for id $alert_id");
@@ -1801,9 +1888,10 @@ sub _ack_alert_for {
     alert              => "/alert/$alert_id",
   });
 
-  my $res = $ua->post(
+  my $res = $self->circ_post(
     "$CIRC_BASE/acknowledgement",
-    Content => $content
+    Content => $content,
+    Content_Type => 'application/json',
   );
 
   unless ($res->is_success) {
@@ -1869,8 +1957,7 @@ sub SAID_maint {
 sub _maint_alert_for {
   my ($self, $alert_id, $min) = @_;
 
-  my $ua = $self->circ_ua;
-  my $check = $ua->get("$CIRC_BASE/alert/$alert_id");
+  my $check = $self->circ_get("$CIRC_BASE/alert/$alert_id");
 
   return unless $check->is_success;
 
@@ -1886,9 +1973,10 @@ sub _maint_alert_for {
     type       => 'check',
   });
 
-  my $res = $ua->post(
+  my $res = $self->circ_post(
     "$CIRC_BASE/maintenance",
-    Content => $content
+    Content => $content,
+    Content_Type => 'application/json',
   );
 
   warn "MAINT FAIL: " . $res->as_string unless $res->is_success;
@@ -1899,8 +1987,6 @@ sub _maint_alert_for {
 sub _maint_host_for {
   my ($self, $host, $min) = @_;
 
-  my $ua = $self->circ_ua;
-
   my $content = $JSON->encode({
     item       => "$host",
     severities => [ 1..5 ],
@@ -1910,9 +1996,10 @@ sub _maint_host_for {
     type       => 'host',
   });
 
-  my $res = $ua->post(
+  my $res = $self->circ_post(
     "$CIRC_BASE/maintenance",
-    Content => $content
+    Content => $content,
+    Content_Type => 'application/json',
   );
 
   warn "MAINT FAIL: " . $res->as_string unless $res->is_success;
@@ -1987,10 +2074,13 @@ sub SAID_task {
                 .  "on behalf of $arg->{who}",
   } };
 
-  my $user  = $self->user_named($arg->{who});
-  my $lp_ua = ($user && $user->lp_ua);
+  my $user = $self->user_named($arg->{who});
+  $user = undef unless $user && $user->lp_auth_header;
 
-  my $res = ($lp_ua || $self->master_lp_ua)->post(
+  my $master = $self->master_lp_user;
+
+  my $res = $self->http_post_for_user(
+    $user || $master,
     "$LP_BASE/tasks",
     Content_Type => 'application/json',
     Content => $JSON->encode($payload),
@@ -2015,8 +2105,8 @@ sub SAID_task {
     $task_id;
 
   if ($start) {
-    if ($lp_ua) {
-      my $res = $lp_ua->post("$LP_BASE/tasks/$task_id/timer/start");
+    if ($user) {
+      my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task_id/timer/start");
 
       if ($res->is_success) {
         $reply =~ s/created:/created, timer running:/;
@@ -2034,11 +2124,10 @@ sub SAID_task {
 sub SAID_expand {
   my ($self, $arg) = @_;
 
-  my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
+  my $user = $self->user_named($arg->{who});
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
+    unless $user && $user->lp_auth_header;
 
   my @tasks = $user->tasks_for_expando($arg->{what});
 
@@ -2061,7 +2150,7 @@ sub SAID_expand {
 
     warn $JSON->encode($payload);
 
-    my $res = $lp_ua->post(
+    my $res = $self->http_post_for_user($user,
       "$LP_BASE/tasks",
       Content_Type => 'application/json',
       Content => $JSON->encode($payload),
