@@ -1697,6 +1697,8 @@ sub update_oncall_list {
         : ()
       )
     );
+    return "There's no useful contact info in Circonus for user $person."
+      unless @this;
     push @to_send, @this;
   }
 
