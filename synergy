@@ -1679,18 +1679,25 @@ sub update_oncall_list {
     my $res = $self->circ_get("$CIRC_BASE/user/$person");
     my $json = $res->decoded_content;
     my $contact_info = $JSON->decode($json);
-    push @to_send, (
-      {
-        '_contact_info' => $contact_info->{contact_info}->{sms},
-        'user' => $contact_info->{_cid},
-        'method' => 'sms'
-      },
-      {
-        '_contact_info' => $contact_info->{email},
-        'user' => $contact_info->{_cid},
-        'method' => 'email'
-      }
+    my @this = (
+      ($contact_info->{contact_info}{sms}
+        ?  {
+            '_contact_info' => $contact_info->{contact_info}->{sms},
+            'user' => $contact_info->{_cid},
+            'method' => 'sms'
+          }
+        : ()
+      ),
+      ($contact_info->{email}
+        ?  {
+            '_contact_info' => $contact_info->{email},
+            'user' => $contact_info->{_cid},
+            'method' => 'email'
+          }
+        : ()
+      )
     );
+    push @to_send, @this;
   }
 
   my $set_struct = $JSON->encode({
