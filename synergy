@@ -30,6 +30,7 @@ die "Config file '$ENV{$cname}' not found" unless -e $ENV{$cname};
 
 my $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
 
+flood    1;
 server   $config->{irc}{server};
 nickname $config->{irc}{nickname};
 username $config->{irc}{username};
