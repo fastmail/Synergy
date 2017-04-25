@@ -1653,7 +1653,9 @@ sub _do_oncall_update {
     }
   }
 
-  $self->update_oncall_list($contact_group->{external}, @current);
+  if (my $error = $self->update_oncall_list($contact_group->{external}, @current)) {
+    return $error;
+  }
 
   # We (presumably) updated the on-call list, so update the one we will print.
   %$contact_group = %{ $self->get_oncall_list };
@@ -1703,6 +1705,8 @@ sub update_oncall_list {
     Content => $set_struct,
     Content_Type => 'application/json',
   );
+
+  return;
 }
 
 sub add_oncall {
