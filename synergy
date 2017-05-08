@@ -327,10 +327,11 @@ event _http_sms => sub {
 
   my $reply = q{};
   my $result = $self->_dispatch({
-    how   => \$reply,
+    how   => 'sms',
     who   => $who->username,
     where => [ $from ],
     what  => $text,
+    reply_buffer => \$reply,
   });
 
   if ($result && $result eq -1) {
@@ -781,7 +782,11 @@ sub SAID_good {
   }
 
   if ($expand && $user && $user->tasks_for_expando($expand)) {
-    $self->SAID_expand({ %$arg, what => $expand, how => \$reply });
+    $self->SAID_expand({
+      %$arg,
+      what => $expand,
+      reply_buffer => \$reply,
+    });
   }
 
   if ($stop && $user && $user->lp_auth_header) {
@@ -886,10 +891,10 @@ sub _dispatch {
 sub reply {
   my ($self, $reply, $arg) = @_;
 
-  if ($arg->{how} eq 'sms') {
+  if ($arg->{reply_buffer}) {
+    ${ $arg->{reply_buffer} } .= $reply;
+  } elsif ($arg->{how} eq 'sms') {
     $self->sms($arg->{where}[0], $reply);
-  } elsif (ref $arg->{how} eq 'SCALAR') {
-    ${ $arg->{how} } .= $reply;
   } else {
     $self->privmsg($arg->{where}, "$arg->{who}: $reply");
   }
@@ -2080,21 +2085,30 @@ sub SAID_task {
   }
 
   my $where = ref $arg->{where} ? $arg->{where}[0] : $arg->{where};
-  my $payload = { task => {
-    name     => $name,
-    ($urgent ? (parent_id => $config->{liquidplanner}{urgent}) : ()),
-    assignments => [ map {; { person_id => $_->lp_id } } @owners ],
-    description => "created by " . $self->get_nickname . " on $where "
-                .  "on behalf of $arg->{who}",
-  } };
+  my $via   = $arg->{how} eq 'sms'  ? 'an SMS'
+            : $arg->{where} =~ /^#/ ? "a message on $where"
+            :                         "a private message";
 
   my $user = $self->user_named($arg->{who});
   $user = undef unless $user && $user->lp_auth_header;
 
-  my $master = $self->master_lp_user;
+  my $description = sprintf 'created by %s in response to %s from %s%s',
+    $self->get_nickname,
+    $via,
+    $arg->{who};
+
+  my $payload = { task => {
+    name     => $name,
+    ($urgent ? (parent_id => $config->{liquidplanner}{urgent}) : ()),
+    assignments => [ map {; { person_id => $_->lp_id } } @owners ],
+    description => $description,
+  } };
+
+
+  my $as_user = $user // $self->master_lp_user;
 
   my $res = $self->http_post_for_user(
-    $user || $master,
+    $as_user,
     "$LP_BASE/tasks",
     Content_Type => 'application/json',
     Content => $JSON->encode($payload),
