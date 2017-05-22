@@ -2086,7 +2086,7 @@ sub SAID_task {
 
   my $where = ref $arg->{where} ? $arg->{where}[0] : $arg->{where};
   my $via   = $arg->{how} eq 'sms'  ? 'an SMS'
-            : $arg->{where} =~ /^#/ ? "a message on $where"
+            : $where =~ /^#/        ? "a message on $where"
             :                         "a private message";
 
   my $user = $self->user_named($arg->{who});
