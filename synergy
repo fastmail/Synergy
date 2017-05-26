@@ -2113,6 +2113,10 @@ sub SAID_task {
     my ($code) = $1;
     $urgent = $code =~ /!/;
     $start  = $code =~ />/;
+  } elsif ($name =~ s/\s*((?::timer_clock:|:hourglass(?:_flowing_sand)?:|:exclamation:)+)\s*\z//) {
+    my ($code) = $1;
+    $urgent = $code =~ /exclamation/;
+    $start  = $code =~ /timer_clock|hourglass/;
   }
 
   my $where = ref $arg->{where} ? $arg->{where}[0] : $arg->{where};
