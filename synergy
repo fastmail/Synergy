@@ -1472,6 +1472,72 @@ sub SAID_stop {
   }
 }
 
+sub SAID_spent {
+  my ($self, $arg) = @_;
+
+  my $user = $self->user_named($arg->{who});
+  $user = undef unless $user && $user->lp_auth_header;
+
+  unless ($user) {
+    return $self->reply(
+      "You're not set up to do stuff in LiquidPlanner.",
+      $arg,
+    );
+  }
+
+  my ($dur_str, $name) = $arg->{what} =~ /\A(.+?)\s*(?::|\son\s)\s*(\S.+)\z/;
+  unless ($dur_str && $name) {
+    return -1;
+  }
+
+  my $duration;
+  my $ok = eval { $duration = parse_duration($dur_str); 1 };
+  unless ($ok) {
+    return $self->reply("I didn't understand how long you spent!", $arg);
+  }
+
+  my $task = $self->_create_lp_task({
+    name   => $name,
+    # urgent => $urgent,
+    user   => $user,
+    owners => [ $user ],
+    description => 'Created by Synergy in response to a "spent" command.',
+  });
+
+  unless ($task) {
+    return $self->reply(
+      "Sorry, something went wrong when I tried to make that task.",
+      $arg,
+    );
+  }
+
+  my $uri = sprintf
+    'https://app.liquidplanner.com/space/%s/projects/show/%s',
+    $config->{liquidplanner}{workspace},
+    $task->{id};
+
+  my $res = $self->http_post_for_user($user,
+    "$LP_BASE/tasks/$task->{id}/track_time",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({
+      activity_id => $task->{activity_id},
+      member_id => $user->lp_id,
+      work      => $duration / 3600,
+      is_done   => \1,
+    }),
+  );
+
+  unless ($res->is_success) {
+    warn $res->as_string;
+    return $self->reply(
+      "I was able to create the task, but not log your time.  Drat.  $uri",
+      $arg,
+    );
+  }
+
+  return $self->reply("I logged that time here: $uri", $arg);
+}
+
 sub SAID_tasks {
   my ($self, $arg) = @_;
 
