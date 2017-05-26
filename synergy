@@ -2474,6 +2474,7 @@ my %HELP = (
   "show's over" => "show's over -- chill for the rest of the day",
   start    => "start [TASKID] -- start next upcoming task, or task ID TASKID ",
   tasks    => "tasks [ N ] -- see your upcoming 5 tasks, or 'page' N of your tasks ",
+  spent    => "spent DURATION on TASK: make a task, already complete, with time logged on it",
   timer    => "timer -- show timer status (LP users only)",
   stop     => "stop timer -- stop the current timer (LP users only)",
   task     => "task for SOMEBODY: TASK -- make a new task in Liquid Planner",
