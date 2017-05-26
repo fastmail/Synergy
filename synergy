@@ -2026,6 +2026,37 @@ sub _maint_host_for {
   return $res->is_success;
 }
 
+
+sub _create_lp_task {
+  my ($self, $arg) = @_;
+
+  my $payload = { task => {
+    name     => $arg->{name},
+    ($arg->{urgent} ? (parent_id => $config->{liquidplanner}{urgent}) : ()),
+    assignments => [ map {; { person_id => $_->lp_id } } @{ $arg->{owners} } ],
+    description => $arg->{description},
+  } };
+
+  my $as_user = $arg->{user} // $self->master_lp_user;
+
+  my $res = $self->http_post_for_user(
+    $as_user,
+    "$LP_BASE/tasks",
+    Content_Type => 'application/json',
+    Content => $JSON->encode($payload),
+  );
+
+  unless ($res->is_success) {
+    warn ">>" . $res->decoded_content . "<<";
+    warn $res->as_string;
+    return;
+  }
+
+  my $task = $JSON->decode($res->decoded_content);
+
+  return $task;
+}
+
 sub SAID_task {
   my ($self, $arg) = @_;
 
@@ -2097,44 +2128,31 @@ sub SAID_task {
     $via,
     $arg->{who};
 
-  my $payload = { task => {
-    name     => $name,
-    ($urgent ? (parent_id => $config->{liquidplanner}{urgent}) : ()),
-    assignments => [ map {; { person_id => $_->lp_id } } @owners ],
+  my $task = $self->_create_lp_task({
+    name   => $name,
+    urgent => $urgent,
+    user   => $user,
+    owners => \@owners,
     description => $description,
-  } };
+  });
 
-
-  my $as_user = $user // $self->master_lp_user;
-
-  my $res = $self->http_post_for_user(
-    $as_user,
-    "$LP_BASE/tasks",
-    Content_Type => 'application/json',
-    Content => $JSON->encode($payload),
-  );
-
-  unless ($res->is_success) {
-    warn ">>" . $res->decoded_content . "<<";
-    warn $res->as_string;
+  unless ($task) {
     return $self->reply(
       "Sorry, something went wrong when I tried to make that task.",
       $arg,
     );
   }
 
-  my $task_id = $JSON->decode($res->decoded_content)->{id};
-
   my $rcpt = join q{ and }, map {; $_->username } @owners;
 
   my $reply = sprintf
     "Task for $rcpt created: https://app.liquidplanner.com/space/%s/projects/show/%s",
     $config->{liquidplanner}{workspace},
-    $task_id;
+    $task->{id};
 
   if ($start) {
     if ($user) {
-      my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task_id/timer/start");
+      my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
 
       if ($res->is_success) {
         $reply =~ s/created:/created, timer running:/;
