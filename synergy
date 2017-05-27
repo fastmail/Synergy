@@ -1,8 +1,10 @@
 #!perl
-use 5.16.0;
+use 5.20.0;
 package Synergy;
 use Moses;
 use namespace::autoclean;
+
+use experimental 'postderef';
 
 use DateTime::Format::Natural;
 use HTTP::Body;
@@ -612,13 +614,13 @@ sub http_request {
 }
 
 sub lp_tasks_for_user {
-  my ($self, $user, $count) = @_;
+  my ($self, $user, $count, $arg) = @_;
 
   return unless $user && $user->lp_auth_header;
 
   my $res = $self->http_get_for_user(
     $user,
-    "$LP_BASE/upcoming_tasks?limit=$count&flat=true",
+    "$LP_BASE/upcoming_tasks?limit=200&flat=true",
   );
 
   unless ($res->is_success) {
@@ -627,6 +629,29 @@ sub lp_tasks_for_user {
   }
 
   my $tasks = $JSON->decode( $res->decoded_content );
+
+  if ($arg->{inbox}) {
+    @$tasks = grep {;
+      (grep { $config->{liquidplanner}{inbox} == $_ } $_->{parent_ids}->@*)
+      ||
+      (grep { $config->{liquidplanner}{inbox} == $_ } $_->{package_ids}->@*)
+    } @$tasks;
+  } else {
+    @$tasks = grep {;
+      (! grep { $config->{liquidplanner}{inbox} == $_ } $_->{parent_ids}->@*)
+      &&
+      (! grep { $config->{liquidplanner}{inbox} == $_ } $_->{package_ids}->@*)
+    } @$tasks;
+  }
+
+  splice @$tasks, $count;
+
+  my $urgent = $config->{liquidplanner}{urgent};
+  for (@$tasks) {
+    $_->{name} = "[URGENT] $_->{name}"
+      if (grep { $urgent == $_ } $_->{parent_ids}->@*)
+      || (grep { $urgent == $_ } $_->{package_ids}->@*);
+  }
 
   return $tasks;
 }
@@ -1540,6 +1565,18 @@ sub SAID_spent {
 
 sub SAID_tasks {
   my ($self, $arg) = @_;
+  $self->_task_list($arg, { inbox => 0 });
+}
+
+sub SAID_inbox {
+  my ($self, $arg) = @_;
+  $self->_task_list($arg, { inbox => 1 });
+}
+
+sub _task_list {
+  my ($self, $arg, $meta) = @_;
+
+  my $command = $meta->{inbox} ? 'inbox' : 'tasks';
 
   my $user  = $self->user_named($arg->{who});
 
@@ -1547,7 +1584,7 @@ sub SAID_tasks {
     unless $user && $user->lp_auth_header;
 
   if ($arg->{how} eq 'irc' && $arg->{where} ne $arg->{who}) {
-    $self->reply("Responses to <tasks> are sent privately.", $arg);
+    $self->reply("Responses to <$command> are sent privately.", $arg);
     $arg->{where} = $arg->{who};
   }
 
@@ -1568,11 +1605,11 @@ sub SAID_tasks {
     my $count = $per_page * $page;
     my $start = $per_page * ($page - 1);
 
-    my $lp_tasks = $self->lp_tasks_for_user($user, $count);
+    my $lp_tasks = $self->lp_tasks_for_user($user, $count, $meta);
     @tasks = splice @$lp_tasks, $start, $per_page;
   } elsif ($what =~ m{\A/(.+)/\z}) {
     $what = $1;
-    my $lp_tasks = $self->lp_tasks_for_user($user, 50);
+    my $lp_tasks = $self->lp_tasks_for_user($user, 50, $meta);
     @tasks = grep {; $_->{name} =~ /$what/ } @$lp_tasks;
     $#tasks = 4 if @tasks > 5;
   } else {
