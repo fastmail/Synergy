@@ -18,6 +18,7 @@ use YAML::XS;
 use IO::Async::Loop::POE;
 use Net::Async::HTTP;
 use URI;
+use Lingua::EN::Inflect qw(PL_N);
 
 use Synergy::User;
 
@@ -620,7 +621,7 @@ sub lp_tasks_for_user {
 
   my $res = $self->http_get_for_user(
     $user,
-    "$LP_BASE/upcoming_tasks?limit=200&flat=true",
+    "$LP_BASE/upcoming_tasks?limit=200&flat=true&member_id=" . $user->lp_id,
   );
 
   unless ($res->is_success) {
@@ -654,6 +655,54 @@ sub lp_tasks_for_user {
   }
 
   return $tasks;
+}
+
+sub lp_damage_report {
+  my ($self, $user, $lp_id) = @_;
+
+  return unless $user && $user->lp_auth_header;
+
+  $lp_id //= $user->lp_id;
+
+  my $res = $self->http_get_for_user(
+    $user,
+    "$LP_BASE/upcoming_tasks?limit=200&member_id=" . $lp_id,
+  );
+
+  unless ($res->is_success) {
+    warn "failed to get tasks from LiquidPlanner: " . $res->as_string;
+    return;
+  }
+
+  my $groups = $JSON->decode( $res->decoded_content );
+  return "no upcoming work... what??" unless @$groups;
+
+  my $summary = q{};
+  splice @$groups, 4;
+  while (my $group = shift @$groups) {
+    next unless $group->{items}->@*;
+
+    my $count = 0;
+    my $unest = 0;
+    for my $item ($group->{items}->@*) {
+      $count++;
+      my ($assignment) = grep {; $_->{person_id} == $lp_id }
+                         $item->{assignments}->@*;
+
+      $unest++ if $assignment->{low_effort_remaining} == 0
+               && $assignment->{high_effort_remaining} == 0;
+    }
+
+    $summary .= $group->{group} eq 'INBOX'
+              ? 'inbox'
+              : "week of $group->{from}";
+
+    $summary .= sprintf ": %u %s", $count, PL_N('item', $count);
+    $summary .= sprintf ", %u unestimated", $unest if $unest;
+    $summary .= "; " if @$groups;
+  }
+
+  return $summary;
 }
 
 event irc_msg => sub {
@@ -1561,6 +1610,33 @@ sub SAID_spent {
   }
 
   return $self->reply("I logged that time here: $uri", $arg);
+}
+
+sub SAID_damage {
+  my ($self, $arg) = @_;
+
+  $arg->{what} =~ s/\A\s*//;
+  $arg->{what} =~ s/\Areport\s*//;
+  $arg->{what} =~ s/\Afor (\S+)\z//;
+  my $for_str = $1 // $arg->{who};
+
+  return -1 if $arg->{what};
+
+  my $who = $self->user_named($arg->{who});
+  my $for = $self->user_named($for_str);
+
+  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+    unless $who && $who->lp_auth_header;
+
+  unless ($for and $for->lp_id) {
+    return $self->reply(
+      "I don't know who the user $for_str is in LiquidPlanner.",
+      $arg,
+    );
+  }
+
+  my $report = $self->lp_damage_report($who, $for->lp_id);
+  return $self->reply($report, $arg);
 }
 
 sub SAID_tasks {
