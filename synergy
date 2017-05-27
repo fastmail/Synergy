@@ -685,6 +685,15 @@ sub lp_damage_report {
     my $count = 0;
     my $unest = 0;
     for my $item ($group->{items}->@*) {
+      # upcoming_tasks is meant to act like My Work, in which on-hold tasks are
+      # not shown, but it includes on hold tasks.  bug filed
+      next if $item->{is_on_hold};
+
+      # Project, parent, and package are a complete mess, or at least mystery,
+      # in the LiquidPlanner API.  Here, I'm trying to exclude tasks that are
+      # in a project but not a package, meaning they're basically backlog work.
+      next if $item->{project_id} && ! $item->{package_id};
+
       $count++;
       my ($assignment) = grep {; $_->{person_id} == $lp_id }
                          $item->{assignments}->@*;
