@@ -1,0 +1,68 @@
+#!perl
+use v5.24.0;
+use warnings;
+use experimental qw(lexical_subs signatures);
+
+use IO::Async::Loop;
+use IO::Async::Timer::Periodic;
+use Cpanel::JSON::XS qw(decode_json encode_json);
+use Net::Async::WebSocket::Client;
+use Net::Async::HTTP;
+
+my $key = `cat ~/jem.key`;
+
+my $loop = IO::Async::Loop->new;
+
+my $http = Net::Async::HTTP->new();
+$loop->add($http);
+
+my $i = 1;
+
+my sub register_slack_rtm ($res) {
+  my $ws_url = decode_json($res->content)->{url};
+
+  my $client = Net::Async::WebSocket::Client->new(
+    on_frame => sub ($self, $frame) {
+      my $event;
+      unless (eval { $event = decode_json($frame) }) {
+        warn "ERROR DECODING <$frame> <$@>\n";
+        return;
+      }
+
+      dispatch_event($event, $frame);
+    }
+  );
+  $loop->add($client);
+
+  $client->connect(
+    url     => $ws_url,
+    service => 'https',
+    extensions => [ qw(SSL) ],
+    on_done => sub {
+      my $timer = IO::Async::Timer::Periodic->new(
+        interval => 60,
+        on_tick  => sub {
+          $client->send_frame(encode_json({
+            id   => $i++,
+            type => 'ping',
+          }));
+        }
+      );
+
+      $timer->start;
+      $loop->add( $timer );
+    },
+  );
+}
+
+sub dispatch_event ($event, $frame) {
+  say "GOT EVENT: $event->{type}: $frame";
+  return;
+}
+
+$http->GET("https://slack.com/api/rtm.connect?token=$key")
+     ->on_done(\&register_slack_rtm)
+     ->on_fail(sub ($failure) { die "couldn't start RTM API: $failure" })
+     ->get;
+
+$loop->run;
