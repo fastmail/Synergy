@@ -714,6 +714,61 @@ sub lp_damage_report {
   return $summary;
 }
 
+sub lp_unestimated_tasks {
+  my ($self, $user, $lp_id) = @_;
+
+  return unless $user && $user->lp_auth_header;
+
+  $lp_id //= $user->lp_id;
+
+  my $res = $self->http_get_for_user(
+    $user,
+    "$LP_BASE/upcoming_tasks?limit=200&member_id=" . $lp_id,
+  );
+
+  unless ($res->is_success) {
+    warn "failed to get tasks from LiquidPlanner: " . $res->as_string;
+    return;
+  }
+
+  my $groups = $JSON->decode( $res->decoded_content );
+  return "no upcoming work... what??" unless @$groups;
+
+  my @tasks;
+
+  splice @$groups, 4;
+  while (my $group = shift @$groups) {
+    next unless $group->{items}->@*;
+
+    for my $item ($group->{items}->@*) {
+      # upcoming_tasks is meant to act like My Work, in which on-hold tasks are
+      # not shown, but it includes on hold tasks.  bug filed
+      next if $item->{is_on_hold};
+
+      # Project, parent, and package are a complete mess, or at least mystery,
+      # in the LiquidPlanner API.  Here, I'm trying to exclude tasks that are
+      # in a project but not a package, meaning they're basically backlog work.
+      next if $item->{project_id} && ! $item->{package_id};
+
+      my ($assignment) = grep {; $_->{person_id} == $lp_id }
+                         $item->{assignments}->@*;
+
+      if (
+           $assignment->{low_effort_remaining} == 0
+        && $assignment->{high_effort_remaining} == 0
+      ) {
+        my $url = sprintf "https://app.liquidplanner.com/space/%s/projects/show/%s",
+          $config->{liquidplanner}{workspace},
+          $assignment->{treeitem_id};
+
+        push @tasks, "$url\n";
+      }
+    }
+  }
+
+  return @tasks;
+}
+
 event irc_msg => sub {
   my ($self, $nickstr, $msg) = @_[ OBJECT, ARG0, ARG2 ];
   my ($nick) = split /!/, $nickstr;
@@ -1646,6 +1701,42 @@ sub SAID_damage {
 
   my $report = $self->lp_damage_report($who, $for->lp_id);
   return $self->reply($report, $arg);
+}
+
+sub SAID_unestimated {
+  my ($self, $arg) = @_;
+
+  $arg->{what} //= '';
+  $arg->{what} =~ s/\A\s*//;
+  $arg->{what} =~ s/\Areport\s*//;
+  $arg->{what} =~ s/\Afor (\S+)\z//;
+  my $for_str = $1 // $arg->{who};
+
+  return -1 if $arg->{what};
+
+  my $who = $self->user_named($arg->{who});
+  my $for = $self->user_named($for_str);
+
+  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+    unless $who && $who->lp_auth_header;
+
+  unless ($for and $for->lp_id) {
+    return $self->reply(
+      "I don't know who the user $for_str is in LiquidPlanner.",
+      $arg,
+    );
+  }
+
+  my @tasks = $self->lp_unestimated_tasks($who, $for->lp_id);
+
+  if ($arg->{how} eq 'irc' && $arg->{where} ne $arg->{who}) {
+    $self->reply("Responses to <unestimated> are sent privately.", $arg);
+    $arg->{where} = $arg->{who};
+  }
+
+  $self->reply($_, $arg) for @tasks;
+
+  return;
 }
 
 sub SAID_tasks {
