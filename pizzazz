@@ -1,0 +1,22 @@
+#!perl
+use v5.24.0;
+use warnings;
+
+use lib 'lib';
+
+use IO::Async::Loop;
+use IO::Async::Timer::Periodic;
+use Synergy::Event;
+use Synergy::EventHandler;
+use Synergy::EventSource::TrivialTest;
+use Synergy::ReplyChannel::Test;
+
+my $eh   = Synergy::EventHandler->new;
+my $loop = IO::Async::Loop->new;
+
+Synergy::EventSource::TrivialTest->new({
+  loop => $loop,
+  eventhandler => $eh,
+});
+
+$loop->run;
