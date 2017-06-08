@@ -657,6 +657,17 @@ sub lp_tasks_for_user {
   return $tasks;
 }
 
+sub _lp_task_is_unestimated {
+  my ($self, $task) = @_;
+
+  # A task can be estimated to have 0 remaining effort. If so
+  # it will have an expect_start and expect_finish.
+  return    $task->{low_effort_remaining} == 0
+         && $task->{high_effort_remaining} == 0
+         && ! $task->{expected_start}
+         && ! $task->{expected_finish};
+}
+
 sub lp_damage_report {
   my ($self, $user, $lp_id) = @_;
 
@@ -698,8 +709,7 @@ sub lp_damage_report {
       my ($assignment) = grep {; $_->{person_id} == $lp_id }
                          $item->{assignments}->@*;
 
-      $unest++ if $assignment->{low_effort_remaining} == 0
-               && $assignment->{high_effort_remaining} == 0;
+      $unest++ if $self->_lp_task_is_unestimated($assignment);
     }
 
     $summary .= $group->{group} eq 'INBOX'
@@ -753,10 +763,7 @@ sub lp_unestimated_tasks {
       my ($assignment) = grep {; $_->{person_id} == $lp_id }
                          $item->{assignments}->@*;
 
-      if (
-           $assignment->{low_effort_remaining} == 0
-        && $assignment->{high_effort_remaining} == 0
-      ) {
+      if ($self->_lp_task_is_unestimated($assignment)) {
         my $url = sprintf "https://app.liquidplanner.com/space/%s/projects/show/%s",
           $config->{liquidplanner}{workspace},
           $assignment->{treeitem_id};
