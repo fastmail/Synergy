@@ -57,7 +57,9 @@ has http => (
   isa => 'Net::Async::HTTP',
   lazy => 1,
   default => sub {
-    my $http = Net::Async::HTTP->new();
+    my $http = Net::Async::HTTP->new(
+      max_connections_per_host => 5, # seems good?
+    );
 
     shift->io_loop->add($http);
 
