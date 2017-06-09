@@ -38,11 +38,11 @@ my sub register_slack_rtm ($res) {
     url     => $ws_url,
     service => 'https',
     extensions => [ qw(SSL) ],
-    on_done => sub {
+    on_connected => sub {
       my $timer = IO::Async::Timer::Periodic->new(
-        interval => 60,
+        interval => 10,
         on_tick  => sub {
-          $client->send_frame(encode_json({
+          $client->send_frame(masked => 1, buffer => encode_json({
             id   => $i++,
             type => 'ping',
           }));
