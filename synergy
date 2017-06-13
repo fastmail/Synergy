@@ -698,8 +698,8 @@ sub lp_damage_report {
       my ($assignment) = grep {; $_->{person_id} == $lp_id }
                          $item->{assignments}->@*;
 
-      $unest++ if $assignment->{low_effort_remaining} == 0
-               && $assignment->{high_effort_remaining} == 0;
+      $unest++ if ($assignment->{low_effort_remaining}  // 0) < 0.00000001
+               && ($assignment->{high_effort_remaining} // 0) < 0.00000001;
     }
 
     $summary .= $group->{group} eq 'INBOX'
