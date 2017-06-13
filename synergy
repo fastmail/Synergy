@@ -2686,6 +2686,7 @@ my %HELP = (
   chill    => "chill [until TIME | for DURATION] -- stop nagging for a while (LP users only)",
   clox     => "what time is it in everybody's TZ now?",
   commit   => "commit work on your current timer; pair with STOP or DONE",
+  damage   => "what is coming up, and what needs to be estimated?",
   good     => "set up recurring tasks with good [morning|afternoon|etc]",
   maint    => "maint <ALERTID> [for DURATION] -- set a maintenance window for an alert",
   oncall   => "oncall -- list on call users; also, (oncall add SOMEBODY, oncall remove SOMEBODY, oncall set SOMEBODY...)",
