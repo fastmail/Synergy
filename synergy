@@ -424,6 +424,12 @@ sub sms {
     ],
     Authorization => "Basic $config->{twilio}{auth}",
   );
+
+  unless ($res->is_success) {
+    warn "failed to send sms to $number: " . $res->as_string;
+  }
+
+  return $res;
 }
 
 event nag => sub {
@@ -2525,8 +2531,13 @@ sub SAID_page {
     }
 
     my $where = ref $arg->{where} ? "@{$arg->{where}}" : $arg->{where};
-    $self->sms($target->phone, "$arg->{who} just paged you on $where");
-    $self->reply("Okay, I sent a page.", $arg);
+    my $res = $self->sms($target->phone, "$arg->{who} just paged you on $where");
+    if ($res->is_success) {
+      $self->reply("Okay, I sent a page.", $arg);
+    } else {
+      $self->reply("Sorry, I couldn't seem to send the page...", $arg);
+    }
+
     return;
   }
 
@@ -2545,11 +2556,15 @@ sub SAID_page {
   }
 
   my $where = ref $arg->{where} ? "@{$arg->{where}}" : $arg->{where};
-  $self->sms(
+  my $res = $self->sms(
     $target->phone,
     "$arg->{who} just paged you on $where: $rest",
   );
-  $self->reply("Okay, I sent a page.", $arg);
+  if ($res->is_success) {
+    $self->reply("Okay, I sent a page.", $arg);
+  } else {
+    $self->reply("Sorry, I couldn't seem to send the page...", $arg);
+  }
   return;
 }
 
