@@ -417,11 +417,11 @@ sub sms {
 
   my $res = $self->http_post(
     "https://api.twilio.com/2010-04-01/Accounts/$config->{twilio}{sid}/SMS/Messages",
-    {
+    Content => [
       From => $config->{twilio}{from},
       To   => $number,
       Body => $msg,
-    },
+    ],
     Authorization => "Basic $config->{twilio}{auth}",
   );
 }
