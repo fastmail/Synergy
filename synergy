@@ -2684,6 +2684,7 @@ my %HELP = (
   commit   => "commit work on your current timer; pair with STOP or DONE",
   damage   => "what is coming up, and what needs to be estimated?",
   good     => "set up recurring tasks with good [morning|afternoon|etc]",
+  inbox    => "inbox -- list the tasks in your inbox",
   maint    => "maint <ALERTID> [for DURATION] -- set a maintenance window for an alert",
   oncall   => "oncall -- list on call users; also, (oncall add SOMEBODY, oncall remove SOMEBODY, oncall set SOMEBODY...)",
   page     => "page SOMEBODY: message -- send an SMS to a user",
