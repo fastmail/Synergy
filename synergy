@@ -2697,6 +2697,7 @@ my %HELP = (
   timer    => "timer -- show timer status (LP users only)",
   stop     => "stop timer -- stop the current timer (LP users only)",
   task     => "task for SOMEBODY: TASK -- make a new task in Liquid Planner",
+  unestimated => "unestimated -- how much work do you have unestimated",
   what     => "what's SOMEBODY number -- get a user's phone number",
   who      => "who is SOMEBODY -- get a user or alias's identity",
 );
