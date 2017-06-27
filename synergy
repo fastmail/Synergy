@@ -1620,6 +1620,9 @@ sub SAID_stop {
     my ($timer) = grep {; $_->{running} }
                   @{ $JSON->decode( $res->decoded_content ) };
 
+    return $self->reply("You don't have any active timers to stop.", $arg)
+      unless $timer;
+
     my $stop_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/stop");
     unless ($stop_res->is_success) {
       return $self->reply("I couldn't stop your active timer.", $arg);
