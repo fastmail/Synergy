@@ -313,9 +313,9 @@ event _http_sms => sub {
   my $param = $self->_params_from_req($request);
 
   my $from = $param->{From} // '';
-  $from =~ s/\A\+1//;
 
   my $who = $self->username_for_phone($from);
+
   unless ($param->{AccountSid} eq $config->{twilio}{sid} and $who) {
     $response->code(400);
     $response->content("Bad request");
@@ -334,7 +334,7 @@ event _http_sms => sub {
   my $result = $self->_dispatch({
     how   => 'sms',
     who   => $who->username,
-    where => [ $from ],
+    where => [ $from, $param->{To} ],
     what  => $text,
     reply_buffer => \$reply,
   });
@@ -413,12 +413,25 @@ event _http_404 => sub {
 sub __hs { $_[0] * 3600 + $_[1] * 60 }
 
 sub sms {
-  my ($self, $number, $msg) = @_;
+  my ($self, $number, $msg, $from) = @_;
+
+  unless ($from) {
+    COUNTRY: for my $code (
+      sort { length $b <=> length $a } keys $config->{twilio}{numbers}->%*
+    ) {
+      if (0 == index $number, $code) {
+        $from = $config->{twilio}{numbers}{$code};
+        last;
+      }
+    }
+
+    $from = $config->{twilio}{numbers}{1};
+  }
 
   my $res = $self->http_post(
     "https://api.twilio.com/2010-04-01/Accounts/$config->{twilio}{sid}/SMS/Messages",
     Content => [
-      From => $config->{twilio}{from},
+      From => $from,
       To   => $number,
       Body => $msg,
     ],
@@ -1043,7 +1056,7 @@ sub reply {
   if ($arg->{reply_buffer}) {
     ${ $arg->{reply_buffer} } .= $reply;
   } elsif ($arg->{how} eq 'sms') {
-    $self->sms($arg->{where}[0], $reply);
+    $self->sms($arg->{where}[0], $reply, $arg->{where}[1]);
   } else {
     $self->privmsg($arg->{where}, "$arg->{who}: $reply");
   }
