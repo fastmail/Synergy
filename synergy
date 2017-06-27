@@ -341,10 +341,13 @@ event _http_sms => sub {
 
   if ($result && $result eq -1) {
     $response->code(200);
-    $response->content( $self->_does_not_compute($who) );
+    my $dnc = $self->_does_not_compute($who);
+    $self->sms($from, $dnc, $param->{To});
+    $response->content(q{});
   } else {
     $response->code(200);
-    $response->content($reply);
+    $self->sms($from, $reply, $param->{To});
+    $response->content(q{});
   }
 
   $kernel->call( 'httpd', 'DONE', $response );
@@ -413,13 +416,17 @@ event _http_404 => sub {
 sub __hs { $_[0] * 3600 + $_[1] * 60 }
 
 sub sms {
-  my ($self, $number, $msg, $from) = @_;
+  my ($self, $to, $msg, $from) = @_;
+
+  # We can't send to +1 from not-+1 for weird reasons that Twilio says they
+  # want to fix.  Meantime, if we're about to do that, stop.
+  undef $from if $from && $to =~ /\A\+?1/ && $from !~ /\A\+?1/;
 
   unless ($from) {
     COUNTRY: for my $code (
       sort { length $b <=> length $a } keys $config->{twilio}{numbers}->%*
     ) {
-      if (0 == index $number, $code) {
+      if (0 == index $to, $code) {
         $from = $config->{twilio}{numbers}{$code};
         last;
       }
@@ -432,14 +439,14 @@ sub sms {
     "https://api.twilio.com/2010-04-01/Accounts/$config->{twilio}{sid}/SMS/Messages",
     Content => [
       From => $from,
-      To   => $number,
+      To   => $to,
       Body => $msg,
     ],
     Authorization => "Basic $config->{twilio}{auth}",
   );
 
   unless ($res->is_success) {
-    warn "failed to send sms to $number: " . $res->as_string;
+    warn "failed to send sms to $to: " . $res->as_string;
   }
 
   return $res;
