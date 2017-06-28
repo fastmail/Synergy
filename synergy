@@ -1840,7 +1840,7 @@ sub _task_list {
   } else {
     my $reply = $meta->{which} eq 'tasks'
       ? "You don't have any open tasks right now!  Woah!"
-      : "You don't have any open $arg->{which} tasks right now.";
+      : "You don't have any open $meta->{which} tasks right now.";
 
     $self->reply($reply, $arg);
   }
