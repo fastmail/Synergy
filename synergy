@@ -660,7 +660,7 @@ sub lp_tasks_for_user {
 
   my $tasks = $JSON->decode( $res->decoded_content );
 
-  if ($which) {
+  if ($which eq 'tasks') {
     @$tasks = grep {;
       (! grep { $config->{liquidplanner}{inbox} == $_ } $_->{parent_ids}->@*)
       &&
