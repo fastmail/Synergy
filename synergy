@@ -659,17 +659,23 @@ sub lp_tasks_for_user {
 
   my $tasks = $JSON->decode( $res->decoded_content );
 
-  if ($arg->{inbox}) {
-    @$tasks = grep {;
-      (grep { $config->{liquidplanner}{inbox} == $_ } $_->{parent_ids}->@*)
-      ||
-      (grep { $config->{liquidplanner}{inbox} == $_ } $_->{package_ids}->@*)
-    } @$tasks;
-  } else {
+  if ($arg->{which} eq 'tasks') {
     @$tasks = grep {;
       (! grep { $config->{liquidplanner}{inbox} == $_ } $_->{parent_ids}->@*)
       &&
       (! grep { $config->{liquidplanner}{inbox} == $_ } $_->{package_ids}->@*)
+    } @$tasks;
+  } else {
+    my $package_id = $config->{liquidplanner}{ $arg->{which} };
+    unless ($package_id) {
+      warn "can't find package_id for '$arg->{which}'";
+      return;
+    }
+
+    @$tasks = grep {;
+      (grep { $package_id == $_ } $_->{parent_ids}->@*)
+      ||
+      (grep { $package_id == $_ } $_->{package_ids}->@*)
     } @$tasks;
   }
 
@@ -1770,20 +1776,23 @@ sub SAID_unestimated {
   return;
 }
 
-sub SAID_tasks {
-  my ($self, $arg) = @_;
-  $self->_task_list($arg, { inbox => 0 });
-}
+BEGIN {
+  for my $pkg (qw( tasks inbox urgent recurring )) {
+    my $code = sub {
+      my ($self, $arg) = @_;
+      $self->_task_list($arg, { which => $pkg });
+    };
 
-sub SAID_inbox {
-  my ($self, $arg) = @_;
-  $self->_task_list($arg, { inbox => 1 });
+    no strict 'refs';
+    *{"SAID_$pkg"} = $code;
+  }
 }
 
 sub _task_list {
   my ($self, $arg, $meta) = @_;
 
-  my $command = $meta->{inbox} ? 'inbox' : 'tasks';
+  $meta->{which} //= "tasks";
+  my $command = $meta->{which};
 
   my $user  = $self->user_named($arg->{who});
 
@@ -1823,8 +1832,16 @@ sub _task_list {
     return -1;
   }
 
-  for my $task (@tasks) {
-    $self->reply("$task->{name} ($LINK_BASE$task->{id})", $arg);
+  if (@tasks) {
+    for my $task (@tasks) {
+      $self->reply("$task->{name} ($LINK_BASE$task->{id})", $arg);
+    }
+  } else {
+    my $reply = $meta->{which} eq 'tasks'
+      ? "You don't have any open tasks right now!  Woah!"
+      : "You don't have any open $arg->{which} tasks right now.";
+
+    $self->reply($reply, $arg);
   }
 
   return;
