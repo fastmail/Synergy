@@ -2361,11 +2361,24 @@ sub _maint_host_for {
 sub _create_lp_task {
   my ($self, $arg) = @_;
 
+  my %container = (
+    package_id  => $arg->{urgent}
+                ? $config->{liquidplanner}{package}{urgent}
+                : $config->{liquidplanner}{package}{inbox},
+    parent_id   => $arg->{project_id}
+                ?  $arg->{project_id}
+                :  undef,
+  );
+
+  $container{parent_id} = delete $container{package_id}
+    unless $container{parent_id};
+
   my $payload = { task => {
-    name     => $arg->{name},
-    ($arg->{urgent} ? (parent_id => $config->{liquidplanner}{package}{urgent}) : ()),
+    name        => $arg->{name},
     assignments => [ map {; { person_id => $_->lp_id } } @{ $arg->{owners} } ],
     description => $arg->{description},
+
+    %container,
   } };
 
   my $as_user = $arg->{user} // $self->master_lp_user;
@@ -2401,6 +2414,8 @@ sub SAID_task {
   my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
   my (@owners, @no_lp, @unknown);
   my %seen;
+
+  my %project_id;
   for my $name (@target_names) {
     my $target = $self->resolve_name($name, $arg->{who});
 
@@ -2412,6 +2427,12 @@ sub SAID_task {
     # push(($owner_id ? @owner_ids : @unknown), $owner_id);
     if ($owner_id) {
       push @owners, $target;
+
+      my $project_id = $config->{liquidplanner}{project}{$target->username};
+      warn sprintf "Looking for project for %s found %s\n",
+        $target->username, $project_id // '(undef)';
+
+      $project_id{ $project_id }++ if $project_id;
     } elsif ($target) {
       push @no_lp, $target->username;
     } else {
@@ -2463,12 +2484,15 @@ sub SAID_task {
     $via,
     $arg->{who};
 
+  my $project_id = (keys %project_id)[0] if 1 == keys %project_id;
+
   my $task = $self->_create_lp_task({
     name   => $name,
     urgent => $urgent,
     user   => $user,
     owners => \@owners,
     description => $description,
+    project_id  => $project_id,
   });
 
   unless ($task) {
