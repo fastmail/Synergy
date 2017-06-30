@@ -1661,7 +1661,7 @@ sub SAID_spent {
     );
   }
 
-  my ($dur_str, $name) = $arg->{what} =~ /\A(.+?)\s*(?::|\son\s)\s*(\S.+)\z/;
+  my ($dur_str, $name) = $arg->{what} =~ /\A(.+?)(?:\s*:|\s*\son\s|\s+)\s*(\S.+)\z/;
   unless ($dur_str && $name) {
     return -1;
   }
