@@ -2479,7 +2479,7 @@ sub SAID_task {
   my $user = $self->user_named($arg->{who});
   $user = undef unless $user && $user->lp_auth_header;
 
-  my $description = sprintf 'created by %s in response to %s from %s%s',
+  my $description = sprintf 'created by %s in response to %s from %s',
     $self->get_nickname,
     $via,
     $arg->{who};
