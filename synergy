@@ -662,12 +662,12 @@ sub lp_tasks_for_user {
 
   if ($which eq 'tasks') {
     @$tasks = grep {;
-      (! grep { $config->{liquidplanner}{inbox} == $_ } $_->{parent_ids}->@*)
+      (! grep { $config->{liquidplanner}{package}{inbox} == $_ } $_->{parent_ids}->@*)
       &&
-      (! grep { $config->{liquidplanner}{inbox} == $_ } $_->{package_ids}->@*)
+      (! grep { $config->{liquidplanner}{package}{inbox} == $_ } $_->{package_ids}->@*)
     } @$tasks;
   } else {
-    my $package_id = $config->{liquidplanner}{ $which };
+    my $package_id = $config->{liquidplanner}{package}{ $which };
     unless ($package_id) {
       warn "can't find package_id for '$which'";
       return;
@@ -682,7 +682,7 @@ sub lp_tasks_for_user {
 
   splice @$tasks, $count;
 
-  my $urgent = $config->{liquidplanner}{urgent};
+  my $urgent = $config->{liquidplanner}{package}{urgent};
   for (@$tasks) {
     $_->{name} = "[URGENT] $_->{name}"
       if (grep { $urgent == $_ } $_->{parent_ids}->@*)
@@ -2363,7 +2363,7 @@ sub _create_lp_task {
 
   my $payload = { task => {
     name     => $arg->{name},
-    ($arg->{urgent} ? (parent_id => $config->{liquidplanner}{urgent}) : ()),
+    ($arg->{urgent} ? (parent_id => $config->{liquidplanner}{package}{urgent}) : ()),
     assignments => [ map {; { person_id => $_->lp_id } } @{ $arg->{owners} } ],
     description => $arg->{description},
   } };
@@ -2515,7 +2515,7 @@ sub SAID_expand {
   return $self->reply("You don't have an expando for: $arg->{what}", $arg)
     unless @tasks;
 
-  my $parent = $config->{liquidplanner}{recurring};
+  my $parent = $config->{liquidplanner}{package}{recurring};
   my $where  = ref $arg->{where} ? $arg->{where}[0] : $arg->{where};
 
   my (@ok, @fail);
