@@ -533,6 +533,21 @@ event nag => sub {
   }
 };
 
+sub last_lp_timer_for_user {
+  my ($self, $user) = @_;
+
+  return unless $user->lp_auth_header;
+  return unless my $lp_timer_id = $user->last_lp_timer_id;
+
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  return unless $res->is_success;
+
+  my ($timer) = grep {; $_->{id} eq $lp_timer_id }
+                @{ $JSON->decode( $res->decoded_content ) };
+
+  return $timer;
+}
+
 sub lp_timer_for_user {
   my ($self, $user) = @_;
 
@@ -543,6 +558,10 @@ sub lp_timer_for_user {
 
   my ($timer) = grep {; $_->{running} }
                 @{ $JSON->decode( $res->decoded_content ) };
+
+  if ($timer) {
+    $user->last_lp_timer_id($timer->{id});
+  }
 
   return $timer;
 }
@@ -1399,6 +1418,7 @@ sub SAID_abort {
 
   if ($stop_res->is_success and $clr_res->is_success) {
     $user->timer->clear_last_nag;
+    $user->clear_last_lp_timer_id;
     $self->reply("Okay, I stopped and cleared your active timer.", $arg);
   } else {
     $self->reply("Something went wrong aborting your timer.", $arg);
@@ -1567,7 +1587,56 @@ sub SAID_commit {
       $meta{DONE} ? "  Task was: $task->{name}" : q{}),
     $arg
   );
+
+  if ($meta{DONE}) {
+    $user->clear_last_lp_timer_id;
+  }
+
   return 1;
+}
+
+sub SAID_resume {
+  my ($self, $arg) = @_;
+
+  my $user = $self->user_named($arg->{who});
+
+  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+    unless $user && $user->lp_auth_header;
+
+  my $lp_timer = $self->lp_timer_for_user($user);
+
+  if ($lp_timer && ref $lp_timer) {
+    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$lp_timer->{item_id}");
+
+    unless ($task_res->is_success) {
+      return $self->reply("You already have a running timer (but I couldn't figure out its task...)", $arg);
+    }
+
+    my $task = $JSON->decode($task_res->decoded_content);
+    return $self->reply("You already have a running timer ($task->{name})", $arg);
+  }
+
+  my $last_lp_timer = $self->last_lp_timer_for_user($user);
+
+  unless ($last_lp_timer) {
+    return $self->reply("I'm not aware of any previous timer you had running. Sorry!", $arg);
+  }
+
+  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$last_lp_timer->{item_id}");
+
+  unless ($task_res->is_success) {
+    return $self->reply("I found your timer but I couldn't figure out its task...", $arg);
+  }
+
+  my $task = $JSON->decode($task_res->decoded_content);
+
+  my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+
+  unless ($res->is_success) {
+    return $self->reply("I failed to resume the timer for $task->{name}, sorry!", $arg);
+  }
+
+  return $self->reply("Timer resumed. Task is: $task->{name}", $arg);
 }
 
 sub SAID_start {
@@ -1582,6 +1651,8 @@ sub SAID_start {
     my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$arg->{what}/timer/start");
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
     if ($start_res->is_success && $timer->{running}) {
+      $user->last_lp_timer_id($timer->{id});
+
       my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$timer->{item_id}");
 
       my $name = $task_res->is_success
@@ -1606,6 +1677,8 @@ sub SAID_start {
     my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
     if ($start_res->is_success && $timer->{running}) {
+      $user->last_lp_timer_id($timer->{id});
+
       return $self->reply(
         "Started task: $task->{name} ($LINK_BASE$task->{id})",
         $arg,
@@ -2542,8 +2615,10 @@ sub SAID_task {
   if ($start) {
     if ($user) {
       my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+      my $timer = eval { $JSON->decode( $res->decoded_content ); };
+      if ($res->is_success && $timer->{running}) {
+        $user->last_lp_timer_id($timer->{id});
 
-      if ($res->is_success) {
         $reply =~ s/created:/created, timer running:/;
       } else {
         $reply =~ s/created:/created, timer couldn't be started:/;

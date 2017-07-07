@@ -61,6 +61,12 @@ has timer => (
   },
 );
 
+has last_lp_timer_id => (
+  is => 'rw',
+  isa => 'Str',
+  clearer => 'clear_last_lp_timer_id',
+);
+
 has lp_id    => (is => 'ro', isa => 'Int', predicate => 'has_lp_id');
 has lp_token => (is => 'ro', isa => 'Str', predicate => 'has_lp_token');
 
