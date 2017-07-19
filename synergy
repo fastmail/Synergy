@@ -1748,6 +1748,47 @@ sub SAID_spent {
     return $self->reply("I didn't understand how long you spent!", $arg);
   }
 
+  my $ws = $config->{liquidplanner}{workspace};
+
+  if (
+       $name =~ m{^\s*https://app.liquidplanner.com/space/$ws/.*/(\d+)/?(?:\s*:)?\s*(.*?)\z}
+  ) {
+    my ($task_id, $comment) = ($1, $2);
+    $comment //= "";
+
+    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$task_id");
+
+    my $activity_id;
+    unless ($task_res->is_success) {
+      return $self->reply("I couldn't log the work because I couldn't the activity id.", $arg);
+    }
+
+    my $task = $JSON->decode($task_res->decoded_content);
+    $activity_id = $task->{activity_id};
+
+    unless ($activity_id) {
+      return $self->reply("I couldn't log the work because the task doesn't have a defined activity.", $arg);
+    }
+
+    my $res = $self->http_post_for_user($user,
+      "$LP_BASE/tasks/$task->{id}/track_time",
+      Content_Type => 'application/json',
+      Content => $JSON->encode({
+        activity_id => $task->{activity_id},
+        member_id => $user->lp_id,
+        work      => $duration / 3600,
+        ($comment ? (comment => $comment ) : ()),
+      }),
+    );
+
+    unless ($res->is_success) {
+      warn $res->as_string;
+      return $self->reply("I couldn't log your time, sorry.", $arg);
+    }
+
+    return $self->reply("I logged that time on your task", $arg);
+  }
+
   my $task = $self->_create_lp_task({
     name   => $name,
     # urgent => $urgent,
@@ -2880,7 +2921,8 @@ my %HELP = (
   "show's over" => "show's over -- chill for the rest of the day",
   start    => "start [TASKID] -- start next upcoming task, or task ID TASKID ",
   tasks    => "tasks [ N ] -- see your upcoming 5 tasks, or 'page' N of your tasks ",
-  spent    => "spent DURATION on TASK: make a task, already complete, with time logged on it",
+  spent    => "spent DURATION on TASK: make a task, already complete, with time logged on it; "
+             ."spent DURATION on https://https://app.liquidplanner.com/space/14822/projects/panel/[id]: <comment>: Log the time and comment against an existing task",
   timer    => "timer -- show timer status (LP users only)",
   stop     => "stop timer -- stop the current timer (LP users only)",
   task     => "task for SOMEBODY: TASK -- make a new task in Liquid Planner",
