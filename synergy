@@ -2876,6 +2876,7 @@ my %HELP = (
   recurring => 'show your tasks in the recurring tasks package',
   remind   => "remind SOMEBODY [at TIME | in DURATION]: WHAT -- set up a reminder",
   reset    => "reset timer -- clear the timer, leave it running (LP user onlys)",
+  resume   => "resume timer -- resume the last timer you stopped with \"stop timer\"",
   showtime => "showtime -- stop chilling, start nagging",
   "show's over" => "show's over -- chill for the rest of the day",
   start    => "start [TASKID] -- start next upcoming task, or task ID TASKID ",
