@@ -1751,7 +1751,7 @@ sub SAID_spent {
   my $ws = $config->{liquidplanner}{workspace};
 
   if (
-       $name =~ m{^\s*https://app.liquidplanner.com/space/$ws/.*/(\d+)/?(?:\s*:)?\s*(.*?)\z}
+       $name =~ m{^\s*(?:https://app.liquidplanner.com/space/$ws/.*/)?(\d+)/?(?:\s*:)?\s*(.*?)\z}
   ) {
     my ($task_id, $comment) = ($1, $2);
     $comment //= "";
