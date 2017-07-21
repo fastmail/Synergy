@@ -2982,10 +2982,11 @@ sub state {
 event save_state => sub {
   my ($self) = @_[OBJECT,];
 
-  return unless $config->{state_file};
-
   my $state = $self->state;
-  path($config->{state_file})->spew_utf8( $JSON->encode($state) );
+
+  return unless my $file = $self->_state_file;
+  $file->spew_utf8( $JSON->encode($state) );
+
   return;
 };
 
@@ -2995,11 +2996,14 @@ sub load_users {
   my %uconf = %{ $config->{users} };
   my %users;
 
+  my $dir = $self->_state_dir && $self->_state_dir->child("users");
+
   for my $username (keys %uconf) {
     my %config = %{ $uconf{$username} };
 
-    if (-e "/home/rjbs/code/synergy/users/$username.yaml") {
-      my $doc = YAML::XS::LoadFile("/home/rjbs/code/synergy/users/$username.yaml");
+    my $file = $dir && $dir->child("$username.yaml");
+    if ($file && -e $file) {
+      my $doc = YAML::XS::LoadFile("$file");
       %config = (%config, %$doc);
     }
 
@@ -3012,11 +3016,23 @@ sub load_users {
   $self->_set_users(\%users);
 }
 
+sub _state_dir {
+  return unless $config->{state_dir} && -d $config->{state_dir};
+  path($config->{state_dir});
+}
+
+sub _state_file {
+  return unless $_[0]->_state_dir;
+  $_[0]->_state_dir->child("state.json");
+}
+
 sub load_state {
   my ($self) = @_;
 
-  return unless $config->{state_file} and -r $config->{state_file};
-  my $state = $JSON->decode( path($config->{state_file})->slurp_utf8 );
+  my $state_file = $self->_state_file;
+  return unless $state_file && -r $state_file;
+
+  my $state = $JSON->decode( $state_file->slurp_utf8 );
 
   @{ $self->_reminders } = @{ $state->{reminders} };
 
