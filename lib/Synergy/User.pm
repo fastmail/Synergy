@@ -57,7 +57,7 @@ has timer => (
   init_arg => undef,
   default  => sub {
     return unless $_[0]->has_lp_token;
-    return Synergy::Timer->new;
+    return Synergy::Timer->new({ time_zone => $_[0]->time_zone });
   },
 );
 

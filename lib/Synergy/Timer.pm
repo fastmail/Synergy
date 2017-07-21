@@ -3,6 +3,8 @@ package Synergy::Timer;
 use Moose;
 use namespace::autoclean;
 
+use DateTime;
+
 has chill_until_active => (
   is  => 'rw',
   isa => 'Bool',
@@ -55,19 +57,30 @@ has showtime => (
   clearer => 'clear_showtime',
 );
 
+has time_zone => (
+  is  => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
 sub is_business_hours {
   my ($self) = @_;
-  my @time = localtime;
+
+  my $now = DateTime->now(time_zone => $self->time_zone);
+
+  my $dow  = $now->day_of_week;
+  my $hour = $now->hour;
+  my $min  = $now->minute;
 
   # Weekends off.
-  return if $time[6] == 0 or $time[6] == 6;
+  return if $dow == 0 or $dow == 6;
 
   # Nagging starts at 10:30
-  return if $time[2] <  10
-         or $time[2] == 10 && $time[1] < 30;
+  return if $hour <  10
+         or $hour == 10 && $min < 30;
   #
   # Nagging ends at 17:00
-  return if $time[2] >  16;
+  return if $hour >  16;
 
   return 1;
 }
