@@ -69,7 +69,6 @@ has http => (
 
 has users => (
   isa  => 'HashRef',
-  lazy => 1,
   traits  => [ 'Hash' ],
   handles => {
     users      => 'values',
@@ -77,13 +76,7 @@ has users => (
     usernames  => 'keys',
   },
   clearer => '_clear_users',
-  default => sub {
-    my %uconf = %{ $config->{users} };
-    my %users
-      = map {; $_ => Synergy::User->new({ username => $_, %{ $uconf{$_} } }) }
-        keys %uconf;
-    return \%users;
-  },
+  writer  => '_set_users',
 );
 
 sub phone_for_username {
@@ -2867,6 +2860,7 @@ sub SAID_reload {
   # All of these are potentially invalidated by a config reload. -- rjbs,
   # 2014-06-10
   $self->_clear_users;
+  $self->load_users;
 
   return $self->reply("Configuration reloaded.", $arg);
 }
@@ -2995,6 +2989,29 @@ event save_state => sub {
   return;
 };
 
+sub load_users {
+  my ($self) = @_;
+
+  my %uconf = %{ $config->{users} };
+  my %users;
+
+  for my $username (keys %uconf) {
+    my %config = %{ $uconf{$username} };
+
+    if (-e "/home/rjbs/code/synergy/users/$username.yaml") {
+      my $doc = YAML::XS::LoadFile("/home/rjbs/code/synergy/users/$username.yaml");
+      %config = (%config, %$doc);
+    }
+
+    $users{$username} = Synergy::User->new({
+      %config,
+      username => $username,
+    });
+  }
+
+  $self->_set_users(\%users);
+}
+
 sub load_state {
   my ($self) = @_;
 
@@ -3028,6 +3045,7 @@ sub BUILD {
 
   $self->delay(nag => 60);
   $self->delay(check_reminders => 60);
+  $self->load_users;
   $self->load_state;
 }
 
