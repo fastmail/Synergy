@@ -74,6 +74,7 @@ has users => (
     users      => 'values',
     user_named => 'get',
     usernames  => 'keys',
+    _set_user  => 'set',
   },
   clearer => '_clear_users',
   writer  => '_set_users',
@@ -2853,16 +2854,32 @@ sub SAID_what {
 sub SAID_reload {
   my ($self, $arg) = @_;
 
+  if ($arg->{what} eq 'config') {
+    $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
+
+    # All of these are potentially invalidated by a config reload. -- rjbs,
+    # 2014-06-10
+    $self->_clear_users;
+    $self->load_users;
+
+    return $self->reply("Configuration reloaded.", $arg);
+  }
+
+  if ($arg->{what} eq 'my config') {
+    my ($ok, $error) = $self->_update_user_config($arg->{who});
+
+    unless ($ok) {
+      return $self->reply("I couldn't reload your config: $error");
+    }
+
+    my $user = $self->load_user($arg->{who});
+    $self->_set_user($arg->{who}, $user);
+
+    return $self->reply("Your configuration has been reloaded.", $arg);
+  }
+
   return -1 unless $arg->{what} eq 'config';
 
-  $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
-
-  # All of these are potentially invalidated by a config reload. -- rjbs,
-  # 2014-06-10
-  $self->_clear_users;
-  $self->load_users;
-
-  return $self->reply("Configuration reloaded.", $arg);
 }
 
 sub SAID_compose {
@@ -2990,30 +3007,70 @@ event save_state => sub {
   return;
 };
 
+sub _update_user_config {
+  my ($self, $username) = @_;
+
+  my $res = $self->http_get(
+    $config->{gitlab}{base}
+      . "/api/v3/projects/"
+      . $config->{gitlab}{project_id}
+      . "/repository/files/$username.yaml"
+      . "?ref=master",
+    'PRIVATE-TOKEN' =>  $config->{gitlab}{token}
+  );
+
+  return (undef, "error retrieving config") unless $res->is_success;
+
+  my $content = eval {
+    decode_base64( $JSON->decode( $res->decoded_content )->{content} );
+  };
+
+  return (undef, "error with GitLab response") unless $content;
+
+  my $uconfig = eval { YAML::XS::Load($content) };
+
+  return (undef, "error with YAML in config") unless $uconfig;
+
+  my $dir = $self->_state_dir && $self->_state_dir->child("users");
+  $dir->child("$username.yaml")->spew_utf8($content);
+  my $file = $dir && $dir->child("$username.yaml");
+
+  return (1, undef);
+}
+
+sub load_user {
+  my ($self, $username) = @_;
+
+  my $dir = $self->_state_dir && $self->_state_dir->child("users");
+
+  my %uconf = %{ $config->{users}{$username} };
+
+  my $file = $dir && $dir->child("$username.yaml");
+  if ($file && -e $file) {
+    my $doc = YAML::XS::LoadFile("$file");
+    %uconf = (%uconf, %$doc);
+  }
+
+  return Synergy::User->new({
+    %uconf,
+    username => $username,
+  });
+}
+
 sub load_users {
   my ($self) = @_;
 
   my %uconf = %{ $config->{users} };
   my %users;
 
-  my $dir = $self->_state_dir && $self->_state_dir->child("users");
+  $self->_set_users(\%users);
 
   for my $username (keys %uconf) {
-    my %config = %{ $uconf{$username} };
-
-    my $file = $dir && $dir->child("$username.yaml");
-    if ($file && -e $file) {
-      my $doc = YAML::XS::LoadFile("$file");
-      %config = (%config, %$doc);
-    }
-
-    $users{$username} = Synergy::User->new({
-      %config,
-      username => $username,
-    });
+    my $user = $self->load_user($username);
+    $users{$username} = $user;
   }
 
-  $self->_set_users(\%users);
+  return;
 }
 
 sub _state_dir {
