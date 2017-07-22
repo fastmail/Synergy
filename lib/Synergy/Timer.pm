@@ -63,6 +63,12 @@ has time_zone => (
   required => 1,
 );
 
+has business_hours => (
+  is => 'ro',
+  isa => 'HashRef',
+  required => 1,
+);
+
 sub is_business_hours {
   my ($self) = @_;
 
@@ -75,12 +81,17 @@ sub is_business_hours {
   # Weekends off.
   return if $dow == 0 or $dow == 6;
 
-  # Nagging starts at 10:30
-  return if $hour <  10
-         or $hour == 10 && $min < 30;
-  #
-  # Nagging ends at 17:00
-  return if $hour >  16;
+  # Start nagging
+  my ($start_h, $start_m) = split /:/, $self->business_hours->{start}, 2;
+
+  return if $hour <  $start_h,
+         or $hour == $start_h && $min < $start_m;
+
+  # Stop nagging
+  my ($end_h, $end_m) = split /:/, $self->business_hours->{end}, 2;
+
+  return if $hour >  $end_h
+         or $hour == $end_h && $min > $end_m;
 
   return 1;
 }
