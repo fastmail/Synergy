@@ -1066,7 +1066,7 @@ sub _dispatch {
   my $method = "SAID_$cmd";
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
-  my %private = map {; $_ => 1 } qw( eject pose reload );
+  my %private = map {; $_ => 1 } qw( eject pose );
 
   return -1 unless $self->can("SAID_$cmd");
 
@@ -2855,6 +2855,10 @@ sub SAID_reload {
   my ($self, $arg) = @_;
 
   if ($arg->{what} eq 'config') {
+    if ($arg->{who} ne $config->{master}) {
+      return $self->reply("Only $config->{master} can do that.", $arg);
+    }
+
     $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
 
     # All of these are potentially invalidated by a config reload. -- rjbs,
