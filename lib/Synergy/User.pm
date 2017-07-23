@@ -51,13 +51,27 @@ has nicknames => (
   default => sub {  []  },
 );
 
+has business_hours => (
+  is => 'ro',
+  isa => 'HashRef',
+  default => sub {
+    {
+      start => '10:30',
+      end   => '17:00',
+    }
+  },
+);
+
 has timer => (
   is   => 'ro',
   lazy => 1,
   init_arg => undef,
   default  => sub {
     return unless $_[0]->has_lp_token;
-    return Synergy::Timer->new({ time_zone => $_[0]->time_zone });
+    return Synergy::Timer->new({
+      time_zone      => $_[0]->time_zone,
+      business_hours => $_[0]->business_hours,
+    });
   },
 );
 
