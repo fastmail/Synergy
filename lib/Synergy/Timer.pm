@@ -73,7 +73,7 @@ sub is_business_hours {
   my $min  = $now->minute;
 
   # Weekends off.
-  return if $dow == 0 or $dow == 6;
+  return if $dow == 7 or $dow == 6;
 
   # Nagging starts at 10:30
   return if $hour <  10
