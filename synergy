@@ -882,6 +882,17 @@ event irc_public => sub {
     $timer->clear_chilltill;
     $self->reply("You're back!  No longer chilling.", $arg);
   }
+
+  if (my ($task_id) = $msg =~ /LP([0-9]{8})/) {
+    return unless $user && $user->lp_auth_header;
+
+    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$task_id");
+    return unless $task_res->is_success;
+
+    my $task = $JSON->decode($task_res->decoded_content);
+    my $name = $task->{name};
+    $self->reply("LP$task_id: $task->{name} ($LINK_BASE$task_id)", $arg);
+  }
 };
 
 event irc_bot_addressed => sub {
