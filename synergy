@@ -1782,7 +1782,7 @@ sub SAID_spent {
       return $self->reply("I couldn't log your time, sorry.", $arg);
     }
 
-    return $self->reply("I logged that time on your task", $arg);
+    return $self->reply("I logged that time on your task ($task->{name})", $arg);
   }
 
   my $task = $self->_create_lp_task({
