@@ -1754,7 +1754,7 @@ sub SAID_spent {
 
     my $activity_id;
     unless ($task_res->is_success) {
-      return $self->reply("I couldn't log the work because I couldn't the activity id.", $arg);
+      return $self->reply("I couldn't log the work because I couldn't find the activity id.", $arg);
     }
 
     my $task = $JSON->decode($task_res->decoded_content);
@@ -1780,7 +1780,7 @@ sub SAID_spent {
       return $self->reply("I couldn't log your time, sorry.", $arg);
     }
 
-    return $self->reply("I logged that time on your task", $arg);
+    return $self->reply("I logged that time on your task ($task->{name})", $arg);
   }
 
   my $task = $self->_create_lp_task({
