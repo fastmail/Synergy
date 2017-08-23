@@ -2884,6 +2884,33 @@ sub SAID_reload {
     return $self->reply("Your configuration has been reloaded.", $arg);
   }
 
+  if ($arg->{what} eq 'all user config') {
+    if ($arg->{who} ne $config->{master}) {
+      return $self->reply("Only $config->{master} can do that.", $arg);
+    }
+
+    my @reloaded;
+    my @failed;
+
+    for my $user ($self->users) {
+      my ($ok, $error) = $self->_update_user_config($user->username);
+
+      if ($ok) {
+        push @reloaded, $user->username;
+        my $new_user = $self->load_user($user->username);
+        $self->_set_user($user->username, $new_user);
+      } else {
+        push @failed, $user->username;
+      }
+    }
+
+    my $error = @failed
+              ? sprintf('  Failed to refresh: %s', join(q{, }, @failed))
+              : '';
+
+    return $self->reply("User config refreshed.$error", $arg);
+  }
+
   return -1 unless $arg->{what} eq 'config';
 
 }
