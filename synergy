@@ -1747,7 +1747,7 @@ sub SAID_spent {
   my $ws = $config->{liquidplanner}{workspace};
 
   if (
-       $name =~ m{^\s*(?:https://app.liquidplanner.com/space/$ws/.*/)?(\d+)/?(?:\s*:)?\s*(.*?)\z}
+    $name =~ m{^\s*(?:https://app.liquidplanner.com/space/$ws/.*/)?([0-9]+)/?\s*\z}
   ) {
     my ($task_id, $comment) = ($1, $2);
     $comment //= "";
@@ -1756,7 +1756,7 @@ sub SAID_spent {
 
     my $activity_id;
     unless ($task_res->is_success) {
-      return $self->reply("I couldn't log the work because I couldn't the activity id.", $arg);
+      return $self->reply("I couldn't log the work because I couldn't find the task.", $arg);
     }
 
     my $task = $JSON->decode($task_res->decoded_content);
