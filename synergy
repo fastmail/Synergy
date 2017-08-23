@@ -2202,7 +2202,7 @@ sub SAID_angleangle {
     return -1;
   }
 
-  $what =~ s/\A\s*(\S+?):?\s+//;
+  $what =~ s/\A\s*(\S+?)(\s*:)?\s+//;
   my $who = $1;
 
   return $self->SAID_task({
