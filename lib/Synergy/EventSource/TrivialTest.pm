@@ -6,17 +6,9 @@ use experimental qw(signatures);
 
 use IO::Async::Timer::Periodic;
 
-use namespace::clean;
+use namespace::autoclean;
 
-has loop         => (is => 'ro', required => 1);
-has eventhandler => (is => 'ro', required => 1);
-
-has rch => (
-  is => 'ro',
-  default => sub {
-    Synergy::ReplyChannel::Test->new;
-  },
-);
+with 'Synergy::EventSource';
 
 sub BUILD ($self, @) {
   my $timer = IO::Async::Timer::Periodic->new(
