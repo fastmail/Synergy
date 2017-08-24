@@ -1,0 +1,109 @@
+use v5.24.0;
+package Synergy::External::Slack;
+
+use Moose;
+use experimental qw(lexical_subs signatures);
+use namespace::autoclean;
+
+use Cpanel::JSON::XS qw(decode_json encode_json);
+use Net::Async::WebSocket::Client;
+use Data::Dumper::Concise;
+
+has loop    => ( is => 'ro', required => 1 );
+has http    => ( is => 'ro', required => 1 );
+has api_key => ( is => 'ro', required => 1 );
+
+has client => (
+  is       => 'ro',
+  required => 1,
+  lazy     => 1,
+  default  => sub {
+    my $self = shift;
+    my $client = Net::Async::WebSocket::Client->new(
+      # This will get overwritten in EventSource::Slack
+      on_frame => sub {}
+    );
+  },
+);
+
+sub connect ($self) {
+  $self->http
+       ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
+       ->on_done(sub ($res) { $self->_register_slack_rtm($res) })
+       ->on_fail(sub ($err) { die "couldn't start RTM API: $err" })
+       ->get;
+};
+
+# This returns a Future. If you're just posting or something, you can just let
+# it complete whenever. If you're retrieving data, you probably want to do
+# something like slack_call($method, {})->on_done(sub { do_something }).
+sub api_call ($self, $method, $arg = {}) {
+  my $url = "https://slack.com/api/$method";
+  my $payload = {
+    token => $self->api_key,
+    %$arg,
+  };
+
+  return Future->wrap($self->http->POST(URI->new($url), $payload));
+}
+
+sub _register_slack_rtm ($self, $res) {
+  my $json = decode_json($res->content);
+
+  die "Could not connect to Slack RTM: $json->{error}"
+    unless $json->{ok};
+
+  $self->loop->add($self->client);
+  $self->client->connect(
+    url => $json->{url},
+    service => 'https',
+    extensions => [ qw(SSL) ],
+    on_connected => sub {
+      state $i = 1;
+
+      # Send pings to slack so it knows we're still alive
+      my $timer = IO::Async::Timer::Periodic->new(
+        interval => 10,
+        on_tick  => sub {
+          $self->client->send_frame(masked => 1, buffer => encode_json({
+            id   => $i++,
+            type => 'ping',
+          }));
+        }
+      );
+
+      $timer->start;
+      $self->loop->add($timer);
+    },
+  );
+}
+
+sub setup ($self) {
+  say "Connected to Slack!";
+  $self->load_users;
+  $self->load_channels;
+}
+
+sub load_users ($self) {
+  $self->api_call('users.list', {
+    presence => 0,
+    callback => sub ($resp) {
+    },
+  })->on_done(sub ($http_res) {
+    my $res = decode_json($http_res->decoded_content);
+    warn "load users here, dummy\n";
+  });
+}
+
+sub load_channels ($self) {
+  $self->api_call('channels.list', {
+    exclude_archived => 1,
+  })->on_done(sub ($http_res) {
+    my $res = decode_json($http_res->decoded_content);
+    warn "load channels here, dummy\n";
+    # my %channels = map {; $_->{id} => $_->{name} } $res->{channels}->@*;
+    # $self->_set_channels(Jem::Channels->new({_by_id => \%channels}));
+  });
+}
+
+1;
