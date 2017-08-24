@@ -15,8 +15,17 @@ has slack => (
   required => 1,
 );
 
+has channel => (
+  is => 'rw',
+  isa => 'Str',
+);
+
 sub reply ($self, $text) {
-  say "(on slack) $text";
+  $self->slack->api_call("chat.postMessage", {
+    text => $text,
+    channel => $self->channel,
+    as_user => 1,
+  });
   return;
 }
 

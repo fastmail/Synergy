@@ -9,6 +9,12 @@ use namespace::autoclean;
 has type => (is => 'ro', isa => 'Str', required => 1);
 has text => (is => 'ro', isa => 'Str', required => 1); # clearly per-type
 
+has from => (
+  is => 'ro',
+  isa => 'Str',   # probably a User object at some point
+  required => 1
+);
+
 sub BUILD ($self, @) {
   confess "only 'message' events exist for now"
     unless $self->type eq 'message';

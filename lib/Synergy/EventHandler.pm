@@ -10,7 +10,10 @@ use Data::Dumper::Concise;
 sub handle_event ($self, $event, $rch) {
   return unless $event->type eq 'message';
 
-  $rch->reply("I got your message: " . $event->text);
+  my $response = sprintf 'I heard you, %s. You said "%s"',
+    $event->from,
+    $event->text;
+  $rch->reply($response);
 }
 
 1;

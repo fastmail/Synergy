@@ -34,10 +34,19 @@ sub _handle_slack_event ($self, $e) {
   $self->slack->setup if $e->{type} eq 'hello';
   return unless $e->{type} eq 'message';
 
+  # bots like to talk to each other and never stop
+  return if $e->{bot_id};
+  return if $self->slack->username($e->{user}) eq 'synergy';
+
   my $event = Synergy::Event->new({
     type => 'message',
     text => $e->{text},
+    from => $self->slack->users->{$e->{user}},
   });
+
+  $self->rch->channel($e->{channel});
+
+  $self->eventhandler->handle_event($event, $self->rch);
 }
 
 

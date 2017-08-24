@@ -92,6 +92,10 @@ sub setup ($self) {
   $self->load_channels;
 }
 
+sub username ($self, $id) {
+  return $self->users->{$id};
+}
+
 sub load_users ($self) {
   $self->api_call('users.list', {
     presence => 0,
