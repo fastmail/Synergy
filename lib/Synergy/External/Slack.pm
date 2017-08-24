@@ -13,16 +13,24 @@ has loop    => ( is => 'ro', required => 1 );
 has http    => ( is => 'ro', required => 1 );
 has api_key => ( is => 'ro', required => 1 );
 
+has users => (
+  is => 'ro',
+  isa => 'HashRef',
+  writer => '_set_users',
+);
+
+has channels => (
+  is => 'ro',
+  isa => 'HashRef',
+  writer => '_set_channels',
+);
+
 has client => (
   is       => 'ro',
   required => 1,
   lazy     => 1,
   default  => sub {
-    my $self = shift;
-    my $client = Net::Async::WebSocket::Client->new(
-      # This will get overwritten in EventSource::Slack
-      on_frame => sub {}
-    );
+    my $client = Net::Async::WebSocket::Client->new;
   },
 );
 
@@ -33,19 +41,6 @@ sub connect ($self) {
        ->on_fail(sub ($err) { die "couldn't start RTM API: $err" })
        ->get;
 };
-
-# This returns a Future. If you're just posting or something, you can just let
-# it complete whenever. If you're retrieving data, you probably want to do
-# something like slack_call($method, {})->on_done(sub { do_something }).
-sub api_call ($self, $method, $arg = {}) {
-  my $url = "https://slack.com/api/$method";
-  my $payload = {
-    token => $self->api_key,
-    %$arg,
-  };
-
-  return Future->wrap($self->http->POST(URI->new($url), $payload));
-}
 
 sub _register_slack_rtm ($self, $res) {
   my $json = decode_json($res->content);
@@ -78,6 +73,19 @@ sub _register_slack_rtm ($self, $res) {
   );
 }
 
+# This returns a Future. If you're just posting or something, you can just let
+# it complete whenever. If you're retrieving data, you probably want to do
+# something like slack_call($method, {})->on_done(sub { do_something }).
+sub api_call ($self, $method, $arg = {}) {
+  my $url = "https://slack.com/api/$method";
+  my $payload = {
+    token => $self->api_key,
+    %$arg,
+  };
+
+  return Future->wrap($self->http->POST(URI->new($url), $payload));
+}
+
 sub setup ($self) {
   say "Connected to Slack!";
   $self->load_users;
@@ -91,7 +99,10 @@ sub load_users ($self) {
     },
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
-    warn "load users here, dummy\n";
+    $self->_set_users({
+      map { $_->{id}, $_->{name} } $res->{members}->@*
+    });
+    warn "loaded users!\n";
   });
 }
 
@@ -100,9 +111,10 @@ sub load_channels ($self) {
     exclude_archived => 1,
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
-    warn "load channels here, dummy\n";
-    # my %channels = map {; $_->{id} => $_->{name} } $res->{channels}->@*;
-    # $self->_set_channels(Jem::Channels->new({_by_id => \%channels}));
+    $self->_set_channels({
+      map { $_->{id}, $_->{name} } $res->{channels}->@*
+    });
+    warn "loaded channels!\n";
   });
 }
 

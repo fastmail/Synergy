@@ -25,6 +25,8 @@ sub BUILD ($self, @) {
 
     $self->_handle_slack_event($event);
   };
+
+  $self->slack->connect;
 }
 
 
