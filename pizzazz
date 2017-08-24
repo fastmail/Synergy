@@ -10,6 +10,7 @@ use Synergy::Event;
 use Synergy::EventHandler;
 use Synergy::EventSource::TrivialTest;
 use Synergy::ReplyChannel::Test;
+use Synergy::ReplyChannel::Stdout;
 
 my $eh   = Synergy::EventHandler->new;
 my $loop = IO::Async::Loop->new;
@@ -17,6 +18,7 @@ my $loop = IO::Async::Loop->new;
 Synergy::EventSource::TrivialTest->new({
   loop => $loop,
   eventhandler => $eh,
+  rch => Synergy::ReplyChannel::Stdout->new,
 });
 
 $loop->run;
