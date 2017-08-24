@@ -3,6 +3,8 @@ package Synergy::EventSource::Slack;
 
 use Moose;
 use experimental qw(signatures);
+use JSON::MaybeXS qw(encode_json decode_json);
+
 use namespace::autoclean;
 
 with 'Synergy::EventSource';
@@ -44,9 +46,12 @@ sub _handle_slack_event ($self, $e) {
     from => $self->slack->users->{$e->{user}},
   });
 
-  $self->rch->channel($e->{channel});
+  my $rch = Synergy::ReplyChannel::Slack->new(
+    slack => $self->slack,
+    channel => $e->{channel},
+  );
 
-  $self->eventhandler->handle_event($event, $self->rch);
+  $self->eventhandler->handle_event($event, $rch);
 }
 
 

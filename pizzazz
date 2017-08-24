@@ -31,15 +31,10 @@ my $slack = Synergy::External::Slack->new({
   api_key => $key,
 });
 
-my $slack_rch = Synergy::ReplyChannel::Slack->new({
-  slack => $slack,
-});
-
 Synergy::EventSource::Slack->new({
   loop => $loop,
   eventhandler => $eh,
   slack => $slack,
-  rch => $slack_rch,
 });
 
 

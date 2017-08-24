@@ -16,7 +16,7 @@ has slack => (
 );
 
 has channel => (
-  is => 'rw',
+  is => 'ro',
   isa => 'Str',
 );
 
