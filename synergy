@@ -1076,6 +1076,8 @@ sub _dispatch {
   # Second pass for alnum aliases.
   $cmd = $ALIAS{$cmd} if $ALIAS{$cmd};
 
+  $cmd =~ s/\Ago{3,}d\z/good/;
+
   my $method = "SAID_$cmd";
   $self->info("looking to call ->$method(" . ($rest // '') . ")");
 
