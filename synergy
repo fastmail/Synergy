@@ -1784,9 +1784,9 @@ sub SAID_spent {
     );
   }
 
-  my ($dur_str, $name) = $arg->{what} =~ /\A(.+?)(?:\s*:|\s*\son\s|\s+)\s*(\S.+)\z/;
+  my ($dur_str, $name) = $arg->{what} =~ /\A(.+?)(?:\s*:|\s*\son)\s+(\S.+)\z/;
   unless ($dur_str && $name) {
-    return -1;
+    return $self->reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL", $arg);
   }
 
   my $duration;
