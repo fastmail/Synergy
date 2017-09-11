@@ -7,6 +7,7 @@ use namespace::autoclean;
 use experimental 'postderef';
 
 use DateTime::Format::Natural;
+use DBI;
 use HTTP::Body;
 use JSON 2 ();
 use MIME::Base64;
@@ -50,6 +51,19 @@ has io_loop => (
   is => 'ro',
   isa => 'IO::Async::Loop::POE',
   default => sub { IO::Async::Loop::POE->new() },
+);
+
+has sqlite_dbh => (
+  is    => 'ro',
+  init_arg  => undef,
+  default   => sub {
+    my ($self) = @_;
+    die "no state dir" unless my $dir = $self->_state_dir;
+    my $filename = $dir->child("synergy.sqlite");
+    my $dbh = DBI->connect("dbi:SQLite:dbname=$filename", undef, undef);
+    die $DBI::errstr unless $dbh;
+    return $dbh;
+  },
 );
 
 has http => (
@@ -386,6 +400,30 @@ sub SAID_announce {
   );
 
   $self->reply("Message relayed", $arg);
+}
+
+sub SAID_paired {
+  my ($self, $arg) = @_;
+  $arg->{what} =~ /\A\s*with\s+(\S+)(?:\s+(?:on|about)\s+(.+))?\z/;
+  my $rhs   = $1;
+  my $topic = $2;
+
+  my $rhs_user = $self->resolve_name($rhs);
+  $rhs = $rhs_user ? $rhs_user->username : $rhs;
+
+  $self->sqlite_dbh->do(
+    "INSERT INTO pairing
+    (paired_at, pair_lhs, pair_rhs, topic)
+    VALUES
+    (?, ?, ?, ?)",
+    undef,
+    time,
+    $arg->{who},
+    $rhs,
+    $topic // "?",
+  );
+
+  $self->reply("Pairing recorded.", $arg);
 }
 
 event _http_404 => sub {
