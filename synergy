@@ -1000,21 +1000,31 @@ sub SAID_good {
   my $stop;
   my $end_of_day;
 
-  if    ($what eq 'morning')   { $reply = "Good morning!"; $expand = 'morning' }
-  elsif ($what eq 'afternoon') { $reply = "You, too!"; }
-  elsif ($what eq 'day')       { $reply = "Long days and pleasant nights!"; }
-  elsif ($what eq 'evening')   { $reply = "I'll be here when you get back!";
-                                 $stop = 1; }
-  elsif ($what eq 'night')     { $reply = "Sleep tight!";
-                                 $stop = 1;
-                                 $end_of_day = 1; }
-  elsif ($what eq 'riddance')  { $reply = "I'll outlive you all.";
-                                 $stop = 1;
-                                 $end_of_day = 1; }
-  elsif ($what eq 'bye')       { $reply = __pick_one(\@BYE);
-                                 $stop = 1;
-                                 $end_of_day = 1; }
-  else                         { return; }
+  if    ($what eq 'morning')    { $reply  = "Good morning!";
+                                  $expand = 'morning'; }
+
+  elsif ($what eq 'afternoon')  { $reply  = "You, too!";
+                                  $expand = 'afternoon' }
+
+  elsif ($what eq 'day')        { $reply  = "Long days and pleasant nights!";
+                                  $expand = 'morning'; }
+
+  elsif ($what eq 'evening')    { $reply  = "I'll be here when you get back!";
+                                  $stop   = 1; }
+
+  elsif ($what eq 'night')      { $reply  = "Sleep tight!";
+                                  $stop   = 1;
+                                  $end_of_day = 1; }
+
+  elsif ($what eq 'riddance')   { $reply  = "I'll outlive you all.";
+                                  $stop   = 1;
+                                  $end_of_day = 1; }
+
+  elsif ($what eq 'bye')        { $reply  = __pick_one(\@BYE);
+                                  $stop   = 1;
+                                  $end_of_day = 1; }
+
+  else                          { return; }
 
   if ($reply) {
     $reply =~ s/%n/$arg->{who}/g;
