@@ -1634,7 +1634,7 @@ sub SAID_commit {
   $sy_timer->clear_last_nag;
   my $also
     = $meta{DONE}  ? " and marked the task done"
-    : $meta{CHILL} ? " stopped the timer, and will chill until you're back"
+    : $meta{CHILL} ? ", stopped the timer, and will chill until you're back"
     : $meta{STOP}  ? " and stopped the timer"
     :                "";
 
