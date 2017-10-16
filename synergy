@@ -213,6 +213,11 @@ sub _build_httpd {
         EVENT => '_http_alert',
       },
       {
+        DIR => '^/highfive$',
+        SESSION => 'Synergy',
+        EVENT => '_http_slack_highfive',
+      },
+      {
         DIR => '.*',
         SESSION => 'Synergy',
         EVENT => '_http_404',
@@ -362,6 +367,175 @@ event _http_sms => sub {
 
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
+
+event _http_slack_highfive => sub {
+  my ($kernel, $self, $request, $response, $dirmatch)
+    = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
+
+  # Check for errors
+  if (! defined $request) {
+    $kernel->call('httpd', 'DONE', $response );
+    return;
+  }
+
+  my $token = $config->{slack_highfive}{token};
+  my $url = $config->{slack_highfive}{url};
+
+  unless ($token && $url) {
+    $response->code(200);
+    $response->content($JSON->encode({ text => "highfive not configured" }));
+    $kernel->call('httpd', 'DONE', $response);
+    $self->info("/highfive attempted but not configured in Synergy");
+    return;
+  }
+
+  my $param = $self->_params_from_req($request);
+
+  unless ($param->{token} && $param->{token} eq $token) {
+    $response->code(500);
+    $response->content($JSON->encode({ error => \1 }));
+    $kernel->call('httpd', 'DONE', $response);
+    if ($param->{token}) {
+      $self->info("/highfive attempted with bad token $param->{token}");
+    } else {
+      $self->info("/highfive attempted with no token");
+    }
+    return;
+  }
+
+  my $who = $param->{user_name};
+  my $text = Encode::decode('utf-8', $param->{text});
+
+  $self->_handle_highfive(
+    from => $who,
+    text => $text,
+    chan => $param->{channel_name},
+    success => sub {
+      my ($self, $msg) = @_;
+      $msg ||= '';
+
+      $response->code(200);
+      $response->content($JSON->encode({
+        text => "highfive sent! $msg",
+      }));
+      $kernel->call('httpd', 'DONE', $response);
+    },
+    failure => sub {
+      my ($self, $err) = @_;
+      $err ||= '';
+
+      $response->code(200);
+      $response->content($JSON->encode({
+        text => "something went wrong $err",
+      }));
+      $kernel->call('httpd', 'DONE', $response);
+    }
+  );
+
+  return;
+};
+
+sub _handle_highfive {
+  my ($self, %arg) = @_;
+
+  my $from = $arg{from};
+  my $text = $arg{text};
+  my $chan = $arg{chan} || '';
+  my $success = $arg{success} || sub {};
+  my $failure = $arg{failure} || sub {};
+
+  my $url = $config->{slack_highfive}{url};
+
+  unless ($url) {
+    warn "No url\n";
+    $failure->($self, "highfive webhook not configured in Synergy");
+
+    return;
+  }
+
+  # "highfive to rjbs for eating pie" or "highfive for @rjbs for baking pie"
+  $text =~ s/\A\s*(to|for)\s+//;
+
+  my ($target, $reason) = split /\s+/, $text, 2;
+
+  $target =~ s/^@//; # @rjbs -> rjbs (and we'll add the @ back later)
+
+  # "for eating pie" -> "eating pie"
+  $reason =~ s/\Afor\s+//;
+
+  my $response_text = "highfive to $target"
+                    . (length($reason) ? " for: $reason" : '');
+
+  my @targets = ("#highfives", "\@$target");
+  push @targets, "#" . $chan
+    unless $chan eq 'directmessage'
+        or $chan eq 'highfives';
+
+  my $ok = 1;
+
+  for my $channel (@targets) {
+    $self->info("Sending to $channel");
+    my $res = $self->http_post($url,
+      Content_Type => 'application/json',
+      Content      => $JSON->encode({
+        text     => $response_text,
+        channel  => $channel,
+        username => $from,
+      }),
+    );
+
+    $ok = 0 unless $res->is_success;
+
+    unless ($res->is_success) {
+      warn "Hrm, ok = 0\n";
+      warn $res->as_string;
+    }
+  }
+
+  if ($ok) {
+    $success->($self);
+  } else {
+    $failure->($self);
+  }
+
+  return;
+};
+
+sub SAID_highfive {
+  my ($self, $arg) = @_;
+
+  my $chan = $arg->{how} eq 'irc'
+    ? ( ref($arg->{where}) ? $arg->{where}[0] : $arg->{where} )
+    : '';
+
+  if ($chan) {
+    $chan =~ s/^#//;
+  }
+
+  $self->_handle_highfive(
+    from => $arg->{who},
+    text => $arg->{what},
+    chan => $chan,
+    success => sub {
+      my ($self, $msg) = @_;
+      $msg ||= '';
+
+      return $self->reply(
+        "Highfive sent! $msg",
+        $arg,
+      );
+    },
+    failure => sub {
+      my ($self, $err) = @_;
+      $err ||= '';
+
+      return $self->reply(
+        "Something went wrong! $err",
+        $arg,
+      );
+    }
+  );
+}
 
 sub __pick_one {
   my ($opts) = @_;
