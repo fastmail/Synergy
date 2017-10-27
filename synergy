@@ -468,8 +468,8 @@ sub _handle_highfive {
 
   my @targets = ("#highfives", "\@$target");
   push @targets, "#" . $chan
-    unless $chan eq 'directmessage'
-        or $chan eq 'highfives';
+    unless $chan eq 'highfives'
+        or $chan eq $from;
 
   my $ok = 1;
 
