@@ -94,6 +94,29 @@ has users => (
   writer  => '_set_users',
 );
 
+has projects => (
+  isa => 'HashRef',
+  traits => [ 'Hash' ],
+  handles => {
+    project_ids   => 'values',
+    projects      => 'keys',
+    project_named => 'get',
+    project_pairs => 'kv',
+  },
+  lazy => 1,
+  default => sub {
+    my $self = shift;
+
+    my ($ok, $err) = $self->_update_user_config('projects');
+    if ($err) {
+      warn("Failed to fetch projects from gitlab: $err\n");
+    }
+
+    $self->get_projects_from_config;
+  },
+  writer => '_set_projects',
+);
+
 sub phone_for_username {
   my ($self, $username) = @_;
   return unless my $user = $self->user_named($username);
@@ -1351,6 +1374,31 @@ sub SAID_pose {
   return;
 }
 
+sub SAID_projects {
+  my ($self, $arg) = @_;
+
+  if ($arg->{how} eq 'irc' && $arg->{where} ne $arg->{who}) {
+#    $self->reply("Responses to <projects> are sent privately.", $arg);
+#    $arg->{where} = $arg->{who};
+  }
+
+  my $ws = $config->{liquidplanner}{workspace};
+  my $url_base = "https://app.liquidplanner.com/space/$ws/projects/show";
+
+  my @pairs = $self->project_pairs;
+  unless (@pairs) {
+    return $self->reply("I'm not configured with any projects, sorry", $arg);
+  }
+
+  $self->reply("Project shortcuts: ", $arg);
+
+  for my $pair (@pairs) {
+    my ($shortcut, $id) = @$pair;
+
+    $self->reply("  $shortcut: $url_base/$id", $arg);
+  }
+}
+
 sub SAID_showtime {
   my ($self, $arg) = @_;
 
@@ -2030,13 +2078,17 @@ sub SAID_spent {
     user   => $user,
     owners => [ $user ],
     description => 'Created by Synergy in response to a "spent" command.',
-  });
+  }, $arg);
 
   unless ($task) {
-    return $self->reply(
-      "Sorry, something went wrong when I tried to make that task.",
-      $arg,
-    );
+    if ($arg->{already_notified}) {
+      return;
+    } else {
+      return $self->reply(
+        "Sorry, something went wrong when I tried to make that task.",
+        $arg,
+      );
+    }
   }
 
   my $uri = sprintf
@@ -2749,29 +2801,47 @@ sub _maint_host_for {
 
 
 sub _create_lp_task {
-  my ($self, $arg) = @_;
+  my ($self, $my_arg, $arg) = @_;
 
   my %container = (
-    package_id  => $arg->{urgent}
+    package_id  => $my_arg->{urgent}
                 ? $config->{liquidplanner}{package}{urgent}
                 : $config->{liquidplanner}{package}{inbox},
-    parent_id   => $arg->{project_id}
-                ?  $arg->{project_id}
+    parent_id   => $my_arg->{project_id}
+                ?  $my_arg->{project_id}
                 :  undef,
   );
+
+  if ($my_arg->{name} =~ s/#(.*)$//) {
+    my $project = lc $1;
+
+    my $id = $self->project_named($project);
+
+    unless ($id) {
+      $arg->{already_notified} = 1;
+
+      return $self->reply(
+          "I am not aware of a project named '$project'. (Try 'projects' "
+        . "to see what projects I know about.)",
+        $arg,
+      );
+    }
+
+    $container{parent_id} = $id;
+  }
 
   $container{parent_id} = delete $container{package_id}
     unless $container{parent_id};
 
   my $payload = { task => {
-    name        => $arg->{name},
-    assignments => [ map {; { person_id => $_->lp_id } } @{ $arg->{owners} } ],
-    description => $arg->{description},
+    name        => $my_arg->{name},
+    assignments => [ map {; { person_id => $_->lp_id } } @{ $my_arg->{owners} } ],
+    description => $my_arg->{description},
 
     %container,
   } };
 
-  my $as_user = $arg->{user} // $self->master_lp_user;
+  my $as_user = $my_arg->{user} // $self->master_lp_user;
 
   my $res = $self->http_post_for_user(
     $as_user,
@@ -2895,13 +2965,17 @@ sub SAID_task {
     owners => \@owners,
     description => $description,
     project_id  => $project_id,
-  });
+  }, $arg);
 
   unless ($task) {
-    return $self->reply(
-      "Sorry, something went wrong when I tried to make that task.",
-      $arg,
-    );
+    if ($arg->{already_notified}) {
+      return;
+    } else {
+      return $self->reply(
+        "Sorry, something went wrong when I tried to make that task.",
+        $arg,
+      );
+    }
   }
 
   my $rcpt = join q{ and }, map {; $_->username } @owners;
@@ -3146,6 +3220,16 @@ sub SAID_reload {
     return $self->reply("Your configuration has been reloaded.", $arg);
   }
 
+  if ($arg->{what} eq 'projects') {
+    my ($ok, $error) = $self->_update_user_config('projects');
+
+    if ($ok) {
+      return $self->reload_projects($arg);
+    } else {
+      return $self->reply("Failed to reload projects: $error", $arg);
+    }
+  }
+
   if ($arg->{what} eq 'all user config') {
     if ($arg->{who} ne $config->{master}) {
       return $self->reply("Only $config->{master} can do that.", $arg);
@@ -3314,7 +3398,10 @@ sub _update_user_config {
     'PRIVATE-TOKEN' =>  $config->{gitlab}{token}
   );
 
-  return (undef, "error retrieving config") unless $res->is_success;
+  unless ($res->is_success) {
+    warn "Error: " . $res->as_string;
+    return (undef, "error retrieving config")
+  }
 
   my $content = eval {
     decode_base64( $JSON->decode( $res->decoded_content )->{content} );
@@ -3331,6 +3418,41 @@ sub _update_user_config {
   my $file = $dir && $dir->child("$username.yaml");
 
   return (1, undef);
+}
+
+sub reload_projects {
+  my ($self, $arg) = @_;
+
+  my $projects = $self->get_projects_from_config($arg);
+
+  $self->_set_projects($projects);
+}
+
+sub get_projects_from_config {
+  my ($self, $arg) = @_;
+
+  my $dir = $self->_state_dir && $self->_state_dir->child("users");
+
+  my $file = $dir && $dir->child("projects.yaml");
+  if ($file && -e $file) {
+    my $doc = YAML::XS::LoadFile("$file");
+
+    $_ = lc $_ for keys %$doc;
+
+    my $count = 0+keys %$doc;
+
+    if ($arg) {
+      $self->reply("Projects reloaded (got $count)", $arg);
+    }
+
+    return $doc;
+  }
+
+  if ($arg) {
+    $self->reply("Projects reloaded (0 found)", $arg);
+  }
+
+  return {};
 }
 
 sub load_user {
