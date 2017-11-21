@@ -567,8 +567,13 @@ sub _does_not_compute {
 sub SAID_eject {
   my ($self, $arg) = @_;
   return -1 unless $arg->{what} eq 'warp core';
-  kill 'INT', $$;
+  $self->reply("Good bye", $arg);
+  $self->delay('end_it' => 1);
 }
+
+event end_it => sub {
+  kill 'INT', $$;
+};
 
 sub SAID_announce {
   my ($self, $arg) = @_;
