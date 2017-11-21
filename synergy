@@ -2021,7 +2021,23 @@ sub SAID_spent {
       return $self->reply("I couldn't log your time, sorry.", $arg);
     }
 
-    return $self->reply("I logged that time on your task ($task->{name})", $arg);
+    my $uri = sprintf
+      'https://app.liquidplanner.com/space/%s/projects/show/%s',
+      $config->{liquidplanner}{workspace},
+      $task->{id};
+
+    if ($flags->{running}) {
+      my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+      my $timer = eval { $JSON->decode( $res->decoded_content ); };
+      if ($res->is_success && $timer->{running}) {
+        $user->last_lp_timer_id($timer->{id});
+        return $self->reply("I logged that time on task ($task->{name}) and started your timer here: $uri", $arg);
+      } else {
+        return $self->reply("I couldn't start the timer on task ($task->{name}), but I logged that time here: $uri", $arg);
+      }
+    }
+
+    return $self->reply("I logged that time on your task ($task->{name} here: $uri)", $arg);
   }
 
   my $task = $self->_create_lp_task({
