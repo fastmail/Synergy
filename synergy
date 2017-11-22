@@ -2158,10 +2158,28 @@ sub _task_list {
   $meta->{which} //= "tasks";
   my $command = $meta->{which};
 
-  my $user  = $self->user_named($arg->{who});
+  my $user = $self->user_named($arg->{who});
 
   return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
     unless $user && $user->lp_auth_header;
+
+  my ($page, $target);
+  {
+    my $what = $arg->{what} // 1;
+    my @whats = split / /, $what, 2;
+    if ($whats[0] =~ /[^0-9]/ && $whats[0] !~ m{^/}) {
+      my $who = shift @whats;
+
+      $target = $self->user_named($who);
+
+      return $self->reply("$who doesn't seem to be a LiquidPlanner-known user.", $arg)
+        unless $target && $target->lp_id;
+    }
+
+    $page = $whats[0] // 1;
+  }
+
+  $target //= $user;
 
   if ($arg->{how} eq 'irc' && $arg->{where} ne $arg->{who}) {
     $self->reply("Responses to <$command> are sent privately.", $arg);
@@ -2169,11 +2187,9 @@ sub _task_list {
   }
 
   my @tasks;
-  my $what = $arg->{what} // 1;
 
-  if ($what =~ /\A[0-9]+\z/ && $what > 0) {
+  if ($page =~ /\A[0-9]+\z/ && $page > 0) {
     my $per_page = 5;
-    my $page = $what;
 
     unless ($page <= 10) {
       return $self->reply(
@@ -2185,12 +2201,12 @@ sub _task_list {
     my $count = $per_page * $page;
     my $start = $per_page * ($page - 1);
 
-    my $lp_tasks = $self->lp_tasks_for_user($user, $count, $meta);
+    my $lp_tasks = $self->lp_tasks_for_user($target, $count, $meta);
     @tasks = splice @$lp_tasks, $start, $per_page;
-  } elsif ($what =~ m{\A/(.+)/\z}) {
-    $what = $1;
-    my $lp_tasks = $self->lp_tasks_for_user($user, 50, $meta);
-    @tasks = grep {; $_->{name} =~ /$what/ } @$lp_tasks;
+  } elsif ($page =~ m{\A/(.+)/\z}) {
+    my $pat = $1;
+    my $lp_tasks = $self->lp_tasks_for_user($target, 50, $meta);
+    @tasks = grep {; $_->{name} =~ /$pat/ } @$lp_tasks;
     $#tasks = 4 if @tasks > 5;
   } else {
     return -1;
@@ -2202,8 +2218,8 @@ sub _task_list {
     }
   } else {
     my $reply = $meta->{which} eq 'tasks'
-      ? "You don't have any open tasks right now!  Woah!"
-      : "You don't have any open $meta->{which} tasks right now.";
+      ? "No tasks open right now!  Woah!"
+      : "No open $meta->{which} tasks right now.";
 
     $self->reply($reply, $arg);
   }
