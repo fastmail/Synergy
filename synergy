@@ -1142,6 +1142,7 @@ my %ALIAS = (
   '+x' => 'addchecklist',
   new  => 'task',
   expando => 'expand',
+  restart => 'resume',
 );
 
 my @BYE = (
