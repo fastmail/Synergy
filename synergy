@@ -1982,6 +1982,15 @@ sub SAID_spent {
     return $self->reply("I didn't understand how long you spent!", $arg);
   }
 
+  if ($duration > 12 * 86_400) {
+    my $dur_restr = duration($duration);
+    return $self->reply(
+        qq{You said to spend "$dur_str" which I read as $dur_restr.  }
+      . qq{That's too long!},
+      $arg,
+    );
+  }
+
   my $flags = $self->_strip_name_flags($name);
 
   my $ws = $config->{liquidplanner}{workspace};
