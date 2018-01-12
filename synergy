@@ -1180,11 +1180,14 @@ sub SAID_good {
   if    ($what eq 'morning')    { $reply  = "Good morning!";
                                   $expand = 'morning'; }
 
-  elsif ($what eq 'afternoon')  { $reply  = "You, too!";
-                                  $expand = 'afternoon' }
+  elsif ($what eq 'day_au')     { $reply  = "How ya goin'?";
+                                  $expand = 'morning'; }
 
   elsif ($what eq 'day')        { $reply  = "Long days and pleasant nights!";
                                   $expand = 'morning'; }
+
+  elsif ($what eq 'afternoon')  { $reply  = "You, too!";
+                                  $expand = 'afternoon' }
 
   elsif ($what eq 'evening')    { $reply  = "I'll be here when you get back!";
                                   $stop   = 1; }
@@ -1289,6 +1292,9 @@ sub _dispatch {
   $msg = "chill until I'm back" if lc $msg eq 'zzz';
   $msg = "good bye" if lc $msg eq 'bye'
                     or lc $msg eq 'adios';
+
+  # Special case hack because lazy. -- rjbs, 2018-01-12
+  $msg = "good day_au" if $msg =~ /\A\s*g'day(?:,?\s+mate)?[1!.?]*\z/i;
 
   my ($cmd, $rest) = split ' ', $msg, 2;
 
