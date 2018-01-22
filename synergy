@@ -105,14 +105,7 @@ has projects => (
   },
   lazy => 1,
   default => sub {
-    my $self = shift;
-
-    my ($ok, $err) = $self->_update_user_config('projects');
-    if ($err) {
-      warn("Failed to fetch projects from gitlab: $err\n");
-    }
-
-    $self->get_projects_from_config;
+    return { synergy => 39448726 },
   },
   writer => '_set_projects',
 );
@@ -1406,8 +1399,8 @@ sub SAID_projects {
   my ($self, $arg) = @_;
 
   if ($arg->{how} eq 'irc' && $arg->{where} ne $arg->{who}) {
-#    $self->reply("Responses to <projects> are sent privately.", $arg);
-#    $arg->{where} = $arg->{who};
+    $self->reply("Responses to <projects> are sent privately.", $arg);
+    $arg->{where} = $arg->{who};
   }
 
   my $ws = $config->{liquidplanner}{workspace};
@@ -3293,7 +3286,8 @@ sub SAID_reload {
     my ($ok, $error) = $self->_update_user_config('projects');
 
     if ($ok) {
-      return $self->reload_projects($arg);
+      $self->reload_projects($arg);
+      return $self->reply("Project nicknames have (not really) been reloaded.", $arg);
     } else {
       return $self->reply("Failed to reload projects: $error", $arg);
     }
@@ -3492,36 +3486,7 @@ sub _update_user_config {
 sub reload_projects {
   my ($self, $arg) = @_;
 
-  my $projects = $self->get_projects_from_config($arg);
-
-  $self->_set_projects($projects);
-}
-
-sub get_projects_from_config {
-  my ($self, $arg) = @_;
-
-  my $dir = $self->_state_dir && $self->_state_dir->child("users");
-
-  my $file = $dir && $dir->child("projects.yaml");
-  if ($file && -e $file) {
-    my $doc = YAML::XS::LoadFile("$file");
-
-    $_ = lc $_ for keys %$doc;
-
-    my $count = 0+keys %$doc;
-
-    if ($arg) {
-      $self->reply("Projects reloaded (got $count)", $arg);
-    }
-
-    return $doc;
-  }
-
-  if ($arg) {
-    $self->reply("Projects reloaded (0 found)", $arg);
-  }
-
-  return {};
+  # TODO: implement this
 }
 
 sub load_user {
