@@ -496,6 +496,18 @@ sub _handle_highfive {
 
   if ($ok) {
     $success->($self);
+
+    $self->sqlite_dbh->do(
+      "INSERT INTO highfives
+      (from_user, to_user, reason, highfived_at)
+      VALUES
+      (?, ?, ?, ?)",
+      undef,
+      $from,
+      $target,
+      $reason,
+      time,
+    );
   } else {
     $failure->($self);
   }
