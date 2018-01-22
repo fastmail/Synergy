@@ -1183,6 +1183,9 @@ sub SAID_good {
   elsif ($what eq 'day_au')     { $reply  = "How ya goin'?";
                                   $expand = 'morning'; }
 
+  elsif ($what eq 'day_de')     { $reply  = "Doch, wenn du ihn siehst!";
+                                  $expand = 'morning'; }
+
   elsif ($what eq 'day')        { $reply  = "Long days and pleasant nights!";
                                   $expand = 'morning'; }
 
@@ -1295,6 +1298,7 @@ sub _dispatch {
 
   # Special case hack because lazy. -- rjbs, 2018-01-12
   $msg = "good day_au" if $msg =~ /\A\s*g'day(?:,?\s+mate)?[1!.?]*\z/i;
+  $msg = "good day_de" if $msg =~ /\Agruß gott[1!.]?\z/i;
 
   my ($cmd, $rest) = split ' ', $msg, 2;
 
