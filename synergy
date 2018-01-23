@@ -3097,6 +3097,13 @@ sub SAID_expand {
   return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
+  unless ($arg->{what} && $arg->{what} =~ /\S/) {
+    my @names = sort $user->defined_expandoes;
+
+    return $self->reply("You don't have any expandoes", $arg) unless @names;
+    return $self->reply("Your expandoes: " . (join q{, }, @names), $arg);
+  }
+
   my @tasks = $user->tasks_for_expando($arg->{what});
 
   return $self->reply("You don't have an expando for: $arg->{what}", $arg)

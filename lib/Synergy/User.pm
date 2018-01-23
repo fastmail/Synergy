@@ -30,6 +30,15 @@ has expandoes => (
   default => sub {  {}  },
 );
 
+sub defined_expandoes {
+  my ($self) = @_;
+
+  my $expandoes = $self->_expandoes;
+  my @keys = grep {; @{ $expandoes->{ $_ } } } keys %$expandoes;
+
+  return @keys;
+}
+
 sub tasks_for_expando {
   my ($self, $name) = @_;
 
