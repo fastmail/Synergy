@@ -3304,7 +3304,17 @@ sub SAID_reload {
     if ($ok) {
       my $nicks = $self->get_project_nicknames;
       $self->_set_projects($nicks);
-      return $self->reply("Project nicknames have been reloaded.", $arg);
+
+      my $conflicts = q{};
+      if (my @dupes = grep {; $nicks->{$_}->@* > 1 } keys %$nicks) {
+        $conflicts = " There are some conflicting nicknames: "
+                   . (join q{; }, map {; "($_: $nicks->{$_}->@*)" } @dupes);
+      }
+
+      return $self->reply(
+        "Project nicknames have been reloaded.$conflicts",
+        $arg,
+      );
     } else {
       return $self->reply("Failed to reload projects: $error", $arg);
     }
