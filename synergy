@@ -1413,7 +1413,7 @@ sub SAID_projects {
   my $ws = $config->{liquidplanner}{workspace};
   my $url_base = "https://app.liquidplanner.com/space/$ws/projects/show";
 
-  my @pairs = $self->project_pairs;
+  my @pairs = sort {; $a->[0] cmp $b->[0] } $self->project_pairs;
   unless (@pairs) {
     return $self->reply("I'm not configured with any projects, sorry", $arg);
   }
