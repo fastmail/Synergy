@@ -2885,9 +2885,9 @@ sub _create_lp_task {
   if ($my_arg->{name} =~ s/#(.*)$//) {
     my $project = lc $1;
 
-    my $id = $self->project_named($project);
+    my $ids = $self->project_named($project);
 
-    unless ($id) {
+    unless ($ids && @$ids) {
       $arg->{already_notified} = 1;
 
       return $self->reply(
@@ -2897,7 +2897,15 @@ sub _create_lp_task {
       );
     }
 
-    $container{parent_id} = $id;
+    if (@$ids > 1) {
+      return $self->reply(
+          "More than one LiquidPlanner project has the nickname '$project'. "
+        . "Their ids are: @$ids",
+        $arg,
+      );
+    }
+
+    $container{parent_id} = $ids->[0];
   }
 
   $container{parent_id} = delete $container{package_id}
@@ -3505,6 +3513,7 @@ sub get_project_nicknames {
   for my $project (@projects) {
     # Impossible, right?
     next unless my $nick = $project->{custom_field_values}{Nickname};
+    $nick = lc $nick;
 
     # We'll deal with conflicts later. -- rjbs, 2018-01-22
     $project_dict{$nick} //= [];
