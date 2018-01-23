@@ -3495,7 +3495,7 @@ sub _update_user_config {
 sub get_project_nicknames {
   my ($self, $arg) = @_;
 
-  my $query = "/projects?filter[]=custom_field:Nickname is_set";
+  my $query = "/projects?filter[]=custom_field:Nickname is_set&filter[]=is_done is false";
   my $res = $self->http_get_for_master("$LP_BASE$query");
   return unless $res->is_success;
 
@@ -3508,7 +3508,7 @@ sub get_project_nicknames {
 
     # We'll deal with conflicts later. -- rjbs, 2018-01-22
     $project_dict{$nick} //= [];
-    push $project_dict{$nick}->@*, $nick;
+    push $project_dict{$nick}->@*, $project->{id};
   }
 
   return \%project_dict;
