@@ -47,6 +47,8 @@ my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
 my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
 my $CIRC_BASE = "https://api.circonus.com";
 
+my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
+
 has io_loop => (
   is => 'ro',
   isa => 'IO::Async::Loop::POE',
@@ -1439,7 +1441,7 @@ sub SAID_showtime {
   my $user  = $self->user_named($arg->{who});
   my $timer = $user && $user->has_lp_id ? $user->timer : undef;
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $timer;
 
   if ($timer->has_chilltill and $timer->chilltill > time) {
@@ -1505,7 +1507,7 @@ sub SAID_chill {
 
   my $user  = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
@@ -1713,7 +1715,7 @@ sub SAID_abort {
 
   my $user  = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
@@ -1748,7 +1750,7 @@ sub SAID_reset {
 
   my $user  = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
@@ -1830,7 +1832,7 @@ sub SAID_commit {
 
   my $user  = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my %meta;
@@ -1915,7 +1917,7 @@ sub SAID_resume {
 
   my $user = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my $lp_timer = $self->lp_timer_for_user($user);
@@ -1958,7 +1960,7 @@ sub SAID_start {
   my ($self, $arg) = @_;
   my $user  = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   if ($arg->{what} =~ /\A[0-9]+\z/) {
@@ -2011,7 +2013,7 @@ sub SAID_stop {
 
   my $user  = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   if ($arg->{what} eq 'timer') {
@@ -2201,7 +2203,7 @@ sub SAID_damage {
   my $who = $self->user_named($arg->{who});
   my $for = $self->user_named($for_str);
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $who && $who->lp_auth_header;
 
   unless ($for and $for->lp_id) {
@@ -2229,7 +2231,7 @@ sub SAID_unestimated {
   my $who = $self->user_named($arg->{who});
   my $for = $self->user_named($for_str);
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $who && $who->lp_auth_header;
 
   unless ($for and $for->lp_id) {
@@ -2271,7 +2273,7 @@ sub _task_list {
 
   my $user = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my ($page, $target);
@@ -2353,7 +2355,7 @@ sub SAID_timer {
 
   my $user = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
@@ -2595,7 +2597,7 @@ sub SAID_addchecklist {
 
   return -1 unless $arg->{what} =~ /\S/;
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   return $self->reply("You can't add checklist items unless you've got a running LiquidPlanner timer.", $arg)
@@ -2628,7 +2630,7 @@ sub SAID_todo {
 
   return -1 unless $arg->{what} =~ /\S/;
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my $desc = $arg->{what};
@@ -3092,7 +3094,7 @@ sub SAID_expand {
 
   my $user = $self->user_named($arg->{who});
 
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
+  return $self->reply($ERR_NO_LP, $arg)
     unless $user && $user->lp_auth_header;
 
   my @tasks = $user->tasks_for_expando($arg->{what});
