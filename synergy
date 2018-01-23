@@ -105,9 +105,9 @@ has projects => (
   },
   lazy => 1,
   default => sub {
-    return { synergy => 39448726 },
+    $_[0]->get_project_nicknames;
   },
-  writer => '_set_projects',
+  writer    => '_set_projects',
 );
 
 sub phone_for_username {
@@ -807,6 +807,13 @@ sub lp_timer_for_user {
   return $timer;
 }
 
+sub http_get_for_master {
+  my ($self) = shift;
+
+  my $master = $self->user_named($config->{master});
+  $self->http_get_for_user($master, @_);
+}
+
 sub http_get_for_user {
   my $self = shift;
   my $user = shift;
@@ -1414,9 +1421,10 @@ sub SAID_projects {
   $self->reply("Project shortcuts: ", $arg);
 
   for my $pair (@pairs) {
-    my ($shortcut, $id) = @$pair;
+    my ($shortcut, $ids) = @$pair;
+    my $thing = @$ids > 1 ? "(in conflict! @$ids)" : "$url_base/$ids->[0]";
 
-    $self->reply("  $shortcut: $url_base/$id", $arg);
+    $self->reply("  $shortcut: $thing", $arg);
   }
 }
 
@@ -3286,8 +3294,9 @@ sub SAID_reload {
     my ($ok, $error) = $self->_update_user_config('projects');
 
     if ($ok) {
-      $self->reload_projects($arg);
-      return $self->reply("Project nicknames have (not really) been reloaded.", $arg);
+      my $nicks = $self->get_project_nicknames($arg);
+      $self->_set_projects($nicks);
+      return $self->reply("Project nicknames have been reloaded.", $arg);
     } else {
       return $self->reply("Failed to reload projects: $error", $arg);
     }
@@ -3483,10 +3492,26 @@ sub _update_user_config {
   return (1, undef);
 }
 
-sub reload_projects {
+sub get_project_nicknames {
   my ($self, $arg) = @_;
 
-  # TODO: implement this
+  my $query = "/projects?filter[]=custom_field:Nickname is_set";
+  my $res = $self->http_get_for_master("$LP_BASE$query");
+  return unless $res->is_success;
+
+  my %project_dict;
+
+  my @projects = @{ $JSON->decode( $res->decoded_content ) };
+  for my $project (@projects) {
+    # Impossible, right?
+    next unless my $nick = $project->{custom_field_values}{Nickname};
+
+    # We'll deal with conflicts later. -- rjbs, 2018-01-22
+    $project_dict{$nick} //= [];
+    push $project_dict{$nick}->@*, $nick;
+  }
+
+  return \%project_dict;
 }
 
 sub load_user {
