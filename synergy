@@ -1420,11 +1420,16 @@ sub SAID_projects {
 
   $self->reply("Project shortcuts: ", $arg);
 
-  for my $pair (@pairs) {
-    my ($shortcut, $ids) = @$pair;
-    my $thing = @$ids > 1 ? "(in conflict! @$ids)" : "$url_base/$ids->[0]";
+  PAIR: for my $pair (@pairs) {
+    my ($shortcut, $projects) = @$pair;
+    if (@$projects > 1) {
+      my $list = join q{; }, map {; "$_->{id}: $_->{name}" } @$projects;
+      $self->reply("  $shortcut: CONFLICT: ($list)", $arg);
+      next PAIR;
+    }
 
-    $self->reply("  $shortcut: $thing", $arg);
+    my $p = $projects->[0];
+    $self->reply("  $p->{nickname}: $p->{name}: $url_base/$p->{id}", $arg);
   }
 }
 
@@ -3523,11 +3528,14 @@ sub get_project_nicknames {
   for my $project (@projects) {
     # Impossible, right?
     next unless my $nick = $project->{custom_field_values}{Nickname};
-    $nick = lc $nick;
 
     # We'll deal with conflicts later. -- rjbs, 2018-01-22
-    $project_dict{$nick} //= [];
-    push $project_dict{$nick}->@*, $project->{id};
+    $project_dict{ lc $nick } //= [];
+    push $project_dict{ lc $nick }->@*, {
+      id        => $project->{id},
+      nickname  => $nick,
+      name      => $project->{name},
+    };
   }
 
   return \%project_dict;
