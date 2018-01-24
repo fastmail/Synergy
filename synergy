@@ -2892,9 +2892,9 @@ sub _create_lp_task {
   if ($my_arg->{name} =~ s/#(.*)$//) {
     my $project = lc $1;
 
-    my $ids = $self->project_named($project);
+    my $projects = $self->project_named($project);
 
-    unless ($ids && @$ids) {
+    unless ($projects && @$projects) {
       $arg->{already_notified} = 1;
 
       return $self->reply(
@@ -2904,15 +2904,16 @@ sub _create_lp_task {
       );
     }
 
-    if (@$ids > 1) {
+    if (@$projects > 1) {
       return $self->reply(
           "More than one LiquidPlanner project has the nickname '$project'. "
-        . "Their ids are: @$ids",
-        $arg,
+        . "Their ids are: "
+        . join(q{, }, map {; $_->{id} } @$projects),
+        $arg
       );
     }
 
-    $container{parent_id} = $ids->[0];
+    $container{parent_id} = $projects->[0]{id};
   }
 
   $container{parent_id} = delete $container{package_id}
