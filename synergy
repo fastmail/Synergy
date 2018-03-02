@@ -1872,10 +1872,12 @@ sub SAID_commit {
     return $self->reply("I couldn't log the work because the task doesn't have a defined activity.", $arg);
   }
 
+  my $restart = $meta{STOP} ? 0 : 1;
+
   my $content = $JSON->encode({
     is_done => $meta{DONE} ? \1 : \0,
     comment => $comment,
-    restart => $meta{STOP} ? \0 : \1,
+    restart => \$restart,
     activity_id => $activity_id,
   });
 
@@ -1901,11 +1903,22 @@ sub SAID_commit {
   }
 
   $sy_timer->clear_last_nag;
+
+  if ($restart) {
+    my $start_res = $self->http_post_for_user(
+      $user,
+      "$LP_BASE/tasks/$lp_timer->{item_id}/timer/start",
+    );
+    $meta{RESTARTFAIL} = ! $start_res->is_success;
+  }
+
   my $also
     = $meta{DONE}  ? " and marked the task done"
     : $meta{CHILL} ? ", stopped the timer, and will chill until you're back"
     : $meta{STOP}  ? " and stopped the timer"
     :                "";
+
+  $also .= ", but I couldn't restart the timer" if $meta{RESTARTFAIL};
 
   my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
   $self->reply(
