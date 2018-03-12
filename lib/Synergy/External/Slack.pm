@@ -52,7 +52,6 @@ sub _register_slack_rtm ($self, $res) {
   $self->client->connect(
     url => $json->{url},
     service => 'https',
-    extensions => [ qw(SSL) ],
     on_connected => sub {
       state $i = 1;
 

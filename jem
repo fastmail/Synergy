@@ -37,7 +37,6 @@ my sub register_slack_rtm ($res) {
   $client->connect(
     url     => $ws_url,
     service => 'https',
-    extensions => [ qw(SSL) ],
     on_connected => sub {
       my $timer = IO::Async::Timer::Periodic->new(
         interval => 10,
