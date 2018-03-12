@@ -14,6 +14,8 @@ sub handle_event ($self, $event, $rch) {
     $event->from,
     $event->text;
   $rch->reply($response);
+
+  $main::x++;
 }
 
 1;
