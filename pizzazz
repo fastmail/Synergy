@@ -41,5 +41,4 @@ Synergy::EventSource::Slack->new({
   eventhandler  => $eh,
 });
 
-
 $loop->run;
