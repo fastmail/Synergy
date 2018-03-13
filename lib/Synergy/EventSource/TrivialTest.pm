@@ -5,6 +5,7 @@ use Moose;
 use experimental qw(signatures);
 
 use IO::Async::Timer::Periodic;
+use Synergy::ReplyChannel::Callback;
 
 use namespace::autoclean;
 
@@ -22,20 +23,42 @@ has debug_callback => (
   default => sub {  sub {}  }
 );
 
+has replies => (
+  isa => 'ArrayRef',
+  default  => sub {  []  },
+  init_arg => undef,
+  reader   => '_reply_reference',
+  traits   => [ 'Array' ],
+  handles  => {
+    reply_count   => 'count',
+    record_reply  => 'push',
+    clear_replies => 'clear',
+    replies       => 'elements',
+  },
+);
+
 sub BUILD ($self, @) {
+  my $rch = do {
+    my $weak_self = $self;
+    Scalar::Util::weaken($weak_self);
+    Synergy::ReplyChannel::Callback->new({
+      to_reply => sub ($channel, $text) {
+        $weak_self->record_reply($text);
+        $weak_self->debug_callback->("Sent reply: $text");
+      }
+    });
+  };
+
   my $timer = IO::Async::Timer::Periodic->new(
     interval => $self->interval,
     on_tick  => sub {
-      my $rch = $self->rch;
-      my $replies = $rch->reply_count;
+      state $reply_count = 0;
+      my $replies = $self->reply_count;
 
       my $debug = $self->debug_callback;
       $debug->("We saw $replies since last time...");
 
-      for my $reply ($rch->replies) {
-        $debug->( sprintf '%8i %s', @$reply );
-      }
-      $rch->clear_replies;
+      $reply_count++;
 
       my $event = Synergy::Event->new({
         type => 'message',

@@ -1,11 +1,11 @@
 use v5.24.0;
-package Synergy::EventHandler;
+package Synergy::EventHandler::TrivialTest;
 
 use Moose;
+with 'Synergy::Role::EventHandler';
+
 use experimental qw(signatures);
 use namespace::clean;
-
-use Data::Dumper::Concise;
 
 sub handle_event ($self, $event, $rch) {
   return unless $event->type eq 'message';
@@ -13,9 +13,12 @@ sub handle_event ($self, $event, $rch) {
   my $response = sprintf 'I heard you, %s. You said "%s"',
     $event->from,
     $event->text;
+
   $rch->reply($response);
 
   $main::x++;
+
+  return;
 }
 
 1;
