@@ -12,6 +12,7 @@ my $i = 0;
 has slack => (
   is => 'ro',
   isa => 'Synergy::External::Slack',
+  weak_ref => 1,
   required => 1,
 );
 

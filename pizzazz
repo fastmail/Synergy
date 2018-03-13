@@ -8,10 +8,9 @@ use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Synergy::Event;
-use Synergy::EventHandler;
-use Synergy::EventSource::TrivialTest;
+use Synergy::EventHandler::Mux;
+use Synergy::EventHandler::Slack;
 use Synergy::EventSource::Slack;
-use Synergy::ReplyChannel::Test;
 use Synergy::ReplyChannel::Stdout;
 use Synergy::ReplyChannel::Slack;
 
@@ -20,7 +19,6 @@ use Synergy::External::Slack;
 my $key = qx(cat ~/.jem.key);
 chomp $key;
 
-my $eh   = Synergy::EventHandler->new;
 my $loop = IO::Async::Loop->new;
 my $http = Net::Async::HTTP->new;
 $loop->add($http);
@@ -30,6 +28,13 @@ my $slack = Synergy::External::Slack->new({
   http => $http,
   api_key => $key,
 });
+
+my $eh = Synergy::EventHandler::Mux->new({
+  eventhandlers => [
+    Synergy::EventHandler::Slack->new({ slack => $slack }),
+  ]
+});
+
 
 Synergy::EventSource::Slack->new({
   loop => $loop,

@@ -25,34 +25,33 @@ sub BUILD ($self, @) {
       return;
     }
 
-    $self->_handle_slack_event($event);
+    if ($event->{type} eq 'hello') {
+      $self->slack->setup if $event->{type} eq 'hello';
+      return;
+    }
+
+    # XXX dispatch these better
+    return unless $event->{type} eq 'message';
+
+    # This should go in the event handler, probably
+    return if $event->{bot_id};
+    return if $self->slack->username($event->{user}) eq 'synergy';
+
+    my $evt = Synergy::Event->new({
+      type => 'message',
+      text => $event->{text},
+      from => $self->slack->users->{$event->{user}},
+    });
+
+    my $rch = Synergy::ReplyChannel::Slack->new(
+      slack => $self->slack,
+      channel => $event->{channel},
+    );
+
+    $self->eventhandler->handle_event($evt, $rch);
   };
 
   $self->slack->connect;
 }
-
-
-sub _handle_slack_event ($self, $e) {
-  $self->slack->setup if $e->{type} eq 'hello';
-  return unless $e->{type} eq 'message';
-
-  # bots like to talk to each other and never stop
-  return if $e->{bot_id};
-  return if $self->slack->username($e->{user}) eq 'synergy';
-
-  my $event = Synergy::Event->new({
-    type => 'message',
-    text => $e->{text},
-    from => $self->slack->users->{$e->{user}},
-  });
-
-  my $rch = Synergy::ReplyChannel::Slack->new(
-    slack => $self->slack,
-    channel => $e->{channel},
-  );
-
-  $self->eventhandler->handle_event($event, $rch);
-}
-
 
 1;
