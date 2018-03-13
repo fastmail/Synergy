@@ -44,7 +44,7 @@ sub BUILD ($self, @) {
     });
 
     my $rch = Synergy::ReplyChannel::Slack->new(
-      slack => $self->slack,
+      slack   => $self->slack,
       channel => $event->{channel},
     );
 

@@ -9,7 +9,7 @@ use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Synergy::Event;
 use Synergy::EventHandler::Mux;
-use Synergy::EventHandler::Slack;
+use Synergy::EventHandler::Echo;
 use Synergy::EventSource::Slack;
 use Synergy::ReplyChannel::Stdout;
 use Synergy::ReplyChannel::Slack;
@@ -31,15 +31,14 @@ my $slack = Synergy::External::Slack->new({
 
 my $eh = Synergy::EventHandler::Mux->new({
   eventhandlers => [
-    Synergy::EventHandler::Slack->new({ slack => $slack }),
+    Synergy::EventHandler::Echo->new,
   ]
 });
 
-
 Synergy::EventSource::Slack->new({
-  loop => $loop,
-  eventhandler => $eh,
-  slack => $slack,
+  loop          => $loop,
+  slack         => $slack,
+  eventhandler  => $eh,
 });
 
 
