@@ -8,11 +8,7 @@ use namespace::clean;
 
 use Synergy::Listener;
 
-has name => (
-  is  => 'ro',
-  isa => 'Str',
-  default => sub ($self, @) { ref $self },
-);
+with 'Synergy::Role::HubComponent';
 
 has listeners => (
   isa => 'ArrayRef',
@@ -30,8 +26,7 @@ has listeners => (
   },
 );
 
-sub register_with_hub ($self, $hub) { }
-sub start             ($self) { }
+sub start ($self) { }
 
 no Moose::Role;
 1;
