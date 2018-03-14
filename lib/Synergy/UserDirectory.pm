@@ -8,14 +8,11 @@ use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
 
-my $cname = 'SYNERGY_CONFIG';
-
-die "You must set \$$cname to the Synergy config file.\n"
-  unless defined $ENV{$cname};
-
-die "Config file '$ENV{$cname}' not found" unless -e $ENV{$cname};
-
-my $config = YAML::XS::LoadFile($ENV{SYNERGY_CONFIG});
+has config_file => (
+  is => 'ro',
+  isa => 'Maybe[Str]',
+  default => undef,
+);
 
 has users => (
   isa  => 'HashRef',
@@ -41,8 +38,8 @@ sub resolve_user ($self, $channel_name, $user) {
   return undef;
 }
 
-sub load_user ($self, $username) {
-  my $dir = $self->_state_dir && $self->_state_dir->child("users");
+sub load_user ($self, $state_dir, $username) {
+  my $dir = $state_dir->child("users");
 
   my %uconf;
 
@@ -59,25 +56,21 @@ sub load_user ($self, $username) {
 }
 
 sub load_users ($self) {
+  return {} unless $self->config_file;
+
+  my $config = YAML::XS::LoadFile($self->config_file);
+  return {} unless $config->{state_dir};
+  my $state_dir = path($config->{state_dir});
+
   my %users;
   my %uconf = %{ $config->{users} };
 
   for my $username (keys %uconf) {
-    my $user = $self->load_user($username);
+    my $user = $self->load_user($state_dir, $username);
     $users{$username} = $user;
   }
 
   return \%users;
-}
-
-sub _state_dir {
-  return unless $config->{state_dir} && -d $config->{state_dir};
-  path($config->{state_dir});
-}
-
-sub _state_file {
-  return unless $_[0]->_state_dir;
-  $_[0]->_state_dir->child("state.json");
 }
 
 1;
