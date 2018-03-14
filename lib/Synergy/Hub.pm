@@ -7,6 +7,8 @@ use MooseX::StrictConstructor;
 use experimental qw(signatures);
 use namespace::clean;
 
+use Try::Tiny;
+
 has user_directory => (
   is  => 'ro',
   isa => 'Object',
@@ -67,8 +69,18 @@ sub handle_event ($self, $event, $rch) {
   }
 
   for my $hit (@hits) {
-    my $method = $hit->[1]->method;
-    $hit->[0]->$method($event, $rch);
+    my $reactor = $hit->[0];
+    my $method  = $hit->[1]->method;
+
+    try {
+      $reactor->$method($event, $rch);
+    } catch {
+      my $error = $_;
+
+      $error =~ s/\n.*//ms;
+
+      $rch->reply("My $reactor system crashed while handling your message.  Sorry!");
+    };
   }
 
   return;
