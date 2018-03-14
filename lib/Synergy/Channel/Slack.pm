@@ -60,7 +60,7 @@ sub start ($self) {
       type => 'message',
       text => $self->decode_slack_usernames($event->{text}),
       from_channel => $self,
-      from_address => $self->slack->users->{$event->{user}}->{name},
+      from_address => $event->{user},
       ( $from_user ? ( from_user => $from_user ) : () ),
     });
 
