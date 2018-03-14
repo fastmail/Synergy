@@ -7,6 +7,8 @@ use namespace::autoclean;
 
 use experimental qw(signatures);
 
+with 'Synergy::Role::ReplyChannel';
+
 has to_reply => (
   isa     => 'CodeRef',
   traits  => [ 'Code' ],
@@ -14,5 +16,7 @@ has to_reply => (
     reply => 'execute_method',
   },
 );
+
+sub is_private { 1 }
 
 1;

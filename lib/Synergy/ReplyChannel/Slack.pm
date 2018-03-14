@@ -7,6 +7,8 @@ use namespace::autoclean;
 
 use experimental qw(signatures);
 
+with 'Synergy::Role::ReplyChannel';
+
 my $i = 0;
 
 has slack => (
@@ -20,6 +22,8 @@ has channel => (
   is => 'ro',
   isa => 'Str',
 );
+
+sub is_private ($self) { $self->channel =~ /^D/ }
 
 sub reply ($self, $text) {
   $self->slack->api_call("chat.postMessage", {

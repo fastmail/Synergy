@@ -7,10 +7,16 @@ with 'Synergy::Role::EventHandler';
 use experimental qw(signatures);
 use namespace::clean;
 
+my $OWN_NAME = $ENV{SYNERGY_NAME};
+
 sub start { }
 
 sub handle_event ($self, $event, $rch) {
   return unless $event->type eq 'message';
+
+  # here, handle LP12345678 & "you're back!"
+
+  return unless $rch->is_private or $event->text =~ /^\@?$OWN_NAME\W/;
 
   my $rn;
 
