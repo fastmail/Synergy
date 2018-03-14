@@ -59,7 +59,7 @@ sub start ($self) {
     # decode text
     my $me = $self->slack->own_name;
     my $text = $self->decode_slack_usernames($event->{text});
-    $text =~ s/\A \@?($me):?\s*//x;
+    $text =~ s/\A \@?($me)(?=\W):?\s*//x;
     my $was_targeted = !! $1;
 
     my $evt = Synergy::Event->new({
