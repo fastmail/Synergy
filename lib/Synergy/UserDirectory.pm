@@ -8,12 +8,6 @@ use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
 
-has config_file => (
-  is => 'ro',
-  isa => 'Maybe[Str]',
-  default => undef,
-);
-
 has users => (
   isa  => 'HashRef',
   traits  => [ 'Hash' ],
@@ -25,7 +19,7 @@ has users => (
   },
   clearer => '_clear_users',
   writer  => '_set_users',
-  builder => 'load_users',
+  default => sub {  {}  },
 );
 
 sub resolve_user ($self, $channel_name, $user) {
@@ -38,36 +32,16 @@ sub resolve_user ($self, $channel_name, $user) {
   return undef;
 }
 
-sub load_user ($self, $state_dir, $username) {
-  my $dir = $state_dir->child("users");
-
-  my %uconf;
-
-  my $file = $dir && $dir->child("$username.yaml");
-  if ($file && -e $file) {
-    my $doc = YAML::XS::LoadFile("$file");
-    %uconf = %$doc;
-  }
-
-  return Synergy::User->new({
-    %uconf,
-    username => $username,
-  });
-}
-
-sub load_users ($self) {
-  return {} unless $self->config_file;
-
-  my $config = YAML::XS::LoadFile($self->config_file);
-  return {} unless $config->{state_dir};
-  my $state_dir = path($config->{state_dir});
+sub load_users_from_file ($self, $file) {
+  my $user_config = YAML::XS::LoadFile($file);
 
   my %users;
-  my %uconf = %{ $config->{users} };
 
-  for my $username (keys %uconf) {
-    my $user = $self->load_user($state_dir, $username);
-    $users{$username} = $user;
+  for my $username (keys %$user_config) {
+    $users{$username} = Synergy::User->new({
+      $user_config->{$username}->%*,
+      username => $username,
+    });
   }
 
   return \%users;

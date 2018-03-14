@@ -1,9 +1,10 @@
 use v5.16.0;
 package Synergy::User;
-use Moose;
-use namespace::autoclean;
 
-#use Synergy::Timer;
+use Moose;
+use MooseX::StrictConstructor;
+
+use namespace::autoclean;
 
 has [ qw(username realname) ] => (
   is => 'ro',
@@ -43,7 +44,6 @@ has identities => (
   isa => 'HashRef',
 );
 
-has circonus_id => (is => 'ro', isa => 'Int', predicate => 'has_circonus_id');
 has phone       => (is => 'ro', isa => 'Str', predicate => 'has_phone');
 has want_page   => (is => 'ro', isa => 'Bool', default => 1);
 
@@ -68,6 +68,8 @@ has business_hours => (
 );
 
 =head1
+
+use Synergy::Timer;
 
 has timer => (
   is   => 'ro',

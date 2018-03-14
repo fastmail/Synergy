@@ -17,8 +17,6 @@ use Synergy::External::Slack;
 my $key = qx(cat ~/.jem.key);
 chomp $key;
 
-my $config = shift;
-
 my $loop = IO::Async::Loop->new;
 
 my $slack_channel = Synergy::Channel::Slack->new({
@@ -27,7 +25,7 @@ my $slack_channel = Synergy::Channel::Slack->new({
 });
 
 my $synergy = Synergy::Hub->new({
-  user_directory => Synergy::UserDirectory->new({ config_file => $config }),
+  user_directory => Synergy::UserDirectory->new,
   event_handler  => Synergy::EventHandler::Mux->new({
     event_handlers => [ Synergy::EventHandler::Echo->new ]
   }),
