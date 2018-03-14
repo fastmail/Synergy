@@ -22,14 +22,19 @@ has users => (
   default => sub {  {}  },
 );
 
-sub resolve_user ($self, $channel_name, $user) {
+sub user_by_channel_and_address ($self, $channel_name, $address) {
   for my $u ($self->users) {
-    if (($u->identities->{$channel_name} // '') eq $user) {
+    if (($u->identities->{$channel_name} // '') eq $address) {
       return $u;
     }
   }
 
   return undef;
+}
+
+sub user_by_name ($self, $name) {
+  # XXX - probably just put user_by_name in handles
+  return $self->user_named($name);
 }
 
 sub load_users_from_file ($self, $file) {

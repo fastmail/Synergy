@@ -54,7 +54,10 @@ sub start ($self) {
     return if $event->{bot_id};
     return if $self->slack->username($event->{user}) eq 'synergy';
 
-    my $from_user = $self->hub->user_directory->resolve_user($self->name, $event->{user});
+    my $from_user = $self->hub->user_directory->user_by_channel_and_address(
+      $self->name, $event->{user}
+    );
+
     my $from_username = $from_user
                       ? $from_user->username
                       : $self->slack->username($event->{user});

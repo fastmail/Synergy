@@ -102,10 +102,15 @@ sub dispatch_event ($self, $event, $rch) {
   return $known{$what}->($self, $event, $rch, $what)
 }
 
-sub http_get_for_user ($self, $rch, $user, @arg) {
-  return $rch->channel->hub->http_get(@arg,
+sub http_get_for_user ($self, $user, @arg) {
+  return $self->hub->http_get(@arg,
     Authorization => $user->lp_auth_header,
   );
+}
+
+sub http_get_for_master ($self, @arg) {
+  my $master = $self->hub->user_directory->user_by_name('alh');
+  $self->http_get_for_user($master, @arg);
 }
 
 sub _handle_timer ($self, $event, $rch, $text) {
@@ -120,7 +125,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
   return reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($rch, $user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
 
   unless ($res->is_success) {
     warn "failed to get timer: " . $res->as_string . "\n";
@@ -155,7 +160,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
 
   my $timer = $timers[0];
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
-  my $task_res = $self->http_get_for_user($rch, $user, "$LP_BASE/tasks/$timer->{item_id}");
+  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$timer->{item_id}");
 
   my $name = $task_res->is_success
            ? $JSON->decode($task_res->decoded_content)->{name}
