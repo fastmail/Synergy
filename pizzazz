@@ -5,56 +5,32 @@ use warnings;
 use lib 'lib';
 
 use IO::Async::Loop;
-use IO::Async::Timer::Periodic;
-use Synergy::Channel::Slack;
-use Synergy::Reactor::SlackID;
-# use Synergy::EventHandler::SlackID;
-use Synergy::Reactor::Announce;
-use Synergy::Reactor::Echo;
-use Synergy::Reactor::Clox;
-use Synergy::Reactor::LiquidPlanner;
 use Synergy::Hub;
-use Synergy::UserDirectory;
-
-use Synergy::External::Slack;
 
 my $key = qx(cat ~/.jem.key);
 chomp $key;
 
-my $loop = IO::Async::Loop->new;
-
-my $slack_channel = Synergy::Channel::Slack->new({
-  name  => 'slack_fm',
-  api_key => $key,
+my $synergy = Synergy::Hub->synergize({
+  ($ENV{SYNERGY_USERS_FILE}
+    ? (user_directory => $ENV{SYNERGY_USERS_FILE})
+    : ()),
+  channels => {
+    'slack-fm' => {
+      class   => 'Synergy::Channel::Slack',
+      api_key => $key,
+    },
+  },
+  reactors => {
+    clox    => { class => 'Synergy::Reactor::Clox' },
+    echo    => { class => 'Synergy::Reactor::Echo' },
+    lp      => { class => 'Synergy::Reactor::LiquidPlanner' },
+    slackid => { class => 'Synergy::Reactor::SlackID' },
+    announce=> {
+      class => 'Synergy::Reactor::Announce',
+      slack_channel_name => 'slack-fm',
+      announce_chan_name => 'bottest',
+    }
+  },
 });
 
-my $synergy = Synergy::Hub->new({
-  user_directory => Synergy::UserDirectory->new,
-});
-
-
-$synergy->register_channel($slack_channel);  # must come before reactors
-
-$synergy->register_reactor($_->new) for qw(
-  Synergy::Reactor::Clox
-  Synergy::Reactor::Echo
-  Synergy::Reactor::LiquidPlanner
-  Synergy::Reactor::SlackID
-);
-
-$synergy->register_reactor(
-  Synergy::Reactor::Announce->new({
-    slack_channel_name => 'slack_fm',
-    announce_chan_name => 'bottest',
-  })
-);
-
-if ($ENV{SYNERGY_USERS_FILE}) {
-  $synergy->user_directory->load_users_from_file(
-    $ENV{SYNERGY_USERS_FILE}
-  );
-}
-
-$synergy->set_loop($loop);
-
-$loop->run;
+$synergy->loop->run;

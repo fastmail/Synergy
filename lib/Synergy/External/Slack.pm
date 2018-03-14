@@ -6,6 +6,7 @@ use experimental qw(lexical_subs signatures);
 use namespace::autoclean;
 
 use Cpanel::JSON::XS qw(decode_json encode_json);
+use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Net::Async::WebSocket::Client;
 use Data::Dumper::Concise;

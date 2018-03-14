@@ -5,6 +5,7 @@ use Moose;
 use experimental qw(signatures);
 use JSON::MaybeXS qw(encode_json decode_json);
 
+use Synergy::External::Slack;
 use Synergy::Event;
 use Synergy::ReplyChannel;
 
