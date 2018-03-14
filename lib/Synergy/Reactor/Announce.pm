@@ -46,7 +46,8 @@ sub handle_announce ($self, $event, $rch) {
   my $to_send = $event->text =~ s/^announce:?\s*//r;
 
   # XXX fix this
-  my $channel_id = $event->from_channel->slack->channel_named($self->announce_chan_name);
+  my $channel_id = $event->from_channel->slack->channel_named($self->announce_chan_name)->{id};
+
   my $slack = $self->hub->channel_named($self->slack_channel_name);
 
   my $from = $event->from_user ? $event->from_user->username
