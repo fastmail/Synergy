@@ -67,8 +67,8 @@ sub handle_event ($self, $event, $rch) {
   }
 
   for my $hit (@hits) {
-    my $method = $hit->[1]->reactor_method;
-    $hit->[0]->$method($event);
+    my $method = $hit->[1]->method;
+    $hit->[0]->$method($event, $rch);
   }
 
   return;

@@ -1,21 +1,24 @@
 use v5.24.0;
-package Synergy::EventHandler::Clox;
+package Synergy::Reactor::Clox;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::EventHandler';
+with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures);
 use namespace::clean;
 use List::Util qw(first);
 
-sub start { }
+sub listener_specs {
+  return {
+    name      => 'clox',
+    method    => 'handle_clox',
+    exclusive => 1,
+    predicate => sub ($self, $e) { $e->was_targeted && $e->text eq 'clox' },
+  };
+}
 
-sub handle_event ($self, $event, $rch) {
-  return unless $event->type eq 'message';
-  return unless $event->was_targeted;
-  return unless $event->text =~ /^clox/;
-
+sub handle_clox ($self, $event, $rch) {
   my $now = DateTime->now;
 
   # TODO: get from config

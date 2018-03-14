@@ -7,11 +7,10 @@ use lib 'lib';
 use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
 use Synergy::Channel::Slack;
-use Synergy::EventHandler::Mux;
-use Synergy::EventHandler::SlackID;
-use Synergy::EventHandler::Echo;
-use Synergy::EventHandler::Clox;
-use Synergy::EventHandler::LiquidPlanner;
+# use Synergy::EventHandler::SlackID;
+use Synergy::Reactor::Echo;
+use Synergy::Reactor::Clox;
+# use Synergy::EventHandler::LiquidPlanner;
 use Synergy::Hub;
 use Synergy::UserDirectory;
 
@@ -29,15 +28,12 @@ my $slack_channel = Synergy::Channel::Slack->new({
 
 my $synergy = Synergy::Hub->new({
   user_directory => Synergy::UserDirectory->new,
-  event_handler  => Synergy::EventHandler::Mux->new({
-    event_handlers => [
-      Synergy::EventHandler::SlackID->new,
-      Synergy::EventHandler::Clox->new,
-      Synergy::EventHandler::LiquidPlanner->new,
-      Synergy::EventHandler::Echo->new,
-    ]
-  }),
 });
+
+$synergy->register_reactor($_->new) for qw(
+  Synergy::Reactor::Clox
+  Synergy::Reactor::Echo
+);
 
 $synergy->register_channel($slack_channel);
 
