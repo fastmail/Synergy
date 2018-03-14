@@ -14,6 +14,11 @@ has event_handlers => (
   handles   => { event_handlers => 'elements' },
 );
 
+sub start ($self) {
+  $_->start for $self->event_handlers;
+  return;
+}
+
 sub handle_event ($self, $event, $rch) {
   for my $handler ($self->event_handlers) {
     last if $handler->handle_event($event, $rch);

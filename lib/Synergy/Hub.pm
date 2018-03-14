@@ -61,6 +61,7 @@ sub set_loop ($self, $loop) {
   $self->_set_loop($loop);
 
   $_->start for $self->channels;
+  $_->start for $self->event_handler;
 
   return $loop;
 }

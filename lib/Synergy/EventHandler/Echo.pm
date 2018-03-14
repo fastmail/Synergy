@@ -7,6 +7,8 @@ with 'Synergy::Role::EventHandler';
 use experimental qw(signatures);
 use namespace::clean;
 
+sub start { }
+
 sub handle_event ($self, $event, $rch) {
   return unless $event->type eq 'message';
 
