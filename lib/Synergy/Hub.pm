@@ -217,6 +217,14 @@ sub http_get {
   return shift->http_request('GET' => @_);
 }
 
+sub http_post {
+  return shift->http_request('POST' => @_);
+}
+
+sub http_put {
+  return shift->http_request('PUT' => @_);
+}
+
 sub http_request ($self, $method, $url, %args) {
   my $content = delete $args{Content};
   my $content_type = delete $args{Content_Type};

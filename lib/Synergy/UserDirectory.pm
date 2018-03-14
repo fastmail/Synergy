@@ -7,6 +7,7 @@ use namespace::autoclean;
 use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
+use List::Util qw(first);
 
 has users => (
   isa  => 'HashRef',
@@ -39,6 +40,12 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
 sub user_by_name ($self, $name) {
   # XXX - probably just put user_by_name in handles
   return $self->user_named($name);
+}
+
+sub user_by_nickname ($self, $name) {
+  return first {;
+    grep {; lc $_ eq lc $name } $_->nicknames
+  } $self->users;
 }
 
 sub load_users_from_file ($self, $file) {
