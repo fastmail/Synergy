@@ -49,12 +49,12 @@ $synergy->register_reactor(
   })
 );
 
-$synergy->set_loop($loop);
-
 if ($ENV{SYNERGY_USERS_FILE}) {
   $synergy->user_directory->load_users_from_file(
     $ENV{SYNERGY_USERS_FILE}
   );
 }
+
+$synergy->set_loop($loop);
 
 $loop->run;

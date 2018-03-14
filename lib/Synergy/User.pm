@@ -8,6 +8,8 @@ use namespace::autoclean;
 
 use Synergy::Timer;
 
+has is_master => (is => 'ro', isa => 'Bool');
+
 has [ qw(username realname) ] => (
   is => 'ro',
   isa => 'Str',

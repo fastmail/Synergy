@@ -51,18 +51,20 @@ has projects => (
     project_pairs => 'kv',
   },
   lazy => 1,
-  default => sub {
-    $_[0]->get_project_nicknames;
+  default => sub ($self) {
+    $self->get_project_nicknames;
   },
   writer    => '_set_projects',
 );
+
+sub start ($self) { $self->projects }
 
 sub get_project_nicknames {
   my ($self) = @_;
 
   my $query = "/projects?filter[]=custom_field:Nickname is_set&filter[]=is_done is false";
   my $res = $self->http_get_for_master("$LP_BASE$query");
-  return unless $res->is_success;
+  return {} unless $res && $res->is_success;
 
   my %project_dict;
 
@@ -109,7 +111,12 @@ sub http_get_for_user ($self, $user, @arg) {
 }
 
 sub http_get_for_master ($self, @arg) {
-  my $master = $self->hub->user_directory->user_by_name('alh');
+  my ($master) = $self->hub->user_directory->master_users;
+  unless ($master) {
+    warn "No master users configured\n";
+    return;
+  }
+
   $self->http_get_for_user($master, @arg);
 }
 

@@ -22,6 +22,10 @@ has users => (
   default => sub {  {}  },
 );
 
+sub master_users ($self) {
+  return grep {; $_->is_master } $self->users;
+}
+
 sub user_by_channel_and_address ($self, $channel_name, $address) {
   for my $u ($self->users) {
     if (($u->identities->{$channel_name} // '') eq $address) {
