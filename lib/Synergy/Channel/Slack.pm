@@ -3,13 +3,15 @@ package Synergy::Channel::Slack;
 
 use Moose;
 use experimental qw(signatures);
-use JSON::MaybeXS qw(encode_json decode_json);
+use JSON::MaybeXS;
 
 use Synergy::External::Slack;
 use Synergy::Event;
 use Synergy::ReplyChannel;
 
 use namespace::autoclean;
+
+my $JSON = JSON->new->canonical;
 
 with 'Synergy::Role::Channel';
 
@@ -38,7 +40,7 @@ sub start ($self) {
     return unless $frame;
 
     my $event;
-    unless (eval { $event = decode_json($frame) }) {
+    unless (eval { $event = $JSON->decode($frame) }) {
       warn "ERROR DECODING <$frame> <$@>\n";
       return;
     }
@@ -66,9 +68,14 @@ sub start ($self) {
     # decode text
     my $me = $self->slack->own_name;
     my $text = $self->decode_slack_usernames($event->{text});
-    $text =~ s/\A \@?($me)(?=\W):?\s*//x;
 
+    $text =~ s/\A \@?($me)(?=\W):?\s*//x;
     my $was_targeted = !! $1;
+
+    $text =~ s/&lt;/</g;
+    $text =~ s/&gt;/>/g;
+    $text =~ s/&amp;/&/g;
+
     my $is_public = $event->{channel} =~ /^C/;
     $was_targeted = 1 if not $is_public;   # private replies are always targeted
 
@@ -99,6 +106,10 @@ sub decode_slack_usernames ($self, $text) {
 }
 
 sub send_text ($self, $target, $text) {
+  $text =~ s/&/&amp;/g;
+  $text =~ s/</&lt;/g;
+  $text =~ s/>/&gt;/g;
+
   $self->slack->api_call("chat.postMessage", {
     text    => $text,
     channel => $target,
