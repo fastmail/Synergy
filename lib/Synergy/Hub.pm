@@ -79,7 +79,7 @@ sub handle_event ($self, $event, $rch) {
 
       $error =~ s/\n.*//ms;
 
-      $rch->reply("My $reactor system crashed while handling your message.  Sorry!");
+      $rch->reply("My reactor ($reactor) crashed while handling your message.  ($error). Sorry!");
     };
   }
 
