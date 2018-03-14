@@ -10,32 +10,36 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Synergy::Hub;
+use Synergy::UserDirectory;
 use Synergy::Event;
 use Synergy::EventHandler::Mux;
 use Synergy::EventHandler::TrivialTest;
 use Synergy::EventSource::TrivialTest;
 
-my $loop = IO::Async::Loop->new;
-my $http = Net::Async::HTTP->new;
-$loop->add($http);
-
-my $eh = Synergy::EventHandler::Mux->new({
-  eventhandlers => [
-    Synergy::EventHandler::TrivialTest->new,
-  ]
+my $synergy = Synergy::Hub->new({
+  user_directory => Synergy::UserDirectory->new,
+  eventhandler   => Synergy::EventHandler::Mux->new({
+    eventhandlers => [ Synergy::EventHandler::TrivialTest->new ]
+  }),
 });
+
+my $test_channel = Synergy::EventSource::TrivialTest->new({
+  name      => 'test-channel',
+  interval  => 1,
+});
+
+$synergy->register_channel($test_channel);
+
+my $loop = IO::Async::Loop->new;
+
+$synergy->set_loop($loop);
 
 testing_loop($loop);
 
-my $tes = Synergy::EventSource::TrivialTest->new({
-  interval  => 1,
-  loop      => $loop,
-  eventhandler => $eh,
-});
-
 wait_for { ($main::x // 0) gt 2 };
 
-my @replies = $tes->replies;
+my @replies = $test_channel->replies;
 
 is(@replies, 3, "three replies recorded");
 like($replies[1], qr{I heard you, tester}, "...and it's what we expect");

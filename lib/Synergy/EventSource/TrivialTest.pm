@@ -37,7 +37,7 @@ has replies => (
   },
 );
 
-sub BUILD ($self, @) {
+sub start ($self) {
   my $rch = do {
     my $weak_self = $self;
     Scalar::Util::weaken($weak_self);
@@ -66,7 +66,7 @@ sub BUILD ($self, @) {
         from => "tester",
       });
 
-      $self->eventhandler->handle_event($event, $rch);
+      $self->hub->eventhandler->handle_event($event, $rch);
     }
   );
 
