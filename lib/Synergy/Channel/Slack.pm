@@ -5,6 +5,8 @@ use Moose;
 use experimental qw(signatures);
 use JSON::MaybeXS qw(encode_json decode_json);
 
+use Synergy::Event;
+
 use namespace::autoclean;
 
 with 'Synergy::Role::Channel';
@@ -15,7 +17,7 @@ has slack => (
   required => 1,
 );
 
-sub BUILD ($self, @) {
+sub start ($self) {
   $self->slack->client->{on_frame} = sub ($client, $frame) {
     return unless $frame;
 
@@ -48,7 +50,7 @@ sub BUILD ($self, @) {
       channel => $event->{channel},
     );
 
-    $self->eventhandler->handle_event($evt, $rch);
+    $self->hub->eventhandler->handle_event($evt, $rch);
   };
 
   $self->slack->connect;

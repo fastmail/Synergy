@@ -7,12 +7,13 @@ use lib 'lib';
 use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
-use Synergy::Event;
+use Synergy::Channel::Slack;
 use Synergy::EventHandler::Mux;
 use Synergy::EventHandler::Echo;
-use Synergy::EventSource::Slack;
+use Synergy::Hub;
 use Synergy::ReplyChannel::Stdout;
 use Synergy::ReplyChannel::Slack;
+use Synergy::UserDirectory;
 
 use Synergy::External::Slack;
 
@@ -29,16 +30,20 @@ my $slack = Synergy::External::Slack->new({
   api_key => $key,
 });
 
-my $eh = Synergy::EventHandler::Mux->new({
-  eventhandlers => [
-    Synergy::EventHandler::Echo->new,
-  ]
+my $slack_channel = Synergy::Channel::Slack->new({
+  name  => 'slack',
+  slack => $slack,
 });
 
-Synergy::EventSource::Slack->new({
-  loop          => $loop,
-  slack         => $slack,
-  eventhandler  => $eh,
+my $synergy = Synergy::Hub->new({
+  user_directory => Synergy::UserDirectory->new,
+  eventhandler   => Synergy::EventHandler::Mux->new({
+    eventhandlers => [ Synergy::EventHandler::Echo->new ]
+  }),
 });
+
+$synergy->register_channel($slack_channel);
+
+$synergy->set_loop($loop);
 
 $loop->run;
