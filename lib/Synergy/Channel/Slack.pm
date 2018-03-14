@@ -41,7 +41,7 @@ sub start ($self) {
 
     my $evt = Synergy::Event->new({
       type => 'message',
-      text => $event->{text},
+      text => $self->decode_slack_usernames($event->{text}),
       from => $self->slack->users->{$event->{user}}->{name},
       user => $self->hub->user_directory->resolve_user($self->name, $event->{user}),
     });
@@ -55,6 +55,11 @@ sub start ($self) {
   };
 
   $self->slack->connect;
+}
+
+# TODO: re-encode these on reply?
+sub decode_slack_usernames ($self, $text) {
+  return $text =~ s/<\@(U[A-Z0-9]+)>/"@" . $self->slack->username($1)/ger;
 }
 
 1;

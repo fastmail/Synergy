@@ -92,7 +92,7 @@ sub setup ($self) {
 }
 
 sub username ($self, $id) {
-  return $self->users->{$id};
+  return $self->users->{$id}->{name};
 }
 
 sub load_users ($self) {
