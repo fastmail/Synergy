@@ -95,8 +95,13 @@ sub handle_event ($self, $event, $rch) {
     }
   }
 
-  # Probably we later want a "huh?" for targeted/private events.
-  return unless @hits;
+  unless (@hits) {
+    return unless $event->was_targeted;
+
+    $rch->reply("I'm sorry, I don't know anything about that");
+
+    return;
+  }
 
   if (1 < grep {; $_->[1]->is_exclusive } @hits) {
     $rch->reply("Sorry, I find that message ambiguous.");

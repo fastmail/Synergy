@@ -11,7 +11,6 @@ use Synergy::Channel::Twilio;
 use Synergy::Reactor::SlackID;
 # use Synergy::EventHandler::SlackID;
 use Synergy::Reactor::Announce;
-use Synergy::Reactor::Echo;
 use Synergy::Reactor::Clox;
 use Synergy::Reactor::LiquidPlanner;
 use Synergy::Hub;
@@ -49,7 +48,6 @@ my $synergy = Synergy::Hub->synergize({
   },
   reactors => {
     clox    => { class => 'Synergy::Reactor::Clox' },
-    echo    => { class => 'Synergy::Reactor::Echo' },
     lp      => { class => 'Synergy::Reactor::LiquidPlanner' },
     slackid => { class => 'Synergy::Reactor::SlackID' },
     announce=> {
