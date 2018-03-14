@@ -7,5 +7,9 @@ use namespace::clean;
 
 with 'Synergy::Role::HubComponent';
 
+requires qw(
+  send_text
+  describe_event
+);
 
 1;

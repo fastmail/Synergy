@@ -70,4 +70,10 @@ sub send_text ($self, $target, $text) {
   return $res;
 }
 
+sub describe_event ($self, $event) {
+  my $who = $event->from_user ? $event->from_user->username
+                              : $event->from_address;
+  return "an sms from $who";
+}
+
 1;

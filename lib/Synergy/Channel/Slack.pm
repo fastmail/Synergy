@@ -87,6 +87,7 @@ sub start ($self) {
       from_channel => $self,
       from_address => $event->{user},
       ( $from_user ? ( from_user => $from_user ) : () ),
+      transport_data => $event,
     });
 
     my $rch = Synergy::ReplyChannel->new(
@@ -116,6 +117,25 @@ sub send_text ($self, $target, $text) {
     as_user => 1,
   });
   return;
+}
+
+sub describe_event ($self, $event) {
+  my $who = $event->from_user ? $event->from_user->username
+                              : $self->slack->users->{$event->from_address}{name};
+
+  my $channel_id = $event->transport_data->{channel};
+
+  my $slack = $self->name;
+
+  if ($channel_id =~ /^C/) {
+    my $channel = $self->slack->channels->{$channel_id}{name};
+
+    return "a message on #$channel from $who on slack $slack";
+  } elsif ($channel_id =~ /^D/) {
+    return "a private message from $who on slack $slack";
+  } else {
+    return "an unknown slack communication from $who on slack $slack";
+  }
 }
 
 1;

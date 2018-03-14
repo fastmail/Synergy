@@ -26,6 +26,10 @@ has from_user => (
   isa => 'Synergy::User',
 );
 
+has transport_data => (
+  is => 'ro',
+);
+
 has was_targeted => (
   is => 'ro',
   isa => 'Bool',
