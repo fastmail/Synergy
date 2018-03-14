@@ -6,18 +6,33 @@ use experimental qw(signatures);
 use JSON::MaybeXS qw(encode_json decode_json);
 
 use Synergy::Event;
+use Synergy::ReplyChannel::Slack;
 
 use namespace::autoclean;
 
 with 'Synergy::Role::Channel';
 
-has slack => (
+has api_key => (
   is => 'ro',
-  isa => 'Synergy::External::Slack',
+  isa => 'Str',
   required => 1,
 );
 
+has slack => (
+  is => 'ro',
+  isa => 'Synergy::External::Slack',
+  lazy => 1,
+  default => sub ($self) {
+    Synergy::External::Slack->new(
+      loop    => $self->loop,
+      api_key => $self->api_key,
+    );
+  }
+);
+
 sub start ($self) {
+  $self->slack->connect;
+
   $self->slack->client->{on_frame} = sub ($client, $frame) {
     return unless $frame;
 
@@ -53,8 +68,6 @@ sub start ($self) {
 
     $self->hub->handle_event($evt, $rch);
   };
-
-  $self->slack->connect;
 }
 
 # TODO: re-encode these on reply?

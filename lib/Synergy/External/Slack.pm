@@ -6,11 +6,22 @@ use experimental qw(lexical_subs signatures);
 use namespace::autoclean;
 
 use Cpanel::JSON::XS qw(decode_json encode_json);
+use Net::Async::HTTP;
 use Net::Async::WebSocket::Client;
 use Data::Dumper::Concise;
 
-has loop    => ( is => 'ro', required => 1 );
-has http    => ( is => 'ro', required => 1 );
+has loop    => (
+  is => 'ro',
+  required => 1
+);
+
+has http    => (
+  is => 'ro',
+  isa => 'Net::Async::HTTP',
+  init_arg => undef,
+  default => sub { Net::Async::HTTP->new },
+);
+
 has api_key => ( is => 'ro', required => 1 );
 
 has users => (
@@ -35,6 +46,7 @@ has client => (
 );
 
 sub connect ($self) {
+  $self->loop->add($self->http);
   $self->http
        ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
        ->on_done(sub ($res) { $self->_register_slack_rtm($res) })

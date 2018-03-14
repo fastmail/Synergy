@@ -6,13 +6,10 @@ use lib 'lib';
 
 use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
-use Net::Async::HTTP;
 use Synergy::Channel::Slack;
 use Synergy::EventHandler::Mux;
 use Synergy::EventHandler::Echo;
 use Synergy::Hub;
-use Synergy::ReplyChannel::Stdout;
-use Synergy::ReplyChannel::Slack;
 use Synergy::UserDirectory;
 
 use Synergy::External::Slack;
@@ -23,18 +20,10 @@ chomp $key;
 my $config = shift;
 
 my $loop = IO::Async::Loop->new;
-my $http = Net::Async::HTTP->new;
-$loop->add($http);
-
-my $slack = Synergy::External::Slack->new({
-  loop => $loop,
-  http => $http,
-  api_key => $key,
-});
 
 my $slack_channel = Synergy::Channel::Slack->new({
   name  => 'slack_fm',
-  slack => $slack,
+  api_key => $key,
 });
 
 my $synergy = Synergy::Hub->new({
