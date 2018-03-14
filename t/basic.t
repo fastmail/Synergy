@@ -20,9 +20,16 @@ my $synergy = Synergy::Hub->synergize(
     user_directory => "t/data/users.yaml",
     channels => {
       'test-channel' => {
-        class     => 'Synergy::Channel::TrivialTest',
-        interval  => 1,
+        class     => 'Synergy::Channel::Test',
         prefix    => q{synergy},
+        todo      => [
+          [ message => { text => "Hi." }  ],
+          [ wait    => { seconds => 1  }  ],
+          [ repeat  => { text => "Hello?", times => 3, sleep => 0.34 } ],
+          [ wait    => { seconds => 1  }  ],
+          [ message => { text => "Bye." } ],
+          [ message => { text => "Never received!?" } ],
+        ],
       }
     },
     reactors => {
@@ -35,15 +42,15 @@ my $synergy = Synergy::Hub->synergize(
 testing_loop($synergy->loop);
 
 wait_for {
-  no warnings 'once';
-  ($main::x // 0) gt 2
+  grep { $_->{text} =~ /Bye\./ }
+    $synergy->channel_named('test-channel')->sent_messages
 };
 
 my @replies = $synergy->channel_named('test-channel')->sent_messages;
 
-is(@replies, 3, "three replies recorded");
+is(@replies, 5, "three replies recorded");
 
-is(  $replies[0]{address}, 'public',                "...expected address");
-like($replies[0]{text},    qr{I heard you, tester}, "...expected text");
+is(  $replies[0]{address}, 'public',                  "...expected address");
+like($replies[0]{text},    qr{I heard you, .* Hi\.},  "...expected text");
 
 done_testing;

@@ -25,8 +25,6 @@ sub echo ($self, $event, $rch) {
 
   $rch->reply($response);
 
-  $main::x++;
-
   return 1;
 }
 
