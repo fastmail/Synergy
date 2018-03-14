@@ -42,7 +42,8 @@ sub start ($self) {
     my $evt = Synergy::Event->new({
       type => 'message',
       text => $event->{text},
-      from => $self->slack->users->{$event->{user}},
+      from => $self->slack->users->{$event->{user}}->{name},
+      user => $self->hub->user_directory->resolve_user($self->name, $event->{user}),
     });
 
     my $rch = Synergy::ReplyChannel::Slack->new(

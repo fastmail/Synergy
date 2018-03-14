@@ -15,6 +15,12 @@ has from => (
   required => 1
 );
 
+has user => (
+  is => 'ro',
+  isa => 'Maybe[Synergy::User]',
+  default => undef,
+);
+
 sub BUILD ($self, @) {
   confess "only 'message' events exist for now"
     unless $self->type eq 'message';

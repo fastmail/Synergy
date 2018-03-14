@@ -103,7 +103,7 @@ sub load_users ($self) {
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
     $self->_set_users({
-      map { $_->{id}, $_->{name} } $res->{members}->@*
+      map { $_->{id} => $_ } $res->{members}->@*
     });
     warn "loaded users!\n";
   });

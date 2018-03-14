@@ -31,7 +31,7 @@ my $slack = Synergy::External::Slack->new({
 });
 
 my $slack_channel = Synergy::Channel::Slack->new({
-  name  => 'slack',
+  name  => 'slack_fm',
   slack => $slack,
 });
 

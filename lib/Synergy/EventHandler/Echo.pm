@@ -10,7 +10,15 @@ use namespace::clean;
 sub handle_event ($self, $event, $rch) {
   return unless $event->type eq 'message';
 
-  my $response = sprintf 'I heard you, %s. You said "%s"',
+  my $rn;
+
+  if ($event->user) {
+    $rn = "%s, (" . $event->user->realname . ")";
+  } else {
+    $rn = "%s";
+  }
+
+  my $response = sprintf "I heard you, $rn. You said \"%s\"",
     $event->from,
     $event->text;
 
