@@ -66,7 +66,7 @@ sub start ($self) {
         from => "tester",
       });
 
-      $self->hub->eventhandler->handle_event($event, $rch);
+      $self->hub->handle_event($event, $rch);
     }
   );
 

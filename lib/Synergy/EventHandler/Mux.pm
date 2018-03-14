@@ -7,15 +7,15 @@ with 'Synergy::Role::EventHandler';
 use experimental qw(signatures);
 use namespace::clean;
 
-has eventhandlers => (
+has event_handlers => (
   isa => 'ArrayRef',
   required  => 1,
   traits    => [ 'Array' ],
-  handles   => { eventhandlers => 'elements' },
+  handles   => { event_handlers => 'elements' },
 );
 
 sub handle_event ($self, $event, $rch) {
-  for my $handler ($self->eventhandlers) {
+  for my $handler ($self->event_handlers) {
     last if $handler->handle_event($event, $rch);
   }
 

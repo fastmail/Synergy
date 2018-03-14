@@ -37,10 +37,11 @@ sub register_channel ($self, $channel) {
   return;
 }
 
-has eventhandler => (
+has event_handler => (
   is  => 'ro',
   isa      => 'Object',
   required => 1,
+  handles  => [ qw( handle_event ) ],
 );
 
 has loop => (

@@ -20,8 +20,8 @@ use Synergy::Channel::TrivialTest;
 # Initialize Synergy.
 my $synergy = Synergy::Hub->new({
   user_directory => Synergy::UserDirectory->new,
-  eventhandler   => Synergy::EventHandler::Mux->new({
-    eventhandlers => [ Synergy::EventHandler::TrivialTest->new ]
+  event_handler  => Synergy::EventHandler::Mux->new({
+    event_handlers => [ Synergy::EventHandler::TrivialTest->new ]
   }),
 });
 

@@ -50,7 +50,7 @@ sub start ($self) {
       channel => $event->{channel},
     );
 
-    $self->hub->eventhandler->handle_event($evt, $rch);
+    $self->hub->handle_event($evt, $rch);
   };
 
   $self->slack->connect;

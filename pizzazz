@@ -37,8 +37,8 @@ my $slack_channel = Synergy::Channel::Slack->new({
 
 my $synergy = Synergy::Hub->new({
   user_directory => Synergy::UserDirectory->new,
-  eventhandler   => Synergy::EventHandler::Mux->new({
-    eventhandlers => [ Synergy::EventHandler::Echo->new ]
+  event_handler  => Synergy::EventHandler::Mux->new({
+    event_handlers => [ Synergy::EventHandler::Echo->new ]
   }),
 });
 
