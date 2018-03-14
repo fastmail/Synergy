@@ -11,6 +11,7 @@ use Synergy::EventHandler::Mux;
 use Synergy::EventHandler::SlackID;
 use Synergy::EventHandler::Echo;
 use Synergy::EventHandler::Clox;
+use Synergy::EventHandler::LiquidPlanner;
 use Synergy::Hub;
 use Synergy::UserDirectory;
 
@@ -32,6 +33,7 @@ my $synergy = Synergy::Hub->new({
     event_handlers => [
       Synergy::EventHandler::SlackID->new,
       Synergy::EventHandler::Clox->new,
+      Synergy::EventHandler::LiquidPlanner->new,
       Synergy::EventHandler::Echo->new,
     ]
   }),

@@ -6,6 +6,8 @@ use MooseX::StrictConstructor;
 
 use namespace::autoclean;
 
+use Synergy::Timer;
+
 has [ qw(username realname) ] => (
   is => 'ro',
   isa => 'Str',
@@ -67,10 +69,6 @@ has business_hours => (
   },
 );
 
-=head1
-
-use Synergy::Timer;
-
 has timer => (
   is   => 'ro',
   lazy => 1,
@@ -89,8 +87,6 @@ has last_lp_timer_id => (
   isa => 'Str',
   clearer => 'clear_last_lp_timer_id',
 );
-
-=cut
 
 has lp_id    => (is => 'ro', isa => 'Int', predicate => 'has_lp_id');
 has lp_token => (is => 'ro', isa => 'Str', predicate => 'has_lp_token');
