@@ -22,12 +22,18 @@ has channel => (
   required => 1,
 );
 
+has prefix => (
+  is      => 'ro',
+  isa     => 'Str',
+  default => '',
+);
+
 sub reply ($self, $text) {
-  return $self->channel->send_text($self->default_address, $text);
+  return $self->channel->send_text($self->default_address, $self->prefix . $text);
 }
 
 sub private_reply ($self, $text) {
-  return $self->channel->send_text($self->private_address, $text);
+  return $self->channel->send_text($self->private_address, $self->prefix . $text);
 }
 
 1;

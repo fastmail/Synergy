@@ -55,18 +55,24 @@ sub start ($self) {
     return if $self->slack->username($event->{user}) eq 'synergy';
 
     my $from_user = $self->hub->user_directory->resolve_user($self->name, $event->{user});
+    my $from_username = $from_user
+                      ? $from_user->username
+                      : $self->slack->username($event->{user});
 
     # decode text
     my $me = $self->slack->own_name;
     my $text = $self->decode_slack_usernames($event->{text});
     $text =~ s/\A \@?($me)(?=\W):?\s*//x;
+
     my $was_targeted = !! $1;
+    my $is_public = $event->{channel} =~ /^C/;
+    $was_targeted = 1 if not $is_public;   # private replies are always targeted
 
     my $evt = Synergy::Event->new({
       type => 'message',
       text => $text,
       was_targeted => $was_targeted,
-      is_public => ($event->{channel} =~ /^C/),
+      is_public => $is_public,
       from_channel => $self,
       from_address => $event->{user},
       ( $from_user ? ( from_user => $from_user ) : () ),
@@ -76,6 +82,7 @@ sub start ($self) {
       channel => $self,
       default_address => $event->{channel},
       private_address => $event->{user},
+      ( $is_public ? ( prefix => "$from_username: " ) : () ),
     );
 
     $self->hub->handle_event($evt, $rch);
