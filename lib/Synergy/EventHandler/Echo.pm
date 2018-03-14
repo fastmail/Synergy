@@ -7,8 +7,6 @@ with 'Synergy::Role::EventHandler';
 use experimental qw(signatures);
 use namespace::clean;
 
-our $OWN_NAME = $ENV{SYNERGY_NAME};
-
 sub start { }
 
 sub handle_event ($self, $event, $rch) {

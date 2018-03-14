@@ -39,4 +39,10 @@ $synergy->register_channel($slack_channel);
 
 $synergy->set_loop($loop);
 
+if ($ENV{SYNERGY_USERS_FILE}) {
+  $synergy->user_directory->load_users_from_file(
+    $ENV{SYNERGY_USERS_FILE}
+  );
+}
+
 $loop->run;

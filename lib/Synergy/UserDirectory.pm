@@ -44,6 +44,8 @@ sub load_users_from_file ($self, $file) {
     });
   }
 
+  $self->_set_users(\%users);
+
   return \%users;
 }
 
