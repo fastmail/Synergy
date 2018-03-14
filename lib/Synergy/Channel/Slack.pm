@@ -54,12 +54,14 @@ sub start ($self) {
     return if $event->{bot_id};
     return if $self->slack->username($event->{user}) eq 'synergy';
 
+    my $from_user = $self->hub->user_directory->resolve_user($self->name, $event->{user});
+
     my $evt = Synergy::Event->new({
       type => 'message',
       text => $self->decode_slack_usernames($event->{text}),
       from_channel => $self,
       from_address => $self->slack->users->{$event->{user}}->{name},
-      from_user => $self->hub->user_directory->resolve_user($self->name, $event->{user}),
+      ( $from_user ? ( from_user => $from_user ) : () ),
     });
 
     my $rch = Synergy::ReplyChannel->new(
