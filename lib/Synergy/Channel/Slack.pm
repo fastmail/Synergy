@@ -46,7 +46,7 @@ sub start ($self) {
       return;
     }
 
-    if ($event->{reply_to}) {
+    if (! $event->{type} && $event->{reply_to}) {
       unless ($event->{ok}) {
         warn "We failed to send a response? " . Dumper($event);
       }
