@@ -25,6 +25,8 @@ my $synergy = Synergy::Hub->new({
   }),
 });
 
+$synergy->user_directory->load_users_from_file('t/data/users.yaml');
+
 my $test_channel = Synergy::Channel::TrivialTest->new({
   name      => 'test-channel',
   interval  => 1,
