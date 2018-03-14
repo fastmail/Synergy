@@ -43,9 +43,11 @@ $synergy->set_loop($loop);
 # Tests begin here.
 wait_for { ($main::x // 0) gt 2 };
 
-my @replies = $test_channel->replies;
+my @replies = $test_channel->sent_messages;
 
 is(@replies, 3, "three replies recorded");
-like($replies[1], qr{I heard you, tester}, "...and it's what we expect");
+
+is(  $replies[0]{address}, 'public',                "...expected address");
+like($replies[0]{text},    qr{I heard you, tester}, "...expected text");
 
 done_testing;

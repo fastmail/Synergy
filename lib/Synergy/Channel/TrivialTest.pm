@@ -5,7 +5,7 @@ use Moose;
 use experimental qw(signatures);
 
 use IO::Async::Timer::Periodic;
-use Synergy::ReplyChannel::Callback;
+use Synergy::ReplyChannel;
 
 use namespace::autoclean;
 
@@ -23,37 +23,30 @@ has debug_callback => (
   default => sub {  sub {}  }
 );
 
-has replies => (
+sub send_text ($self, $address, $text) {
+  $self->record_message({ address => $address, text => $text });
+}
+
+has sent_messages => (
   isa => 'ArrayRef',
   default  => sub {  []  },
   init_arg => undef,
   reader   => '_reply_reference',
   traits   => [ 'Array' ],
   handles  => {
-    reply_count   => 'count',
-    record_reply  => 'push',
-    clear_replies => 'clear',
-    replies       => 'elements',
+    sent_message_count  => 'count',
+    record_message      => 'push',
+    clear_messages      => 'clear',
+    sent_messages       => 'elements',
   },
 );
 
 sub start ($self) {
-  my $rch = do {
-    my $weak_self = $self;
-    Scalar::Util::weaken($weak_self);
-    Synergy::ReplyChannel::Callback->new({
-      to_reply => sub ($channel, $text) {
-        $weak_self->record_reply($text);
-        $weak_self->debug_callback->("Sent reply: $text");
-      }
-    });
-  };
-
   my $timer = IO::Async::Timer::Periodic->new(
     interval => $self->interval,
     on_tick  => sub {
       state $reply_count = 0;
-      my $replies = $self->reply_count;
+      my $replies = $self->sent_message_count;
 
       my $debug = $self->debug_callback;
       $debug->("We saw $replies since last time...");
@@ -64,6 +57,12 @@ sub start ($self) {
         type => 'message',
         text => "It's " . localtime . ", do you know where you are?",
         from => "tester",
+      });
+
+      my $rch = Synergy::ReplyChannel->new({
+        channel => $self,
+        public_address  => 'public',
+        private_address => 'private',
       });
 
       $self->hub->handle_event($event, $rch);
