@@ -8,6 +8,7 @@ use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
 use Synergy::Channel::Slack;
 use Synergy::EventHandler::Mux;
+use Synergy::EventHandler::SlackID;
 use Synergy::EventHandler::Echo;
 use Synergy::Hub;
 use Synergy::UserDirectory;
@@ -27,7 +28,10 @@ my $slack_channel = Synergy::Channel::Slack->new({
 my $synergy = Synergy::Hub->new({
   user_directory => Synergy::UserDirectory->new,
   event_handler  => Synergy::EventHandler::Mux->new({
-    event_handlers => [ Synergy::EventHandler::Echo->new ]
+    event_handlers => [
+      Synergy::EventHandler::SlackID->new,
+      Synergy::EventHandler::Echo->new,
+    ]
   }),
 });
 
