@@ -108,4 +108,50 @@ sub set_loop ($self, $loop) {
   return $loop;
 }
 
+has http => (
+  is => 'ro',
+  isa => 'Net::Async::HTTP',
+  lazy => 1,
+  default => sub ($self) {
+    my $http = Net::Async::HTTP->new(
+      max_connections_per_host => 5, # seems good?
+    );
+
+    $self->loop->add($http);
+
+    return $http;
+  },
+);
+
+sub http_get {
+  return shift->http_request('GET' => @_);
+}
+
+sub http_request ($self, $method, $url, %args) {
+  my $content = delete $args{Content};
+  my $content_type = delete $args{Content_Type};
+
+  my @args = $url;
+
+  if ($method ne 'GET' && $method ne 'HEAD') {
+    push @args, $content // [];
+  }
+
+  if ($content_type) {
+    push @args, content_type => $content_type;
+  }
+
+  push @args, headers => \%args;
+
+  # The returned future will run the loop for us until we return. This makes
+  # it asynchronous as far as the rest of the code is concerned, but
+  # sychronous as far as the caller is concerned.
+  return $self->http->$method(
+    @args
+  )->on_fail( sub {
+    my $failure = shift;
+    warn "Failed to $method $url: $failure\n";
+  } )->get;
+}
+
 1;

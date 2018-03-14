@@ -12,6 +12,13 @@ use JSON 2 ();
 use Time::Duration::Parse;
 use Time::Duration;
 
+my $JSON = JSON->new;
+
+my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
+my $WKSP_ID = 14822;
+my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
+my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
+
 my %known = (
   timer => \&_handle_timer,
 );
@@ -34,68 +41,47 @@ sub listener_specs {
   };
 }
 
-my $JSON = JSON->new;
-
-my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
-my $WKSP_ID = 14822;
-my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
-my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
-
-has http => (
-  is => 'ro',
-  isa => 'Net::Async::HTTP',
+has projects => (
+  isa => 'HashRef',
+  traits => [ 'Hash' ],
+  handles => {
+    project_ids   => 'values',
+    projects      => 'keys',
+    project_named => 'get',
+    project_pairs => 'kv',
+  },
   lazy => 1,
   default => sub {
-    my $http = Net::Async::HTTP->new(
-      max_connections_per_host => 5, # seems good?
-    );
-
-    return $http;
+    $_[0]->get_project_nicknames;
   },
+  writer    => '_set_projects',
 );
 
-sub http_get_for_user ($self, $user, @arg) {
-  return $self->http_get(@arg,
-    Authorization => $user->lp_auth_header,
-  );
-}
+sub get_project_nicknames {
+  my ($self) = @_;
 
-sub http_get {
-  return shift->http_request('GET' => @_);
-}
+  my $query = "/projects?filter[]=custom_field:Nickname is_set&filter[]=is_done is false";
+  my $res = $self->http_get_for_master("$LP_BASE$query");
+  return unless $res->is_success;
 
-sub http_request ($self, $method, $url, %args) {
-  my $content = delete $args{Content};
-  my $content_type = delete $args{Content_Type};
+  my %project_dict;
 
-  my @args = $url;
+  my @projects = @{ $JSON->decode( $res->decoded_content ) };
+  for my $project (@projects) {
+    # Impossible, right?
+    next unless my $nick = $project->{custom_field_values}{Nickname};
 
-  if ($method ne 'GET' && $method ne 'HEAD') {
-    push @args, $content // [];
+    # We'll deal with conflicts later. -- rjbs, 2018-01-22
+    $project_dict{ lc $nick } //= [];
+    push $project_dict{ lc $nick }->@*, {
+      id        => $project->{id},
+      nickname  => $nick,
+      name      => $project->{name},
+    };
   }
 
-  if ($content_type) {
-    push @args, content_type => $content_type;
-  }
-
-  push @args, headers => \%args;
-
-  # The returned future will run the loop for us until we return. This makes
-  # it asynchronous as far as the rest of the code is concerned, but
-  # sychronous as far as the caller is concerned.
-  return $self->http->$method(
-    @args
-  )->on_fail( sub {
-    my $failure = shift;
-    warn "Failed to $method $url: $failure\n";
-  } )->get;
+  return \%project_dict;
 }
-
-has looped => (
-  is => 'ro',
-  isa => 'Bool',
-  writer => '_set_looped',
-);
 
 sub dispatch_event ($self, $event, $rch) {
   unless ($event->from_user) {
@@ -110,16 +96,16 @@ sub dispatch_event ($self, $event, $rch) {
     return 1;
   }
 
-  unless ($self->looped) {
-    $rch->channel->hub->loop->add($self->http);
-
-    $self->_set_looped(1);
-  }
-
   my ($what) = $event->text =~ /^([^\s]+)\s?/;
   $what &&= lc $what;
 
   return $known{$what}->($self, $event, $rch, $what)
+}
+
+sub http_get_for_user ($self, $rch, $user, @arg) {
+  return $rch->channel->hub->http_get(@arg,
+    Authorization => $user->lp_auth_header,
+  );
 }
 
 sub _handle_timer ($self, $event, $rch, $text) {
@@ -134,7 +120,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
   return reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($rch, $user, "$LP_BASE/my_timers");
 
   unless ($res->is_success) {
     warn "failed to get timer: " . $res->as_string . "\n";
@@ -169,7 +155,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
 
   my $timer = $timers[0];
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
-  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$timer->{item_id}");
+  my $task_res = $self->http_get_for_user($rch, $user, "$LP_BASE/tasks/$timer->{item_id}");
 
   my $name = $task_res->is_success
            ? $JSON->decode($task_res->decoded_content)->{name}
