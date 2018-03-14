@@ -36,6 +36,24 @@ has channels => (
   writer => '_set_channels',
 );
 
+has _channels_by_name => (
+  is              => 'ro',
+  isa             => 'HashRef',
+  traits          => [ 'Hash' ],
+  lazy            => 1,
+  handles         => {
+    channel_named => 'get',
+  },
+  default         => sub ($self) {
+    my %by_name;
+    for my $k (keys $self->channels->%*) {
+      $by_name{ $self->channels->{ $k } } = $k;
+    }
+
+    return \%by_name;
+  },
+);
+
 has client => (
   is       => 'ro',
   required => 1,

@@ -8,6 +8,8 @@ use IO::Async::Loop;
 use IO::Async::Timer::Periodic;
 use Synergy::Channel::Slack;
 use Synergy::Reactor::SlackID;
+# use Synergy::EventHandler::SlackID;
+use Synergy::Reactor::Announce;
 use Synergy::Reactor::Echo;
 use Synergy::Reactor::Clox;
 use Synergy::Reactor::LiquidPlanner;
@@ -30,6 +32,9 @@ my $synergy = Synergy::Hub->new({
   user_directory => Synergy::UserDirectory->new,
 });
 
+
+$synergy->register_channel($slack_channel);  # must come before reactors
+
 $synergy->register_reactor($_->new) for qw(
   Synergy::Reactor::Clox
   Synergy::Reactor::Echo
@@ -37,7 +42,12 @@ $synergy->register_reactor($_->new) for qw(
   Synergy::Reactor::SlackID
 );
 
-$synergy->register_channel($slack_channel);
+$synergy->register_reactor(
+  Synergy::Reactor::Announce->new({
+    slack_channel_name => 'slack_fm',
+    announce_chan_name => 'bottest',
+  })
+);
 
 $synergy->set_loop($loop);
 
