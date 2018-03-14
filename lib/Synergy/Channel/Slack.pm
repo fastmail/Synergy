@@ -75,4 +75,13 @@ sub decode_slack_usernames ($self, $text) {
   return $text =~ s/<\@(U[A-Z0-9]+)>/"@" . $self->slack->username($1)/ger;
 }
 
+sub send_text ($self, $target, $text) {
+  $self->slack->api_call("chat.postMessage", {
+    text    => $text,
+    channel => $target,
+    as_user => 1,
+  });
+  return;
+}
+
 1;
