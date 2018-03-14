@@ -8,16 +8,12 @@ use experimental qw(signatures);
 use namespace::clean;
 use List::Util qw(first);
 
-my $OWN_NAME = $ENV{SYNERGY_NAME};
-
 sub start { }
 
 sub handle_event ($self, $event, $rch) {
   return unless $event->type eq 'message';
 
   return unless $rch->channel->can('slack');
-
-  return unless $event->text =~ /^\@?$OWN_NAME\W/;
 
   return unless $event->text =~ /slackid (\w+)/;
 

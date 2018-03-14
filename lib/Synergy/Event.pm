@@ -26,6 +26,18 @@ has from_user => (
   isa => 'Synergy::User',
 );
 
+has was_targeted => (
+  is => 'ro',
+  isa => 'Bool',
+  default => 1,
+);
+
+has is_public => (
+  is => 'ro',
+  isa => 'Bool',
+  default => 0,
+);
+
 sub BUILD ($self, @) {
   confess "only 'message' events exist for now"
     unless $self->type eq 'message';

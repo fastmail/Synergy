@@ -16,7 +16,7 @@ sub handle_event ($self, $event, $rch) {
 
   # here, handle LP12345678 & "you're back!"
 
-  return unless $event->text =~ /^\@?$OWN_NAME\W/;
+  return unless $event->was_targeted;
 
   my $from_str = $event->from_user ? $event->from_user->username
                                    : $event->from_address;

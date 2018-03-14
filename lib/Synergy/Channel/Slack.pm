@@ -56,9 +56,17 @@ sub start ($self) {
 
     my $from_user = $self->hub->user_directory->resolve_user($self->name, $event->{user});
 
+    # decode text
+    my $me = $self->slack->own_name;
+    my $text = $self->decode_slack_usernames($event->{text});
+    $text =~ s/\A \@?($me):?\s*//x;
+    my $was_targeted = !! $1;
+
     my $evt = Synergy::Event->new({
       type => 'message',
-      text => $self->decode_slack_usernames($event->{text}),
+      text => $text,
+      was_targeted => $was_targeted,
+      is_public => ($event->{channel} =~ /^C/),
       from_channel => $self,
       from_address => $event->{user},
       ( $from_user ? ( from_user => $from_user ) : () ),

@@ -45,6 +45,18 @@ has client => (
   },
 );
 
+has own_name => (
+  is => 'ro',
+  isa => 'Str',
+  writer => '_set_own_name',
+);
+
+has own_id => (
+  is => 'ro',
+  isa => 'Str',
+  writer => '_set_own_id',
+);
+
 sub connect ($self) {
   $self->loop->add($self->http);
   $self->http
@@ -59,6 +71,9 @@ sub _register_slack_rtm ($self, $res) {
 
   die "Could not connect to Slack RTM: $json->{error}"
     unless $json->{ok};
+
+  $self->_set_own_name($json->{self}->{name});
+  $self->_set_own_id($json->{self}->{id});
 
   $self->loop->add($self->client);
   $self->client->connect(
