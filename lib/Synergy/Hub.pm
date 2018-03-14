@@ -13,36 +13,66 @@ has user_directory => (
   required  => 1,
 );
 
-has channel_registry => (
-  isa => 'HashRef[Object]',
-  init_arg  => undef,
-  default   => sub {  {}  },
-  traits    => [ 'Hash' ],
-  handles   => {
-    channel_named   => 'get',
-    channels        => 'values',
-    _add_channel    => 'set',
-    _channel_exists => 'exists',
-  },
-);
+for my $pair (
+  [ qw( channel channels ) ],
+  [ qw( reactor reactors ) ],
+) {
+  my ($s, $p) = @$pair;
 
-sub register_channel ($self, $channel) {
-  my $name = $channel->name;
+  my $exists = "_$s\_exists";
+  my $add    = "_add_$s";
 
-  confess("channel named $name is already registered")
-    if $self->_channel_exists($name);
+  has "$s\_registry" => (
+    isa => 'HashRef[Object]',
+    init_arg  => undef,
+    default   => sub {  {}  },
+    traits    => [ 'Hash' ],
+    handles   => {
+      "$s\_named" => 'get',
+      $p          => 'values',
+      $add        => 'set',
+      $exists     => 'exists',
+    },
+  );
 
-  $self->_add_channel($name, $channel);
-  $channel->register_with_hub($self);
-  return;
+  Sub::Install::install_sub({
+    as    => "register_$s",
+    code  => sub ($self, $thing) {
+      my $name = $thing->name;
+
+      confess("$s named $name is already registered") if $self->$exists($name);
+
+      $self->$add($name, $thing);
+      $thing->register_with_hub($self);
+      return;
+    }
+  });
 }
 
-has event_handler => (
-  is  => 'ro',
-  isa      => 'Object',
-  required => 1,
-  handles  => [ qw( handle_event ) ],
-);
+sub handle_event ($self, $event, $rch) {
+  my @hits;
+  for my $reactor ($self->reactors) {
+    for my $listener ($reactor->listeners) {
+      next unless $listener->matches_event($event);
+      push @hits, [ $reactor, $listener ];
+    }
+  }
+
+  # Probably we later want a "huh?" for targeted/private events.
+  return unless @hits;
+
+  if (1 < grep {; $_->[1]->is_exclusive } @hits) {
+    $rch->reply("Sorry, I find that message ambiguous.");
+    return;
+  }
+
+  for my $hit (@hits) {
+    my $method = $hit->[1]->reactor_method;
+    $hit->[0]->$method($event);
+  }
+
+  return;
+}
 
 has loop => (
   reader => '_get_loop',
@@ -61,7 +91,7 @@ sub set_loop ($self, $loop) {
   $self->_set_loop($loop);
 
   $_->start for $self->channels;
-  $_->start for $self->event_handler;
+  $_->start for $self->reactors;
 
   return $loop;
 }

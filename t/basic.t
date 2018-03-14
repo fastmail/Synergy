@@ -13,16 +13,12 @@ use Net::Async::HTTP;
 use Synergy::Hub;
 use Synergy::UserDirectory;
 use Synergy::Event;
-use Synergy::EventHandler::Mux;
-use Synergy::EventHandler::Echo;
+use Synergy::Reactor::Echo;
 use Synergy::Channel::TrivialTest;
 
 # Initialize Synergy.
 my $synergy = Synergy::Hub->new({
   user_directory => Synergy::UserDirectory->new,
-  event_handler  => Synergy::EventHandler::Mux->new({
-    event_handlers => [ Synergy::EventHandler::Echo->new ]
-  }),
 });
 
 $synergy->user_directory->load_users_from_file('t/data/users.yaml');
@@ -34,6 +30,8 @@ my $test_channel = Synergy::Channel::TrivialTest->new({
 });
 
 $synergy->register_channel($test_channel);
+
+$synergy->register_reactor(Synergy::Reactor::Echo->new);
 
 # Start the event loop.
 my $loop = IO::Async::Loop->new;

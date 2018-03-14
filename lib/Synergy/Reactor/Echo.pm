@@ -1,21 +1,21 @@
 use v5.24.0;
-package Synergy::EventHandler::Echo;
+package Synergy::Reactor::Echo;
 
 use Moose;
-with 'Synergy::Role::EventHandler';
+with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures);
 use namespace::clean;
 
-sub start { }
+sub listener_specs {
+  return {
+    name      => 'echo',
+    method    => 'echo',
+    predicate => sub ($self, $e) { $e->was_targeted || $e->is_private },
+  };
+}
 
-sub handle_event ($self, $event, $rch) {
-  return unless $event->type eq 'message';
-
-  # here, handle LP12345678 & "you're back!"
-
-  return unless $event->was_targeted;
-
+sub echo ($self, $event, $rch) {
   my $from_str = $event->from_user ? $event->from_user->username
                                    : $event->from_address;
 
