@@ -56,12 +56,13 @@ sub start ($self) {
       my $event = Synergy::Event->new({
         type => 'message',
         text => "It's " . localtime . ", do you know where you are?",
-        from => "tester",
+        from_address => "tester",
+        from_channel => $self,
       });
 
       my $rch = Synergy::ReplyChannel->new({
         channel => $self,
-        public_address  => 'public',
+        default_address => 'public',
         private_address => 'private',
       });
 

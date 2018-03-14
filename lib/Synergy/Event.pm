@@ -9,16 +9,21 @@ use namespace::autoclean;
 has type => (is => 'ro', isa => 'Str', required => 1);
 has text => (is => 'ro', isa => 'Str', required => 1); # clearly per-type
 
-has from => (
+has from_channel => (
   is => 'ro',
-  isa => 'Str',   # probably a User object at some point
-  required => 1
+  does => 'Synergy::Role::Channel',
+  required => 1,
 );
 
-has user => (
+has from_address => (
   is => 'ro',
-  isa => 'Maybe[Synergy::User]',
-  default => undef,
+  isa => 'Defined',
+  required => 1,
+);
+
+has from_user => (
+  is => 'ro',
+  isa => 'Synergy::User',
 );
 
 sub BUILD ($self, @) {
