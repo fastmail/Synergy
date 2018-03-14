@@ -6,7 +6,7 @@ use experimental qw(signatures);
 use JSON::MaybeXS qw(encode_json decode_json);
 
 use Synergy::Event;
-use Synergy::ReplyChannel::Slack;
+use Synergy::ReplyChannel;
 
 use namespace::autoclean;
 
@@ -61,9 +61,10 @@ sub start ($self) {
       user => $self->hub->user_directory->resolve_user($self->name, $event->{user}),
     });
 
-    my $rch = Synergy::ReplyChannel::Slack->new(
-      slack   => $self->slack,
-      channel => $event->{channel},
+    my $rch = Synergy::ReplyChannel->new(
+      channel => $self,
+      public_address  => $event->{channel},
+      private_address => $event->{user},
     );
 
     $self->hub->handle_event($evt, $rch);
