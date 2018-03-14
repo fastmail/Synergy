@@ -6,6 +6,8 @@ use lib 'lib';
 
 use Test::More;
 
+use Synergy::Logger::Test '$Logger';
+
 use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;

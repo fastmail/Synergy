@@ -7,6 +7,7 @@ use MooseX::StrictConstructor;
 use experimental qw(signatures);
 use namespace::clean;
 
+use Synergy::Logger '$Logger';
 use Try::Tiny;
 
 has user_directory => (
@@ -52,6 +53,14 @@ for my $pair (
 }
 
 sub handle_event ($self, $event, $rch) {
+  $Logger->log([
+    "%s event from %s/%s: %s",
+    $event->type,
+    $event->from_channel->name,
+    $event->from_address,
+    $event->text,
+  ]);
+
   my @hits;
   for my $reactor ($self->reactors) {
     for my $listener ($reactor->listeners) {
@@ -79,7 +88,13 @@ sub handle_event ($self, $event, $rch) {
 
       $error =~ s/\n.*//ms;
 
-      $rch->reply("My reactor ($reactor) crashed while handling your message.  ($error). Sorry!");
+      $rch->reply("My $reactor system crashed while handling your message.  Sorry!");
+      $Logger->log([
+        "error with %s listener on %s: %s",
+        $hit->[1],
+        $reactor->name,
+        $error,
+      ]);
     };
   }
 
