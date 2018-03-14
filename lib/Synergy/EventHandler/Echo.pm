@@ -16,7 +16,7 @@ sub handle_event ($self, $event, $rch) {
 
   # here, handle LP12345678 & "you're back!"
 
-  return unless $rch->is_private or $event->text =~ /^\@?$OWN_NAME\W/;
+  return unless $event->text =~ /^\@?$OWN_NAME\W/;
 
   my $rn;
 
