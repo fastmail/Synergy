@@ -14,13 +14,8 @@ use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Synergy::Hub;
 
-# Create the event loop.
-my $loop = IO::Async::Loop->new;
-testing_loop($loop);
-
 # Initialize Synergy.
 my $synergy = Synergy::Hub->synergize(
-  $loop,
   {
     user_directory => "t/data/users.yaml",
     channels => {
@@ -37,6 +32,8 @@ my $synergy = Synergy::Hub->synergize(
 );
 
 # Tests begin here.
+testing_loop($synergy->loop);
+
 wait_for {
   no warnings 'once';
   ($main::x // 0) gt 2

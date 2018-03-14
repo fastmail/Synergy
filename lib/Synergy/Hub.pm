@@ -126,7 +126,14 @@ sub set_loop ($self, $loop) {
   return $loop;
 }
 
-sub synergize ($class, $loop, $config) {
+sub synergize {
+  my $class = shift;
+  my ($loop, $config) = @_ == 2 ? @_
+                      : @_ == 1 ? (undef, @_)
+                      : confess("weird arguments passed to synergize");
+
+  $loop //= IO::Async::Loop->new;
+
   # config:
   #   directory: source file
   #   channels: name => config
