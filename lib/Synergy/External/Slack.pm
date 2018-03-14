@@ -132,7 +132,6 @@ sub load_users ($self) {
     $self->_set_users({
       map { $_->{id} => $_ } $res->{members}->@*
     });
-    warn "loaded users!\n";
   });
 }
 
@@ -144,7 +143,6 @@ sub load_channels ($self) {
     $self->_set_channels({
       map { $_->{id}, $_->{name} } $res->{channels}->@*
     });
-    warn "loaded channels!\n";
   });
 }
 
