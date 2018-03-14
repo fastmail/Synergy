@@ -10,7 +10,7 @@ use Synergy::Channel::Slack;
 # use Synergy::EventHandler::SlackID;
 use Synergy::Reactor::Echo;
 use Synergy::Reactor::Clox;
-# use Synergy::EventHandler::LiquidPlanner;
+use Synergy::Reactor::LiquidPlanner;
 use Synergy::Hub;
 use Synergy::UserDirectory;
 
@@ -33,6 +33,7 @@ my $synergy = Synergy::Hub->new({
 $synergy->register_reactor($_->new) for qw(
   Synergy::Reactor::Clox
   Synergy::Reactor::Echo
+  Synergy::Reactor::LiquidPlanner
 );
 
 $synergy->register_channel($slack_channel);

@@ -11,7 +11,7 @@ sub listener_specs {
   return {
     name      => 'echo',
     method    => 'echo',
-    predicate => sub ($self, $e) { $e->was_targeted || $e->is_private },
+    predicate => sub ($self, $e) { $e->was_targeted },
   };
 }
 

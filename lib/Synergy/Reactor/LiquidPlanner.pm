@@ -1,8 +1,8 @@
 use v5.24.0;
-package Synergy::EventHandler::LiquidPlanner;
+package Synergy::Reactor::LiquidPlanner;
 
 use Moose;
-with 'Synergy::Role::EventHandler';
+with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
@@ -11,6 +11,28 @@ use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration::Parse;
 use Time::Duration;
+
+my %known = (
+  timer => \&_handle_timer,
+);
+
+sub listener_specs {
+  return {
+    name      => "liquid planner",
+    method    => "dispatch_event",
+    predicate => sub ($self, $event) {
+      return unless $event->type eq 'message';
+      return unless $event->was_targeted;
+
+      my ($what) = $event->text =~ /^([^\s]+)\s?/;
+      $what &&= lc $what;
+
+      return unless $known{$what};
+
+      return 1;
+    }
+  };
+}
 
 my $JSON = JSON->new;
 
@@ -75,22 +97,7 @@ has looped => (
   writer => '_set_looped',
 );
 
-sub start { }
-
-my %known = (
-  timer => \&_handle_timer,
-);
-
-sub handle_event ($self, $event, $rch) {
-  return unless $event->type eq 'message';
-
-  return unless $event->was_targeted;
-
-  my ($what) = $event->text =~ /^([^\s]+)\s?/;
-  $what &&= lc $what;
-
-  return unless $known{$what};
-
+sub dispatch_event ($self, $event, $rch) {
   unless ($event->from_user) {
     $rch->reply("Sorry, I don't know who you are.");
 
@@ -103,15 +110,16 @@ sub handle_event ($self, $event, $rch) {
     return 1;
   }
 
-  my $text = $event->text;
-
   unless ($self->looped) {
     $rch->channel->hub->loop->add($self->http);
 
     $self->_set_looped(1);
   }
 
-  return $known{$what}->($self, $event, $rch, $text)
+  my ($what) = $event->text =~ /^([^\s]+)\s?/;
+  $what &&= lc $what;
+
+  return $known{$what}->($self, $event, $rch, $what)
 }
 
 sub _handle_timer ($self, $event, $rch, $text) {
