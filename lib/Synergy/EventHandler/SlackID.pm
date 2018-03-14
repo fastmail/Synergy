@@ -17,6 +17,8 @@ sub handle_event ($self, $event, $rch) {
 
   return unless $event->text =~ /slackid (\w+)/;
 
+  return unless $event->was_targeted;
+
   my $who = $1;
 
   my $user = first { $_->{name} eq $who } values $rch->channel->slack->users->%*;
