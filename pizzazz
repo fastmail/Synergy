@@ -16,6 +16,12 @@ use Synergy::Reactor::Clox;
 use Synergy::Reactor::LiquidPlanner;
 use Synergy::Hub;
 
+use Synergy::Logger '$Logger' => { init => {
+  ident => 'pizzazz',
+  facility => undef,
+  to_stderr => 1,
+} };
+
 my $key = qx(cat ~/.jem.key);
 chomp $key;
 
@@ -26,13 +32,19 @@ my $synergy = Synergy::Hub->synergize({
     ? (user_directory => $ENV{SYNERGY_USERS_FILE})
     : ()),
   channels => {
-    'slack-fm' => {
+    'slack_fm' => {
       class   => 'Synergy::Channel::Slack',
       api_key => $key,
     },
     twilio  => {
       class   => 'Synergy::Channel::Twilio',
-      api_key => $twilio_key,
+      sid => '',
+      auth => '',
+      from => '',
+      numbers => {
+        1 => '',
+        61 => '',
+      },
     },
   },
   reactors => {
@@ -42,9 +54,13 @@ my $synergy = Synergy::Hub->synergize({
     slackid => { class => 'Synergy::Reactor::SlackID' },
     announce=> {
       class => 'Synergy::Reactor::Announce',
-      slack_channel_name => 'slack-fm',
+      slack_channel_name => 'slack_fm',
       announce_chan_name => 'bottest',
-    }
+    },
+    page => {
+      class => 'Synergy::Reactor::Page',
+      twilio_channel_name => 'twilio',
+    },
   },
   server_port => 8118,
 });
