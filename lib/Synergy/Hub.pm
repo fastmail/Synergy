@@ -11,6 +11,8 @@ use Synergy::Logger '$Logger';
 
 use Module::Runtime qw(require_module);
 use Synergy::UserDirectory;
+use Plack::App::URLMap;
+use Synergy::HTTPServer;
 use Try::Tiny;
 
 has user_directory => (
@@ -18,6 +20,27 @@ has user_directory => (
   isa => 'Object',
   required  => 1,
 );
+
+has server_port => (
+  is => 'ro',
+  isa => 'Int',
+  default => 8118,
+);
+
+has server => (
+  is => 'ro',
+  isa => 'Synergy::HTTPServer',
+  lazy => 1,
+  default => sub ($self) {
+    my $s = Synergy::HTTPServer->new({
+      server_port => $self->server_port,
+    });
+
+    $s->register_with_hub($self);
+    return $s;
+  },
+);
+
 
 for my $pair (
   [ qw( channel channels ) ],
@@ -119,6 +142,8 @@ sub loop ($self) {
 sub set_loop ($self, $loop) {
   confess "tried to set loop, but look already set" if $self->_get_loop;
   $self->_set_loop($loop);
+
+  $self->server->start;
 
   $_->start for $self->channels;
   $_->start for $self->reactors;

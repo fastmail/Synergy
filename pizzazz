@@ -5,10 +5,21 @@ use warnings;
 use lib 'lib';
 
 use IO::Async::Loop;
+use IO::Async::Timer::Periodic;
+use Synergy::Channel::Slack;
+use Synergy::Channel::Twilio;
+use Synergy::Reactor::SlackID;
+# use Synergy::EventHandler::SlackID;
+use Synergy::Reactor::Announce;
+use Synergy::Reactor::Echo;
+use Synergy::Reactor::Clox;
+use Synergy::Reactor::LiquidPlanner;
 use Synergy::Hub;
 
 my $key = qx(cat ~/.jem.key);
 chomp $key;
+
+my $twilio_key = 'foo';  # XXX fixme
 
 my $synergy = Synergy::Hub->synergize({
   ($ENV{SYNERGY_USERS_FILE}
@@ -18,6 +29,10 @@ my $synergy = Synergy::Hub->synergize({
     'slack-fm' => {
       class   => 'Synergy::Channel::Slack',
       api_key => $key,
+    },
+    twilio  => {
+      class   => 'Synergy::Channel::Twilio',
+      api_key => $twilio_key,
     },
   },
   reactors => {
@@ -31,6 +46,7 @@ my $synergy = Synergy::Hub->synergize({
       announce_chan_name => 'bottest',
     }
   },
+  server_port => 8118,
 });
 
 $synergy->loop->run;
