@@ -85,6 +85,22 @@ sub connect ($self) {
        ->get;
 };
 
+sub send_frame ($self, $frame) {
+  state $i = 1;
+
+  $frame->{id} = $i++;
+
+  $self->client->send_frame(masked => 1, buffer => encode_json($frame));
+}
+
+sub send_message ($self, $channel, $text) {
+  $self->send_frame({
+    type => 'message',
+    channel => $channel,
+    text    => $text,
+  });
+}
+
 sub _register_slack_rtm ($self, $res) {
   my $json = decode_json($res->content);
 
@@ -105,10 +121,9 @@ sub _register_slack_rtm ($self, $res) {
       my $timer = IO::Async::Timer::Periodic->new(
         interval => 10,
         on_tick  => sub {
-          $self->client->send_frame(masked => 1, buffer => encode_json({
-            id   => $i++,
+          $self->send_frame({
             type => 'ping',
-          }));
+          });
         }
       );
 

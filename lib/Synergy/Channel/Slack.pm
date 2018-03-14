@@ -10,6 +10,7 @@ use Synergy::Event;
 use Synergy::ReplyChannel;
 
 use namespace::autoclean;
+use Data::Dumper::Concise;
 
 my $JSON = JSON->new->canonical;
 
@@ -42,6 +43,14 @@ sub start ($self) {
     my $event;
     unless (eval { $event = $JSON->decode($frame) }) {
       warn "ERROR DECODING <$frame> <$@>\n";
+      return;
+    }
+
+    if ($event->{reply_to}) {
+      unless ($event->{ok}) {
+        warn "We failed to send a response? " . Dumper($event);
+      }
+
       return;
     }
 
@@ -111,11 +120,8 @@ sub send_text ($self, $target, $text) {
   $text =~ s/</&lt;/g;
   $text =~ s/>/&gt;/g;
 
-  $self->slack->api_call("chat.postMessage", {
-    text    => $text,
-    channel => $target,
-    as_user => 1,
-  });
+  $self->slack->send_message($target, $text);
+
   return;
 }
 
