@@ -1,5 +1,5 @@
 use v5.24.0;
-package Synergy::EventSource::TrivialTest;
+package Synergy::Channel::TrivialTest;
 
 use Moose;
 use experimental qw(signatures);
@@ -9,7 +9,7 @@ use Synergy::ReplyChannel::Callback;
 
 use namespace::autoclean;
 
-with 'Synergy::EventSource';
+with 'Synergy::Role::Channel';
 
 has interval => (
   is  => 'ro',

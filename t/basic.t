@@ -15,7 +15,7 @@ use Synergy::UserDirectory;
 use Synergy::Event;
 use Synergy::EventHandler::Mux;
 use Synergy::EventHandler::TrivialTest;
-use Synergy::EventSource::TrivialTest;
+use Synergy::Channel::TrivialTest;
 
 my $synergy = Synergy::Hub->new({
   user_directory => Synergy::UserDirectory->new,
@@ -24,7 +24,7 @@ my $synergy = Synergy::Hub->new({
   }),
 });
 
-my $test_channel = Synergy::EventSource::TrivialTest->new({
+my $test_channel = Synergy::Channel::TrivialTest->new({
   name      => 'test-channel',
   interval  => 1,
 });

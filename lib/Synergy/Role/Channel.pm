@@ -1,5 +1,5 @@
 use v5.24.0;
-package Synergy::EventSource;
+package Synergy::Role::Channel;
 
 use Moose::Role;
 use experimental qw(signatures);

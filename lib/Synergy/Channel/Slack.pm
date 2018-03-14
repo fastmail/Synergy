@@ -1,5 +1,5 @@
 use v5.24.0;
-package Synergy::EventSource::Slack;
+package Synergy::Channel::Slack;
 
 use Moose;
 use experimental qw(signatures);
@@ -7,7 +7,7 @@ use JSON::MaybeXS qw(encode_json decode_json);
 
 use namespace::autoclean;
 
-with 'Synergy::EventSource';
+with 'Synergy::Role::Channel';
 
 has slack => (
   is => 'ro',
