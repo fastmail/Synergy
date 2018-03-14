@@ -17,6 +17,12 @@ has interval => (
   default => 3,
 );
 
+has prefix => (
+  is  => 'ro',
+  isa => 'Str',
+  default => q{synergy},
+);
+
 has debug_callback => (
   is  => 'ro',
   isa => 'CodeRef',
@@ -55,7 +61,7 @@ sub start ($self) {
 
       my $event = Synergy::Event->new({
         type => 'message',
-        text => "It's " . localtime . ", do you know where you are?",
+        text => $self->prefix . ": It's " . localtime . ", do you know where you are?",
         from_address => "tester",
         from_channel => $self,
       });

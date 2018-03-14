@@ -7,7 +7,7 @@ with 'Synergy::Role::EventHandler';
 use experimental qw(signatures);
 use namespace::clean;
 
-my $OWN_NAME = $ENV{SYNERGY_NAME};
+our $OWN_NAME = $ENV{SYNERGY_NAME};
 
 sub start { }
 
@@ -18,19 +18,16 @@ sub handle_event ($self, $event, $rch) {
 
   return unless $event->text =~ /^\@?$OWN_NAME\W/;
 
-  my $rn;
+  my $from_str = $event->from_user ? $event->from_user->username
+                                   : $event->from_address;
 
-  if ($event->user) {
-    $rn = "%s, (" . $event->user->realname . ")";
-  } else {
-    $rn = "%s";
-  }
-
-  my $response = sprintf "I heard you, $rn. You said \"%s\"",
-    $event->from,
+  my $response = sprintf 'I heard you, %s. You said "%s"',
+    $from_str,
     $event->text;
 
   $rch->reply($response);
+
+  $main::x++;
 
   return 1;
 }
