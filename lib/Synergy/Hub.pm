@@ -8,6 +8,9 @@ use experimental qw(signatures);
 use namespace::clean;
 
 use Synergy::Logger '$Logger';
+
+use Module::Runtime qw(require_module);
+use Synergy::UserDirectory;
 use Try::Tiny;
 
 has user_directory => (
@@ -121,6 +124,46 @@ sub set_loop ($self, $loop) {
   $_->start for $self->reactors;
 
   return $loop;
+}
+
+sub synergize ($class, $loop, $config) {
+  # config:
+  #   directory: source file
+  #   channels: name => config
+  #   reactors: name => config
+  #   http_server: (port => id)
+  #   state_directory: ...
+  my $directory = Synergy::UserDirectory->new;
+
+  if ($config->{user_directory}) {
+    $directory->load_users_from_file($config->{user_directory});
+  }
+
+  my $hub = $class->new({ user_directory => $directory });
+
+  for my $thing (qw( channel reactor )) {
+    my $plural    = "${thing}s";
+    my $register  = "register_$thing";
+
+    for my $thing_name (keys %{ $config->{$plural} }) {
+      my $thing_config = $config->{$plural}{$thing_name};
+      my $thing_class  = delete $thing_config->{class};
+
+      confess "no class given for $thing" unless $thing_class;
+      require_module($thing_class);
+
+      my $thing = $thing_class->new({
+        %{ $thing_config },
+        name => $thing_name,
+      });
+
+      $hub->$register($thing);
+    }
+  }
+
+  $hub->set_loop($loop);
+
+  return $hub;
 }
 
 has http => (

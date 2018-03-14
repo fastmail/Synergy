@@ -5,6 +5,8 @@ use Moose;
 use experimental qw(signatures);
 
 use IO::Async::Timer::Periodic;
+
+use Synergy::Event;
 use Synergy::ReplyChannel;
 
 use namespace::autoclean;
