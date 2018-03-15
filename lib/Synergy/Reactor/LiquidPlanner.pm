@@ -23,9 +23,10 @@ my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
 my %known = (
   timer     => \&_handle_timer,
   task      => \&_handle_task,
- '++'       => \&_handle_plus_plus,
- good       => \&_handle_good,
- gruß       => \&_handle_good,
+  tasks     => \&_handle_tasks,
+  '++'      => \&_handle_plus_plus,
+  good      => \&_handle_good,
+  gruß      => \&_handle_good,
 );
 
 sub listener_specs {
@@ -312,6 +313,39 @@ sub _handle_task ($self, $event, $rch, $text) {
   }
 
   $rch->reply($reply);
+}
+
+sub lp_tasks_for_user ($self, $user, $count) {
+  my $res = $self->http_get_for_user($user, "$LP_BASE/upcoming_tasks?limit=$count&flat=true");
+  return unless $res->is_success;
+
+  my $tasks = $JSON->decode( $res->decoded_content );
+  return $tasks;
+}
+
+sub _handle_tasks ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  my ($how_many) = $text =~ /\Atasks\s+([0-9]+)\z/;
+
+  my $per_page = 5;
+  my $page = $how_many && $how_many > 0 ? $how_many : 1;
+
+  unless ($page <= 10) {
+    return $rch->reply(
+      "If it's not in your first ten pages, better go to the web.",
+    );
+  }
+
+  my $count = $per_page * $page;
+  my $start = $per_page * ($page - 1);
+
+  my $lp_tasks = $self->lp_tasks_for_user($user, $count);
+
+  for my $task (splice @$lp_tasks, $start, $per_page) {
+    $rch->private_reply("$task->{name} ($LINK_BASE$task->{id})");
+  }
+
+  $rch->reply("responses to 'tasks' are sent privately") if $event->is_public;
 }
 
 sub _handle_plus_plus ($self, $event, $rch, $text) {
