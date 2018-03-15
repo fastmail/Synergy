@@ -10,6 +10,7 @@ with 'Synergy::Role::HubComponent';
 requires qw(
   send_text
   describe_event
+  send_message_to_user
 );
 
 1;

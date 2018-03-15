@@ -51,8 +51,9 @@ sub handle_page ($self, $event, $rch) {
   my $from = $event->from_user ? $event->from_user->username
                                : $event->from_address;
 
-  my $res = $twilio->send_text($user->phone, "$from says: $what");
-  my $str = $res->is_success ? "page sent!" : "Oops...something went wrong.";
+  my $res = $twilio->send_message_to_user("$from says: $what");
+  my $str = ($res && $res->is_success) ? "page sent!"
+                                       : "Oops...something went wrong.";
   $rch->reply($str);
   return 1;
 }

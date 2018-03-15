@@ -19,6 +19,8 @@ has prefix => (
   default => q{synergy},
 );
 
+sub send_message_to_user (@) { # XXX }
+
 sub send_text ($self, $address, $text) {
   $self->record_message({ address => $address, text => $text });
 }

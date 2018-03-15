@@ -12,6 +12,7 @@ use JSON 2 ();
 use Time::Duration::Parse;
 use Time::Duration;
 use utf8;
+use Synergy::Logger '$Logger';
 
 my $JSON = JSON->new;
 
@@ -27,6 +28,47 @@ my %known = (
   '++'      => \&_handle_plus_plus,
   good      => \&_handle_good,
   gruß      => \&_handle_good,
+);
+
+has user_timers => (
+  is               => 'ro',
+  isa              => 'HashRef',
+  traits           => [ 'Hash' ],
+  lazy             => 1,
+  handles          => {
+    _timer_for_user     => 'get',
+    _add_timer_for_user => 'set',
+  },
+
+  default => sub { {} },
+);
+
+sub timer_for_user ($self, $user) {
+  return unless $user->has_lp_token;
+
+  my $timer = $self->_timer_for_user($user->username);
+  return $timer if $timer;
+
+  $timer = Synergy::Timer->new({
+    time_zone      => $user->time_zone,
+    business_hours => $user->business_hours,
+  });
+
+  $self->_add_timer_for_user($user, $timer);
+
+  return $timer;
+}
+
+has primary_nag_channel_name => (
+  is => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
+has aggressive_nag_channel_name => (
+  is => 'ro',
+  isa => 'Str',
+  default => 'twilio',
 );
 
 sub listener_specs {
@@ -64,7 +106,104 @@ has projects => (
   writer    => '_set_projects',
 );
 
-sub start ($self) { $self->projects }
+sub start ($self) {
+  $self->projects;
+
+  my $timer = IO::Async::Timer::Periodic->new(
+    interval => 300,
+    on_tick  => sub ($timer, @arg) { $self->nag($timer); },
+  );
+
+  $self->hub->loop->add($timer);
+
+  $timer->start;
+}
+
+sub nag ($self, $timer, @) {
+  $Logger->log("considering nagging");
+
+  USER: for my $user ($self->hub->user_directory->users) {
+    next USER unless my $sy_timer = $user->timer;
+
+    next USER unless $user->should_nag;
+
+    my $username = $user->username;
+
+    my $last_nag = $sy_timer->last_relevant_nag;
+    my $lp_timer = $self->lp_timer_for_user($user);
+
+    if ($lp_timer && $lp_timer == -1) {
+      warn "$username: error retrieving timer\n";
+      next USER;
+    }
+
+    # Record the last time we saw a timer
+    if ($lp_timer) {
+      $sy_timer->last_saw_timer(time);
+    }
+
+    { # Timer running too long!
+      if ($lp_timer && $lp_timer->{running_time} > 3) {
+        if ($last_nag && time - $last_nag->{time} < 900) {
+          $Logger->log("$username: Won't nag, nagged within the last 15min.");
+          next USER;
+        }
+
+        my $msg = "Your timer has been running for "
+                . concise(duration($lp_timer->{running_time} * 3600))
+                . ".  Maybe you should commit your work.";
+
+        my $friendly = $self->hub->channel_named($self->primary_nag_channel_name);
+        $friendly->send_message_to_user($user, $msg);
+
+        if ($user) {
+          my $aggressive = $self->hub->channel_named($self->aggressive_nag_channel_name);
+          $aggressive->send_message_to_user($user, $msg);
+        }
+
+        $sy_timer->last_nag({ time => time, level => 0 });
+        next USER;
+      }
+    }
+
+    if ($sy_timer->is_showtime) {
+      if ($lp_timer) {
+        $Logger->log("$username: We're good: there's a timer.");
+
+        $sy_timer->clear_last_nag;
+        next USER;
+      }
+
+      my $level = 0;
+      if ($last_nag) {
+        if (time - $last_nag->{time} < 900) {
+          $Logger->log("$username: Won't nag, nagged within the last 15min.");
+          next USER;
+        }
+        $level = $last_nag->{level} + 1;
+      }
+
+      # Have we seen a timer recently? Give them a grace period
+      if (
+           $sy_timer->last_saw_timer
+        && $sy_timer->last_saw_timer > time - 900
+      ) {
+        warn("$username: Not nagging, they only recently disabled a timer");
+        next USER;
+      }
+
+      my $still = $level == 0 ? '' : ' still';
+      my $msg   = "Your LiquidPlanner timer$still isn't running";
+      my $friendly = $self->hub->channel_named($self->primary_nag_channel_name);
+      $friendly->send_message_to_user($user, $msg);
+      if ($level >= 2) {
+        my $aggressive = $self->hub->channel_named($self->aggressive_nag_channel_name);
+        $aggressive->send_message_to_user($user, $msg);
+      }
+      $sy_timer->last_nag({ time => time, level => $level });
+    }
+  }
+}
 
 sub get_project_nicknames {
   my ($self) = @_;
@@ -525,5 +664,22 @@ sub _strip_name_flags ($self, $name) {
 
   return { urgent => $urgent, running => $running };
 }
+
+sub lp_timer_for_user ($self, $user) {
+  return unless $user->lp_auth_header;
+
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  return -1 unless $res->is_success; # XXX WARN
+
+  my ($timer) = grep {; $_->{running} }
+                @{ $JSON->decode( $res->decoded_content ) };
+
+  if ($timer) {
+    $user->last_lp_timer_id($timer->{id});
+  }
+
+  return $timer;
+}
+
 
 1;

@@ -35,6 +35,18 @@ sub http_post {
   return $self->hub->http_request('POST' => @_);
 }
 
+sub send_message_to_user ($self, $user, $text) {
+  unless ($user->phone) {
+    warn "No user phone number for " . $user->username . "\n";
+    return;
+  }
+
+  my $where = $user->phone;
+
+  $self->send_text($where, $text);
+}
+
+
 sub send_text ($self, $target, $text) {
   my $from;
 

@@ -185,8 +185,18 @@ sub username ($self, $id) {
   return $self->users->{$id}->{name};
 }
 
+sub dm_channel_for_user ($self, $user, $channel) {
+  my $identity = $user->identities->{$channel->name};
+  unless ($identity) {
+    warn "No known identity for " . $user->username . " for channel " . $self->name . "\n";
 
-sub dm_channel_for_user ($self, $slack_id) {
+    return;
+  }
+
+  return $self->dm_channel_for_address($identity);
+}
+
+sub dm_channel_for_address ($self, $slack_id) {
   my $channel_id = $self->dm_channel_for($slack_id);
   return $channel_id if $channel_id;
 

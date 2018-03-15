@@ -80,7 +80,7 @@ sub start ($self) {
     # say "screw you, buddy," in which case we'll return undef, which we'll
     # understand as "we will not ever respond to this person anyway. Thanks,
     # Slack. -- michael, 2018-03-15
-    my $private_addr = $self->slack->dm_channel_for_user($event->{user});
+    my $private_addr = $self->slack->dm_channel_for_address($event->{user});
     return unless $private_addr;
 
     my $from_user = $self->hub->user_directory->user_by_channel_and_address(
@@ -130,6 +130,12 @@ sub start ($self) {
 # TODO: re-encode these on reply?
 sub decode_slack_usernames ($self, $text) {
   return $text =~ s/<\@(U[A-Z0-9]+)>/"@" . $self->slack->username($1)/ger;
+}
+
+sub send_message_to_user ($self, $user, $text) {
+  my $where = $self->slack->dm_channel_for_user($user, $self);
+
+  $self->send_text($where, $text);
 }
 
 sub send_text ($self, $target, $text) {
