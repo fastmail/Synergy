@@ -111,7 +111,7 @@ sub start ($self) {
     my $rch = Synergy::ReplyChannel->new(
       channel => $self,
       default_address => $event->{channel},
-      private_address => $event->{user},
+      private_address => $self->slack->dm_channel_for_user($event->{user}),
       ( $is_public ? ( prefix => "$from_username: " ) : () ),
     );
 

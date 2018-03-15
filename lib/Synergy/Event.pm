@@ -42,6 +42,8 @@ has is_public => (
   default => 0,
 );
 
+sub is_private ($self) { ! $self->is_public }
+
 sub BUILD ($self, @) {
   confess "only 'message' events exist for now"
     unless $self->type eq 'message';

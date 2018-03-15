@@ -11,6 +11,8 @@ use Net::Async::HTTP;
 use Net::Async::WebSocket::Client;
 use Data::Dumper::Concise;
 
+use Synergy::Logger '$Logger';
+
 has loop    => (
   is => 'ro',
   required => 1
@@ -52,6 +54,32 @@ has _channels_by_name => (
     }
 
     return \%by_name;
+  },
+);
+
+has dm_channels => (
+  is => 'ro',
+  isa => 'HashRef',
+  writer => '_set_dm_channels',
+  default => sub { {} },
+);
+
+has _dm_channels_ids_by_user => (
+  is              => 'ro',
+  isa             => 'HashRef',
+  traits          => [ 'Hash' ],
+  lazy            => 1,
+  clearer         => '_clear_dm_cache',
+  handles         => {
+    dm_channel_for => 'get',
+  },
+  default         => sub ($self) {
+    my %by_user;
+    for my $k (keys $self->dm_channels->%*) {
+      $by_user{ $self->dm_channels->{$k} } = $k;
+    }
+
+    return \%by_user;
   },
 );
 
@@ -150,10 +178,35 @@ sub setup ($self) {
   say "Connected to Slack!";
   $self->load_users;
   $self->load_channels;
+  $self->load_dm_channels;
 }
 
 sub username ($self, $id) {
   return $self->users->{$id}->{name};
+}
+
+
+sub dm_channel_for_user ($self, $slack_id) {
+  my $channel_id = $self->dm_channel_for($slack_id);
+  return $channel_id if $channel_id;
+
+  # look it up!
+  my $res = $self->api_call('im.open', {
+    user => $slack_id,
+  })->get;
+
+  return unless $res->is_success;
+
+  my $json = decode_json($res->decoded_content);
+  use Data::Dumper::Concise;
+  warn Dumper $json;
+
+  $channel_id = $json->{channel}->{id};
+  $self->dm_channels->{$channel_id} = $slack_id;
+
+  $self->_clear_dm_cache;
+
+  return $channel_id;
 }
 
 sub load_users ($self) {
@@ -176,6 +229,15 @@ sub load_channels ($self) {
     my $res = decode_json($http_res->decoded_content);
     $self->_set_channels({
       map { $_->{id}, $_ } $res->{channels}->@*
+    });
+  });
+}
+
+sub load_dm_channels ($self) {
+  $self->api_call('im.list', {})->on_done(sub ($http_res) {
+    my $res = decode_json($http_res->decoded_content);
+    $self->_set_dm_channels({
+      map { $_->{id}, $_->{user} } $res->{ims}->@*
     });
   });
 }
