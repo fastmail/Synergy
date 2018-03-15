@@ -8,6 +8,7 @@ use JSON::MaybeXS;
 use Synergy::External::Slack;
 use Synergy::Event;
 use Synergy::ReplyChannel;
+use Synergy::Logger '$Logger';
 
 use namespace::autoclean;
 use Data::Dumper::Concise;
@@ -61,6 +62,14 @@ sub start ($self) {
 
     # XXX dispatch these better
     return unless $event->{type} eq 'message';
+
+    if ($event->{subtype}) {
+      $Logger->log([
+        "refusing to respond to message with subtype %s",
+        $event->{subtype},
+      ]);
+      return;
+    }
 
     # This should go in the event handler, probably
     return if $event->{bot_id};
