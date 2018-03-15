@@ -60,6 +60,11 @@ sub _inject_event ($self, $arg) {
   return;
 }
 
+# when we queue an event, and the queue was empty, we should start it
+#                                                  and become ! exhausted
+# when we try to dequeue and the queue is empty, we should become exhausted
+# new event type wait-for-reply
+
 has todo => (
   isa       => 'ArrayRef',
   traits    => [ 'Array' ],
@@ -67,65 +72,92 @@ has todo => (
   handles   => {
     queue_todo    => 'push',
     dequeue_todo  => 'shift',
+    queue_empty   => 'is_empty',
   },
 );
 
+after queue_todo => sub {
+  my ($self) = @_;
+  if ($self->is_exhausted) {
+    $self->_set_is_exhausted(0);
+    $self->do_next;
+  }
+};
+
+before do_next => sub {
+  my ($self) = @_;
+  if ($self->queue_empty) {
+    $self->_set_is_exhausted(1);
+  }
+};
+
+has is_exhausted => (
+  is => 'ro',
+  writer    => '_set_is_exhausted',
+  lazy      => 1,
+  init_arg  => undef,
+  default   => sub ($self, @) { $self->queue_empty },
+);
+
 sub _todo_to_notifier ($self, $todo) {
-  if ($todo->[0] eq 'message') {
-    my $arg   = $todo->[1];
-    my $timer = IO::Async::Timer::Countdown->new(
-      delay => 0,
-      on_expire => sub {
-        my ($timer) = @_;
-        $self->_inject_event($arg);
+  my ($method, @rest) = @$todo;
+
+  my $compiler = $self->can("_compile_$method");
+
+  confess("bogus todo item: $method") unless $compiler;
+
+  return $self->$compiler(@rest);
+}
+
+sub _compile_send ($self, $arg) {
+  my $timer = IO::Async::Timer::Countdown->new(
+    delay => 0,
+    on_expire => sub {
+      my ($timer) = @_;
+      $self->_inject_event($arg);
+      $self->hub->loop->remove($timer);
+      $self->do_next;
+    },
+  );
+  $timer->start;
+  return $timer;
+}
+
+sub _compile_wait ($self, $arg) {
+  my $timer = IO::Async::Timer::Countdown->new(
+    delay => $arg->{seconds} // 1,
+    on_expire => sub {
+      my ($timer) = @_;
+      $self->hub->loop->remove($timer);
+      $self->do_next;
+    },
+  );
+  $timer->start;
+  return $timer;
+}
+
+sub _compile_repeat ($self, $arg) {
+  my $times = $arg->{times} // 5;
+  my $sleep = $arg->{sleep} // 1;
+
+  my $timer = IO::Async::Timer::Periodic->new(
+    interval => $sleep,
+    on_tick  => sub {
+      my ($timer) = @_;
+
+      state $ticks = 0;
+
+      $self->_inject_event($arg);
+
+      if (++$ticks == $times) {
         $self->hub->loop->remove($timer);
         $self->do_next;
-      },
-    );
-    $timer->start;
-    return $timer;
-  }
-
-  if ($todo->[0] eq 'wait') {
-    my $arg   = $todo->[1];
-    my $timer = IO::Async::Timer::Countdown->new(
-      delay => $arg->{seconds} // 1,
-      on_expire => sub {
-        my ($timer) = @_;
-        $self->hub->loop->remove($timer);
-        $self->do_next;
-      },
-    );
-    $timer->start;
-    return $timer;
-  }
-
-  if ($todo->[0] eq 'repeat') {
-    my $arg   = $todo->[1];
-    my $times = $arg->{times} // 5;
-    my $sleep = $arg->{sleep} // 1;
-
-    my $timer = IO::Async::Timer::Periodic->new(
-      interval => $sleep,
-      on_tick  => sub {
-        my ($timer) = @_;
-
-        state $ticks = 0;
-
-        $self->_inject_event($arg);
-
-        if (++$ticks == $times) {
-          $self->hub->loop->remove($timer);
-          $self->do_next;
-        }
       }
-    );
+    }
+  );
 
-    $timer->start;
-    return $timer;
-  }
-
-  confess("bogus todo item: $todo->[0]");
+  $timer->start;
+  return $timer;
 }
 
 sub do_next ($self) {

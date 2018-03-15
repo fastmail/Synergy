@@ -23,12 +23,11 @@ my $synergy = Synergy::Hub->synergize(
         class     => 'Synergy::Channel::Test',
         prefix    => q{synergy},
         todo      => [
-          [ message => { text => "Hi." }  ],
+          [ send    => { text => "Hi." }  ],
           [ wait    => { seconds => 1  }  ],
           [ repeat  => { text => "Hello?", times => 3, sleep => 0.34 } ],
           [ wait    => { seconds => 1  }  ],
-          [ message => { text => "Bye." } ],
-          [ message => { text => "Never received!?" } ],
+          [ send    => { text => "Bye." } ],
         ],
       }
     },
@@ -42,15 +41,17 @@ my $synergy = Synergy::Hub->synergize(
 testing_loop($synergy->loop);
 
 wait_for {
-  grep { $_->{text} =~ /Bye\./ }
-    $synergy->channel_named('test-channel')->sent_messages
+  $synergy->channel_named('test-channel')->is_exhausted;
 };
 
 my @replies = $synergy->channel_named('test-channel')->sent_messages;
 
-is(@replies, 5, "three replies recorded");
+is(@replies, 5, "five replies recorded");
 
-is(  $replies[0]{address}, 'public',                  "...expected address");
-like($replies[0]{text},    qr{I heard you, .* Hi\.},  "...expected text");
+is(  $replies[0]{address}, 'public',                  "1st: expected address");
+like($replies[0]{text},    qr{I heard you, .* Hi\.},  "1st: expected text");
+
+is(  $replies[4]{address}, 'public',                  "5th: expected address");
+like($replies[4]{text},    qr{I heard you, .* Bye\.}, "5th: expected text");
 
 done_testing;
