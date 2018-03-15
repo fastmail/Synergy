@@ -21,6 +21,7 @@ my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
 my $WKSP_ID = 14822;
 my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
 my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
+my $CONFIG;  # XXX use real config
 
 my %known = (
   timer     => \&_handle_timer,
