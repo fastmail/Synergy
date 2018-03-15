@@ -11,6 +11,7 @@ use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration::Parse;
 use Time::Duration;
+use Synergy::Logger '$Logger';
 use utf8;
 use Synergy::Logger '$Logger';
 
@@ -25,6 +26,9 @@ my %known = (
   timer     => \&_handle_timer,
   task      => \&_handle_task,
   tasks     => \&_handle_tasks,
+  inbox     => \&_handle_inbox,
+  urgent    => \&_handle_urgent,
+  recurring => \&_handle_recurring,
   '++'      => \&_handle_plus_plus,
   good      => \&_handle_good,
   gruß      => \&_handle_good,
@@ -360,7 +364,7 @@ sub _handle_task ($self, $event, $rch, $text) {
 
       # XXX - From real config! --alh, 2018-03-14
       my $config;
-      my $project_id = $config->{liquidplanner}{project}{$target->username};
+      my $project_id = $CONFIG->{liquidplanner}{project}{$target->username};
       warn sprintf "Looking for project for %s found %s\n",
         $target->username, $project_id // '(undef)';
 
@@ -454,11 +458,58 @@ sub _handle_task ($self, $event, $rch, $text) {
   $rch->reply($reply);
 }
 
-sub lp_tasks_for_user ($self, $user, $count) {
-  my $res = $self->http_get_for_user($user, "$LP_BASE/upcoming_tasks?limit=$count&flat=true");
-  return unless $res->is_success;
+# sub lp_tasks_for_user ($self, $user, $count) {
+#   my $res = $self->http_get_for_user($user, "$LP_BASE/upcoming_tasks?limit=$count&flat=true");
+#   return unless $res->is_success;
+#
+#   my $tasks = $JSON->decode( $res->decoded_content );
+#   return $tasks;
+# }
+
+sub lp_tasks_for_user ($self, $user, $count, $which='tasks') {
+  my $res = $self->http_get_for_user(
+    $user,
+    "$LP_BASE/upcoming_tasks?limit=200&flat=true&member_id=" . $user->lp_id,
+  );
+
+  unless ($res->is_success) {
+    $Logger->log("failed to get tasks from LiquidPlanner: " . $res->as_string);
+    return;
+  }
 
   my $tasks = $JSON->decode( $res->decoded_content );
+
+  @$tasks = grep {; $_->{type} eq 'Task' } @$tasks;
+
+  if ($which eq 'tasks') {
+    @$tasks = grep {;
+      (! grep { $CONFIG->{liquidplanner}{package}{inbox} == $_ } $_->{parent_ids}->@*)
+      &&
+      (! grep { $CONFIG->{liquidplanner}{package}{inbox} == $_ } $_->{package_ids}->@*)
+    } @$tasks;
+  } else {
+    my $package_id = $CONFIG->{liquidplanner}{package}{ $which };
+    unless ($package_id) {
+      warn "can't find package_id for '$which'";
+      return;
+    }
+
+    @$tasks = grep {;
+      (grep { $package_id == $_ } $_->{parent_ids}->@*)
+      ||
+      (grep { $package_id == $_ } $_->{package_ids}->@*)
+    } @$tasks;
+  }
+
+  splice @$tasks, $count;
+
+  my $urgent = $CONFIG->{liquidplanner}{package}{urgent};
+  for (@$tasks) {
+    $_->{name} = "[URGENT] $_->{name}"
+      if (grep { $urgent == $_ } $_->{parent_ids}->@*)
+      || (grep { $urgent == $_ } $_->{package_ids}->@*);
+  }
+
   return $tasks;
 }
 
@@ -478,13 +529,45 @@ sub _handle_tasks ($self, $event, $rch, $text) {
   my $count = $per_page * $page;
   my $start = $per_page * ($page - 1);
 
-  my $lp_tasks = $self->lp_tasks_for_user($user, $count);
+  my $lp_tasks = $self->lp_tasks_for_user($user, $count, 'tasks');
 
   for my $task (splice @$lp_tasks, $start, $per_page) {
     $rch->private_reply("$task->{name} ($LINK_BASE$task->{id})");
   }
 
-  $rch->reply("responses to 'tasks' are sent privately") if $event->is_public;
+  $rch->reply("responses to <tasks> are sent privately") if $event->is_public;
+}
+
+sub _handle_task_like ($self, $event, $rch, $command, $count) {
+  my $user = $event->from_user;
+  my $lp_tasks = $self->lp_tasks_for_user($user, $count, $command);
+
+  unless (@$lp_tasks) {
+    my $suffix = $command =~ /(inbox|urgent)/n
+               ? ' \o/'
+               : '';
+    $rch->reply("you don't have any open $command tasks right now.$suffix");
+    return;
+  }
+
+  for my $task (@$lp_tasks) {
+    $rch->private_reply("$task->{name} ($LINK_BASE$task->{id})");
+  }
+
+  $rch->reply("responses to <$command> are sent privately") if $event->is_public;
+}
+
+
+sub _handle_inbox ($self, $event, $rch, $text) {
+  return $self->_handle_task_like($event, $rch, 'inbox', 200);
+}
+
+sub _handle_urgent ($self, $event, $rch, $text) {
+  return $self->_handle_task_like($event, $rch, 'urgent', 100);
+}
+
+sub _handle_recurring ($self, $event, $rch, $text) {
+  return $self->_handle_task_like($event, $rch, 'recurring', 100);
 }
 
 sub _handle_plus_plus ($self, $event, $rch, $text) {
@@ -585,8 +668,8 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
   my $config; # XXX REAL CONFIG
   my %container = (
     package_id  => $my_arg->{urgent}
-                ? $config->{liquidplanner}{package}{urgent}
-                : $config->{liquidplanner}{package}{inbox},
+                ? $CONFIG->{liquidplanner}{package}{urgent}
+                : $CONFIG->{liquidplanner}{package}{inbox},
     parent_id   => $my_arg->{project_id}
                 ?  $my_arg->{project_id}
                 :  undef,

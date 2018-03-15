@@ -636,35 +636,6 @@ sub SAID_stop {
   }
 }
 
-sub SAID_tasks {
-  my ($self, $arg) = @_;
-
-  my $user  = $self->user_named($arg->{who});
-  my $lp_ua = $user ? $user->lp_ua : undef;
-
-  return $self->reply("You don't seem to be a LiquidPlanner-enabled user.", $arg)
-    unless $lp_ua;
-
-  my $per_page = 5;
-  my $page = $arg->{what} =~ /\A[0-9]+\z/ && $arg->{what} > 0 ? $arg->{what} : 1;
-
-  unless ($page <= 10) {
-    return $self->reply(
-      "If it's not in your first ten pages, better go to the web.",
-      $arg,
-    );
-  }
-
-  my $count = $per_page * $page;
-  my $start = $per_page * ($page - 1);
-
-  my $lp_tasks = $self->lp_tasks_for_user($user, $count);
-
-  for my $task (splice @$lp_tasks, $start, $per_page) {
-    return $self->reply("$task->{name} ($LINK_BASE$task->{id})");
-  }
-}
-
 sub master_lp_ua {
   $_[0]->user_named( $config->{master} )->lp_ua;
 }
