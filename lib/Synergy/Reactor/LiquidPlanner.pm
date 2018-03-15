@@ -11,6 +11,7 @@ use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration::Parse;
 use Time::Duration;
+use utf8;
 
 my $JSON = JSON->new;
 
@@ -23,6 +24,8 @@ my %known = (
   timer     => \&_handle_timer,
   task      => \&_handle_task,
  '++'       => \&_handle_plus_plus,
+ good       => \&_handle_good,
+ gruß       => \&_handle_good,
 );
 
 sub listener_specs {
@@ -36,9 +39,10 @@ sub listener_specs {
       my ($what) = $event->text =~ /^([^\s]+)\s?/;
       $what &&= lc $what;
 
-      return unless $known{$what};
-
-      return 1;
+      return 1 if $known{$what};
+      return 1 if $what =~ /^g'day/;    # stupid, but effective
+      return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
+      return;
     }
   };
 }
@@ -90,18 +94,25 @@ sub get_project_nicknames {
 sub dispatch_event ($self, $event, $rch) {
   unless ($event->from_user) {
     $rch->reply("Sorry, I don't know who you are.");
-
     return 1;
   }
+
+  # existing hacks for silly greetings
+  my $text = $event->text;
+  $text = "good day_au" if $text =~ /\A\s*g'day(?:,?\s+mate)?[1!.?]*\z/i;
+  $text = "good day_de" if $text =~ /\Agruß gott[1!.]?\z/i;
+  $text =~ s/\Ago{3,}d(?=\s)/good/;
+
+  my ($what, $rest) = $text =~ /^([^\s]+)\s*(.*)/;
+  $what &&= lc $what;
+
+  # we can be polite even to non-lp-enabled users
+  return $self->_handle_good($event, $rch, $rest) if $what eq 'good';
 
   unless ($event->from_user->lp_auth_header) {
     $rch->reply($ERR_NO_LP);
-
     return 1;
   }
-
-  my ($what, $rest) = $event->text =~ /^([^\s]+)\s*(.*)/;
-  $what &&= lc $what;
 
   return $known{$what}->($self, $event, $rch, $rest)
 }
@@ -316,6 +327,73 @@ sub _handle_plus_plus ($self, $event, $rch, $text) {
   my $who = $event->from_user->username;
 
   return $self->_handle_task($event, $rch, "task for $who: $text");
+}
+
+my @BYE = (
+  "See you later, alligator.",
+  "After a while, crocodile.",
+  "Time to scoot, little newt.",
+  "See you soon, raccoon.",
+  "Auf wiedertippen!",
+  "Later.",
+  "Peace.",
+  "¡Adios!",
+  "Au revoir.",
+  "221 2.0.0 Bye",
+  "+++ATH0",
+  "Later, gator!",
+  "Pip pip.",
+  "Aloha.",
+  "Farewell, %n.",
+);
+
+sub __pick_one ($opts) {
+  return $opts->[ rand @$opts ];
+}
+
+sub _handle_good ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+
+  my ($what) = $text =~ /^([a-z_]+)/i;
+  my ($reply, $expand, $stop, $end_of_day);
+
+  if    ($what eq 'morning')    { $reply  = "Good morning!";
+                                  $expand = 'morning'; }
+
+  elsif ($what eq 'day_au')     { $reply  = "How ya goin'?";
+                                  $expand = 'morning'; }
+
+  elsif ($what eq 'day_de')     { $reply  = "Doch, wenn du ihn siehst!";
+                                  $expand = 'morning'; }
+
+  elsif ($what eq 'day')        { $reply  = "Long days and pleasant nights!";
+                                  $expand = 'morning'; }
+
+  elsif ($what eq 'afternoon')  { $reply  = "You, too!";
+                                  $expand = 'afternoon' }
+
+  elsif ($what eq 'evening')    { $reply  = "I'll be here when you get back!";
+                                  $stop   = 1; }
+
+  elsif ($what eq 'night')      { $reply  = "Sleep tight!";
+                                  $stop   = 1;
+                                  $end_of_day = 1; }
+
+  elsif ($what eq 'riddance')   { $reply  = "I'll outlive you all.";
+                                  $stop   = 1;
+                                  $end_of_day = 1; }
+
+  elsif ($what eq 'bye')        { $reply  = __pick_one(\@BYE);
+                                  $stop   = 1;
+                                  $end_of_day = 1; }
+
+  if ($reply) {
+    $reply =~ s/%n/$user->username/ge;
+  }
+
+  return $rch->reply($reply) if $reply;
+
+  # TODO: implement expandos
 }
 
 sub resolve_name ($self, $name, $who) {

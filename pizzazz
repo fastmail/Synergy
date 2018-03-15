@@ -24,8 +24,6 @@ use Synergy::Logger '$Logger' => { init => {
 my $key = qx(cat ~/.jem.key);
 chomp $key;
 
-my $twilio_key = 'foo';  # XXX fixme
-
 my $synergy = Synergy::Hub->synergize({
   ($ENV{SYNERGY_USERS_FILE}
     ? (user_directory => $ENV{SYNERGY_USERS_FILE})
