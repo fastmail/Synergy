@@ -65,4 +65,18 @@ sub load_users_from_file ($self, $file) {
   return \%users;
 }
 
+sub resolve_name ($self, $name, $who) {
+  return unless $name;
+
+  $name = lc $name;
+  return $who if $name eq 'me' || $name eq 'my' || $name eq 'myself' || $name eq 'i';
+
+  my $user = $self->user_named($name);
+  unless ($user) {
+    ($user) = grep {; grep { $_ eq $name } $_->nicknames } $self->users;
+  }
+
+  return $user;
+}
+
 1;

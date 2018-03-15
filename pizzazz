@@ -48,6 +48,7 @@ my $synergy = Synergy::Hub->synergize({
     clox    => { class => 'Synergy::Reactor::Clox' },
     lp      => { class => 'Synergy::Reactor::LiquidPlanner' },
     slackid => { class => 'Synergy::Reactor::SlackID' },
+    who     => { class => 'Synergy::Reactor::Who' },
     announce=> {
       class => 'Synergy::Reactor::Announce',
       slack_channel_name => 'slack_fm',
