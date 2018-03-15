@@ -71,9 +71,17 @@ sub start ($self) {
       return;
     }
 
-    # This should go in the event handler, probably
     return if $event->{bot_id};
     return if $self->slack->username($event->{user}) eq 'synergy';
+
+    # Ok, so we need to be able to look up the DM channels. If a bot replies
+    # over the websocket connection, it doesn't have a bot id. So we need to
+    # attempt to get the DM channel for this person. If it's a bot, slack will
+    # say "screw you, buddy," in which case we'll return undef, which we'll
+    # understand as "we will not ever respond to this person anyway. Thanks,
+    # Slack. -- michael, 2018-03-15
+    my $private_addr = $self->slack->dm_channel_for_user($event->{user});
+    return unless $private_addr;
 
     my $from_user = $self->hub->user_directory->user_by_channel_and_address(
       $self->name, $event->{user}
@@ -111,7 +119,7 @@ sub start ($self) {
     my $rch = Synergy::ReplyChannel->new(
       channel => $self,
       default_address => $event->{channel},
-      private_address => $self->slack->dm_channel_for_user($event->{user}),
+      private_address => $private_addr,
       ( $is_public ? ( prefix => "$from_username: " ) : () ),
     );
 

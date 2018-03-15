@@ -198,8 +198,7 @@ sub dm_channel_for_user ($self, $slack_id) {
   return unless $res->is_success;
 
   my $json = decode_json($res->decoded_content);
-  use Data::Dumper::Concise;
-  warn Dumper $json;
+  return unless $json->{ok};
 
   $channel_id = $json->{channel}->{id};
   $self->dm_channels->{$channel_id} = $slack_id;
