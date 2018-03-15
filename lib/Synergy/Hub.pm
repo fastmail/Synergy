@@ -98,8 +98,10 @@ sub handle_event ($self, $event, $rch) {
   unless (@hits) {
     return unless $event->was_targeted;
 
-    $rch->reply("I'm sorry, I don't know anything about that");
+    my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
+    @replies = 'Does not compute.' unless @replies;
 
+    $rch->reply($replies[ rand @replies ]);
     return;
   }
 

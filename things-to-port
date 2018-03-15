@@ -1,22 +1,6 @@
 #!perl
 
 
-sub resolve_name {
-  my ($self, $name, $who) = @_;
-
-  return unless $name;
-
-  $name = lc $name;
-  $name = $who if $name eq 'me' || $name eq 'my' || $name eq 'myself';
-
-  my $user = $self->user_named($name);
-  unless ($user) {
-    ($user) = grep {; grep { $_ eq $name } $_->nicknames } $self->users;
-  }
-
-  return $user;
-}
-
 event _http_sms => sub {
   my ($kernel, $self, $request, $response, $dirmatch)
     = @_[ KERNEL, OBJECT, ARG0 .. ARG2 ];
@@ -67,17 +51,6 @@ event _http_sms => sub {
 
   $self->info("Request from " . $response->connection->remote_ip . " " . $request->uri->path_query);
 };
-
-sub _does_not_compute {
-  my ($self, $user) = @_;
-
-  my @replies = $user ? $user->wtf_replies : ();
-  @replies = 'Does not compute.' unless @replies;
-
-  my $reply = $replies[ rand @replies ];
-
-  return $reply;
-}
 
 sub SAID_eject {
   my ($self, $arg) = @_;
