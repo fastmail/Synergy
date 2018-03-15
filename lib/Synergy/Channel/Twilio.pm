@@ -5,6 +5,8 @@ use Moose;
 use experimental qw(signatures);
 use JSON::MaybeXS qw(encode_json decode_json);
 
+use Synergy::Logger '$Logger';
+
 use Synergy::Event;
 use Synergy::ReplyChannel;
 
@@ -26,7 +28,50 @@ has numbers => (
 
 sub start ($self) {
   $self->hub->server->register_path('/sms', sub ($req) {
-    return [200, [], [ 'great!' ]];
+    my $param = $req->parameters;
+    my $from  = $param->{From} // '';
+
+    my $who = $self->hub->user_directory->user_by_channel_and_address(
+      $self,
+      $from,
+    );
+
+    unless (($param->{AccountSid}//'') eq $self->sid and $who) {
+      $Logger->log(sprintf "Bad request for %s from phone %s from IP %s",
+        $req->uri->path_query,
+        $from,
+        $req->address,
+      );
+
+      return [
+        400,
+        [ 'Content-Type', 'application/json' ],
+        [ "{}\n" ],
+      ];
+    }
+
+    my $text = $param->{Body};
+
+    my $evt = Synergy::Event->new({
+      type => 'message',
+      text => $text,
+      was_targeted => 1,
+      is_public    => 0,
+      from_channel => $self,
+      from_address => $from,
+      from_user    => $who, # we already gave up if no user -- rjbs, 2018-03-15
+      transport_data => $param,
+    });
+
+    my $rch = Synergy::ReplyChannel->new(
+      channel => $self,
+      default_address => $from,
+      private_address => $from,
+    );
+
+    $self->hub->handle_event($evt, $rch);
+
+    return [ 200, [ 'Content-Type', 'text/plain' ], [ "" ] ];
   });
 }
 

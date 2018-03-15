@@ -178,7 +178,10 @@ sub synergize {
     $directory->load_users_from_file($config->{user_directory});
   }
 
-  my $hub = $class->new({ user_directory => $directory });
+  my $hub = $class->new({
+    user_directory => $directory,
+    ($config->{server_port} ? (server_port => $config->{server_port}) : ()),
+  });
 
   for my $thing (qw( channel reactor )) {
     my $plural    = "${thing}s";
