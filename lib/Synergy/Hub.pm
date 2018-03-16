@@ -95,16 +95,6 @@ sub handle_event ($self, $event, $rch) {
     }
   }
 
-  unless (@hits) {
-    return unless $event->was_targeted;
-
-    my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
-    @replies = 'Does not compute.' unless @replies;
-
-    $rch->reply($replies[ rand @replies ]);
-    return;
-  }
-
   if (1 < grep {; $_->[1]->is_exclusive } @hits) {
     $rch->reply("Sorry, I find that message ambiguous.");
     return;
@@ -132,6 +122,17 @@ sub handle_event ($self, $event, $rch) {
       ]);
     };
   }
+
+  unless ($event->was_handled) {
+    return unless $event->was_targeted;
+
+    my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
+    @replies = 'Does not compute.' unless @replies;
+
+    $rch->reply($replies[ rand @replies ]);
+    return;
+  }
+
 
   return;
 }

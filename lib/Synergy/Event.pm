@@ -44,6 +44,16 @@ has is_public => (
 
 sub is_private ($self) { ! $self->is_public }
 
+has was_handled => (
+  is => 'ro',
+  isa => 'Bool',
+  default => 0,
+  traits  => ['Bool'],
+  handles => {
+    mark_handled => 'set',
+  },
+);
+
 sub BUILD ($self, @) {
   confess "only 'message' events exist for now"
     unless $self->type eq 'message';

@@ -24,8 +24,7 @@ sub echo ($self, $event, $rch) {
     $event->text;
 
   $rch->reply($response);
-
-  return 1;
+  $event->mark_handled;
 }
 
 1;

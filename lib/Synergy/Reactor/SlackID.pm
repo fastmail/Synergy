@@ -28,6 +28,8 @@ sub listener_specs {
 
 
 sub handle_event ($self, $event, $rch) {
+  $event->mark_handled;
+
   $event->text =~ /slackid (\w+)/;
 
   my $who = $1;
@@ -41,8 +43,6 @@ sub handle_event ($self, $event, $rch) {
   }
 
   $rch->reply("Their slack ID is $user->{id}");
-
-  return 1;
 }
 
 1;

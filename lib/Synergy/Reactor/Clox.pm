@@ -19,6 +19,8 @@ sub listener_specs {
 }
 
 sub handle_clox ($self, $event, $rch) {
+  $event->mark_handled;
+
   my $now = DateTime->now;
 
   # TODO: get from config
@@ -40,7 +42,6 @@ sub handle_clox ($self, $event, $rch) {
       . int(($sit->second + $sit->minute * 60 + $sit->hour * 3600) / 86.4);
 
   $rch->reply(join('; ', @times));
-  return 1;
 }
 
 1;

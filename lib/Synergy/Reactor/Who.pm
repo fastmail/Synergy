@@ -19,6 +19,7 @@ sub listener_specs {
 }
 
 sub handle_who ($self, $event, $rch) {
+  $event->mark_handled;
 
   my ($what) = $event->text =~ /^who\s*(.*)/;
   $what =~ s/\s*\?*\z//;
@@ -39,9 +40,7 @@ sub handle_who ($self, $event, $rch) {
     return $rch->reply(qq{"$what" is $whois.});
   }
 
-  return $rch->reply(qq["$what" is an alias for $whois.]);
-
-  return 1;
+  $rch->reply(qq["$what" is an alias for $whois.]);
 }
 
 1;

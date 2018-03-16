@@ -11,7 +11,7 @@ use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration;
 use Synergy::Logger '$Logger';
-use Synergy::Util qw(parse_time_hunk);
+use Synergy::Util qw(parse_time_hunk pick_one);
 use DateTime;
 use utf8;
 
@@ -69,6 +69,71 @@ my %KNOWN = (
   spent     => \&_handle_spent,
 );
 
+sub listener_specs {
+  return (
+    {
+      name      => "you're-back",
+      method    => 'see_if_back',
+      predicate => sub { 1 },
+    },
+    {
+      name      => "liquid planner",
+      method    => "dispatch_event",
+      exclusive => 1,
+      predicate => sub ($self, $event) {
+        return unless $event->type eq 'message';
+        return unless $event->was_targeted;
+
+        my ($what) = $event->text =~ /^([^\s]+)\s?/;
+        $what &&= lc $what;
+
+        return 1 if $KNOWN{$what};
+        return 1 if $what =~ /^g'day/;    # stupid, but effective
+        return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
+        return 1 if $what =~ /^done,/;    # ugh
+        return;
+      }
+    },
+    {
+      name      => "last-thing-said",
+      method    => 'record_utterance',
+      predicate => sub { 1 },
+    },
+  );
+}
+
+sub dispatch_event ($self, $event, $rch) {
+  unless ($event->from_user) {
+    $rch->reply("Sorry, I don't know who you are.");
+    $event->mark_handled;
+    return 1;
+  }
+
+  # existing hacks for silly greetings
+  my $text = $event->text;
+  $text = "good day_au" if $text =~ /\A\s*g'day(?:,?\s+mate)?[1!.?]*\z/i;
+  $text = "good day_de" if $text =~ /\Agruß gott[1!.]?\z/i;
+  $text =~ s/\Ago{3,}d(?=\s)/good/;
+  $text =~  s/^done, /done /;   # ugh
+
+  my ($what, $rest) = $text =~ /^([^\s]+)\s*(.*)/;
+  $what &&= lc $what;
+
+  # It's not handled yet, but it will have been by the time we return!
+  $event->mark_handled;
+
+  # we can be polite even to non-lp-enabled users
+  return $self->_handle_good($event, $rch, $rest) if $what eq 'good';
+
+  unless ($event->from_user->lp_auth_header) {
+    $rch->reply($ERR_NO_LP);
+    return 1;
+  }
+
+  return $KNOWN{$what}->($self, $event, $rch, $rest)
+}
+
+
 has user_timers => (
   is               => 'ro',
   isa              => 'HashRef',
@@ -109,39 +174,6 @@ has aggressive_nag_channel_name => (
   isa => 'Str',
   default => 'twilio',
 );
-
-sub listener_specs {
-  return (
-    {
-      name      => "you're-back",
-      method    => 'see_if_back',
-      predicate => sub { 1 },
-    },
-    {
-      name      => "liquid planner",
-      method    => "dispatch_event",
-      exclusive => 1,
-      predicate => sub ($self, $event) {
-        return unless $event->type eq 'message';
-        return unless $event->was_targeted;
-
-        my ($what) = $event->text =~ /^([^\s]+)\s?/;
-        $what &&= lc $what;
-
-        return 1 if $KNOWN{$what};
-        return 1 if $what =~ /^g'day/;    # stupid, but effective
-        return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
-        return 1 if $what =~ /^done,/;    # ugh
-        return;
-      }
-    },
-    {
-      name      => "last-thing-said",
-      method    => 'record_utterance',
-      predicate => sub { 1 },
-    },
-  );
-}
 
 has last_utterances => (
   isa       => 'HashRef',
@@ -319,33 +351,6 @@ sub get_project_nicknames {
   }
 
   return \%project_dict;
-}
-
-sub dispatch_event ($self, $event, $rch) {
-  unless ($event->from_user) {
-    $rch->reply("Sorry, I don't know who you are.");
-    return 1;
-  }
-
-  # existing hacks for silly greetings
-  my $text = $event->text;
-  $text = "good day_au" if $text =~ /\A\s*g'day(?:,?\s+mate)?[1!.?]*\z/i;
-  $text = "good day_de" if $text =~ /\Agruß gott[1!.]?\z/i;
-  $text =~ s/\Ago{3,}d(?=\s)/good/;
-  $text =~  s/^done, /done /;   # ugh
-
-  my ($what, $rest) = $text =~ /^([^\s]+)\s*(.*)/;
-  $what &&= lc $what;
-
-  # we can be polite even to non-lp-enabled users
-  return $self->_handle_good($event, $rch, $rest) if $what eq 'good';
-
-  unless ($event->from_user->lp_auth_header) {
-    $rch->reply($ERR_NO_LP);
-    return 1;
-  }
-
-  return $KNOWN{$what}->($self, $event, $rch, $rest)
 }
 
 sub http_get_for_user ($self, $user, @arg) {

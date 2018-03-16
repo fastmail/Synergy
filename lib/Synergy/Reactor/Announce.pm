@@ -37,6 +37,8 @@ sub start ($self) {
 
 
 sub handle_announce ($self, $event, $rch) {
+  $event->mark_handled;
+
   # TODO: remove this once new synergy can sms
   if (0 && $event->from_channel->can('slack')) {
     $rch->reply("wtf, mate? announce it yourself");
@@ -54,8 +56,6 @@ sub handle_announce ($self, $event, $rch) {
                                : $event->from_address;
 
   $slack->send_text($channel_id, "$from says: $to_send");
-
-  return 1;
 }
 
 1;

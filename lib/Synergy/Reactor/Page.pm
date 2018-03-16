@@ -32,6 +32,8 @@ sub start ($self) {
 }
 
 sub handle_page ($self, $event, $rch) {
+  $event->mark_handled;
+
   my ($who, $what) = $event->text =~ m/^page\s+([a-z]+):\s+(.*)/i;
 
   my $user = $self->hub->user_directory->user_by_name($who);
@@ -55,7 +57,6 @@ sub handle_page ($self, $event, $rch) {
   my $str = ($res && $res->is_success) ? "page sent!"
                                        : "Oops...something went wrong.";
   $rch->reply($str);
-  return 1;
 }
 
 1;
