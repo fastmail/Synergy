@@ -21,6 +21,26 @@ my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
 my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
 my $CONFIG;  # XXX use real config
 
+$CONFIG = {
+  liquidplanner => {
+    workspace => '14822',
+    package => {
+      inbox => '6268529',
+      urgent => '11388082',
+      recurring => '27659967',
+    },
+    project => {
+      comms =>  '39452359',
+      cyrus =>  '38805977',
+      fastmail =>  '36611517',
+      listbox =>  '274080',
+      plumbing =>  '39452373',
+      pobox =>  '274077',
+      topicbox =>  '27495364',
+    },
+  },
+};
+
 my %KNOWN = (
   timer     => \&_handle_timer,
   task      => \&_handle_task,
@@ -93,8 +113,34 @@ sub listener_specs {
         return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
         return;
       }
-    }
+    },
+    {
+      name      => "last-thing-said",
+      method    => 'record_utterance',
+      predicate => sub { 1 },
+    },
   );
+}
+
+has last_utterances => (
+  isa       => 'HashRef',
+  init_arg  => undef,
+  default   => sub {  {}  },
+  traits    => [ 'Hash' ],
+  handles   => {
+    set_last_utterance => 'set',
+    get_last_utterance => 'get',
+  },
+);
+
+sub record_utterance ($self, $event, $rch) {
+  # We're not going to support "++ that" by people who are not users.
+  return unless $event->from_user;
+
+  my $key = join qq{$;}, $event->from_channel->name, $event->from_address;
+
+  $self->set_last_utterance($key, $event->text);
+  return;
 }
 
 has projects => (
@@ -571,13 +617,25 @@ sub _handle_plus_plus ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  if (! length $text) {
+  unless (length $text) {
     return $rch->reply("Thanks, but I'm only as awesome as my creators.");
   }
 
-  my $who = $event->from_user->username;
+  my $who     = $event->from_user->username;
+  my $pretend = "task for $who: $text";
 
-  return $self->_handle_task($event, $rch, "task for $who: $text");
+  if ($text =~ /\A\s*that\s*\z/) {
+    my $key   = join qq{$;}, $event->from_channel->name, $event->from_address;
+    my $last  = $self->get_last_utterance($key);
+
+    unless (length $last) {
+      return $rch->reply("I don't know what 'that' refers to.");
+    }
+
+    $pretend = "task for $who: $last";
+  }
+
+  return $self->_handle_task($event, $rch, $pretend);
 }
 
 my @BYE = (
