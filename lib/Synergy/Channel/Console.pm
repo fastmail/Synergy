@@ -21,55 +21,69 @@ has from_address => (
   default => 'sysop',
 );
 
+has send_only => (
+  is  => 'ro',
+  isa => 'Bool',
+  default => 0,
+);
+
 has stream => (
   reader    => '_stream',
   init_arg  => undef,
-  default   => sub {
-    my ($channel) = @_;
-    Scalar::Util::weaken($channel);
-
-    return IO::Async::Stream->new(
-      read_handle  => \*STDIN,
-      write_handle => \*STDOUT,
-
-      on_read => sub {
-        my ( $self, $buffref, $eof ) = @_;
-
-         while( $$buffref =~ s/^(.*\n)// ) {
-            my $text = $1;
-            chomp $text;
-
-            my $user = $channel->hub->user_directory->user_by_channel_and_address(
-              $channel,
-              $channel->from_address,
-            );
-
-            my $evt = Synergy::Event->new({
-              type => 'message',
-              text => $text,
-              was_targeted  => 1,
-              is_public     => 0,
-              from_channel  => $channel,
-              from_address  => $channel->from_address,
-              ( $user ? ( from_user => $user ) : () ),
-              transport_data => $text,
-            });
-
-            my $rch = Synergy::ReplyChannel->new(
-              channel => $channel,
-              prefix  => ($user ? $user->username : $channel->from_address) . ": ",
-              default_address => $channel->from_address,
-              private_address => $channel->from_address,
-            );
-
-            $channel->hub->handle_event($evt, $rch);
-         }
-
-         return 0;
-      }
-    );
-  },
+  lazy      => 1,
+  builder   => '_build_stream',
 );
+
+sub _build_stream {
+  my ($channel) = @_;
+  Scalar::Util::weaken($channel);
+
+  my %arg = (
+    write_handle => \*STDOUT,
+    autoflush    => 1,
+  );
+
+  unless($channel->send_only) {
+    $arg{read_handle} = \*STDIN;
+    $arg{on_read}     = sub {
+      my ( $self, $buffref, $eof ) = @_;
+
+       while( $$buffref =~ s/^(.*\n)// ) {
+          my $text = $1;
+          chomp $text;
+
+          my $user = $channel->hub->user_directory->user_by_channel_and_address(
+            $channel,
+            $channel->from_address,
+          );
+
+          my $evt = Synergy::Event->new({
+            type => 'message',
+            text => $text,
+            was_targeted  => 1,
+            is_public     => 0,
+            from_channel  => $channel,
+            from_address  => $channel->from_address,
+            ( $user ? ( from_user => $user ) : () ),
+            transport_data => $text,
+          });
+
+          my $rch = Synergy::ReplyChannel->new(
+            channel => $channel,
+            prefix  => ($user ? $user->username : $channel->from_address) . ": ",
+            default_address => $channel->from_address,
+            private_address => $channel->from_address,
+          );
+
+          $channel->hub->handle_event($evt, $rch);
+       }
+
+       return 0;
+    };
+  }
+
+  return IO::Async::Stream->new(%arg);
+}
 
 sub start ($self) {
   $self->hub->loop->add($self->_stream);
