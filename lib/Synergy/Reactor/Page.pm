@@ -9,10 +9,10 @@ use experimental qw(signatures);
 use namespace::clean;
 use List::Util qw(first);
 
-has twilio_channel_name => (
+has page_channel_name => (
   is => 'ro',
   isa => 'Str',
-  default => 'twilio',
+  required => 1,
 );
 
 sub listener_specs {
@@ -25,9 +25,9 @@ sub listener_specs {
 }
 
 sub start ($self) {
-  my $name = $self->twilio_channel_name;
+  my $name = $self->page_channel_name;
   my $channel = $self->hub->channel_named($name);
-  confess("no twilio channel ($name) configured, cowardly giving up")
+  confess("no page channel ($name) configured, cowardly giving up")
     unless $channel;
 }
 
@@ -53,15 +53,13 @@ sub handle_page ($self, $event, $rch) {
     return;
   }
 
-  my $twilio = $self->hub->channel_named($self->twilio_channel_name);
+  my $page_channel = $self->hub->channel_named($self->page_channel_name);
 
   my $from = $event->from_user ? $event->from_user->username
                                : $event->from_address;
 
-  my $res = $twilio->send_message_to_user("$from says: $what");
-  my $str = ($res && $res->is_success) ? "page sent!"
-                                       : "Oops...something went wrong.";
-  $rch->reply($str);
+  $page_channel->send_message_to_user($user, "$from says: $what");
+  $rch->reply("Page sent!");
 }
 
 1;
