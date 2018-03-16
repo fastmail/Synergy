@@ -9,8 +9,10 @@ use namespace::clean;
 
 use Synergy::Logger '$Logger';
 
+use JSON::MaybeXS;
 use Module::Runtime qw(require_module);
 use Synergy::UserDirectory;
+use Path::Tiny ();
 use Plack::App::URLMap;
 use Synergy::HTTPServer;
 use Try::Tiny;
@@ -167,7 +169,10 @@ sub synergize {
                       : @_ == 1 ? (undef, @_)
                       : confess("weird arguments passed to synergize");
 
-  $loop //= IO::Async::Loop->new;
+  $loop //= do {
+    require IO::Async::Loop;
+    IO::Async::Loop->new;
+  };
 
   # config:
   #   directory: source file
@@ -209,6 +214,29 @@ sub synergize {
   $hub->set_loop($loop);
 
   return $hub;
+}
+
+sub _slurp_json_file ($filename) {
+  my $file = Path::Tiny::path($filename);
+  confess "config file does not exist" unless -e $file;
+  my $json = $file->slurp;
+  return JSON::MaybeXS->new->decode($json);
+}
+
+sub synergize_file {
+  my $class = shift;
+  my ($loop, $filename) = @_ == 2 ? @_
+                        : @_ == 1 ? (undef, @_)
+                        : confess("weird arguments passed to synergize_file");
+
+  my $reader  = $filename =~ /\.ya?ml\z/ ? sub { YAML::XS::LoadFile($_[0]) }
+              : $filename =~ /\.json\z/  ? \&_slurp_json_file
+              : confess "don't know how to synergize_file $filename";
+
+  return $class->synergize(
+    ($loop ? $loop : ()),
+    $reader->($filename),
+  );
 }
 
 has http => (

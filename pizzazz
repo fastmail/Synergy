@@ -4,68 +4,23 @@ use warnings;
 
 use lib 'lib';
 
-use IO::Async::Loop;
-use IO::Async::Timer::Periodic;
-use Synergy::Channel::Slack;
-use Synergy::Channel::Twilio;
-use Synergy::Reactor::SlackID;
-use Synergy::Reactor::Status;
-# use Synergy::EventHandler::SlackID;
-use Synergy::Reactor::Announce;
-use Synergy::Reactor::Clox;
-use Synergy::Reactor::LiquidPlanner;
-use Synergy::Hub;
-
 use Synergy::Logger '$Logger' => { init => {
   ident => 'pizzazz',
   facility => undef,
   to_stderr => 1,
+  log_pid   => 0,
 } };
 
-my $key = qx(cat ~/.jem.key);
-chomp $key;
+use Getopt::Long::Descriptive;
+use Synergy::Hub;
 
-my $synergy = Synergy::Hub->synergize({
-  ($ENV{SYNERGY_USERS_FILE}
-    ? (user_directory => $ENV{SYNERGY_USERS_FILE})
-    : ()),
-  channels => {
-    'slack_fm' => {
-      class   => 'Synergy::Channel::Slack',
-      api_key => $key,
-    },
-    twilio  => {
-      class   => 'Synergy::Channel::Twilio',
-      sid => '',
-      auth => '',
-      from => '',
-      numbers => {
-        1 => '',
-        61 => '',
-      },
-    },
-  },
-  reactors => {
-    clox    => { class => 'Synergy::Reactor::Clox' },
-    lp      => {
-      class => 'Synergy::Reactor::LiquidPlanner',
-      primary_nag_channel_name  => 'slack_fm',
-      aggressive_nag_channel_name => 'twilio',
-    },
-    slackid => { class => 'Synergy::Reactor::SlackID' },
-    who     => { class => 'Synergy::Reactor::Who' },
-    status  => { class => 'Synergy::Reactor::Status' },
-    announce=> {
-      class => 'Synergy::Reactor::Announce',
-      slack_channel_name => 'slack_fm',
-      announce_chan_name => 'bottest',
-    },
-    page => {
-      class => 'Synergy::Reactor::Page',
-      twilio_channel_name => 'twilio',
-    },
-  },
-  server_port => 8118,
-});
+$Logger = $Logger->proxy({ proxy_prefix => "LOG | " });
+
+my ($opt, $usage) = describe_options(
+  '%c %o',
+  [ 'config|c=s', 'config file', { required => 1 } ],
+);
+
+my $synergy = Synergy::Hub->synergize_file($opt->config);
 
 $synergy->loop->run;
