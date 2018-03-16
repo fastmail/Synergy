@@ -3,6 +3,7 @@ package Synergy::User;
 
 use Moose;
 use MooseX::StrictConstructor;
+use experimental qw(signatures);
 
 use namespace::autoclean;
 
@@ -35,11 +36,14 @@ has expandoes => (
   default => sub {  {}  },
 );
 
-sub tasks_for_expando {
-  my ($self, $name) = @_;
+sub defined_expandoes ($self) {
+  my $expandoes = $self->_expandoes;
+  my @keys = grep {; $expandoes->{$_}->@*  } keys %$expandoes;
+  return @keys;
+}
 
+sub tasks_for_expando ($self, $name) {
   return unless my $expando = $self->_expandoes->{ $name };
-
   return @$expando;
 }
 

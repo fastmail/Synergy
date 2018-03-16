@@ -9,11 +9,9 @@ use namespace::clean;
 use List::Util qw(first);
 use Net::Async::HTTP;
 use JSON 2 ();
-use Time::Duration::Parse;
 use Time::Duration;
 use Synergy::Logger '$Logger';
 use utf8;
-use Synergy::Logger '$Logger';
 
 my $JSON = JSON->new;
 
@@ -33,6 +31,7 @@ my %known = (
   '++'      => \&_handle_plus_plus,
   good      => \&_handle_good,
   gruß      => \&_handle_good,
+  expand    => \&_handle_expand,
 );
 
 has user_timers => (
@@ -459,14 +458,6 @@ sub _handle_task ($self, $event, $rch, $text) {
   $rch->reply($reply);
 }
 
-# sub lp_tasks_for_user ($self, $user, $count) {
-#   my $res = $self->http_get_for_user($user, "$LP_BASE/upcoming_tasks?limit=$count&flat=true");
-#   return unless $res->is_success;
-#
-#   my $tasks = $JSON->decode( $res->decoded_content );
-#   return $tasks;
-# }
-
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks') {
   my $res = $self->http_get_for_user(
     $user,
@@ -604,10 +595,6 @@ my @BYE = (
   "Farewell, %n.",
 );
 
-sub __pick_one ($opts) {
-  return $opts->[ rand @$opts ];
-}
-
 sub _handle_good ($self, $event, $rch, $text) {
   my $user = $event->from_user;
 
@@ -640,7 +627,7 @@ sub _handle_good ($self, $event, $rch, $text) {
                                   $stop   = 1;
                                   $end_of_day = 1; }
 
-  elsif ($what eq 'bye')        { $reply  = __pick_one(\@BYE);
+  elsif ($what eq 'bye')        { $reply  = pick_one(\@BYE);
                                   $stop   = 1;
                                   $end_of_day = 1; }
 
@@ -648,10 +635,93 @@ sub _handle_good ($self, $event, $rch, $text) {
     $reply =~ s/%n/$user->username/ge;
   }
 
-  return $rch->reply($reply) if $reply;
+  return $rch->reply($reply) if $reply and not $user->lp_auth_header;
 
   # TODO: implement expandos
+  if ($expand && $user->tasks_for_expando($expand)) {
+    $self->expand_tasks($rch, $event, $expand, "$reply  ");
+    $reply = '';
+  }
+
+  if ($stop) {
+    my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+
+    if ($res->is_success) {
+      my @timers = grep {; $_->{running} }
+                   @{ $JSON->decode( $res->decoded_content ) };
+
+      if (@timers) {
+        return $rch->reply("You've got a running timer!  You should commit it.");
+      }
+    }
+  }
+
+  # XXX: Waiting on chill
+  if ($end_of_day && (my $sy_timer = $user->timer)) {
+    my $time = parse_time_hunk('until tomorrow', $user);
+    # $sy_timer->chilltill($time);
+  }
+
+  return $rch->reply($reply) if $reply;
 }
+
+sub _handle_expand ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  my ($what) = $text =~ /^([a-z_]+)/i;
+  $self->expand_tasks($rch, $event, $what);
+}
+
+sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
+  my $user = $event->from_user;
+
+  unless ($expand_target && $expand_target =~ /\S/) {
+    my @names = sort $user->defined_expandoes;
+    return $rch->reply($prefix . "You don't have any expandoes") unless @names;
+    return $rch->reply($prefix . "Your expandoes: " . (join q{, }, @names));
+  }
+
+  my @tasks = $user->tasks_for_expando($expand_target);
+  return $rch->reply($prefix . "You don't have an expando for <$expand_target>")
+    unless @tasks;
+
+  my $parent = $CONFIG->{liquidplanner}{package}{recurring};
+  my $desc = $rch->channel->describe_event($event);
+
+  my (@ok, @fail);
+  for my $task (@tasks) {
+    my $payload = { task => {
+      name        => $task,
+      parent_id   => $parent,
+      assignments => [ { person_id => $user->lp_id } ],
+      description => $desc,
+    } };
+
+    $Logger->log([ "creating LP task: %s", $payload ]);
+
+    my $res = $self->http_post_for_user($user,
+      "$LP_BASE/tasks",
+      Content_Type => 'application/json',
+      Content => $JSON->encode($payload),
+    );
+    if ($res->is_success) {
+      push @ok, $task;
+    } else {
+      $Logger->log([ "error creating LP task: %s", $res->decoded_content ]);
+      push @fail, $task;
+    }
+  }
+  my $reply;
+  if (@ok) {
+    $reply = "I created your $expand_target tasks: " . join(q{; }, @ok);
+    $reply .= "  Some tasks failed to create: " . join(q{; }, @fail) if @fail;
+  } elsif (@fail) {
+    $reply = "Your $expand_target tasks couldn't be created.  Sorry!";
+  } else {
+    $reply = "Something impossible happened.  How exciting!";
+  }
+  $rch->reply($prefix . $reply);
+}
+
 
 sub resolve_name ($self, $name, $who) {
   return unless $name;

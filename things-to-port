@@ -138,18 +138,6 @@ sub lp_timer_for_user {
   return $timer;
 }
 
-sub lp_tasks_for_user {
-  my ($self, $user, $count) = @_;
-  return unless my $lp_ua = $user->lp_ua;
-
-  my $res = $lp_ua->get("$LP_BASE/upcoming_tasks?limit=$count&flat=true");
-  return unless $res->is_success;
-
-  my $tasks = $JSON->decode( $res->decoded_content );
-
-  return $tasks;
-}
-
 has last_msgs => (
   is => 'ro',
   init_arg => undef,
@@ -269,38 +257,6 @@ sub SAID_shows {
   return $self->SAID_chill({ %$arg, what => 'until tomorrow' })
     if $arg->{what} =~ /\s*over\s*[+!.]*\s*/i;
   return -1;
-}
-
-has _date_parser => (
-  is => 'ro',
-  default => sub {
-    DateTime::Format::Natural->new(
-      prefer_future => 1,
-      time_zone     => 'America/New_York',
-    );
-  },
-);
-
-sub  _parse_time_hunk {
-  my ($self, $hunk) = @_;
-
-  my ($prep, $rest) = split ' ', $hunk, 2;
-
-  if ($prep eq 'for') {
-    my $dur;
-    $rest =~ s/^an?\s+/1 /;
-    my $ok = eval { $dur = parse_duration($rest); 1 };
-    return unless $ok;
-    return time + $dur;
-  }
-
-  if ($prep eq 'until') {
-    my $dt = eval { $self->_date_parser->parse_datetime($rest) };
-    return unless $dt;
-    return $dt->epoch;
-  }
-
-  return;
 }
 
 sub SAID_chill {
