@@ -12,11 +12,10 @@ use Sub::Exporter -setup => [ qw(
   parse_time_hunk
   parse_date_for_user
   pick_one
-
 ) ];
 
 
-sub  parse_time_hunk ($hunk, $user) {
+sub parse_time_hunk ($hunk, $user) {
   my ($prep, $rest) = split ' ', $hunk, 2;
 
   if ($prep eq 'for') {
@@ -60,3 +59,4 @@ sub pick_one ($opts) {
   return $opts->[ rand @$opts ];
 }
 
+1;

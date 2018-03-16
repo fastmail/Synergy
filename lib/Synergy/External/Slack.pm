@@ -219,6 +219,7 @@ sub load_users ($self) {
     $self->_set_users({
       map { $_->{id} => $_ } $res->{members}->@*
     });
+    warn "Users loaded\n";
   });
 }
 
@@ -230,6 +231,7 @@ sub load_channels ($self) {
     $self->_set_channels({
       map { $_->{id}, $_ } $res->{channels}->@*
     });
+    warn "Channels loaded\n";
   });
 }
 
@@ -239,6 +241,7 @@ sub load_dm_channels ($self) {
     $self->_set_dm_channels({
       map { $_->{user}, $_->{id} } $res->{ims}->@*
     });
+    warn "DM Channels loaded\n";
   });
 }
 

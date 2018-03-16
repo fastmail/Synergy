@@ -19,7 +19,7 @@ has chilltill => (
 );
 
 after clear_chilltill => sub {
-  POE::Kernel->yield('save_state');
+ # XXX - save state
 };
 
 sub chilling {

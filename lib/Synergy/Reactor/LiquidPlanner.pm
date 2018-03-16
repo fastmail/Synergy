@@ -11,6 +11,8 @@ use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration;
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(parse_time_hunk);
+use DateTime;
 use utf8;
 
 my $JSON = JSON->new;
@@ -52,6 +54,7 @@ my %KNOWN = (
   good      => \&_handle_good,
   gruß      => \&_handle_good,
   expand    => \&_handle_expand,
+  chill     => \&_handle_chill,
 );
 
 has user_timers => (
@@ -98,6 +101,11 @@ has aggressive_nag_channel_name => (
 sub listener_specs {
   return (
     {
+      name      => "you're-back",
+      method    => 'see_if_back',
+      predicate => sub { 1 },
+    },
+    {
       name      => "liquid planner",
       method    => "dispatch_event",
       exclusive => 1,
@@ -141,6 +149,22 @@ sub record_utterance ($self, $event, $rch) {
 
   $self->set_last_utterance($key, $event->text);
   return;
+}
+
+sub see_if_back ($self, $event, $rch) {
+  # We're not going to support "++ that" by people who are not users.
+  return unless $event->from_user;
+
+  my $timer = $event->from_user->timer || return;
+
+  if ($timer->chill_until_active
+    and $event->text !~ /\bzzz\b/i
+  ) {
+    $timer->chill_until_active(0);
+    $timer->clear_chilltill;
+    $rch->reply("You're back!  No longer chilling.")
+      if $timer->is_business_hours;
+  }
 }
 
 has projects => (
@@ -717,10 +741,9 @@ sub _handle_good ($self, $event, $rch, $text) {
     }
   }
 
-  # XXX: Waiting on chill
   if ($end_of_day && (my $sy_timer = $user->timer)) {
     my $time = parse_time_hunk('until tomorrow', $user);
-    # $sy_timer->chilltill($time);
+    $sy_timer->chilltill($time);
   }
 
   return $rch->reply($reply) if $reply;
@@ -896,5 +919,49 @@ sub lp_timer_for_user ($self, $user) {
   return $timer;
 }
 
+sub _handle_chill ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+
+  return $rch->reply($ERR_NO_LP)
+    unless $user && $user->lp_auth_header;
+
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  if ($res->is_success) {
+    my @timers = grep {; $_->{running} }
+                 @{ $JSON->decode( $res->decoded_content ) };
+
+    if (@timers) {
+      return $rch->reply("You've got a running timer!  Use 'commit' instead.");
+    }
+  } # XXX - Error handling? -- alh, 2018-03-16
+
+  my $sy_timer = $user->timer;
+
+  $text =~ s/[.!?]+\z// if length $text;
+
+  if (! length $text or $text =~ /^until\s+I'm\s+back\s*$/i) {
+    $sy_timer->chill_until_active(1);
+    # XXX - Save state
+    return $rch->reply("Okay, I'll stop pestering you until you've active again.");
+  }
+
+  my $time = parse_time_hunk($text, $user);
+  return $rch->reply("Sorry, I couldn't parse '$text' into a time")
+    unless $time;
+
+  my $when = DateTime->from_epoch(
+    time_zone => $user->time_zone,
+    epoch     => $time,
+  )->format_cldr("yyyy-MM-dd HH:mm zzz");
+
+  if ($time <= time) {
+    $rch->reply("That sounded like you want to chill until the past ($when).");
+    return;
+  }
+
+  $sy_timer->chilltill($time);
+  # XXX - Save state
+  $rch->reply("Okay, no more nagging until $when");
+}
 
 1;
