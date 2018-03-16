@@ -36,6 +36,11 @@ sub handle_page ($self, $event, $rch) {
 
   my ($who, $what) = $event->text =~ m/^page\s+([a-z]+):\s+(.*)/i;
 
+  unless (length $who and length $what) {
+    $rch->reply("usage: page USER: MESSAGE");
+    return;
+  }
+
   my $user = $self->hub->user_directory->user_by_name($who);
 
   unless ($user) {
