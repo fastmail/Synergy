@@ -121,7 +121,9 @@ sub handle_event ($self, $event, $rch) {
 
       $error =~ s/\n.*//ms;
 
-      $rch->reply("My $reactor system crashed while handling your message.  Sorry!");
+      my $rname = $reactor->name;
+
+      $rch->reply("My $rname reactor crashed while handling your message.  Sorry!");
       $Logger->log([
         "error with %s listener on %s: %s",
         $hit->[1],
