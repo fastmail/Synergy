@@ -58,6 +58,14 @@ my %KNOWN = (
   shows     => \&_handle_shows,
   "show's"  => \&_handle_shows,
   showtime  => \&_handle_showtime,
+  commit    => \&_handle_commit,
+  abort     => \&_handle_abort,
+  start     => \&_handle_start,
+  stop      => \&_handle_stop,
+  resume    => \&_handle_resume,
+  restart   => \&_handle_resume,
+  reset     => \&_handle_reset,
+  done      => \&_handle_done,
 );
 
 has user_timers => (
@@ -122,6 +130,7 @@ sub listener_specs {
         return 1 if $KNOWN{$what};
         return 1 if $what =~ /^g'day/;    # stupid, but effective
         return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
+        return 1 if $what =~ /^done,/;    # ugh
         return;
       }
     },
@@ -322,6 +331,7 @@ sub dispatch_event ($self, $event, $rch) {
   $text = "good day_au" if $text =~ /\A\s*g'day(?:,?\s+mate)?[1!.?]*\z/i;
   $text = "good day_de" if $text =~ /\Agruß gott[1!.]?\z/i;
   $text =~ s/\Ago{3,}d(?=\s)/good/;
+  $text =~  s/^done, /done /;   # ugh
 
   my ($what, $rest) = $text =~ /^([^\s]+)\s*(.*)/;
   $what &&= lc $what;
@@ -913,7 +923,7 @@ sub lp_timer_for_user ($self, $user) {
   return -1 unless $res->is_success; # XXX WARN
 
   my ($timer) = grep {; $_->{running} }
-                @{ $JSON->decode( $res->decoded_content ) };
+                $JSON->decode( $res->decoded_content )->@*;
 
   if ($timer) {
     $user->last_lp_timer_id($timer->{id});
@@ -996,6 +1006,305 @@ sub _handle_chill ($self, $event, $rch, $text) {
   $sy_timer->chilltill($time);
   # XXX - Save state
   $rch->reply("Okay, no more nagging until $when");
+}
+
+sub _handle_commit ($self, $event, $rch, $comment) {
+  my $user = $event->from_user;
+  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+
+  my %meta;
+  while ($comment =~ s/(?:\A|\s+)(DONE|STOP|CHILL)\z//) {
+    $meta{$1}++;
+  }
+
+  $meta{DONE} = 1 if $comment =~ /\Adone\z/i;
+  $meta{STOP} = 1 if $meta{DONE} or $meta{CHILL};
+
+  my $lp_timer = $self->lp_timer_for_user($user);
+
+  return $rch->reply("You don't seem to have a running timer.")
+    unless $lp_timer && ref $lp_timer; # XXX <-- stupid return type
+
+  my $sy_timer = $user->timer;
+  return $rch->reply("You don't timer-capable.") unless $sy_timer;
+
+  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$lp_timer->{item_id}");
+
+  unless ($task_res->is_success) {
+    return $rch->reply("I couldn't log the work because I couldn't find the current task's activity id.");
+  }
+
+  my $task = $JSON->decode($task_res->decoded_content);
+  my $activity_id = $task->{activity_id};
+
+  unless ($activity_id) {
+    return $rch->reply("I couldn't log the work because the task doesn't have a defined activity.");
+  }
+
+  my $restart = $meta{STOP} ? 0 : 1;
+
+  my $content = $JSON->encode({
+    is_done => $meta{DONE} ? \1 : \0,
+    comment => $comment,
+    restart => \$restart,
+    activity_id => $activity_id,
+  });
+
+  if ($meta{STOP} and ! $sy_timer->chilling) {
+    if ($meta{CHILL}) {
+      $sy_timer->chill_until_active(1);
+    } else {
+      # Don't complain 30s after we stop work!  Give us a couple minutes to
+      # move on to the next task. -- rjbs, 2015-04-21
+      $sy_timer->chilltill(time + 300);
+    }
+  }
+
+  my $commit_res = $self->http_post_for_user(
+    $user,
+    "$LP_BASE/tasks/$lp_timer->{item_id}/timer/commit",
+    Content => $content,
+    Content_Type => 'application/json',
+  );
+
+  unless ($commit_res->is_success) {
+    $Logger->log([ "bad timer commit response: %s", $commit_res->as_string ]);
+    return $rch->reply("I couldn't commit your work, sorry.");
+  }
+
+  $sy_timer->clear_last_nag;
+
+  if ($restart) {
+    my $start_res = $self->http_post_for_user(
+      $user,
+      "$LP_BASE/tasks/$lp_timer->{item_id}/timer/start",
+    );
+    $meta{RESTARTFAIL} = ! $start_res->is_success;
+  }
+
+  my $also
+    = $meta{DONE}  ? " and marked the task done"
+    : $meta{CHILL} ? " stopped the timer, and will chill until you're back"
+    : $meta{STOP}  ? " and stopped the timer"
+    :                "";
+
+  my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
+  $rch->reply("Okay, I've committed $time of work$also.");
+}
+
+
+sub _handle_abort ($self, $event, $rch, $text) {
+  return $rch->reply("I didn't understand your abort request.")
+    unless $text eq 'timer';
+
+  my $user = $event->from_user;
+  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+
+  return $rch->reply("Something went wrong") unless $res->is_success;
+
+  my ($timer) = grep {; $_->{running} }
+                $JSON->decode( $res->decoded_content )->@*;
+
+  return $rch->reply("You don't have an active timer to abort.")
+    unless $timer;
+
+  my $stop_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/stop");
+  my $clr_res  = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/clear");
+
+  if ($stop_res->is_success and $clr_res->is_success) {
+    $user->timer->clear_last_nag;
+    $rch->reply("Okay, I stopped and cleared your active timer.");
+  } else {
+    $rch->reply("Something went wrong aborting your timer.");
+  }
+}
+
+sub _handle_start ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+
+  if ($text =~ /\A[1-9]+\z/) {
+    # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
+    # TODO: print the description of the task instead of its number -- rjbs,
+    # 2016-01-25
+    my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$text/timer/start");
+    my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
+
+    if ($start_res->is_success && $timer->{running}) {
+      $user->last_lp_timer_id($timer->{id});
+
+      my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$timer->{item_id}");
+      my $name = $task_res->is_success
+               ? $JSON->decode($task_res->decoded_content)->{name}
+               : '??';
+
+      return $rch->reply("Started task: $name ($LINK_BASE$timer->{item_id})");
+    } else {
+      return $rch->reply("I couldn't start the timer for $text.");
+    }
+  } elsif ($text eq 'next') {
+    my $lp_tasks = $self->lp_tasks_for_user($user, 1);
+
+    unless ($lp_tasks && $lp_tasks->[0]) {
+      return $rch->reply("I can't get your tasks to start the next one.");
+    }
+
+    my $task = $lp_tasks->[0];
+    my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+    my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
+
+    if ($start_res->is_success && $timer->{running}) {
+      $user->last_lp_timer_id($timer->{id});
+      return $rch->reply("Started task: $task->{name} ($LINK_BASE$task->{id})");
+    } else {
+      return $rch->reply("I couldn't start your next task.");
+    }
+  }
+
+  return -1;
+}
+
+# XXX move this into User object?
+sub last_lp_timer_for_user ($self, $user) {
+  return unless $user->lp_auth_header;
+  return unless my $lp_timer_id = $user->last_lp_timer_id;
+
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  return unless $res->is_success;
+
+  my ($timer) = grep {; $_->{id} eq $lp_timer_id }
+                $JSON->decode( $res->decoded_content )->@*;
+
+  return $timer;
+}
+
+sub _handle_resume ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+
+  my $lp_timer = $self->lp_timer_for_user($user);
+
+  if ($lp_timer && ref $lp_timer) {
+    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$lp_timer->{item_id}");
+
+    unless ($task_res->is_success) {
+      return $rch->reply("You already have a running timer (but I couldn't figure out its task...)");
+    }
+
+    my $task = $JSON->decode($task_res->decoded_content);
+    return $rch->reply("You already have a running timer ($task->{name})");
+  }
+
+  my $last_lp_timer = $self->last_lp_timer_for_user($user);
+
+  unless ($last_lp_timer) {
+    return $rch->reply("I'm not aware of any previous timer you had running. Sorry!");
+  }
+
+  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$last_lp_timer->{item_id}");
+
+  unless ($task_res->is_success) {
+    return $rch->reply("I found your timer but I couldn't figure out its task...");
+  }
+
+  my $task = $JSON->decode($task_res->decoded_content);
+  my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+
+  unless ($res->is_success) {
+    return $rch->reply("I failed to resume the timer for $task->{name}, sorry!");
+  }
+
+  return $rch->reply("Timer resumed. Task is: $task->{name}");
+}
+
+
+sub _handle_stop ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+
+  return $rch->reply("Quit it!  I'm telling mom!")
+    if $text =~ /\Ahitting yourself[.!]*\z/;
+
+  return $rch->reply("I didn't understand your stop request.")
+    unless $text eq 'timer';
+
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  return $rch->reply("Something went wrong") unless $res->is_success;
+
+  my ($timer) = grep {; $_->{running} }
+                $JSON->decode( $res->decoded_content )->@*;
+
+  return $rch->reply("You don't have any active timers to stop.") unless $timer;
+
+  my $stop_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/stop");
+  return $rch->reply("I couldn't stop your active timer.")
+    unless $stop_res->is_success;
+
+  $user->timer->clear_last_nag;
+  return $rch->reply("Okay, I stopped your active timer.");
+}
+
+sub _handle_done ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+
+  my $next;
+  my $chill;
+  if ($text) {
+    my @things = split /\s*,\s*/, $text;
+    for (@things) {
+      if ($_ eq 'next')  { $next  = 1; next }
+      if ($_ eq 'chill') { $chill = 1; next }
+
+      return -1;
+    }
+
+    return $rch->reply("No, it's nonsense to chill /and/ start a new task!")
+      if $chill && $next;
+  }
+
+  $self->_handle_commit($event, $rch, 'DONE');
+  $self->_handle_start($event, $rch, 'next') if $next;
+  $self->_handle_chill($event, $rch, "until I'm back") if $chill;
+  return;
+}
+
+sub _handle_reset ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+
+  return $rch->reply("I didn't understand your reset request. (try 'reset timer')")
+    unless ($text // 'timer') eq 'timer';
+
+  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+
+  return $rch->reply("Something went wrong") unless $res->is_success;
+
+  my ($timer) = grep {; $_->{running} }
+                $JSON->decode( $res->decoded_content )->@*;
+
+  $rch->reply("You don't have an active timer to abort.") unless $timer;
+
+  my $task_id = $timer->{item_id};
+  my $clr_res  = $self->http_post_for_user($user, "$LP_BASE/tasks/$task_id/timer/clear");
+
+  return $rch->reply("Something went wrong resetting your timer.")
+    unless $clr_res->is_success;
+
+  $user->timer->clear_last_nag;
+
+
+  my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task_id/timer/start");
+  my $restart_timer = eval { $JSON->decode( $start_res->decoded_content ); };
+
+  if ($start_res->is_success && $restart_timer->{running}) {
+    $user->last_lp_timer_id($timer->{id});
+    $rch->reply("Okay, I cleared your active timer but left it running.");
+  } else {
+    $rch->reply("Okay, I cleared your timer but couldn't restart it...sorry!");
+  }
 }
 
 1;
