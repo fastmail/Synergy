@@ -8,6 +8,7 @@ with 'Synergy::Role::Reactor';
 use experimental qw(signatures);
 use namespace::clean;
 
+use IO::Async::Timer::Absolute;
 use List::Util qw(first);
 use Time::Duration::Parse;
 use Synergy::Util qw(pare_date_for_user);
@@ -21,15 +22,34 @@ sub listener_specs {
   };
 }
 
+has page_channel_name => (
+  is  => 'ro',
+  isa => 'Str',
+  predicate => 'has_page_channel_name',
+);
+
+sub start ($self) {
+  if ($self->has_page_channel_name) {
+    my $name    = $self->page_channel_name;
+    my $channel = $self->hub->channel_named($name);
+    confess("no channel named $name, cowardly giving up")
+      unless $channel;
+  }
+}
+
 sub handle_remind ($self, $event, $rch) {
   my $text = $event->text;
 
-  unless ($event->user_from) {
+  # XXX: I think $rch->reply should do this. -- rjbs, 2018-03-16
+  $event->mark_handled;
+
+  unless ($event->from_user) {
     $rch->reply("I don't know who you are, so I'm not going to do that.");
     return;
   }
 
-  my ($who, $prep, $dur_str, $want_page, $rest) = $arg->{what} =~ qr/\A
+  $text =~ s/\Aremind\s+//;
+  my ($who, $prep, $dur_str, $want_page, $rest) = $text =~ qr/\A
     \s*
     (\S+)    # "me" or a nick
     \s+
@@ -51,42 +71,55 @@ sub handle_remind ($self, $event, $rch) {
     return $fail->();
   }
 
-  $who = $self->hub->user_directory_resolve_name($who, $event->user_from);
+  if ($want_page && ! $self->page_channel_name) {
+    $rch->reply("Sorry, I can't send pages.");
+    return;
+  }
+
+  my $to_user = $self->hub->user_directory
+                          ->resolve_name($who, $event->from_user);
+
+  unless ($to_user) {
+    $rch->reply(qq{Sorry, I don't know who "$who" is.});
+    return;
+  }
 
   my $time;
   if ($prep eq 'in') {
     my $dur;
     $dur_str =~ s/^an?\s+/1 /;
     my $ok = eval { $dur = parse_duration($dur_str); 1 };
-    return $fail->();
+    return $fail->() unless $ok;
     $time = time + $dur;
   } elsif ($prep eq 'at') {
-    my $dt = eval { parse_date_for_user($dur_str, $event->user_from) };
-    return $fail->();
+    my $dt = eval { parse_date_for_user($dur_str, $event->from_user) };
+    return $fail->() unless $dt;
     $time = $dt->epoch;
   } else {
     return $fail->();
   }
 
   if ($time <= time) {
-    $self->reply("That sounded like you want a reminder sent in the past.", $arg);
+    $self->reply("That sounded like you want a reminder sent in the past.");
     return;
   }
 
-  my $target = $who->username eq $arg->{who} ? 'you' : $who->username;
+  my $target = $to_user->username eq $event->from_user->username
+             ? 'you'
+             : $who->username;
 
   $self->add_reminder({
     when  => $time,
-    who   => $who->username,
-    from  => $event->from_user->username,
     body  => $rest,
-    # want_page     => !! $want_page,
-    channel => $event->from_channel,
-  );
+    want_page => !! $want_page,
+    from_username   => $event->from_user->username,
+    to_channel_name => $event->from_channel->name,
+    to_username     => $to_user->username,
+  });
 
-  $self->reply(
+  $rch->reply(
     # XXX: use a better time formatter here -- rjbs, 2018-03-16
-    sprintf "Okay, I'll remind %s at %s.", $who->username, localtime $time
+    sprintf "Okay, I'll remind %s at %s.", $target, scalar localtime $time
   );
 
   return;
@@ -109,17 +142,18 @@ sub add_reminder ($self, $reminder) {
   my @reminders = sort {; $a->{when} <=> $b->{when} }
                   ($reminder, $self->reminders);
 
-  my $sooner = $reminders[0]{when};
+  my $soonest = $reminders[0]{when};
+
+  $self->_set_reminders(\@reminders);
 
   my $timer = $self->_next_timer;
   return if $timer && $timer->[0] == $soonest;
 
   $self->_clear_timer;
-
   $self->_setup_next_timer;
 }
 
-sub _clear_timer ($self);
+sub _clear_timer ($self) {
   my $timer = $self->_next_timer;
   return unless $timer;
 
@@ -159,10 +193,14 @@ sub _send_due_reminders ($self) {
   my @keep  = grep {; $_->{when} >  $boundary } @reminders;
 
   for my $reminder (@due) {
-    $self->hub->channel_named($_->{channel})->send_message_to_user(
-      $self->hub->user_directory->user_named($_->{who}),
-      "Reminder from $_->{from}: $_->{body}",
-    );
+    my @to_channels = $reminder->{to_channel_name};
+    push @to_channels, $self->page_channel_name if $reminder->{want_page};
+    for my $channel_name (@to_channels) {
+      $self->hub->channel_named($channel_name)->send_message_to_user(
+        $self->hub->user_directory->user_named($reminder->{to_username}),
+        "Reminder from $reminder->{from_username}: $reminder->{body}",
+      );
+    }
   }
 
   $self->_clear_timer;
