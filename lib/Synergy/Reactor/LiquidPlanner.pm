@@ -55,6 +55,9 @@ my %KNOWN = (
   gruß      => \&_handle_good,
   expand    => \&_handle_expand,
   chill     => \&_handle_chill,
+  shows     => \&_handle_shows,
+  "show's"  => \&_handle_shows,
+  showtime  => \&_handle_showtime,
 );
 
 has user_timers => (
@@ -917,6 +920,37 @@ sub lp_timer_for_user ($self, $user) {
   }
 
   return $timer;
+}
+
+sub _handle_showtime ($self, $event, $rch, $text) {
+  my $user  = $event->from_user;
+  my $timer = $user && $user->has_lp_id ? $user->timer : undef;
+
+  return $rch->reply($ERR_NO_LP)
+    unless $timer;
+
+  if ($timer->has_chilltill and $timer->chilltill > time) {
+    if ($timer->is_business_hours) {
+      $rch->reply("Okay, back to work!");
+    } else {
+      $rch->reply("Back to normal business hours, then.");
+    }
+  } elsif ($timer->is_business_hours) {
+    $rch->reply("I thought it was already showtime!");
+  } else {
+    $timer->start_showtime;
+    return $rch->reply("Okay, business hours extended!");
+  }
+
+  $timer->clear_chilltill;
+  return;
+}
+
+sub _handle_shows ($self, $event, $rch, $text) {
+  return $self->_handle_chill($event, $rch, 'until tomorrow')
+    if $text =~ /\s*over\s*[+!.]*\s*/i;
+
+  return;
 }
 
 sub _handle_chill ($self, $event, $rch, $text) {
