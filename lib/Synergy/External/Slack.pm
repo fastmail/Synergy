@@ -58,28 +58,14 @@ has _channels_by_name => (
 );
 
 has dm_channels => (
-  is => 'ro',
-  isa => 'HashRef',
-  writer => '_set_dm_channels',
+  is      => 'ro',
+  isa     => 'HashRef',
+  traits  => [ 'Hash' ],
+  writer  => '_set_dm_channels',
   default => sub { {} },
-);
-
-has _dm_channels_ids_by_user => (
-  is              => 'ro',
-  isa             => 'HashRef',
-  traits          => [ 'Hash' ],
-  lazy            => 1,
-  clearer         => '_clear_dm_cache',
-  handles         => {
-    dm_channel_for => 'get',
-  },
-  default         => sub ($self) {
-    my %by_user;
-    for my $k (keys $self->dm_channels->%*) {
-      $by_user{ $self->dm_channels->{$k} } = $k;
-    }
-
-    return \%by_user;
+  handles => {
+    dm_channel_for      => 'get',
+    is_known_dm_channel => 'exists',
   },
 );
 
@@ -198,23 +184,28 @@ sub dm_channel_for_user ($self, $user, $channel) {
 
 sub dm_channel_for_address ($self, $slack_id) {
   my $channel_id = $self->dm_channel_for($slack_id);
-  return $channel_id if $channel_id;
+  return $channel_id if $self->is_known_dm_channel($slack_id);
 
   # look it up!
-  my $res = $self->api_call('im.open', {
-    user => $slack_id,
-  })->get;
-
+  my $res = $self->api_call('im.open', { user => $slack_id })->get;
   return unless $res->is_success;
 
   my $json = decode_json($res->decoded_content);
-  return unless $json->{ok};
 
-  $channel_id = $json->{channel}->{id};
-  $self->dm_channels->{$channel_id} = $slack_id;
+  $channel_id = $json->{ok}                       ? $json->{channel}->{id}
+              : $json->{error} eq 'cannot_dm_bot' ? undef
+              : '0E0';
 
-  $self->_clear_dm_cache;
+  if (defined $channel_id && $channel_id eq '0E0') {
+    $Logger->log([
+      "weird error from slack: %s",
+      $json,
+    ]);
+    return;
+  }
 
+  # don't look it up again!
+  $self->dm_channels->{$slack_id} = $channel_id;
   return $channel_id;
 }
 
@@ -246,7 +237,7 @@ sub load_dm_channels ($self) {
   $self->api_call('im.list', {})->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
     $self->_set_dm_channels({
-      map { $_->{id}, $_->{user} } $res->{ims}->@*
+      map { $_->{user}, $_->{id} } $res->{ims}->@*
     });
   });
 }
