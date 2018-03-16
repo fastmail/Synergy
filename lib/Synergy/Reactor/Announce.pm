@@ -8,13 +8,13 @@ use experimental qw(signatures);
 use Carp;
 use namespace::clean;
 
-has slack_channel_name => (
+has to_channel_name => (
   is => 'ro',
   isa => 'Str',
   required => 1,
 );
 
-has announce_chan_name => (
+has to_address => (
   is => 'ro',
   isa => 'Str',
   required => 1,
@@ -29,33 +29,30 @@ sub listener_specs {
 }
 
 sub start ($self) {
-  my $name = $self->slack_channel_name;
+  my $name = $self->to_channel_name;
   my $channel = $self->hub->channel_named($name);
-  confess("no slack channel named $name, cowardly giving up")
+  confess("no channel named $name, cowardly giving up")
     unless $channel;
 }
-
 
 sub handle_announce ($self, $event, $rch) {
   $event->mark_handled;
 
-  # TODO: remove this once new synergy can sms
-  if (0 && $event->from_channel->can('slack')) {
-    $rch->reply("wtf, mate? announce it yourself");
+  if ($event->from_channel->name eq $self->to_channel_name) {
+    $rch->reply("You're already using the target system!");
     return 1;
   }
 
   my $to_send = $event->text =~ s/^announce:?\s*//r;
 
-  # XXX fix this
-  my $channel_id = $event->from_channel->slack->channel_named($self->announce_chan_name)->{id};
-
-  my $slack = $self->hub->channel_named($self->slack_channel_name);
-
   my $from = $event->from_user ? $event->from_user->username
                                : $event->from_address;
 
-  $slack->send_text($channel_id, "$from says: $to_send");
+  $self->hub->channel_named($self->to_channel_name)
+            ->send_text($self->to_address, "$from says: $to_send");
+
+  $rch->reply("Sent!");
+  return 1;
 }
 
 1;
