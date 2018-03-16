@@ -76,22 +76,25 @@ has aggressive_nag_channel_name => (
 );
 
 sub listener_specs {
-  return {
-    name      => "liquid planner",
-    method    => "dispatch_event",
-    predicate => sub ($self, $event) {
-      return unless $event->type eq 'message';
-      return unless $event->was_targeted;
+  return (
+    {
+      name      => "liquid planner",
+      method    => "dispatch_event",
+      exclusive => 1,
+      predicate => sub ($self, $event) {
+        return unless $event->type eq 'message';
+        return unless $event->was_targeted;
 
-      my ($what) = $event->text =~ /^([^\s]+)\s?/;
-      $what &&= lc $what;
+        my ($what) = $event->text =~ /^([^\s]+)\s?/;
+        $what &&= lc $what;
 
-      return 1 if $KNOWN{$what};
-      return 1 if $what =~ /^g'day/;    # stupid, but effective
-      return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
-      return;
+        return 1 if $KNOWN{$what};
+        return 1 if $what =~ /^g'day/;    # stupid, but effective
+        return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
+        return;
+      }
     }
-  };
+  );
 }
 
 has projects => (
