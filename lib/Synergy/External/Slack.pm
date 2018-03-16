@@ -209,6 +209,27 @@ sub dm_channel_for_address ($self, $slack_id) {
   return $channel_id;
 }
 
+has loaded_users => (is => 'rw', isa => 'Bool');
+has loaded_channels => (is => 'rw', isa => 'Bool');
+has loaded_dm_channels => (is => 'rw', isa => 'Bool');
+
+has _is_ready => (is => 'rw', isa => 'Bool');
+
+sub is_ready ($self) {
+  return 1 if $self->_is_ready;
+
+  # Stupid micro-opt
+  if (
+       $self->loaded_users
+    && $self->loaded_channels
+    && $self->loaded_dm_channels
+  ) {
+    $self->_is_ready(1);
+  }
+
+  return $self->_is_ready;
+}
+
 sub load_users ($self) {
   $self->api_call('users.list', {
     presence => 0,
@@ -220,6 +241,8 @@ sub load_users ($self) {
       map { $_->{id} => $_ } $res->{members}->@*
     });
     warn "Users loaded\n";
+
+    $self->loaded_users(1);
   });
 }
 
@@ -232,6 +255,8 @@ sub load_channels ($self) {
       map { $_->{id}, $_ } $res->{channels}->@*
     });
     warn "Channels loaded\n";
+
+    $self->loaded_channels(1);
   });
 }
 
@@ -242,6 +267,8 @@ sub load_dm_channels ($self) {
       map { $_->{user}, $_->{id} } $res->{ims}->@*
     });
     warn "DM Channels loaded\n";
+
+    $self->loaded_dm_channels(1);
   });
 }
 

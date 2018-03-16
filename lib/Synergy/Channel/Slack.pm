@@ -63,6 +63,12 @@ sub start ($self) {
     # XXX dispatch these better
     return unless $event->{type} eq 'message';
 
+    unless ($self->slack->is_ready) {
+      warn "Ignoring message, we aren't ready yet\n";
+
+      return;
+    }
+
     if ($event->{subtype}) {
       $Logger->log([
         "refusing to respond to message with subtype %s",
