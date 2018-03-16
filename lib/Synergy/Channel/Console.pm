@@ -94,7 +94,8 @@ sub send_message_to_user ($self, $user, $text) {
 }
 
 sub send_text ($self, $address, $text) {
-  $self->_stream->write(">>> $address > $text\n");
+  my $name = $self->name;
+  $self->_stream->write(">>> $name!$address > $text\n");
   return;
 }
 
