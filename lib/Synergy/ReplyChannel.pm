@@ -30,12 +30,12 @@ has prefix => (
 );
 
 sub reply ($self, $text) {
-  $Logger->log("Sending $text to someone");
+  $Logger->log_debug("sending $text to someone");
   return $self->channel->send_text($self->default_address, $self->prefix . $text);
 }
 
 sub private_reply ($self, $text) {
-  $Logger->log("Sending $text to someone");
+  $Logger->log_debug("sending $text to someone");
   return $self->channel->send_text($self->private_address, $self->prefix . $text);
 }
 
