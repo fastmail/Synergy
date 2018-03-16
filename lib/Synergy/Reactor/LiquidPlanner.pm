@@ -21,7 +21,7 @@ my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
 my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
 my $CONFIG;  # XXX use real config
 
-my %known = (
+my %KNOWN = (
   timer     => \&_handle_timer,
   task      => \&_handle_task,
   tasks     => \&_handle_tasks,
@@ -86,7 +86,7 @@ sub listener_specs {
       my ($what) = $event->text =~ /^([^\s]+)\s?/;
       $what &&= lc $what;
 
-      return 1 if $known{$what};
+      return 1 if $KNOWN{$what};
       return 1 if $what =~ /^g'day/;    # stupid, but effective
       return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
       return;
@@ -258,7 +258,7 @@ sub dispatch_event ($self, $event, $rch) {
     return 1;
   }
 
-  return $known{$what}->($self, $event, $rch, $rest)
+  return $KNOWN{$what}->($self, $event, $rch, $rest)
 }
 
 sub http_get_for_user ($self, $user, @arg) {
