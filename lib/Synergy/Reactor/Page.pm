@@ -12,7 +12,7 @@ use List::Util qw(first);
 has twilio_channel_name => (
   is => 'ro',
   isa => 'Str',
-  required => 1,
+  default => 'twilio',
 );
 
 sub listener_specs {
