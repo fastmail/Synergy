@@ -9,6 +9,7 @@ use IO::Async::Timer::Periodic;
 use Synergy::Channel::Slack;
 use Synergy::Channel::Twilio;
 use Synergy::Reactor::SlackID;
+use Synergy::Reactor::Status;
 # use Synergy::EventHandler::SlackID;
 use Synergy::Reactor::Announce;
 use Synergy::Reactor::Clox;
@@ -53,6 +54,7 @@ my $synergy = Synergy::Hub->synergize({
     },
     slackid => { class => 'Synergy::Reactor::SlackID' },
     who     => { class => 'Synergy::Reactor::Who' },
+    status  => { class => 'Synergy::Reactor::Status' },
     announce=> {
       class => 'Synergy::Reactor::Announce',
       slack_channel_name => 'slack_fm',
