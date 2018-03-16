@@ -66,6 +66,7 @@ my %KNOWN = (
   restart   => \&_handle_resume,
   reset     => \&_handle_reset,
   done      => \&_handle_done,
+  spent     => \&_handle_spent,
 );
 
 has user_timers => (
@@ -1305,6 +1306,145 @@ sub _handle_reset ($self, $event, $rch, $text) {
   } else {
     $rch->reply("Okay, I cleared your timer but couldn't restart it...sorry!");
   }
+}
+
+sub _handle_spent ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+
+  return $rch->reply($ERR_NO_LP)
+    unless $user && $user->lp_auth_header;
+
+  my ($dur_str, $name) = $text =~ /\A(.+?)(?:\s*:|\s*\son)\s+(\S.+)\z/;
+  unless ($dur_str && $name) {
+    return $rch->reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
+  }
+
+  my $duration;
+  my $ok = eval { $duration = parse_duration($dur_str); 1 };
+  unless ($ok) {
+    return $rch->reply("I didn't understand how long you spent!");
+  }
+
+  if ($duration > 12 * 86_400) {
+    my $dur_restr = duration($duration);
+    return $rch->reply(
+        qq{You said to spend "$dur_str" which I read as $dur_restr.  }
+      . qq{That's too long!},
+    );
+  }
+
+  my $flags = $self->_strip_name_flags($name);
+
+  if (
+    $name =~ m{^\s*(?:https://app.liquidplanner.com/space/$WKSP_ID/.*/)?([0-9]+)/?\s*\z}
+  ) {
+    my ($task_id, $comment) = ($1, $2);
+    $comment //= "";
+
+    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$task_id");
+
+    my $activity_id;
+    unless ($task_res->is_success) {
+      return $rch->reply("I couldn't log the work because I couldn't find the task.");
+    }
+
+    my $task = $JSON->decode($task_res->decoded_content);
+    $activity_id = $task->{activity_id};
+
+    unless ($activity_id) {
+      return $rch->reply("I couldn't log the work because the task doesn't have a defined activity.");
+    }
+
+    my $res = $self->http_post_for_user($user,
+      "$LP_BASE/tasks/$task->{id}/track_time",
+      Content_Type => 'application/json',
+      Content => $JSON->encode({
+        activity_id => $task->{activity_id},
+        member_id => $user->lp_id,
+        work      => $duration / 3600,
+        ($comment ? (comment => $comment ) : ()),
+      }),
+    );
+
+    unless ($res->is_success) {
+      warn $res->as_string;
+      return $rch->reply("I couldn't log your time, sorry.");
+    }
+
+    my $uri = sprintf
+      'https://app.liquidplanner.com/space/%s/projects/show/%s',
+      $WKSP_ID,
+      $task->{id};
+
+    if ($flags->{running}) {
+      my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+      my $timer = eval { $JSON->decode( $res->decoded_content ); };
+      if ($res->is_success && $timer->{running}) {
+        $user->last_lp_timer_id($timer->{id});
+        return $rch->reply("I logged that time on task ($task->{name}) and started your timer here: $uri");
+      } else {
+        return $rch->reply("I couldn't start the timer on task ($task->{name}), but I logged that time here: $uri");
+      }
+    }
+
+    return $rch->reply("I logged that time on your task ($task->{name} here: $uri)");
+  }
+
+  my $arg = {};
+
+  my $task = $self->_create_lp_task($rch, {
+    name   => $name,
+    urgent => $flags->{urgent},
+    user   => $user,
+    owners => [ $user ],
+    description => 'Created by Synergy in response to a "spent" command.', # XXX
+  }, $arg);
+
+  unless ($task) {
+    if ($arg->{already_notified}) {
+      return;
+    } else {
+      return $rch->reply(
+        "Sorry, something went wrong when I tried to make that task.",
+      );
+    }
+  }
+
+  my $uri = sprintf
+    'https://app.liquidplanner.com/space/%s/projects/show/%s',
+    $WKSP_ID,
+    $task->{id};
+
+  my $res = $self->http_post_for_user($user,
+    "$LP_BASE/tasks/$task->{id}/track_time",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({
+      activity_id => $task->{activity_id},
+      member_id => $user->lp_id,
+      work      => $duration / 3600,
+      is_done   => ($flags->{running} ? \0 : \1),
+    }),
+  );
+
+  unless ($res->is_success) {
+    warn $res->as_string;
+    return $rch->reply(
+      "I was able to create the task, but not log your time.  Drat.  $uri",
+    );
+  }
+
+  if ($flags->{running}) {
+    my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+    my $timer = eval { $JSON->decode( $res->decoded_content ); };
+    if ($res->is_success && $timer->{running}) {
+      $user->last_lp_timer_id($timer->{id});
+      return $rch->reply("I logged that time and started your timer here: $uri");
+    } else {
+      return $rch->reply("I couldn't start the timer, but I logged that time here: $uri");
+    }
+  }
+
+  return $rch->reply("I logged that time here: $uri");
 }
 
 1;
