@@ -95,6 +95,12 @@ sub listener_specs {
       }
     },
     {
+      name      => "lp-mention-in-passing",
+      method    => "provide_lp_link",
+      predicate => sub { 1 },
+
+    },
+    {
       name      => "last-thing-said",
       method    => 'record_utterance',
       predicate => sub { 1 },
@@ -131,6 +137,21 @@ sub dispatch_event ($self, $event, $rch) {
   }
 
   return $KNOWN{$what}->($self, $event, $rch, $rest)
+}
+
+sub provide_lp_link ($self, $event, $rch) {
+  my $user = $event->from_user;
+  return unless $user && $user->lp_auth_header;
+
+  if (my ($task_id) = $event->text =~ /LP([0-9]{8})/) {
+    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$task_id");
+    return unless $task_res->is_success;
+
+    my $task = $JSON->decode($task_res->decoded_content);
+    my $name = $task->{name};
+    $rch->reply("LP$task_id: $task->{name} ($LINK_BASE$task_id)");
+    $event->mark_handled if $event->was_targeted;   # do better than bort
+  }
 }
 
 
