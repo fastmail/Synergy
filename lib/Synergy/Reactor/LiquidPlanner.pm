@@ -276,7 +276,7 @@ sub nag ($self, $timer, @) {
     my $lp_timer = $self->lp_timer_for_user($user);
 
     if ($lp_timer && $lp_timer == -1) {
-      warn "$username: error retrieving timer\n";
+      $Logger->log("$username: error retrieving timer");
       next USER;
     }
 
@@ -389,7 +389,7 @@ sub http_post_for_user ($self, $user, @arg) {
 sub http_get_for_master ($self, @arg) {
   my ($master) = $self->hub->user_directory->master_users;
   unless ($master) {
-    warn "No master users configured\n";
+    $Logger->log("No master users configured");
     return;
   }
 
