@@ -1153,7 +1153,7 @@ sub _handle_start ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
-  if ($text =~ /\A[1-9]+\z/) {
+  if ($text =~ /\A[0-9]+\z/) {
     # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
     # TODO: print the description of the task instead of its number -- rjbs,
     # 2016-01-25
