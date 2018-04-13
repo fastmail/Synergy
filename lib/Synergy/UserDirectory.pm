@@ -52,7 +52,14 @@ sub user_by_nickname ($self, $name) {
 }
 
 sub load_users_from_file ($self, $file) {
-  my $user_config = YAML::XS::LoadFile($file);
+  my $user_config;
+  if ($file =~ /\.ya?ml\z/) {
+    $user_config = YAML::XS::LoadFile($file);
+  } elsif ($file =~ /\.json\z/) {
+    $user_config = JSON->new->decode( Path::Tiny::path($file)->slurp );
+  } else {
+    Carp::confess("unknown filetype: $file");
+  }
 
   my %users;
 
