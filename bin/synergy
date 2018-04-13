@@ -1,0 +1,26 @@
+#!perl
+use v5.24.0;
+use warnings;
+
+use lib 'lib';
+
+use Synergy::Logger '$Logger' => { init => {
+  ident => 'synergy',
+  facility => undef,
+  to_stderr => 1,
+  log_pid   => 0,
+} };
+
+use Getopt::Long::Descriptive;
+use Synergy::Hub;
+
+$Logger = $Logger->proxy({ proxy_prefix => "LOG | " });
+
+my ($opt, $usage) = describe_options(
+  '%c %o',
+  [ 'config|c=s', 'config file', { required => 1 } ],
+);
+
+my $synergy = Synergy::Hub->synergize_file($opt->config);
+
+$synergy->loop->run;

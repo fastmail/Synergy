@@ -1,9 +1,15 @@
 use v5.16.0;
 package Synergy::User;
+
 use Moose;
+use MooseX::StrictConstructor;
+use experimental qw(signatures);
+
 use namespace::autoclean;
 
 use Synergy::Timer;
+
+has is_master => (is => 'ro', isa => 'Bool');
 
 has [ qw(username realname) ] => (
   is => 'ro',
@@ -30,24 +36,23 @@ has expandoes => (
   default => sub {  {}  },
 );
 
-sub defined_expandoes {
-  my ($self) = @_;
-
+sub defined_expandoes ($self) {
   my $expandoes = $self->_expandoes;
-  my @keys = grep {; @{ $expandoes->{ $_ } } } keys %$expandoes;
-
+  my @keys = grep {; $expandoes->{$_}->@*  } keys %$expandoes;
   return @keys;
 }
 
-sub tasks_for_expando {
-  my ($self, $name) = @_;
-
+sub tasks_for_expando ($self, $name) {
   return unless my $expando = $self->_expandoes->{ $name };
-
   return @$expando;
 }
 
-has circonus_id => (is => 'ro', isa => 'Int', predicate => 'has_circonus_id');
+has identities => (
+  is => 'ro',
+  isa => 'HashRef',
+  default => sub {  {}  },
+);
+
 has phone       => (is => 'ro', isa => 'Str', predicate => 'has_phone');
 has want_page   => (is => 'ro', isa => 'Bool', default => 1);
 
