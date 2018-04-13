@@ -68,6 +68,7 @@ my %KNOWN = (
   done      => \&_handle_done,
   spent     => \&_handle_spent,
   projects  => \&_handle_projects,
+  todo      => \&_handle_todo,
 );
 
 sub listener_specs {
@@ -1489,6 +1490,28 @@ sub _handle_projects ($self, $event, $rch, $text) {
     my $id = $self->project_named($project)->[0]->{id};   # cool, LP
     $rch->private_reply("$project ($LINK_BASE$id)");
   }
+}
+
+sub _handle_todo ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  my $desc = $text;
+
+  # If it's for somebody else, it should be a task instead
+  if ($desc =~ /^for\s+\S+?:/) {
+    return $rch->reply("Sorry, I can only make todo items for you");
+  }
+
+  my $res = $self->http_post_for_user($user,
+    "$LP_BASE/todo_items",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({ todo_item => { title => $desc } }),
+  );
+
+  my $reply = $res->is_success
+            ? "I added \"$desc\" to your todo list."
+            : "Sorry, I couldn't add that todo... for... some reason.";
+
+  return $rch->reply($reply);
 }
 
 1;
