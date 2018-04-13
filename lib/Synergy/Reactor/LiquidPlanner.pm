@@ -332,7 +332,10 @@ sub nag ($self, $timer, @) {
            $sy_timer->last_saw_timer
         && $sy_timer->last_saw_timer > time - 900
       ) {
-        warn("$username: Not nagging, they only recently disabled a timer");
+        $Logger->log([
+          "not nagging %s, they only recently disabled a timer",
+          $username,
+        ]);
         next USER;
       }
 
@@ -406,7 +409,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
   my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
 
   unless ($res->is_success) {
-    warn "failed to get timer: " . $res->as_string . "\n";
+    $Logger->log("failed to get timer: " . $res->as_string);
 
     return $rch->reply("I couldn't get your timer. Sorry!");
   }
@@ -479,8 +482,11 @@ sub _handle_task ($self, $event, $rch, $text) {
       # XXX - From real config! --alh, 2018-03-14
       my $config;
       my $project_id = $CONFIG->{liquidplanner}{project}{$target->username};
-      warn sprintf "Looking for project for %s found %s\n",
-        $target->username, $project_id // '(undef)';
+      $Logger->log([
+        "Looking for project for %s found %s",
+        $target->username,
+        $project_id // '(undef)',
+      ]);
 
       $project_id{ $project_id }++ if $project_id;
     } elsif ($target) {
@@ -596,7 +602,7 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks') {
   } else {
     my $package_id = $CONFIG->{liquidplanner}{package}{ $which };
     unless ($package_id) {
-      warn "can't find package_id for '$which'";
+      $Logger->log("can't find package_id for '$which'");
       return;
     }
 
@@ -917,8 +923,7 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
   );
 
   unless ($res->is_success) {
-    warn ">>" . $res->decoded_content . "<<";
-    warn $res->as_string;
+    $Logger->log("error creating task: " . $res->as_string);
     return;
   }
 
@@ -1394,7 +1399,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
     );
 
     unless ($res->is_success) {
-      warn $res->as_string;
+      $Logger->log("error tracking time: " . $res->as_string);
       return $rch->reply("I couldn't log your time, sorry.");
     }
 
@@ -1454,7 +1459,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
   );
 
   unless ($res->is_success) {
-    warn $res->as_string;
+    $Logger->log("error tracking time: " . $res->as_string);
     return $rch->reply(
       "I was able to create the task, but not log your time.  Drat.  $uri",
     );

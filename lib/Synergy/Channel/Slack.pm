@@ -43,13 +43,13 @@ sub start ($self) {
 
     my $event;
     unless (eval { $event = $JSON->decode($frame) }) {
-      warn "ERROR DECODING <$frame> <$@>\n";
+      $Logger->log("error decoding frame content: <$frame> <$@>");
       return;
     }
 
     if (! $event->{type} && $event->{reply_to}) {
       unless ($event->{ok}) {
-        warn "We failed to send a response? " . Dumper($event);
+        $Logger->log([ "failed to send a response: %s", $event ]);
       }
 
       return;
@@ -64,7 +64,7 @@ sub start ($self) {
     return unless $event->{type} eq 'message';
 
     unless ($self->slack->is_ready) {
-      warn "Ignoring message, we aren't ready yet\n";
+      $Logger->log("ignoring message, we aren't ready yet");
 
       return;
     }

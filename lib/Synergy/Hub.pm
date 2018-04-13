@@ -289,7 +289,7 @@ sub http_request ($self, $method, $url, %args) {
     @args
   )->on_fail( sub {
     my $failure = shift;
-    warn "Failed to $method $url: $failure\n";
+    $Logger->log("Failed to $method $url: $failure");
   } )->get;
 }
 
