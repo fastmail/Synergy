@@ -50,6 +50,7 @@ sub tasks_for_expando ($self, $name) {
 has identities => (
   is => 'ro',
   isa => 'HashRef',
+  default => sub {  {}  },
 );
 
 has phone       => (is => 'ro', isa => 'Str', predicate => 'has_phone');
