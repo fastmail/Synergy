@@ -7,7 +7,7 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures);
 use namespace::clean;
-use List::Util qw(first);
+use List::Util qw(first uniq);
 
 sub listener_specs {
   return {
@@ -23,8 +23,11 @@ sub handle_clox ($self, $event, $rch) {
 
   my $now = DateTime->now;
 
-  # TODO: get from config
-  my @tzs = ('America/New_York', 'Australia/Sydney', 'Asia/Kolkata');
+  my @tzs = sort {; $a cmp $b }
+            uniq
+            grep {; defined }
+            map  {; $_->time_zone }
+            $self->hub->user_directory->users;
   my @times;
 
   for my $tz_name (@tzs) {
