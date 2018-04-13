@@ -26,7 +26,6 @@ sub listener_specs {
   };
 }
 
-
 sub handle_event ($self, $event, $rch) {
   $event->mark_handled;
 
