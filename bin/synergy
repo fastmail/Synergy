@@ -5,7 +5,7 @@ use warnings;
 use lib 'lib';
 
 use Synergy::Logger '$Logger' => { init => {
-  ident => 'pizzazz',
+  ident => 'synergy',
   facility => undef,
   to_stderr => 1,
   log_pid   => 0,
