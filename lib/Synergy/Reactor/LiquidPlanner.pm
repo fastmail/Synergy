@@ -1117,7 +1117,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
     :                "";
 
   my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
-  $rch->reply("Okay, I've committed $time of work$also.");
+  $rch->reply("Okay, I've committed $time of work$also. Task was: $task->{name}");
 }
 
 
