@@ -146,7 +146,7 @@ has reminders => (
   handles   => { reminders => 'elements' },
 );
 
-after _set_reminders => sub ($self) {
+after _set_reminders => sub ($self, @) {
   $self->save_state;
 };
 

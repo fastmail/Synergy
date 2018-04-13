@@ -27,6 +27,7 @@ has user_directory => (
 has state_dbfile => (
   is  => 'ro',
   isa => 'Str',
+  lazy => 1,
   default => "synergy.sqlite",
 );
 
@@ -79,9 +80,11 @@ sub save_state ($self, $reactor, $state) {
 sub fetch_state ($self, $reactor) {
   my ($json) = $self->_state_dbh->selectrow_array(
     "SELECT json FROM synergy_state WHERE reactor_name = ?",
+    undef,
     $reactor->name,
   );
 
+  return unless $json;
   return JSON::MaybeXS->new->decode($json);
 }
 
