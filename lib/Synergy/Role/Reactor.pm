@@ -28,5 +28,15 @@ has listeners => (
 
 sub start ($self) { }
 
+sub state { return {} }
+
+sub save_state ($self) {
+  $self->hub->save_state($self, $self->state);
+}
+
+sub fetch_state ($self) {
+  $self->hub->fetch_state($self);
+}
+
 no Moose::Role;
 1;

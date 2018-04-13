@@ -28,6 +28,12 @@ has page_channel_name => (
   predicate => 'has_page_channel_name',
 );
 
+sub state ($self) {
+  return {
+    reminders => [ $self->reminders ],
+  };
+}
+
 sub start ($self) {
   if ($self->has_page_channel_name) {
     my $name    = $self->page_channel_name;
@@ -35,6 +41,13 @@ sub start ($self) {
     confess("no channel named $name, cowardly giving up")
       unless $channel;
   }
+
+  my $state = $self->fetch_state;
+  if ($state && $state->{reminders}) {
+    $self->add_reminder($_) for $state->{reminders}->@*;
+  }
+
+  return;
 }
 
 sub handle_remind ($self, $event, $rch) {
@@ -132,6 +145,10 @@ has reminders => (
   traits    => [ 'Array' ],
   handles   => { reminders => 'elements' },
 );
+
+after _set_reminders => sub ($self) {
+  $self->save_state;
+};
 
 has _next_timer => (
   is => 'rw',

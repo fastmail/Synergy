@@ -9,6 +9,7 @@ use namespace::clean;
 
 use Synergy::Logger '$Logger';
 
+use DBI;
 use JSON::MaybeXS;
 use Module::Runtime qw(require_module);
 use Synergy::UserDirectory;
@@ -22,6 +23,67 @@ has user_directory => (
   isa => 'Object',
   required  => 1,
 );
+
+has state_dbfile => (
+  is  => 'ro',
+  isa => 'Str',
+  default => "synergy.sqlite",
+);
+
+has _state_dbh => (
+  is  => 'ro',
+  init_arg => undef,
+  default  => sub ($self, @) {
+    my $dbf = $self->state_dbfile;
+
+    my $dbh = DBI->connect(
+      "dbi:SQLite:dbname=$dbf",
+      undef,
+      undef,
+      { RaiseError => 1 },
+    );
+    die $DBI::errstr unless $dbh;
+
+    $dbh->do(q{
+      CREATE TABLE IF NOT EXISTS synergy_state (
+        reactor_name TEXT PRIMARY KEY,
+        stored_at INTEGER NOT NULL,
+        json TEXT NOT NULL
+      );
+    });
+
+    return $dbh;
+  },
+);
+
+sub save_state ($self, $reactor, $state) {
+  my $json = eval { JSON::MaybeXS->new->encode($state) };
+
+  unless ($json) {
+    $Logger->log([ "error serializing state for %s: %s", $reactor->name, $@ ]);
+    return;
+  }
+
+  $self->_state_dbh->do(
+    "INSERT OR REPLACE INTO synergy_state (reactor_name, stored_at, json)
+    VALUES (?, ?, ?)",
+    undef,
+    $reactor->name,
+    time,
+    $json,
+  );
+
+  return 1;
+}
+
+sub fetch_state ($self, $reactor) {
+  my ($json) = $self->_state_dbh->selectrow_array(
+    "SELECT json FROM synergy_state WHERE reactor_name = ?",
+    $reactor->name,
+  );
+
+  return JSON::MaybeXS->new->decode($json);
+}
 
 has server_port => (
   is => 'ro',
