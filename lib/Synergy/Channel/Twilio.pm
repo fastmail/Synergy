@@ -82,12 +82,16 @@ sub http_post {
 
 sub send_message_to_user ($self, $user, $text) {
   unless ($user->phone) {
-    warn "No user phone number for " . $user->username . "\n";
+    $Logger->log([
+      "can't send message, no phone number for %s",
+      $user->username,
+    ]);
     return;
   }
 
   my $where = $user->phone;
 
+  $Logger->log([ "sending text <$text> to $where" ]);
   $self->send_text($where, $text);
 }
 
@@ -121,7 +125,7 @@ sub send_text ($self, $target, $text) {
   );
 
   unless ($res->is_success) {
-    warn "failed to send sms to $target: " . $res->as_string;
+    $Logger->log("failed to send sms to $target: " . $res->as_string);
   }
 
   return $res;
