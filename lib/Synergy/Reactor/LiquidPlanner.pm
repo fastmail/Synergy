@@ -69,6 +69,7 @@ my %KNOWN = (
   spent     => \&_handle_spent,
   projects  => \&_handle_projects,
   todo      => \&_handle_todo,
+  todos     => \&_handle_todos,
 );
 
 sub listener_specs {
@@ -1512,6 +1513,24 @@ sub _handle_todo ($self, $event, $rch, $text) {
             : "Sorry, I couldn't add that todo... for... some reason.";
 
   return $rch->reply($reply);
+}
+
+sub _handle_todos ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+  my $todo_res = $self->http_get_for_user($user, "$LP_BASE/todo_items");
+  return unless $todo_res->is_success;
+
+  my $all_todos = $JSON->decode($todo_res->decoded_content);
+  my @todos = grep {; ! $_->{is_done} } @$all_todos;
+
+  return $rch->reply("you don't have any open to-do items") unless @todos;
+
+  $rch->reply("responses to <todos> are sent privately") if $event->is_public;
+  $rch->private_reply('Open to-do items:');
+
+  for my $todo (@todos) {
+    $rch->private_reply("- $todo->{title}");
+  }
 }
 
 1;
