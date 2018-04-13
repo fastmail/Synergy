@@ -101,7 +101,7 @@ sub start ($self) {
     my $me = $self->slack->own_name;
     my $text = $self->decode_slack_usernames($event->{text});
 
-    $text =~ s/\A \@?($me)(?=\W):?\s*//x;
+    $text =~ s/\A \@?($me)(?=\W):?\s*//ix;
     my $was_targeted = !! $1;
 
     $text =~ s/&lt;/</g;
