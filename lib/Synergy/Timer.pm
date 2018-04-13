@@ -18,10 +18,6 @@ has chilltill => (
   clearer   => 'clear_chilltill',
 );
 
-after clear_chilltill => sub {
- # XXX - save state
-};
-
 sub chilling {
   my ($self) = @_;
   return 1 if $self->chill_until_active;

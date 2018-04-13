@@ -157,7 +157,6 @@ sub provide_lp_link ($self, $event, $rch) {
   }
 }
 
-
 has user_timers => (
   is               => 'ro',
   isa              => 'HashRef',
@@ -171,6 +170,17 @@ has user_timers => (
   default => sub { {} },
 );
 
+sub state ($self) {
+  my $timers = $self->user_timers;
+
+  return {
+    user_timers => {
+      map {; $_ => $timers->{$_}->as_hash }
+        keys $self->user_timers->%*
+    },
+  };
+}
+
 sub timer_for_user ($self, $user) {
   return unless $user->has_lp_token;
 
@@ -182,7 +192,9 @@ sub timer_for_user ($self, $user) {
     business_hours => $user->business_hours,
   });
 
-  $self->_add_timer_for_user($user, $timer);
+  $self->_add_timer_for_user($user->username, $timer);
+
+  $self->save_state;
 
   return $timer;
 }
@@ -224,13 +236,18 @@ sub see_if_back ($self, $event, $rch) {
   # We're not going to support "++ that" by people who are not users.
   return unless $event->from_user;
 
-  my $timer = $event->from_user->timer || return;
+  my $timer = $self->timer_for_user($event->from_user) || return;
 
   if ($timer->chill_until_active
     and $event->text !~ /\bzzz\b/i
   ) {
+    $Logger->log([
+      '%s is back; ending chill_until_active',
+      $event->from_user->username,
+    ]);
     $timer->chill_until_active(0);
     $timer->clear_chilltill;
+    $self->save_state;
     $rch->reply("You're back!  No longer chilling.")
       if $timer->is_business_hours;
   }
@@ -255,6 +272,26 @@ has projects => (
 sub start ($self) {
   $self->projects;
 
+  if (my $state = $self->fetch_state) {
+    if (my $timer_state = $state->{user_timers}) {
+      for my $username (keys %$timer_state) {
+        next unless my $user = $self->hub->user_directory
+                                         ->user_named($username);
+
+        next unless my $timer = $self->timer_for_user($user);
+
+        my $this_timer = $timer_state->{$username};
+
+        my $chill_type = $this_timer->{chill}{type} // '';
+        if ($chill_type eq 'until_active') {
+          $timer->chill_until_active(1);
+        } elsif ($chill_type eq 'until_time') {
+          $timer->chilltill( $this_timer->{chill}{until} );
+        }
+      }
+    }
+  }
+
   my $timer = IO::Async::Timer::Periodic->new(
     interval => 300,
     on_tick  => sub ($timer, @arg) { $self->nag($timer); },
@@ -269,7 +306,7 @@ sub nag ($self, $timer, @) {
   $Logger->log("considering nagging");
 
   USER: for my $user ($self->hub->user_directory->users) {
-    next USER unless my $sy_timer = $user->timer;
+    next USER unless my $sy_timer = $self->timer_for_user($user);
 
     next USER unless $user->should_nag;
 
@@ -419,7 +456,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
   my @timers = grep {; $_->{running} }
                @{ $JSON->decode( $res->decoded_content ) };
 
-  my $sy_timer = $user->timer;
+  my $sy_timer = $self->timer_for_user($user);
 
   unless (@timers) {
     my $nag = $sy_timer->last_relevant_nag;
@@ -790,9 +827,10 @@ sub _handle_good ($self, $event, $rch, $text) {
     }
   }
 
-  if ($end_of_day && (my $sy_timer = $user->timer)) {
+  if ($end_of_day && (my $sy_timer = $self->timer_for_user($user))) {
     my $time = parse_time_hunk('until tomorrow', $user);
     $sy_timer->chilltill($time);
+    $self->save_state;
   }
 
   return $rch->reply($reply) if $reply;
@@ -969,7 +1007,9 @@ sub lp_timer_for_user ($self, $user) {
 
 sub _handle_showtime ($self, $event, $rch, $text) {
   my $user  = $event->from_user;
-  my $timer = $user && $user->has_lp_id ? $user->timer : undef;
+  my $timer = $user
+            ? $self->timer_for_user($user)
+            : undef;
 
   return $rch->reply($ERR_NO_LP)
     unless $timer;
@@ -988,6 +1028,7 @@ sub _handle_showtime ($self, $event, $rch, $text) {
   }
 
   $timer->clear_chilltill;
+  $self->save_state;
   return;
 }
 
@@ -1014,13 +1055,13 @@ sub _handle_chill ($self, $event, $rch, $text) {
     }
   } # XXX - Error handling? -- alh, 2018-03-16
 
-  my $sy_timer = $user->timer;
+  my $sy_timer = $self->timer_for_user($user);
 
   $text =~ s/[.!?]+\z// if length $text;
 
   if (! length $text or $text =~ /^until\s+I'm\s+back\s*$/i) {
     $sy_timer->chill_until_active(1);
-    # XXX - Save state
+    $self->save_state;
     return $rch->reply("Okay, I'll stop pestering you until you've active again.");
   }
 
@@ -1039,7 +1080,7 @@ sub _handle_chill ($self, $event, $rch, $text) {
   }
 
   $sy_timer->chilltill($time);
-  # XXX - Save state
+  $self->save_state;
   $rch->reply("Okay, no more nagging until $when");
 }
 
@@ -1060,7 +1101,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   return $rch->reply("You don't seem to have a running timer.")
     unless $lp_timer && ref $lp_timer; # XXX <-- stupid return type
 
-  my $sy_timer = $user->timer;
+  my $sy_timer = $self->timer_for_user($user);
   return $rch->reply("You don't timer-capable.") unless $sy_timer;
 
   my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$lp_timer->{item_id}");
@@ -1103,11 +1144,13 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   );
 
   unless ($commit_res->is_success) {
+    $self->save_state;
     $Logger->log([ "bad timer commit response: %s", $commit_res->as_string ]);
     return $rch->reply("I couldn't commit your work, sorry.");
   }
 
   $sy_timer->clear_last_nag;
+  $self->save_state;
 
   if ($restart) {
     my $start_res = $self->http_post_for_user(
@@ -1149,7 +1192,7 @@ sub _handle_abort ($self, $event, $rch, $text) {
   my $clr_res  = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/clear");
 
   if ($stop_res->is_success and $clr_res->is_success) {
-    $user->timer->clear_last_nag;
+    $self->timer_for_user($user)->clear_last_nag;
     $rch->reply("Okay, I stopped and cleared your active timer.");
   } else {
     $rch->reply("Something went wrong aborting your timer.");
@@ -1277,7 +1320,7 @@ sub _handle_stop ($self, $event, $rch, $text) {
   return $rch->reply("I couldn't stop your active timer.")
     unless $stop_res->is_success;
 
-  $user->timer->clear_last_nag;
+  $self->timer_for_user($user)->clear_last_nag;
   return $rch->reply("Okay, I stopped your active timer.");
 }
 
@@ -1328,8 +1371,7 @@ sub _handle_reset ($self, $event, $rch, $text) {
   return $rch->reply("Something went wrong resetting your timer.")
     unless $clr_res->is_success;
 
-  $user->timer->clear_last_nag;
-
+  $self->timer_for_user($user)->clear_last_nag;
 
   my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task_id/timer/start");
   my $restart_timer = eval { $JSON->decode( $start_res->decoded_content ); };

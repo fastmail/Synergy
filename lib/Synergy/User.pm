@@ -76,19 +76,6 @@ has business_hours => (
   },
 );
 
-has timer => (
-  is   => 'ro',
-  lazy => 1,
-  init_arg => undef,
-  default  => sub {
-    return unless $_[0]->has_lp_token;
-    return Synergy::Timer->new({
-      time_zone      => $_[0]->time_zone,
-      business_hours => $_[0]->business_hours,
-    });
-  },
-);
-
 has last_lp_timer_id => (
   is => 'rw',
   isa => 'Str',
