@@ -161,7 +161,7 @@ sub api_call ($self, $method, $arg = {}) {
 }
 
 sub setup ($self) {
-  say "Connected to Slack!";
+  $Logger->log("Connected to Slack!");
   $self->load_users;
   $self->load_channels;
   $self->load_dm_channels;
@@ -174,7 +174,11 @@ sub username ($self, $id) {
 sub dm_channel_for_user ($self, $user, $channel) {
   my $identity = $user->identities->{$channel->name};
   unless ($identity) {
-    warn "No known identity for " . $user->username . " for channel " . $self->name . "\n";
+    $Logger->log([
+      "No known identity for %s for channel %s",
+      $user->username,
+      $self->name,
+    ]);
 
     return;
   }
@@ -240,7 +244,7 @@ sub load_users ($self) {
     $self->_set_users({
       map { $_->{id} => $_ } $res->{members}->@*
     });
-    warn "Users loaded\n";
+    $Logger->log("Users loaded");
 
     $self->loaded_users(1);
   });
@@ -254,7 +258,8 @@ sub load_channels ($self) {
     $self->_set_channels({
       map { $_->{id}, $_ } $res->{channels}->@*
     });
-    warn "Channels loaded\n";
+
+    $Logger->log("Slack channels loaded");
 
     $self->loaded_channels(1);
   });
@@ -266,7 +271,8 @@ sub load_dm_channels ($self) {
     $self->_set_dm_channels({
       map { $_->{user}, $_->{id} } $res->{ims}->@*
     });
-    warn "DM Channels loaded\n";
+
+    $Logger->log("Slack dm channels loaded");
 
     $self->loaded_dm_channels(1);
   });
