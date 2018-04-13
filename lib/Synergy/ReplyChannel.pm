@@ -36,7 +36,7 @@ sub reply ($self, $text) {
 
 sub private_reply ($self, $text) {
   $Logger->log_debug("sending $text to someone");
-  return $self->channel->send_text($self->private_address, $self->prefix . $text);
+  return $self->channel->send_text($self->private_address, $text);
 }
 
 1;

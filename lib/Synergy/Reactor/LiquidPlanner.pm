@@ -67,6 +67,7 @@ my %KNOWN = (
   reset     => \&_handle_reset,
   done      => \&_handle_done,
   spent     => \&_handle_spent,
+  projects  => \&_handle_projects,
 );
 
 sub listener_specs {
@@ -1471,6 +1472,18 @@ sub _handle_spent ($self, $event, $rch, $text) {
   }
 
   return $rch->reply("I logged that time here: $uri");
+}
+
+sub _handle_projects ($self, $event, $rch, $text) {
+  my @sorted = sort $self->projects;
+
+  $rch->reply("responses to <projects> are sent privately") if $event->is_public;
+  $rch->private_reply('Known projects:');
+
+  for my $project (@sorted) {
+    my $id = $self->project_named($project)->[0]->{id};   # cool, LP
+    $rch->private_reply("$project ($LINK_BASE$id)");
+  }
 }
 
 1;
