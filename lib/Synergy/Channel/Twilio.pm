@@ -115,7 +115,7 @@ sub send_text ($self, $target, $text) {
 
   my $sid = $self->sid;
   my $res = $self->http_post(
-    "https://api.twilio.com/2010-04-01/Accounts/$sid/SMS/Messages",
+    "https://api.twilio.com/2010-04-01/Accounts/$sid/Messages.json",
     Content => [
       From => $from,
       To   => $target,
