@@ -1032,7 +1032,14 @@ sub lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
 
   my $res = $self->http_get_for_user($user, "/my_timers");
-  return -1 unless $res->is_success; # XXX WARN
+  unless ($res->is_success) {
+    $Logger->log([
+      "couldn't get timer for %s: %s",
+      $user->username,
+      $res->as_string,
+    ]);
+    return -1;
+  }
 
   my ($timer) = grep {; $_->{running} }
                 $JSON->decode( $res->decoded_content )->@*;
