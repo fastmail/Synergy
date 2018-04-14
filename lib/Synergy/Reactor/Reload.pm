@@ -12,7 +12,6 @@ use List::Util qw(first);
 use MIME::Base64;
 use YAML::XS;
 use Synergy::Logger '$Logger';
-use Data::Dumper::Concise;
 
 my $JSON = JSON->new->canonical;
 
@@ -30,27 +29,13 @@ my $GITLAB_BASE = "https://git.messagingengine.com/api/v4";
 my $GITLAB_PROJECT_ID = 335;
 
 sub listener_specs {
-  return ( {
+  return {
     name      => 'reload',
     method    => 'dispatch_event',
     exclusive => 1,
     predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^reload(\s|$)/i },
-  },
-  {
-    name => 'dump-user',
-    method => 'dump_user',
-    exclusive => 1,
-    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^dump(\s|$)/i },
-
-  },
-  );
+  };
 }
-
-sub dump_user ($self, $event, $rch) {
-  $event->mark_handled;
-  my $user = $event->from_user;
-  warn Dumper $user;
-};
 
 sub dispatch_event ($self, $event, $rch) {
   $event->mark_handled;
