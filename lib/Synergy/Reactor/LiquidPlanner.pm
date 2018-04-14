@@ -98,6 +98,14 @@ sub listener_specs {
       }
     },
     {
+      name      => "reload-projects",
+      method    => "reload_projects",
+      predicate => sub ($, $e) {
+        $e->was_targeted &&
+        $e->text =~ /^reload\s+projects\s*$/in;
+      },
+    },
+    {
       name      => "lp-mention-in-passing",
       method    => "provide_lp_link",
       predicate => sub { 1 },
@@ -1573,6 +1581,12 @@ sub _handle_todos ($self, $event, $rch, $text) {
   for my $todo (@todos) {
     $rch->private_reply("- $todo->{title}");
   }
+}
+
+sub reload_projects ($self, $event, $rch) {
+  $self->_set_projects($self->get_project_nicknames);
+  $rch->reply("Projects reloaded");
+  $event->mark_handled;
 }
 
 1;

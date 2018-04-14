@@ -1,28 +1,22 @@
 use v5.24.0;
-package Synergy::Reactor::Reload;
+package Synergy::Reactor::GitLab;
 
 use Moose;
-use DateTime;
 with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures);
 use namespace::clean;
 use JSON 2 ();
-use List::Util qw(first);
 use MIME::Base64;
 use YAML::XS;
 use Synergy::Logger '$Logger';
 
-my $JSON = JSON->new->canonical;
+my $JSON = JSON->new->utf8->canonical;
 
-has lp_reactor_name => (
+has api_token => (
   is => 'ro',
   isa => 'Str',
-);
-
-has gitlab_token => (
-  is => 'ro',
-  isa => 'Str',
+  required => 1,
 );
 
 my $GITLAB_BASE = "https://git.messagingengine.com/api/v4";
@@ -31,13 +25,16 @@ my $GITLAB_PROJECT_ID = 335;
 sub listener_specs {
   return {
     name      => 'reload',
-    method    => 'dispatch_event',
+    method    => 'handle_reload',
     exclusive => 1,
-    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^reload(\s|$)/i },
+    predicate => sub ($self, $e) {
+      $e->was_targeted &&
+      $e->text =~ /^reload\s+(?:my|all user)?\s*config(\s|$)/in;
+    },
   };
 }
 
-sub dispatch_event ($self, $event, $rch) {
+sub handle_reload ($self, $event, $rch) {
   $event->mark_handled;
 
   return $rch->reply("Sorry, I don't know who you are.")
@@ -49,28 +46,13 @@ sub dispatch_event ($self, $event, $rch) {
 
   $what =~ s/^\s*|\s*$//g;
 
-  return $self->handle_projects($event, $rch)   if $what eq 'projects';
   return $self->handle_my_config($event, $rch)  if $what eq 'my config';
   return $self->handle_all_config($event, $rch) if $what eq 'all user config';
 
-  # It's not handled yet, but it will have been by the time we return!
   return $rch->reply("I don't know how to reload <$what>");
 }
 
-sub handle_projects ($self, $event, $rch) {
-  return $rch->reply("I don't seem to have a liquid-planner reactor")
-    unless $self->lp_reactor_name;
-
-  my $lp = $self->hub->reactor_named($self->lp_reactor_name);
-  $lp->_set_projects($lp->get_project_nicknames);
-
-  $rch->reply("Projects reloaded");
-}
-
 sub handle_my_config ($self, $event, $rch) {
-  return $rch->reply("I don't seem to have a gitlab token")
-    unless $self->gitlab_token;
-
   my $username = $event->from_user->username;
   my ($ok, $error) = $self->_update_user_config($username);
 
@@ -79,9 +61,6 @@ sub handle_my_config ($self, $event, $rch) {
 }
 
 sub handle_all_config ($self, $event, $rch) {
-  return $rch->reply("I don't seem to have a gitlab token")
-    unless $self->gitlab_token;
-
   return $rch->reply("Sorry, only the master user can do that")
     unless $event->from_user->is_master;
 
@@ -114,7 +93,7 @@ sub _update_user_config ($self, $username) {
 
   my $res = $self->hub->http_get(
     $url,
-    'PRIVATE-TOKEN' => $self->gitlab_token,
+    'PRIVATE-TOKEN' => $self->api_token,
   );
 
   unless ($res->is_success) {
