@@ -29,9 +29,19 @@ has prefix => (
   default => '',
 );
 
-sub reply ($self, $text) {
+sub reply ($self, $text, $arg) {
   $Logger->log_debug("sending $text to someone");
+
+  # XXX what even to do here
+  return $self->channel->send_rich_text($self->default->address, $text, $arg)
+    if $self->channel->can('send_rich_text');
+
   return $self->channel->send_text($self->default_address, $self->prefix . $text);
+}
+
+sub rich_reply ($self, $fallback, $text) {
+  return $self->reply($fallback) unless $self->channel->can('send_rich_text');
+  return $self->channel->send_rich_text($self->default_address, $self->prefix . $text);
 }
 
 sub private_reply ($self, $text) {
