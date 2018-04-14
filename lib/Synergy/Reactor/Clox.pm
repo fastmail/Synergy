@@ -18,6 +18,12 @@ sub listener_specs {
   };
 }
 
+has time_zone_names => (
+  is  => 'ro',
+  isa => 'HashRef',
+  default => sub {  {}  },
+);
+
 sub handle_clox ($self, $event, $rch) {
   $event->mark_handled;
 
@@ -30,12 +36,19 @@ sub handle_clox ($self, $event, $rch) {
             $self->hub->user_directory->users;
   my @times;
 
+  my $tz_nick = $self->time_zone_names;
+
   for my $tz_name (@tzs) {
     my $tz = DateTime::TimeZone->new(name => $tz_name);
     my $tz_now = $now->clone;
     $tz_now->set_time_zone($tz);
 
-    push @times, $tz_now->day_name . ", " . $tz_now->format_cldr("H:mm vvv");
+    use utf8;
+    my $str = $tz_nick->{$tz_name}
+            ? $tz_now->format_cldr("H:mm") . " $tz_nick->{$tz_name}"
+            : $tz_now->format_cldr("H:mm vvv");
+
+    push @times, $tz_now->day_name . ", $str";
   }
 
   my $sit = $now->clone;
