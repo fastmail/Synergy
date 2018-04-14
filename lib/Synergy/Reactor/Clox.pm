@@ -38,10 +38,18 @@ sub handle_clox ($self, $event, $rch) {
   @tzs = ('America/New_York') unless @tzs;
 
   my $tz_nick = $self->time_zone_names;
+  my $user_tz = ($event->from_user && $event->from_user->time_zone)
+             // '';
 
   my @times;
-  for my $tz_name (@tzs) {
-    my $tz = DateTime::TimeZone->new(name => $tz_name);
+
+  my @tz_objs = map {; DateTime::TimeZone->new(name => $_) } @tzs;
+
+  for my $tz (
+    sort {; $a->offset_for_datetime($now) <=> $b->offset_for_datetime($now) }
+    @tz_objs
+  ) {
+    my $tz_name = $tz->name;
     my $tz_now = $now->clone;
     $tz_now->set_time_zone($tz);
 
@@ -51,6 +59,9 @@ sub handle_clox ($self, $event, $rch) {
                                     : $tz_now->format_cldr("H:mm vvv"));
 
     $str = "$tz_nick->{$tz_name} $str" if $tz_nick->{$tz_name};
+
+    $str .= " \N{LEFTWARDS ARROW} you are here"
+      if $tz_name eq $user_tz;
 
     push @times, $str;
   }
