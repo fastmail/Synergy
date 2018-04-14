@@ -68,6 +68,7 @@ my %KNOWN = (
   urgent    => \&_handle_urgent,
   recurring => \&_handle_recurring,
   '++'      => \&_handle_plus_plus,
+  '>>'      => \&_handle_angle_angle,
   good      => \&_handle_good,
   gruß      => \&_handle_good,
   expand    => \&_handle_expand,
@@ -772,6 +773,14 @@ sub _handle_plus_plus ($self, $event, $rch, $text) {
 
     $pretend = "task for $who: $last";
   }
+
+  return $self->_handle_task($event, $rch, $pretend);
+}
+
+sub _handle_angle_angle ($self, $event, $rch, $text) {
+  my ($target, $rest) = split /\s+/, $text, 2;
+
+  my $pretend = "task for $target: $rest";
 
   return $self->_handle_task($event, $rch, $pretend);
 }
