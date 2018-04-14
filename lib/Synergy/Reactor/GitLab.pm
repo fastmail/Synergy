@@ -19,8 +19,17 @@ has api_token => (
   required => 1,
 );
 
-my $GITLAB_BASE = "https://git.messagingengine.com/api/v4";
-my $GITLAB_PROJECT_ID = 335;
+has api_uri => (
+  is  => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
+has project_id => (
+  is  => 'ro',
+  isa => 'Int',
+  required => 1,
+);
 
 sub start ($self) {
   my ($ok, $errors) = $self->_reload_all;
@@ -101,9 +110,9 @@ sub _reload_all ($self) {
 }
 
 sub _update_user_config ($self, $username) {
-  my $url = sprintf("%s/projects/%s/repository/files/%s.yaml?ref=master",
-    $GITLAB_BASE,
-    $GITLAB_PROJECT_ID,
+  my $url = sprintf("%s/v4/projects/%s/repository/files/%s.yaml?ref=master",
+    $self->api_uri,
+    $self->project_id,
     $username,
   );
 
