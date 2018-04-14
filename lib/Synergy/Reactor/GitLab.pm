@@ -48,7 +48,7 @@ sub listener_specs {
     exclusive => 1,
     predicate => sub ($self, $e) {
       $e->was_targeted &&
-      $e->text =~ /^reload\s+(?:my|all user)?\s*config(\s|$)/in;
+      $e->text =~ /^reload\s+(?:my|all user)?\s+config(\s|$)/in;
     },
   };
 }
