@@ -34,30 +34,38 @@ sub handle_clox ($self, $event, $rch) {
             grep {; defined }
             map  {; $_->time_zone }
             $self->hub->user_directory->users;
-  my @times;
+
+  @tzs = ('America/New_York') unless @tzs;
 
   my $tz_nick = $self->time_zone_names;
 
+  my @times;
   for my $tz_name (@tzs) {
     my $tz = DateTime::TimeZone->new(name => $tz_name);
     my $tz_now = $now->clone;
     $tz_now->set_time_zone($tz);
 
     use utf8;
-    my $str = $tz_nick->{$tz_name}
-            ? $tz_now->format_cldr("H:mm") . " $tz_nick->{$tz_name}"
-            : $tz_now->format_cldr("H:mm vvv");
+    my $str = $tz_now->day_name . ", "
+            . ($tz_nick->{$tz_name} ? $tz_now->format_cldr("H:mm")
+                                    : $tz_now->format_cldr("H:mm vvv"));
 
-    push @times, $tz_now->day_name . ", $str";
+    $str = "$tz_nick->{$tz_name} $str" if $tz_nick->{$tz_name};
+
+    push @times, $str;
   }
 
   my $sit = $now->clone;
   $sit->set_time_zone('+0100');
 
-  push @times, $sit->ymd('-') . '@'
-      . int(($sit->second + $sit->minute * 60 + $sit->hour * 3600) / 86.4);
+  my $beats
+    = $sit->ymd('-') . '@'
+    . int(($sit->second + $sit->minute * 60 + $sit->hour * 3600) / 86.4);
 
-  $rch->reply(join('; ', @times));
+  my $reply = "In Internet Time\N{TRADE MARK SIGN} it's $beats.  That's...\n";
+  $reply .= join q{}, map {; "> $_\n" } @times;
+
+  $rch->reply($reply);
 }
 
 1;
