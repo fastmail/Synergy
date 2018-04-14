@@ -97,7 +97,7 @@ sub _reload_all ($self) {
     my ($ok, $error) = $self->_update_user_config($username);
     next if $ok;
 
-    push @errors, $username;
+    push @errors, "$username: $error";
     $Logger->log([
       "error while fetching user config for %s: %s",
       $username,
