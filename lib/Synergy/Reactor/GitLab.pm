@@ -122,6 +122,11 @@ sub _update_user_config ($self, $username) {
   );
 
   unless ($res->is_success) {
+    if ($res->code == 404) {
+      $self->hub->user_directory->reload_user($username, {});
+      return (undef, "no config in git");
+    }
+
     $Logger->log([ "Error: %s", $res->as_string ]);
     return (undef, "error retrieving config")
   }
