@@ -17,10 +17,27 @@ use utf8;
 
 my $JSON = JSON->new;
 
+has workspace_id => (
+  is  => 'ro',
+  isa => 'Int',
+  required => 1,
+);
+
 my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
-my $WKSP_ID = 14822;
-my $LP_BASE = "https://app.liquidplanner.com/api/workspaces/$WKSP_ID";
-my $LINK_BASE = "https://app.liquidplanner.com/space/$WKSP_ID/projects/show/";
+
+sub _lp_base_uri ($self) {
+  return "https://app.liquidplanner.com/api/workspaces/" . $self->workspace_id;
+}
+
+sub _link_base_uri ($self) {
+  return sprintf "https://app.liquidplanner.com/space/%s/projects/show/",
+    $self->workspace_id;
+}
+
+sub item_uri ($self, $task_id) {
+  return $self->_link_base_uri . $task_id;
+}
+
 my $CONFIG;  # XXX use real config
 
 $CONFIG = {
@@ -155,12 +172,14 @@ sub provide_lp_link ($self, $event, $rch) {
   return unless $user && $user->lp_auth_header;
 
   if (my ($task_id) = $event->text =~ /LP([0-9]{8})/) {
-    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$task_id");
+    my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
     return unless $task_res->is_success;
 
     my $task = $JSON->decode($task_res->decoded_content);
     my $name = $task->{name};
-    $rch->reply("LP$task_id: $task->{name} ($LINK_BASE$task_id)");
+    $rch->reply(
+      "LP$task_id: $task->{name} (" . $self->item_uri($task_id) . ")"
+    );
     $event->mark_handled if $event->was_targeted;   # do better than bort
   }
 }
@@ -403,7 +422,7 @@ sub get_project_nicknames {
   my ($self) = @_;
 
   my $query = "/projects?filter[]=custom_field:Nickname is_set&filter[]=is_done is false";
-  my $res = $self->http_get_for_master("$LP_BASE$query");
+  my $res = $self->http_get_for_master("$query");
   return {} unless $res && $res->is_success;
 
   my %project_dict;
@@ -425,26 +444,30 @@ sub get_project_nicknames {
   return \%project_dict;
 }
 
-sub http_get_for_user ($self, $user, @arg) {
-  return $self->hub->http_get(@arg,
+sub http_get_for_user ($self, $user, $path, @arg) {
+  return $self->hub->http_get(
+    $self->_lp_base_uri . $path,
+    @arg,
     Authorization => $user->lp_auth_header,
   );
 }
 
-sub http_post_for_user ($self, $user, @arg) {
-  return $self->hub->http_post(@arg,
+sub http_post_for_user ($self, $user, $path, @arg) {
+  return $self->hub->http_post(
+    $self->_lp_base_uri . $path,
+    @arg,
     Authorization => $user->lp_auth_header,
   );
 }
 
-sub http_get_for_master ($self, @arg) {
+sub http_get_for_master ($self, $path, @arg) {
   my ($master) = $self->hub->user_directory->master_users;
   unless ($master) {
     $Logger->log("No master users configured");
     return;
   }
 
-  $self->http_get_for_user($master, @arg);
+  $self->http_get_for_user($master, $path, @arg);
 }
 
 sub _handle_timer ($self, $event, $rch, $text) {
@@ -453,7 +476,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "/my_timers");
 
   unless ($res->is_success) {
     $Logger->log("failed to get timer: " . $res->as_string);
@@ -488,13 +511,13 @@ sub _handle_timer ($self, $event, $rch, $text) {
 
   my $timer = $timers[0];
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
-  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$timer->{item_id}");
+  my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
 
   my $name = $task_res->is_success
            ? $JSON->decode($task_res->decoded_content)->{name}
            : '??';
 
-  my $url = sprintf "$LINK_BASE/%s", $timer->{item_id};
+  my $url = $self->item_uri($timer->{item_id});
 
   return $rch->reply(
     "Your timer has been running for $time, work on: $name <$url>",
@@ -601,14 +624,11 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my $rcpt = join q{ and }, map {; $_->username } @owners;
 
-  my $reply = sprintf
-    "Task for $rcpt created: https://app.liquidplanner.com/space/%s/projects/show/%s",
-    $WKSP_ID,
-    $task->{id};
+  my $reply = "Task for $rcpt created: " . $self->item_uri($task->{id});
 
   if ($start) {
     if ($user) {
-      my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+      my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
       my $timer = eval { $JSON->decode( $res->decoded_content ); };
       if ($res->is_success && $timer->{running}) {
         $user->last_lp_timer_id($timer->{id});
@@ -628,7 +648,7 @@ sub _handle_task ($self, $event, $rch, $text) {
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks') {
   my $res = $self->http_get_for_user(
     $user,
-    "$LP_BASE/upcoming_tasks?limit=200&flat=true&member_id=" . $user->lp_id,
+    "/upcoming_tasks?limit=200&flat=true&member_id=" . $user->lp_id,
   );
 
   unless ($res->is_success) {
@@ -691,7 +711,7 @@ sub _handle_tasks ($self, $event, $rch, $text) {
   my $lp_tasks = $self->lp_tasks_for_user($user, $count, 'tasks');
 
   for my $task (splice @$lp_tasks, $start, $per_page) {
-    $rch->private_reply("$task->{name} ($LINK_BASE$task->{id})");
+    $rch->private_reply("$task->{name} (" . $self->item_uri($task->{id}) .  ")");
   }
 
   $rch->reply("responses to <tasks> are sent privately") if $event->is_public;
@@ -710,7 +730,7 @@ sub _handle_task_like ($self, $event, $rch, $command, $count) {
   }
 
   for my $task (@$lp_tasks) {
-    $rch->private_reply("$task->{name} ($LINK_BASE$task->{id})");
+    $rch->private_reply("$task->{name} (" . $self->item_uri($task->{id}) .  ")");
   }
 
   $rch->reply("responses to <$command> are sent privately") if $event->is_public;
@@ -823,7 +843,7 @@ sub _handle_good ($self, $event, $rch, $text) {
   }
 
   if ($stop) {
-    my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+    my $res = $self->http_get_for_user($user, "/my_timers");
 
     if ($res->is_success) {
       my @timers = grep {; $_->{running} }
@@ -878,7 +898,7 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
     $Logger->log([ "creating LP task: %s", $payload ]);
 
     my $res = $self->http_post_for_user($user,
-      "$LP_BASE/tasks",
+      "/tasks",
       Content_Type => 'application/json',
       Content => $JSON->encode($payload),
     );
@@ -965,7 +985,7 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
 
   my $res = $self->http_post_for_user(
     $as_user,
-    "$LP_BASE/tasks",
+    "/tasks",
     Content_Type => 'application/json',
     Content => $JSON->encode($payload),
   );
@@ -1000,7 +1020,7 @@ sub _strip_name_flags ($self, $name) {
 sub lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "/my_timers");
   return -1 unless $res->is_success; # XXX WARN
 
   my ($timer) = grep {; $_->{running} }
@@ -1053,7 +1073,7 @@ sub _handle_chill ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "/my_timers");
   if ($res->is_success) {
     my @timers = grep {; $_->{running} }
                  @{ $JSON->decode( $res->decoded_content ) };
@@ -1112,7 +1132,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $sy_timer = $self->timer_for_user($user);
   return $rch->reply("You don't timer-capable.") unless $sy_timer;
 
-  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$lp_timer->{item_id}");
+  my $task_res = $self->http_get_for_user($user, "/tasks/$lp_timer->{item_id}");
 
   unless ($task_res->is_success) {
     return $rch->reply("I couldn't log the work because I couldn't find the current task's activity id.");
@@ -1146,7 +1166,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
 
   my $commit_res = $self->http_post_for_user(
     $user,
-    "$LP_BASE/tasks/$lp_timer->{item_id}/timer/commit",
+    "/tasks/$lp_timer->{item_id}/timer/commit",
     Content => $content,
     Content_Type => 'application/json',
   );
@@ -1163,7 +1183,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   if ($restart) {
     my $start_res = $self->http_post_for_user(
       $user,
-      "$LP_BASE/tasks/$lp_timer->{item_id}/timer/start",
+      "/tasks/$lp_timer->{item_id}/timer/start",
     );
     $meta{RESTARTFAIL} = ! $start_res->is_success;
   }
@@ -1186,7 +1206,7 @@ sub _handle_abort ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "/my_timers");
 
   return $rch->reply("Something went wrong") unless $res->is_success;
 
@@ -1196,8 +1216,8 @@ sub _handle_abort ($self, $event, $rch, $text) {
   return $rch->reply("You don't have an active timer to abort.")
     unless $timer;
 
-  my $stop_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/stop");
-  my $clr_res  = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/clear");
+  my $stop_res = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/stop");
+  my $clr_res  = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/clear");
 
   if ($stop_res->is_success and $clr_res->is_success) {
     $self->timer_for_user($user)->clear_last_nag;
@@ -1215,18 +1235,18 @@ sub _handle_start ($self, $event, $rch, $text) {
     # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
     # TODO: print the description of the task instead of its number -- rjbs,
     # 2016-01-25
-    my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$text/timer/start");
+    my $start_res = $self->http_post_for_user($user, "/tasks/$text/timer/start");
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
     if ($start_res->is_success && $timer->{running}) {
       $user->last_lp_timer_id($timer->{id});
 
-      my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$timer->{item_id}");
+      my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
       my $name = $task_res->is_success
                ? $JSON->decode($task_res->decoded_content)->{name}
                : '??';
 
-      return $rch->reply("Started task: $name ($LINK_BASE$timer->{item_id})");
+      return $rch->reply("Started task: $name (" .  $self->item_uri($timer->{item_id}) .")");
     } else {
       return $rch->reply("I couldn't start the timer for $text.");
     }
@@ -1238,12 +1258,12 @@ sub _handle_start ($self, $event, $rch, $text) {
     }
 
     my $task = $lp_tasks->[0];
-    my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+    my $start_res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
     if ($start_res->is_success && $timer->{running}) {
       $user->last_lp_timer_id($timer->{id});
-      return $rch->reply("Started task: $task->{name} ($LINK_BASE$task->{id})");
+      return $rch->reply("Started task: $task->{name} (" . $self->link_uri($task->{id}) . ")");
     } else {
       return $rch->reply("I couldn't start your next task.");
     }
@@ -1257,7 +1277,7 @@ sub last_lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
   return unless my $lp_timer_id = $user->last_lp_timer_id;
 
-  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "/my_timers");
   return unless $res->is_success;
 
   my ($timer) = grep {; $_->{id} eq $lp_timer_id }
@@ -1273,7 +1293,7 @@ sub _handle_resume ($self, $event, $rch, $text) {
   my $lp_timer = $self->lp_timer_for_user($user);
 
   if ($lp_timer && ref $lp_timer) {
-    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$lp_timer->{item_id}");
+    my $task_res = $self->http_get_for_user($user, "/tasks/$lp_timer->{item_id}");
 
     unless ($task_res->is_success) {
       return $rch->reply("You already have a running timer (but I couldn't figure out its task...)");
@@ -1289,14 +1309,14 @@ sub _handle_resume ($self, $event, $rch, $text) {
     return $rch->reply("I'm not aware of any previous timer you had running. Sorry!");
   }
 
-  my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$last_lp_timer->{item_id}");
+  my $task_res = $self->http_get_for_user($user, "/tasks/$last_lp_timer->{item_id}");
 
   unless ($task_res->is_success) {
     return $rch->reply("I found your timer but I couldn't figure out its task...");
   }
 
   my $task = $JSON->decode($task_res->decoded_content);
-  my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+  my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
 
   unless ($res->is_success) {
     return $rch->reply("I failed to resume the timer for $task->{name}, sorry!");
@@ -1316,7 +1336,7 @@ sub _handle_stop ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your stop request.")
     unless $text eq 'timer';
 
-  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "/my_timers");
   return $rch->reply("Something went wrong") unless $res->is_success;
 
   my ($timer) = grep {; $_->{running} }
@@ -1324,7 +1344,7 @@ sub _handle_stop ($self, $event, $rch, $text) {
 
   return $rch->reply("You don't have any active timers to stop.") unless $timer;
 
-  my $stop_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$timer->{item_id}/timer/stop");
+  my $stop_res = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/stop");
   return $rch->reply("I couldn't stop your active timer.")
     unless $stop_res->is_success;
 
@@ -1364,7 +1384,7 @@ sub _handle_reset ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your reset request. (try 'reset timer')")
     unless ($text // 'timer') eq 'timer';
 
-  my $res = $self->http_get_for_user($user, "$LP_BASE/my_timers");
+  my $res = $self->http_get_for_user($user, "/my_timers");
 
   return $rch->reply("Something went wrong") unless $res->is_success;
 
@@ -1374,14 +1394,14 @@ sub _handle_reset ($self, $event, $rch, $text) {
   $rch->reply("You don't have an active timer to abort.") unless $timer;
 
   my $task_id = $timer->{item_id};
-  my $clr_res  = $self->http_post_for_user($user, "$LP_BASE/tasks/$task_id/timer/clear");
+  my $clr_res  = $self->http_post_for_user($user, "/tasks/$task_id/timer/clear");
 
   return $rch->reply("Something went wrong resetting your timer.")
     unless $clr_res->is_success;
 
   $self->timer_for_user($user)->clear_last_nag;
 
-  my $start_res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task_id/timer/start");
+  my $start_res = $self->http_post_for_user($user, "/tasks/$task_id/timer/start");
   my $restart_timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
   if ($start_res->is_success && $restart_timer->{running}) {
@@ -1419,13 +1439,15 @@ sub _handle_spent ($self, $event, $rch, $text) {
 
   my $flags = $self->_strip_name_flags($name);
 
+  my $workspace_id = $self->workspace_id;
+
   if (
-    $name =~ m{^\s*(?:https://app.liquidplanner.com/space/$WKSP_ID/.*/)?([0-9]+)/?\s*\z}
+    $name =~ m{^\s*(?:https://app.liquidplanner.com/space/$workspace_id/.*/)?([0-9]+)/?\s*\z}
   ) {
     my ($task_id, $comment) = ($1, $2);
     $comment //= "";
 
-    my $task_res = $self->http_get_for_user($user, "$LP_BASE/tasks/$task_id");
+    my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
 
     my $activity_id;
     unless ($task_res->is_success) {
@@ -1440,7 +1462,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
     }
 
     my $res = $self->http_post_for_user($user,
-      "$LP_BASE/tasks/$task->{id}/track_time",
+      "/tasks/$task->{id}/track_time",
       Content_Type => 'application/json',
       Content => $JSON->encode({
         activity_id => $task->{activity_id},
@@ -1455,13 +1477,10 @@ sub _handle_spent ($self, $event, $rch, $text) {
       return $rch->reply("I couldn't log your time, sorry.");
     }
 
-    my $uri = sprintf
-      'https://app.liquidplanner.com/space/%s/projects/show/%s',
-      $WKSP_ID,
-      $task->{id};
+    my $uri = $self->item_uri($task->{id});
 
     if ($flags->{running}) {
-      my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+      my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
       my $timer = eval { $JSON->decode( $res->decoded_content ); };
       if ($res->is_success && $timer->{running}) {
         $user->last_lp_timer_id($timer->{id});
@@ -1494,13 +1513,10 @@ sub _handle_spent ($self, $event, $rch, $text) {
     }
   }
 
-  my $uri = sprintf
-    'https://app.liquidplanner.com/space/%s/projects/show/%s',
-    $WKSP_ID,
-    $task->{id};
+  my $uri = $self->item_uri($task->{id});
 
   my $res = $self->http_post_for_user($user,
-    "$LP_BASE/tasks/$task->{id}/track_time",
+    "/tasks/$task->{id}/track_time",
     Content_Type => 'application/json',
     Content => $JSON->encode({
       activity_id => $task->{activity_id},
@@ -1518,7 +1534,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
   }
 
   if ($flags->{running}) {
-    my $res = $self->http_post_for_user($user, "$LP_BASE/tasks/$task->{id}/timer/start");
+    my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $res->decoded_content ); };
     if ($res->is_success && $timer->{running}) {
       $user->last_lp_timer_id($timer->{id});
@@ -1539,7 +1555,7 @@ sub _handle_projects ($self, $event, $rch, $text) {
 
   for my $project (@sorted) {
     my $id = $self->project_named($project)->[0]->{id};   # cool, LP
-    $rch->private_reply("$project ($LINK_BASE$id)");
+    $rch->private_reply("$project (" . $self->item_uri($id) . ")");
   }
 }
 
@@ -1553,7 +1569,7 @@ sub _handle_todo ($self, $event, $rch, $text) {
   }
 
   my $res = $self->http_post_for_user($user,
-    "$LP_BASE/todo_items",
+    "/todo_items",
     Content_Type => 'application/json',
     Content => $JSON->encode({ todo_item => { title => $desc } }),
   );
@@ -1567,7 +1583,7 @@ sub _handle_todo ($self, $event, $rch, $text) {
 
 sub _handle_todos ($self, $event, $rch, $text) {
   my $user = $event->from_user;
-  my $todo_res = $self->http_get_for_user($user, "$LP_BASE/todo_items");
+  my $todo_res = $self->http_get_for_user($user, "/todo_items");
   return unless $todo_res->is_success;
 
   my $all_todos = $JSON->decode($todo_res->decoded_content);
