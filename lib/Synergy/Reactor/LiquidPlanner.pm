@@ -531,7 +531,9 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my ($target, $name) = $what =~ /\s*for\s+@?(.+?)\s*:\s+(.+)\z/;
 
-  return -1 unless $target and $name;
+  unless ($target and $name) {
+    return $rch->reply("Does not compute.  Usage:  task for TARGET: TASK");
+  }
 
   my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
   my (@owners, @no_lp, @unknown);
