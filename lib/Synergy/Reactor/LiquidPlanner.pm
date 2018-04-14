@@ -1290,7 +1290,6 @@ sub _handle_start ($self, $event, $rch, $text) {
   return -1;
 }
 
-# XXX move this into User object?
 sub last_lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
   return unless my $lp_timer_id = $user->last_lp_timer_id;
