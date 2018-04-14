@@ -22,6 +22,16 @@ has api_token => (
 my $GITLAB_BASE = "https://git.messagingengine.com/api/v4";
 my $GITLAB_PROJECT_ID = 335;
 
+sub start ($self) {
+  my ($ok, $errors) = $self->_reload_all;
+  return if $ok;
+
+  $Logger->log([
+    "error doing initial user config load from GitLab: %s",
+    $errors,
+  ]);
+}
+
 sub listener_specs {
   return {
     name      => 'reload',
@@ -64,6 +74,14 @@ sub handle_all_config ($self, $event, $rch) {
   return $rch->reply("Sorry, only the master user can do that")
     unless $event->from_user->is_master;
 
+  my ($ok, $errors) = $self->_reload_all;
+  return $rch->reply("user config reloaded") if $ok;
+
+  my $who = join ', ', sort @$errors;
+  return $rch->reply("encounted errors while reloading following users: $who");
+}
+
+sub _reload_all ($self) {
   my @errors;
 
   for my $username ($self->hub->user_directory->usernames) {
@@ -78,10 +96,8 @@ sub handle_all_config ($self, $event, $rch) {
     ]);
   }
 
-  return $rch->reply("user config reloaded") unless @errors;
-
-  my $who = join ', ', sort @errors;
-  return $rch->reply("encounted errors while reloading following users: $who");
+  return (1, undef) unless @errors;
+  return (0, \@errors);
 }
 
 sub _update_user_config ($self, $username) {
