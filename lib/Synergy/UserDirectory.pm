@@ -75,6 +75,18 @@ sub load_users_from_file ($self, $file) {
   return \%users;
 }
 
+sub reload_user ($self, $username, $data) {
+  my $old = $self->user_named($username);
+
+  my $new_user = Synergy::User->new({
+    %$old,
+    %$data,
+    username => $username,
+  });
+
+  $self->_set_user($username, $new_user);
+}
+
 sub resolve_name ($self, $name, $who) {
   return unless $name;
 

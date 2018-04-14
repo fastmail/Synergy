@@ -2,7 +2,9 @@ use v5.16.0;
 package Synergy::User;
 
 use Moose;
-use MooseX::StrictConstructor;
+# This comment-out should be temporary; just here to deal with unknown config
+# from gitlab.  -- michael, 2018-04-13
+# use MooseX::StrictConstructor;
 use experimental qw(signatures);
 
 use namespace::autoclean;
