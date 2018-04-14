@@ -284,7 +284,7 @@ sub synergize {
 sub _slurp_json_file ($filename) {
   my $file = Path::Tiny::path($filename);
   confess "config file does not exist" unless -e $file;
-  my $json = $file->slurp;
+  my $json = $file->slurp_utf8;
   return JSON::MaybeXS->new->decode($json);
 }
 
