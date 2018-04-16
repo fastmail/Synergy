@@ -416,6 +416,7 @@ sub nag ($self, $timer, @) {
 
       my $still = $level == 0 ? '' : ' still';
       my $msg   = "Your LiquidPlanner timer$still isn't running";
+      $Logger->log([ 'nagging %s at level %s', $user->username, $level ]);
       my $friendly = $self->hub->channel_named($self->primary_nag_channel_name);
       $friendly->send_message_to_user($user, $msg);
       if ($level >= 2) {
