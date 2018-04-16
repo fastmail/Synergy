@@ -13,10 +13,17 @@ use Synergy::Timer;
 
 has is_master => (is => 'ro', isa => 'Bool');
 
-has [ qw(username realname) ] => (
+has username => (
   is => 'ro',
   isa => 'Str',
   required => 1,
+);
+
+has realname => (
+  is    => 'ro',
+  isa   => 'Str',
+  lazy  => 1,
+  default => sub { $_[0]->username },
 );
 
 has wtf_replies => (
