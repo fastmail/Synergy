@@ -56,7 +56,15 @@ sub start ($self) {
     }
 
     if ($event->{type} eq 'hello') {
-      $self->slack->setup if $event->{type} eq 'hello';
+      $self->slack->setup;
+      return;
+    }
+
+    if ($event->{type} eq 'pong') {
+      my $pong_timer = $self->slack->pong_timer;
+      $pong_timer->stop;
+      $self->loop->remove($pong_timer);
+      $self->slack->clear_pong_timer;
       return;
     }
 

@@ -25,6 +25,11 @@ has http    => (
   default => sub { Net::Async::HTTP->new },
 );
 
+has _http_added_to_loop => (
+  is => 'rw',
+  isa => 'Bool',
+);
+
 has api_key => ( is => 'ro', required => 1 );
 
 has users => (
@@ -78,6 +83,12 @@ has client => (
   },
 );
 
+has pong_timer => (
+  is => 'rw',
+  isa => 'IO::Async::Timer::Countdown',
+  clearer => 'clear_pong_timer',
+);
+
 has own_name => (
   is => 'ro',
   isa => 'Str',
@@ -91,7 +102,9 @@ has own_id => (
 );
 
 sub connect ($self) {
-  $self->loop->add($self->http);
+  $self->loop->add($self->http) unless $self->_http_added_to_loop;
+  $self->_http_added_to_loop(1);
+
   $self->http
        ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
        ->on_done(sub ($res) { $self->_register_slack_rtm($res) })
@@ -135,9 +148,22 @@ sub _register_slack_rtm ($self, $res) {
       my $timer = IO::Async::Timer::Periodic->new(
         interval => 10,
         on_tick  => sub {
-          $self->send_frame({
-            type => 'ping',
-          });
+          $self->send_frame({ type => 'ping' });
+
+          # If we don't get a pong in 2s, try reconnecting
+          my $pong_timer = IO::Async::Timer::Countdown->new(
+            delay            => 2,
+            remove_on_expire => 1,
+            on_expire        => sub {
+              $Logger->log("failed to get pong; trying to reconnect");
+              $self->client->close;
+              $self->connect;
+            },
+          );
+
+          $self->pong_timer($pong_timer);
+          $pong_timer->start;
+          $self->loop->add($pong_timer);
         }
       );
 
