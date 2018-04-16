@@ -150,7 +150,7 @@ sub handle_event ($self, $event, $rch) {
     "%s event from %s/%s: %s",
     $event->type,
     $event->from_channel->name,
-    $event->from_address,
+    $event->from_user ? 'u:' . $event->from_user->username : $event->from_address,
     $event->text,
   ]);
 
