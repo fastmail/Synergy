@@ -791,6 +791,8 @@ sub _handle_plus_plus ($self, $event, $rch, $text) {
 sub _handle_angle_angle ($self, $event, $rch, $text) {
   my ($target, $rest) = split /\s+/, $text, 2;
 
+  $target =~ s/:$//;
+
   my $pretend = "task for $target: $rest";
 
   return $self->_handle_task($event, $rch, $pretend);
