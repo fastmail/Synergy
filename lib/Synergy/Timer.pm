@@ -54,7 +54,7 @@ has showtime => (
 );
 
 has time_zone => (
-  is  => 'ro',
+  is  => 'rw',
   isa => 'Str',
   required => 1,
 );

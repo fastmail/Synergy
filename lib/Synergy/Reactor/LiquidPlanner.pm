@@ -213,7 +213,15 @@ sub timer_for_user ($self, $user) {
   return unless $user->has_lp_token;
 
   my $timer = $self->_timer_for_user($user->username);
-  return $timer if $timer;
+
+  if ($timer) {
+    # This is a bit daft, but otherwise we could initialize the cached timer
+    # before the user's time zone has loaded from GitHub.  Then we'd be stuck
+    # with it.  Doing this update is cheap. -- rjbs, 2018-04-16
+    $timer->time_zone($user->time_zone);
+
+    return $timer;
+  }
 
   $timer = Synergy::Timer->new({
     time_zone      => $user->time_zone,
