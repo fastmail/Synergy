@@ -1281,7 +1281,7 @@ sub _handle_start ($self, $event, $rch, $text) {
 
     if ($start_res->is_success && $timer->{running}) {
       $user->last_lp_timer_id($timer->{id});
-      return $rch->reply("Started task: $task->{name} (" . $self->link_uri($task->{id}) . ")");
+      return $rch->reply("Started task: $task->{name} (" . $self->item_uri($task->{id}) . ")");
     } else {
       return $rch->reply("I couldn't start your next task.");
     }
