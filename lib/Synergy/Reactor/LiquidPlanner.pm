@@ -6,7 +6,6 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
-use Encode qw(encode);
 use List::Util qw(first);
 use Net::Async::HTTP;
 use JSON 2 ();
@@ -16,7 +15,7 @@ use Synergy::Util qw(parse_time_hunk pick_one);
 use DateTime;
 use utf8;
 
-my $JSON = JSON->new;
+my $JSON = JSON->new->utf8;
 
 has workspace_id => (
   is  => 'ro',
@@ -996,9 +995,9 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
     unless $container{parent_id};
 
   my $payload = { task => {
-    name        => encode('UTF-8', $my_arg->{name}),
+    name        => $my_arg->{name},
     assignments => [ map {; { person_id => $_->lp_id } } @{ $my_arg->{owners} } ],
-    description => encode('UTF-8', $my_arg->{description}),
+    description => $my_arg->{description},
 
     %container,
   } };
