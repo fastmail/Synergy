@@ -6,6 +6,7 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
+use Encode qw(encode);
 use List::Util qw(first);
 use Net::Async::HTTP;
 use JSON 2 ();
@@ -607,7 +608,7 @@ sub _handle_task ($self, $event, $rch, $text) {
   $user = undef unless $user && $user->lp_auth_header;
 
   my $description = sprintf 'created by %s in response to %s',
-    'pizzazz', # XXX -- alh, 2018-03-14
+    'synergy', # XXX -- alh, 2018-03-14
     $via;
 
   my $project_id = (keys %project_id)[0] if 1 == keys %project_id;
@@ -957,7 +958,6 @@ sub resolve_name ($self, $name, $who) {
 }
 
 sub _create_lp_task ($self, $rch, $my_arg, $arg) {
-  my $config; # XXX REAL CONFIG
   my %container = (
     package_id  => $my_arg->{urgent}
                 ? $CONFIG->{liquidplanner}{package}{urgent}
@@ -996,9 +996,9 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
     unless $container{parent_id};
 
   my $payload = { task => {
-    name        => $my_arg->{name},
+    name        => encode('UTF-8', $my_arg->{name}),
     assignments => [ map {; { person_id => $_->lp_id } } @{ $my_arg->{owners} } ],
-    description => $my_arg->{description},
+    description => encode('UTF-8', $my_arg->{description}),
 
     %container,
   } };
