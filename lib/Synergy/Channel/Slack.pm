@@ -28,10 +28,13 @@ has slack => (
   isa => 'Synergy::External::Slack',
   lazy => 1,
   default => sub ($self) {
-    Synergy::External::Slack->new(
+    my $slack = Synergy::External::Slack->new(
       loop    => $self->loop,
       api_key => $self->api_key,
     );
+
+    $slack->register_with_hub($self->hub);
+    return $slack;
   }
 );
 

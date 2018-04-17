@@ -13,22 +13,7 @@ use Data::Dumper::Concise;
 
 use Synergy::Logger '$Logger';
 
-has loop    => (
-  is => 'ro',
-  required => 1
-);
-
-has http    => (
-  is => 'ro',
-  isa => 'Net::Async::HTTP',
-  init_arg => undef,
-  default => sub { Net::Async::HTTP->new },
-);
-
-has _http_added_to_loop => (
-  is => 'rw',
-  isa => 'Bool',
-);
+with 'Synergy::Role::HubComponent';
 
 has api_key => ( is => 'ro', required => 1 );
 
@@ -102,14 +87,11 @@ has own_id => (
 );
 
 sub connect ($self) {
-  $self->loop->add($self->http) unless $self->_http_added_to_loop;
-  $self->_http_added_to_loop(1);
-
-  $self->http
-       ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
-       ->on_done(sub ($res) { $self->_register_slack_rtm($res) })
-       ->on_fail(sub ($err) { die "couldn't start RTM API: $err" })
-       ->get;
+  $self->hub->http
+            ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
+            ->on_done(sub ($res) { $self->_register_slack_rtm($res) })
+            ->on_fail(sub ($err) { die "couldn't start RTM API: $err" })
+            ->get;
 };
 
 sub send_frame ($self, $frame) {
@@ -183,7 +165,7 @@ sub api_call ($self, $method, $arg = {}) {
     %$arg,
   };
 
-  return Future->wrap($self->http->POST(URI->new($url), $payload));
+  return Future->wrap($self->hub->http->POST(URI->new($url), $payload));
 }
 
 sub setup ($self) {
