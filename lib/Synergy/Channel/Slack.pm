@@ -115,6 +115,10 @@ sub start ($self) {
     $text =~ s/\A \@?($me)(?=\W):?\s*//ix;
     my $was_targeted = !! $1;
 
+    # Anything with < and > around it is probably a URL at this point so remove
+    # those
+    $text =~ s/[<>]//g;
+
     $text =~ s/&lt;/</g;
     $text =~ s/&gt;/>/g;
     $text =~ s/&amp;/&/g;
