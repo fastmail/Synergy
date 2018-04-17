@@ -220,6 +220,9 @@ sub timer_for_user ($self, $user) {
     # with it.  Doing this update is cheap. -- rjbs, 2018-04-16
     $timer->time_zone($user->time_zone);
 
+    # equally daft -- michael, 2018-04-17
+    $timer->business_hours($user->business_hours);
+
     return $timer;
   }
 

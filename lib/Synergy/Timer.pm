@@ -60,7 +60,7 @@ has time_zone => (
 );
 
 has business_hours => (
-  is => 'ro',
+  is => 'rw',
   isa => 'HashRef',
   required => 1,
 );
