@@ -111,6 +111,7 @@ sub start ($self) {
     # decode text
     my $me = $self->slack->own_name;
     my $text = $self->decode_slack_usernames($event->{text});
+    $text = $self->decode_slack_channelnames($text);
 
     $text =~ s/\A \@?($me)(?=\W):?\s*//ix;
     my $was_targeted = !! $1;
@@ -151,6 +152,10 @@ sub start ($self) {
 # TODO: re-encode these on reply?
 sub decode_slack_usernames ($self, $text) {
   return $text =~ s/<\@(U[A-Z0-9]+)>/"@" . $self->slack->username($1)/ger;
+}
+
+sub decode_slack_channelnames ($self, $text) {
+  return $text =~ s/<#C(?:[A-Z0-9]+)\|(.*)>/#$1/gr;
 }
 
 sub send_message_to_user ($self, $user, $text) {
