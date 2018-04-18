@@ -110,19 +110,10 @@ sub start ($self) {
 
     # decode text
     my $me = $self->slack->own_name;
-    my $text = $self->decode_slack_usernames($event->{text});
-    $text = $self->decode_slack_channel_names($text);
+    my $text = $self->decode_slack_formatting($event->{text});
 
     $text =~ s/\A \@?($me)(?=\W):?\s*//ix;
     my $was_targeted = !! $1;
-
-    # Anything with < and > around it is probably a URL at this point so remove
-    # those
-    $text =~ s/[<>]//g;
-
-    $text =~ s/&lt;/</g;
-    $text =~ s/&gt;/>/g;
-    $text =~ s/&amp;/&/g;
 
     my $is_public = $event->{channel} =~ /^C/;
     $was_targeted = 1 if not $is_public;   # private replies are always targeted
@@ -149,13 +140,25 @@ sub start ($self) {
   };
 }
 
-# TODO: re-encode these on reply?
-sub decode_slack_usernames ($self, $text) {
-  return $text =~ s/<\@(U[A-Z0-9]+)>/"@" . $self->slack->username($1)/ger;
-}
+sub decode_slack_formatting ($self, $text) {
+  # Usernames: <@U123ABC>
+  $text =~ s/<\@(U[A-Z0-9]+)>/"@" . $self->slack->username($1)/ge;
 
-sub decode_slack_channel_names ($self, $text) {
-  return $text =~ s/<#C(?:[A-Z0-9]+)\|(.*?)>/#$1/gr;
+  # Channels: <#C123ABC|bottest>
+  $text =~ s/<#C(?:[A-Z0-9]+)\|(.*?)>/#$1/g;
+
+  # mailto: mailto:foo@bar.com|foo@bar.com (no surrounding brackets)
+  $text =~ s/mailto:\S+?\|//g;
+
+  # Anything with < and > around it is probably a URL at this point so remove
+  # those
+  $text =~ s/[<>]//g;
+
+  $text =~ s/&lt;/</g;
+  $text =~ s/&gt;/>/g;
+  $text =~ s/&amp;/&/g;
+
+  return $text;
 }
 
 sub send_message_to_user ($self, $user, $text) {
