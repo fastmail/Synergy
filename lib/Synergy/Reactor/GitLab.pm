@@ -60,7 +60,7 @@ sub handle_reload ($self, $event, $rch) {
     unless $event->from_user;
 
   my $text = $event->text;
-  my ($what) = $text =~ /^\s*reload\s+(.*)/;
+  my ($what) = $text =~ /^\s*reload\s+(.*)/i;
   $what &&= lc $what;
 
   $what =~ s/^\s*|\s*$//g;
