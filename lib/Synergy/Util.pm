@@ -1,6 +1,6 @@
 use v5.24.0;
 use warnings;
-package Synergy::Reactor::LiquidPlanner;
+package Synergy::Util;
 
 use experimental qw(signatures);
 

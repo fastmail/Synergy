@@ -11,7 +11,7 @@ use namespace::clean;
 use IO::Async::Timer::Absolute;
 use List::Util qw(first);
 use Time::Duration::Parse;
-use Synergy::Util qw(pare_date_for_user);
+use Synergy::Util qw(parse_date_for_user);
 
 sub listener_specs {
   return {
