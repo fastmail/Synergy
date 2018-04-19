@@ -10,6 +10,7 @@ use List::Util qw(first);
 use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration;
+use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(parse_time_hunk pick_one);
 use DateTime;
