@@ -330,6 +330,8 @@ sub start ($self) {
         }
       }
     }
+
+    $self->save_state;
   }
 
   my $timer = IO::Async::Timer::Periodic->new(
