@@ -452,7 +452,14 @@ sub get_project_nicknames {
     $project_dict{ lc $nick } //= [];
 
     # But don't add the same project twice. -- michael, 2018-04-24
-    next if grep {; $_->{id} eq $project->{id} } $project_dict{ lc $nick }->@*;
+    my @existing = grep {; $_->{id} eq $project->{id} } $project_dict{ lc $nick }->@*;
+    if (@existing) {
+      $Logger->log([ "Duplicate project found; got %s, conflicts with %s",
+        $project,
+        \@existing
+      ]);
+      next;
+    }
 
     push $project_dict{ lc $nick }->@*, {
       id        => $project->{id},
