@@ -450,6 +450,10 @@ sub get_project_nicknames {
 
     # We'll deal with conflicts later. -- rjbs, 2018-01-22
     $project_dict{ lc $nick } //= [];
+
+    # But don't add the same project twice. -- michael, 2018-04-24
+    next if grep {; $_->{id} eq $project->{id} } $project_dict{ lc $nick }->@*;
+
     push $project_dict{ lc $nick }->@*, {
       id        => $project->{id},
       nickname  => $nick,
