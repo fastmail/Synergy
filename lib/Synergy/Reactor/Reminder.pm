@@ -119,7 +119,7 @@ sub handle_remind ($self, $event, $rch) {
 
   my $target = $to_user->username eq $event->from_user->username
              ? 'you'
-             : $who->username;
+             : $to_user->username;
 
   $self->add_reminder({
     when  => $time,
