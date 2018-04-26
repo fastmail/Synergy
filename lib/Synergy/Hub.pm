@@ -17,6 +17,7 @@ use Path::Tiny ();
 use Plack::App::URLMap;
 use Synergy::HTTPServer;
 use Try::Tiny;
+use URI;
 
 has user_directory => (
   is  => 'ro',
@@ -346,6 +347,13 @@ sub http_request ($self, $method, $url, %args) {
   }
 
   push @args, headers => \%args;
+
+  my $uri = URI->new($url);
+
+  if ($uri->scheme eq 'https') {
+    # Work around IO::Async::SSL not handling SNI hosts properly :(
+    push @args, SSL_hostname => $uri->host;
+  }
 
   # The returned future will run the loop for us until we return. This makes
   # it asynchronous as far as the rest of the code is concerned, but
