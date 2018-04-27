@@ -150,6 +150,10 @@ sub decode_slack_formatting ($self, $text) {
   # mailto: mailto:foo@bar.com|foo@bar.com (no surrounding brackets)
   $text =~ s/mailto:\S+?\|//g;
 
+  # "helpful" url formatting:  <https://example.com|example.com>; keep what
+  # user actually typed
+  $text =~ s/< [^|]+ \| ( [^>]+ ) >/$1/gx;
+
   # Anything with < and > around it is probably a URL at this point so remove
   # those
   $text =~ s/[<>]//g;
