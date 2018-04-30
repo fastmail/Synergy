@@ -113,6 +113,7 @@ sub listener_specs {
         return 1 if $what =~ /^g'day/;    # stupid, but effective
         return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
         return 1 if $what =~ /^done,/;    # ugh
+        return 1 if $what =~ /^show’s/;   # ugh, curly quote
         return;
       }
     },
@@ -145,8 +146,9 @@ sub dispatch_event ($self, $event, $rch) {
     return 1;
   }
 
-  # existing hacks for silly greetings
+  # existing hacks for massaging text
   my $text = $event->text;
+  $text = "show's over" if $text =~ /\A\s*show’s\s+over\z/i;    # curly quote
   $text = "good day_au" if $text =~ /\A\s*g'day(?:,?\s+mate)?[1!.?]*\z/i;
   $text = "good day_de" if $text =~ /\Agruß gott[1!.]?\z/i;
   $text =~ s/\Ago{3,}d(?=\s)/good/;
