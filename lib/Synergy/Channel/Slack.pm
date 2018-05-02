@@ -112,8 +112,11 @@ sub start ($self) {
     my $me = $self->slack->own_name;
     my $text = $self->decode_slack_formatting($event->{text});
 
-    $text =~ s/\A \@?($me)(?=\W):?\s*//ix;
-    my $was_targeted = !! $1;
+    my $was_targeted;
+
+    if ($text =~ s/\A \@?($me)(?=\W):?\s*//ix) {
+      $was_targeted = !! $1;
+    }
 
     my $is_public = $event->{channel} =~ /^C/;
     $was_targeted = 1 if not $is_public;   # private replies are always targeted
