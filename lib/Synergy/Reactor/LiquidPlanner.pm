@@ -1248,7 +1248,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
 
 sub _handle_abort ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your abort request.")
-    unless $text eq 'timer';
+    unless $text =~ /^timer\b/i;
 
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
