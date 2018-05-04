@@ -31,17 +31,49 @@ sub start ($self) {
     my $param = $req->parameters;
     my $from  = $param->{From} // '';
 
+    unless (($param->{AccountSid}//'') eq $self->sid) {
+      $Logger->log([
+        "Bad request (wrong sid) for %s from phone %s from IP %s",
+        $req->uri->path_query,
+        $from,
+        $req->address,
+      ]);
+
+      return [
+        400,
+        [ 'Content-Type', 'application/json' ],
+        [ "{}\n" ],
+      ];
+    }
+
     my $who = $self->hub->user_directory->user_by_channel_and_address(
       $self,
       $from,
     );
 
-    unless (($param->{AccountSid}//'') eq $self->sid and $who) {
-      $Logger->log(sprintf "Bad request for %s from phone %s from IP %s",
+    unless ($who) {
+      my (@match) = grep {; $_->has_phone && $_->phone eq $from }
+                    $self->hub->user_directory->users;
+
+      if (@match == 1) {
+        $who = $match[0];
+        $Logger->log([
+          "resolved %s to %s via phone number",
+          $from,
+          $who->username,
+        ]);
+      } elsif (@match > 1) {
+        $Logger->log([ "phone number %s is ambiguous", $from ]);
+      }
+    }
+
+    unless ($who) {
+      $Logger->log([
+        "Bad request (unknown user) for %s from phone %s from IP %s",
         $req->uri->path_query,
         $from,
         $req->address,
-      );
+      ]);
 
       return [
         400,
