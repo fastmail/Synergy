@@ -74,6 +74,7 @@ my %KNOWN = (
   gruß      => \&_handle_good,
   expand    => \&_handle_expand,
   chill     => \&_handle_chill,
+  zzz       => \&_handle_triple_zed,
   shows     => \&_handle_shows,
   "show's"  => \&_handle_shows,
   showtime  => \&_handle_showtime,
@@ -1157,6 +1158,10 @@ sub _handle_chill ($self, $event, $rch, $text) {
   $sy_timer->chilltill($time);
   $self->save_state;
   $rch->reply("Okay, no more nagging until $when");
+}
+
+sub _handle_triple_zed ($self, $event, $rch, $text) {
+  $self->_handle_chill($event, $rch, "");
 }
 
 sub _handle_commit ($self, $event, $rch, $comment) {
