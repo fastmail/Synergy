@@ -1,9 +1,14 @@
+# libssl-dev
+# zlib1g-dev
 requires 'Carp';
 requires 'Cpanel::JSON::XS';
+requires 'DBD::SQLite';
 requires 'Data::Dumper::Concise';
 requires 'DateTime';
 requires 'DateTime::Format::Natural';
+requires 'Getopt::Long::Descriptive';
 requires 'IO::Async::Loop';
+requires 'IO::Async::SSL';
 requires 'IO::Async::Test';
 requires 'IO::Async::Timer::Absolute';
 requires 'IO::Async::Timer::Periodic';
