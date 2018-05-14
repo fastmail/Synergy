@@ -131,8 +131,9 @@ sub handle_remind ($self, $event, $rch) {
   });
 
   $rch->reply(
-    # XXX: use a better time formatter here -- rjbs, 2018-03-16
-    sprintf "Okay, I'll remind %s at %s.", $target, scalar localtime $time
+    sprintf "Okay, I'll remind %s at %s.",
+      $target,
+      $to_user->format_datetime( DateTime->from_epoch(epoch => $time) ),
   );
 
   return;
