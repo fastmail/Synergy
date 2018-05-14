@@ -38,7 +38,7 @@ has time_zone => (
   default => 'America/New_York',
 );
 
-sub format_datetime ($self, $dt, $format = '%G %R %Z') {
+sub format_datetime ($self, $dt, $format = '%F %R %Z') {
   $dt = $dt->clone;
   $dt->set_time_zone($self->time_zone);
   return $dt->strftime($format);
