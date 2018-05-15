@@ -61,7 +61,7 @@ sub handle_remind ($self, $event, $rch) {
     return;
   }
 
-  $text =~ s/\Aremind\s+//;
+  $text =~ s/\Aremind\s+//i;
   my ($who, $prep, $dur_str, $want_page, $rest) = $text =~ qr/\A
     \s*
     (\S+)    # "me" or a nick
@@ -73,7 +73,9 @@ sub handle_remind ($self, $event, $rch) {
     :\s+     # the space is vital:  "at 15:15: eat pie"
     (.+)     # the reminder
     \z
-  /x;
+  /xi;
+
+  $_ = fc $_ for ($who, $prep, $dur_str, $want_page);
 
   my $fail = sub {
     $rch->reply('usage: remind WHO (in|at) (time) [with page]: (reminder)');
