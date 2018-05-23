@@ -55,9 +55,9 @@ sub handle_cat_pic ($self, $event, $rch) {
 sub handle_dog_pic ($self, $event, $rch) {
   $event->mark_handled;
 
-  my $res = $self->hub->http->GET(
-    "http://dog.ceo/api/breeds/image/random",
-  )->get;
+  my $res = $self->hub->http_get(
+    "https://dog.ceo/api/breeds/image/random",
+  );
 
   my $json = eval { JSON::MaybeXS->new->decode( $res->decoded_content ) };
   my $error = $@;
