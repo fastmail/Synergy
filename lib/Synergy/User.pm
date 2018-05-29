@@ -13,6 +13,12 @@ use Synergy::Timer;
 
 has is_master => (is => 'ro', isa => 'Bool');
 
+has is_virtual => (
+  is  => 'ro',
+  isa => 'Bool',
+  default => 0,
+);
+
 has username => (
   is => 'ro',
   isa => 'Str',
