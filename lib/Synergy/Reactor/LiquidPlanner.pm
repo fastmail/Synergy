@@ -622,6 +622,19 @@ sub _handle_task ($self, $event, $rch, $text) {
   my $urgent = $flags->{urgent};
   my $start  = $flags->{running};
 
+  if ($urgent) {
+    my @virtuals = grep {; $_->is_virtual } @owners;
+    if (@virtuals) {
+      my $names = join q{, }, sort map {; $_->username } @virtuals;
+      return $rch->reply(
+        "Sorry, you can't make urgent tasks for non-humans."
+        . "  Find a human who can take responsibility, even if it's you."
+        . "  You got this error because you tried to assign an urgent task to:"
+        . " $names"
+      );
+    }
+  }
+
   my $via = $rch->channel->describe_event($event);
   my $user = $event->from_user;
   $user = undef unless $user && $user->lp_auth_header;
