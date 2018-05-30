@@ -191,15 +191,16 @@ sub describe_event ($self, $event) {
   my $channel_id = $event->transport_data->{channel};
 
   my $slack = $self->name;
+  my $via   = qq{via Slack instance "$slack"};
 
   if ($channel_id =~ /^C/) {
     my $channel = $self->slack->channels->{$channel_id}{name};
 
-    return "a message on #$channel from $who on slack $slack";
+    return qq{a message on #$channel from $who $via};
   } elsif ($channel_id =~ /^D/) {
-    return "a private message from $who on slack $slack";
+    return "a private message from $who $via";
   } else {
-    return "an unknown slack communication from $who on slack $slack";
+    return "an unknown slack communication from $who $via";
   }
 }
 
