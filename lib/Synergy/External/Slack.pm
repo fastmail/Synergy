@@ -17,6 +17,12 @@ with 'Synergy::Role::HubComponent';
 
 has api_key => ( is => 'ro', required => 1 );
 
+has connected => (
+  is => 'rw',
+  isa => 'Bool',
+  default => '0',
+);
+
 has users => (
   is => 'ro',
   isa => 'HashRef',
@@ -87,6 +93,8 @@ has own_id => (
 );
 
 sub connect ($self) {
+  $self->connected(0);
+
   $self->hub->http
             ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
             ->on_done(sub ($res) { $self->_register_slack_rtm($res) })
@@ -99,7 +107,34 @@ sub send_frame ($self, $frame) {
 
   $frame->{id} = $i++;
 
-  $self->client->send_frame(masked => 1, buffer => encode_json($frame));
+  if ($self->connected) {
+    $self->client->send_frame(masked => 1, buffer => encode_json($frame));
+  } else {
+    # Save it til after we've successfully reconnected
+    $self->queue_frame($frame);
+  }
+}
+
+has _frame_queue => (
+  is      => 'ro',
+  isa     => 'ArrayRef',
+  traits  => [ 'Array' ],
+  lazy    => 1,
+  handles => {
+    _next_frame       => 'shift',
+    queue_frame       => 'push',
+    has_queued_frames => 'count',
+  },
+  default => sub { [] },
+);
+
+sub flush_queue ($self) {
+  while ($self->has_queued_frames) {
+    $self->client->send_frame(
+      masked => 1,
+      buffer => encode_json($self->_next_frame)
+    );
+  }
 }
 
 sub send_message ($self, $channel, $text) {
@@ -124,6 +159,10 @@ sub _register_slack_rtm ($self, $res) {
     url => $json->{url},
     service => 'https',
     on_connected => sub {
+      $self->connected(1);
+
+      $self->flush_queue;
+
       state $i = 1;
 
       # Send pings to slack so it knows we're still alive
