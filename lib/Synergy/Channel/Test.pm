@@ -16,7 +16,7 @@ with 'Synergy::Role::Channel';
 has prefix => (
   is  => 'ro',
   isa => 'Str',
-  default => q{synergy},
+  default => q{synergy: },
 );
 
 sub send_message_to_user (@) { ... }
@@ -45,11 +45,15 @@ sub _inject_event ($self, $arg) {
   my $text = $arg->{text} // "This is a test, sent at " . localtime . ".";
   my $from_address = $arg->{from_address} // 'tester';
 
+  my $prefix = $self->prefix;
+  my $had_prefix = $text =~ s/\A\Q$prefix\E\s*//;
+
   my $event = Synergy::Event->new({
     type => 'message',
-    text => $self->prefix . ": " . $text,
+    text => $text,
     from_address => $from_address,
     from_channel => $self,
+    was_targeted => $had_prefix,
   });
 
   my $rch = Synergy::ReplyChannel->new({
