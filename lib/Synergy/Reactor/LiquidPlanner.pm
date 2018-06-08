@@ -560,7 +560,8 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my ($target, $name) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
 
-  $name, (my $description) = split /\n+/, $name, 2;
+  my $description;
+  ($name, $description) = split /\n+/, $name, 2;
   $description //= '';
 
   unless ($target and $name) {
