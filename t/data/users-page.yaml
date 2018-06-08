@@ -1,0 +1,13 @@
+---
+roxy:
+  realname: Roxanne Pelligrini
+  nicknames: [ roxanne ]
+  identities:
+    test-1: Rone
+    test-2: Rtwo
+stormer:
+  realname: Mary Phillips
+  nicknames: [ mary ]
+  identities:
+    test-1: Mone
+    test-2: Mtwo
