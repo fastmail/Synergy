@@ -16,10 +16,22 @@ with 'Synergy::Role::Channel';
 has prefix => (
   is  => 'ro',
   isa => 'Str',
-  default => q{synergy},
+  default => q{synergy: },
 );
 
-sub send_message_to_user (@) { ... }
+sub send_message_to_user ($self, $user, $message) {
+  my $to_address = $user->identities->{ $self->name };
+
+  unless ($to_address) {
+    confess(
+      sprintf "no address for user<%s> on channel<%s>",
+        $user->username,
+        $self->name,
+    );
+  }
+
+  $self->record_message({ address => $to_address, text => $message });
+}
 
 sub send_text ($self, $address, $text) {
   $self->record_message({ address => $address, text => $text });
@@ -45,11 +57,15 @@ sub _inject_event ($self, $arg) {
   my $text = $arg->{text} // "This is a test, sent at " . localtime . ".";
   my $from_address = $arg->{from_address} // 'tester';
 
+  my $prefix = $self->prefix;
+  my $had_prefix = $text =~ s/\A\Q$prefix\E\s*//;
+
   my $event = Synergy::Event->new({
     type => 'message',
-    text => $self->prefix . ": " . $text,
+    text => $text,
     from_address => $from_address,
     from_channel => $self,
+    was_targeted => $had_prefix,
   });
 
   my $rch = Synergy::ReplyChannel->new({

@@ -34,7 +34,7 @@ sub start ($self) {
 sub handle_page ($self, $event, $rch) {
   $event->mark_handled;
 
-  my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):\s+(.*)/i;
+  my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):\s+(.*)/is;
 
   unless (length $who and length $what) {
     $rch->reply("usage: page USER: MESSAGE");
@@ -48,8 +48,8 @@ sub handle_page ($self, $event, $rch) {
     return;
   }
 
-  unless ($user->has_phone) {
-    $rch->reply("'$who' doesn't have a phone number. :confused:");
+  unless ($user->identities->{ $self->page_channel_name } || $user->has_phone) {
+    $rch->reply("I don't know how to page $who, sorry.");
     return;
   }
 

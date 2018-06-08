@@ -21,13 +21,12 @@ my $synergy = Synergy::Hub->synergize(
     channels => {
       'test-channel' => {
         class     => 'Synergy::Channel::Test',
-        prefix    => q{synergy},
         todo      => [
-          [ send    => { text => "Hi." }  ],
+          [ send    => { text => "synergy: Hi." }  ],
           [ wait    => { seconds => 1  }  ],
-          [ repeat  => { text => "Hello?", times => 3, sleep => 0.34 } ],
+          [ repeat  => { text => "synergy: Hello?", times => 3, sleep => 0.34 } ],
           [ wait    => { seconds => 1  }  ],
-          [ send    => { text => "Bye." } ],
+          [ send    => { text => "synergy: Bye." } ],
         ],
       }
     },
@@ -48,10 +47,10 @@ my @replies = $synergy->channel_named('test-channel')->sent_messages;
 
 is(@replies, 5, "five replies recorded");
 
-is(  $replies[0]{address}, 'public',                  "1st: expected address");
-like($replies[0]{text},    qr{I heard you, .* Hi\.},  "1st: expected text");
+is(  $replies[0]{address}, 'public',                    "1st: expected address");
+like($replies[0]{text},    qr{I heard you, .* "Hi\."},  "1st: expected text");
 
-is(  $replies[4]{address}, 'public',                  "5th: expected address");
-like($replies[4]{text},    qr{I heard you, .* Bye\.}, "5th: expected text");
+is(  $replies[4]{address}, 'public',                    "5th: expected address");
+like($replies[4]{text},    qr{I heard you, .* "Bye\."}, "5th: expected text");
 
 done_testing;
