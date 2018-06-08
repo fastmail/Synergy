@@ -643,10 +643,13 @@ sub _handle_task ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   $user = undef unless $user && $user->lp_auth_header;
 
-  $description = sprintf '%screated by %s in response to %s',
+  my $uri = $event->event_uri;
+
+  $description = sprintf '%screated by %s in response to %s%s',
     ($description ? "$description\n\n" : ""),
     $self->hub->name,
-    $via;
+    $via,
+    $uri ? "\n\n$uri" : "";
 
   my $project_id = (keys %project_id)[0] if 1 == keys %project_id;
 
