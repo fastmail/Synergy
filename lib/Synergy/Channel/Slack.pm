@@ -184,6 +184,15 @@ sub send_text ($self, $target, $text) {
   return;
 }
 
+sub _uri_from_event ($self, $event) {
+  my $channel = $event->transport_data->{channel};
+
+  return sprintf 'https://%s.slack.com/archives/%s/p%s',
+    $self->slack->_team_data->{domain},
+    $event->transport_data->{channel},
+    $event->transport_data->{ts} =~ s/\.//r;
+}
+
 sub describe_event ($self, $event) {
   my $who = $event->from_user ? $event->from_user->username
                               : $self->slack->users->{$event->from_address}{name};

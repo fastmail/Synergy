@@ -92,6 +92,11 @@ has own_id => (
   writer => '_set_own_id',
 );
 
+has _team_data => (
+  is => 'ro',
+  writer => '_set_team_data',
+);
+
 sub connect ($self) {
   $self->connected(0);
 
@@ -153,6 +158,7 @@ sub _register_slack_rtm ($self, $res) {
 
   $self->_set_own_name($json->{self}->{name});
   $self->_set_own_id($json->{self}->{id});
+  $self->_set_team_data($json->{team});
 
   $self->loop->add($self->client);
   $self->client->connect(

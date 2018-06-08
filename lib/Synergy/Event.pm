@@ -54,6 +54,11 @@ has was_handled => (
   },
 );
 
+sub event_uri ($self) {
+  return undef unless $self->from_channel->can('_uri_from_event');
+  return $self->from_channel->_uri_from_event($self);
+}
+
 sub BUILD ($self, @) {
   confess "only 'message' events exist for now"
     unless $self->type eq 'message';
