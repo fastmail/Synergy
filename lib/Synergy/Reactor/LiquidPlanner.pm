@@ -155,7 +155,7 @@ sub dispatch_event ($self, $event, $rch) {
   $text =~ s/\Ago{3,}d(?=\s)/good/;
   $text =~  s/^done, /done /;   # ugh
 
-  my ($what, $rest) = $text =~ /^([^\s]+)\s*(.*)/;
+  my ($what, $rest) = $text =~ /^([^\s]+)\s*(.*)/s;
   $what &&= lc $what;
 
   # It's not handled yet, but it will have been by the time we return!
