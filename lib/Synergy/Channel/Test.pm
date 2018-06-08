@@ -19,7 +19,19 @@ has prefix => (
   default => q{synergy: },
 );
 
-sub send_message_to_user (@) { ... }
+sub send_message_to_user ($self, $user, $message) {
+  my $to_address = $user->identities->{ $self->name };
+
+  unless ($to_address) {
+    confess(
+      sprintf "no address for user<%s> on channel<%s>",
+        $user->username,
+        $self->name,
+    );
+  }
+
+  $self->record_message({ address => $to_address, text => $message });
+}
 
 sub send_text ($self, $address, $text) {
   $self->record_message({ address => $address, text => $text });
