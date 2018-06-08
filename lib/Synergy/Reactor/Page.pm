@@ -48,8 +48,8 @@ sub handle_page ($self, $event, $rch) {
     return;
   }
 
-  unless ($user->has_phone) {
-    $rch->reply("'$who' doesn't have a phone number. :confused:");
+  unless ($user->identities->{ $self->page_channel_name } || $user->has_phone) {
+    $rch->reply("I don't know how to page $who, sorry.");
     return;
   }
 
