@@ -558,7 +558,10 @@ sub _handle_task ($self, $event, $rch, $text) {
   # because of "new task for...";
   my $what = $text =~ s/\Atask\s+//r;
 
-  my ($target, $name) = $what =~ /\s*for\s+@?(.+?)\s*:\s+(.+)\z/;
+  my ($target, $name) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
+
+  $name, (my $description) = split /\n+/, $name, 2;
+  $description //= '';
 
   unless ($target and $name) {
     return $rch->reply("Does not compute.  Usage:  task for TARGET: TASK");
@@ -639,8 +642,9 @@ sub _handle_task ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   $user = undef unless $user && $user->lp_auth_header;
 
-  my $description = sprintf 'created by %s in response to %s',
-    'synergy', # XXX -- alh, 2018-03-14
+  $description = sprintf '%screated by %s in response to %s',
+    ($description ? "$description\n\n" : ""),
+    $self->hub->name,
     $via;
 
   my $project_id = (keys %project_id)[0] if 1 == keys %project_id;
