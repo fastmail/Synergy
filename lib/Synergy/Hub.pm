@@ -19,6 +19,12 @@ use Synergy::HTTPServer;
 use Try::Tiny;
 use URI;
 
+has name => (
+  is  => 'ro',
+  isa => 'Str',
+  default => 'Synergy',
+);
+
 has user_directory => (
   is  => 'ro',
   isa => 'Object',
