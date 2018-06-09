@@ -9,3 +9,15 @@ stormer:
   nicknames: [ mary ]
   lp_id: 2
   lp_token: "deadbeef"
+jetta:
+  realname: Sheila Burns
+  nicknames: [ sheila ]
+  lp_id: 3
+  lp_token: "feeb00cat"
+  default_project_nickname: pies
+riot:
+  realname: Rory Llewelyn
+  nicknames: [ rory ]
+  lp_id: 4
+  lp_token: "0u812"
+  default_project_nickname: gorp
