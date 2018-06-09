@@ -693,27 +693,54 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
 
     # TODO: make this less slapdash -- rjbs, 2018-06-08
     my @errors;
+    my @bad_cmds;
+
     for my $cmd_line (@cmd_lines) {
       my @cmd_strs = split m{(?:^|\s+)/}m, $cmd_line;
       shift @cmd_strs; # the leading / means the first entry is always q{}
 
       for my $cmd_str (@cmd_strs) {
         my ($cmd, $rest) = split /\s+/, $cmd_str;
-        if ($cmd eq 'urgent'  or $cmd eq 'u')   { $plan->{urgent}   = 1; next }
-        if ($cmd eq 'running' or $cmd eq 'go')  { $plan->{running}  = 1; next }
+
+        if ($cmd eq 'urgent'   or $cmd eq 'u')  { $plan->{urgent}  = 1; next }
+        if ($cmd eq 'start'    or $cmd eq 'go') { $plan->{running} = 1; next }
+        if ($cmd eq 'estimate' or $cmd eq 'e')  {
+          my ($low, $high) = split /\s*-\s*/, $rest;
+          s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $low, $high;
+          my $low_s  = eval { parse_duration($low); };
+          my $high_s = eval { parse_duration($high); };
+          if (defined $low_s && defined $high_s) {
+            $plan->{estimate} = { low => $low_s / 3600, high => $high_s / 3600 };
+          } else {
+            push @errors, qq{I couldn't understand the /assign estimate "$rest".}
+          }
+          next;
+        }
+        if ($cmd eq 'project'  or $cmd eq 'p')  {
+          $plan->{project}{$rest} = 1;
+          next;
+        }
         if ($cmd eq 'assign') {
-          unless ($rest) { push @errors, $cmd_str; next }
-          push $plan->{usernames}->@*, $rest;      next
+          unless ($rest) {
+            push @bad_cmds, $cmd_str;
+            next;
+          }
+          push $plan->{usernames}->@*, $rest;
+          next
         }
 
-        push @errors, $cmd_str;
+        push @bad_cmds, $cmd_str;
       }
     }
 
-    if (@errors) {
-      $error->{rest} = "Bogus commands: " . join q{ -- }, sort @errors;
-      return;
+    if (@errors or @bad_cmds) {
+      $error->{rest} = @errors ? (join q{  }, @errors) : q{};
+      if (@bad_cmds) {
+        $error->{rest} .= "Bogus commands: " . join q{ -- }, sort @bad_cmds;
+      }
     }
+
+    return if $error->{rest};
   }
 
   $plan->{description} = sprintf '%screated by %s in response to %s%s',
@@ -904,7 +931,6 @@ sub _handle_task_like ($self, $event, $rch, $command, $count) {
 
   $rch->reply("responses to <$command> are sent privately") if $event->is_public;
 }
-
 
 sub _handle_inbox ($self, $event, $rch, $text) {
   return $self->_handle_task_like($event, $rch, 'inbox', 200);
@@ -1100,7 +1126,6 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
   $rch->reply($prefix . $reply);
 }
 
-
 sub resolve_name ($self, $name, $who) {
   return unless $name;
 
@@ -1151,9 +1176,21 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
   $container{parent_id} = delete $container{package_id}
     unless $container{parent_id};
 
+  my sub assignment ($who) {
+    my %est = $my_arg->{estimate}
+            ? (low_effort_remaining  => $my_arg->{estimate}{low},
+               high_effort_remaining => $my_arg->{estimate}{ligh})
+            : ();
+
+    return {
+      person_id => $who,
+      %est,
+    }
+  }
+
   my $payload = { task => {
     name        => $my_arg->{name},
-    assignments => [ map {; { person_id => $_->lp_id } } @{ $my_arg->{owners} } ],
+    assignments => [ map {; assignment($_) } @{ $my_arg->{owners} } ],
     description => $my_arg->{description},
 
     %container,
@@ -1387,7 +1424,6 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   $rch->reply("Okay, I've committed $time of work$also. Task was: $task->{name}");
 }
 
-
 sub _handle_abort ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your abort request.")
     unless $text =~ /^timer\b/i;
@@ -1512,7 +1548,6 @@ sub _handle_resume ($self, $event, $rch, $text) {
 
   return $rch->reply("Timer resumed. Task is: $task->{name}");
 }
-
 
 sub _handle_stop ($self, $event, $rch, $text) {
   my $user = $event->from_user;

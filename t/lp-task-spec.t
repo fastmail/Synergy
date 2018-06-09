@@ -140,17 +140,35 @@ plan_ok(
 );
 
 plan_ok(
-  "Eat more pie #pies\n/assign roxy\n/go /urgent\nOnly pumpkin, please.",
+  "Eat more pie #pies\n/assign roxy\n/go /urgent\n/e 5m-2\nOnly pumpkin, please.",
   {
     name        => "Eat more pie",
     urgent      => 1,
     running     => 1,
     project_id  => 2,
     owners      => [ methods(username => 'roxy') ],
+    estimate    => { low => 3/36, high => 2 },
     description => "Only pumpkin, please."
                 .  "\n\ncreated by Synergy in response to (some test event)",
   },
   "some slash commands"
+);
+
+plan_ok(
+  "Eat more pie #pies\n/project pies",
+  {
+    name        => "Eat more pie",
+    project_id  => 2,
+  },
+  "two project assignments to the same project: okay"
+);
+
+error_ok(
+  "Eat more pie #pies\n/project gorp",
+  {
+    project => 'More than one project specified!',
+  },
+  "tried to assign two different projects"
 );
 
 done_testing;
