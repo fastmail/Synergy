@@ -1548,7 +1548,7 @@ sub _handle_start ($self, $event, $rch, $text) {
     }
   }
 
-  return -1;
+  return $rch->reply(q{You can either say "start LP-TASK-ID" or "start next".});
 }
 
 sub _handle_resume ($self, $event, $rch, $text) {
