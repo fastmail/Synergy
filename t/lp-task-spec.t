@@ -37,9 +37,10 @@ $lp->_set_projects({
   pies => [ { id => 2, nickname => "Pies", name => "Eat More Pies", } ],
 });
 
-sub plan_ok {
-  my ($input, $expect, $desc) = @_;
-  local $Test::Builder::Level = $Test::Builder::Level + 1;
+sub _r_ok {
+  my ($n, $input, $expect, $desc) = @_;
+
+  local $Test::Builder::Level = $Test::Builder::Level + 2;
 
   my $spec = ref $input ? $input : { text => $input };
 
@@ -52,17 +53,39 @@ sub plan_ok {
     was_targeted => 1,
   });
 
-  my ($plan) = $lp->task_plan_from_spec($event, $spec);
+  my @rv = $lp->task_plan_from_spec($event, $spec);
 
   cmp_deeply(
-    $plan,
+    $rv[$n],
+    $expect,
+    $desc,
+  );
+}
+
+sub plan_ok  {
+  my ($input, $expect, $desc) = @_;
+
+  _r_ok(
+    0,
+    $input,
     {
       user        => methods(username => 'stormer'),
       description => "created by Synergy in response to (some test event)",
       %$expect,
     },
     $desc,
-  ) or diag explain($plan);
+  );
+}
+
+sub error_ok {
+  my ($input, $expect, $desc) = @_;
+
+  _r_ok(
+    1,
+    $input,
+    $expect,
+    $desc,
+  );
 }
 
 plan_ok(
@@ -72,9 +95,15 @@ plan_ok(
 );
 
 plan_ok(
-  { text => "Eat more pie", usernames => [ qw(stormer) ] },
-  { name => "Eat more pie", owners    => [ methods(username => 'stormer') ] },
+  { text => "Eat more pie", usernames => [ qw(roxanne) ] },
+  { name => "Eat more pie", owners    => [ methods(username => 'roxy') ] },
   "plain ol' text, preassigned owners",
+);
+
+error_ok(
+  { text => "Eat more pie", usernames => [ qw(roxanne Thing1 Thing2) ] },
+  { usernames => "I don't know who Thing1 or Thing2 are." },
+  "usernames we can't resolve",
 );
 
 plan_ok(
