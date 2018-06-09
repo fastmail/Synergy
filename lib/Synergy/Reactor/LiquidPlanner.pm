@@ -663,6 +663,17 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
     return;
   }
 
+  if ($plan->{urgent}) {
+    if (my @virtuals = grep {; $_->is_virtual } @owners) {
+      my $names = join q{, }, sort map {; $_->username } @virtuals;
+      $error->{usernames}
+        = "Sorry, you can't make urgent tasks for non-humans."
+        . "  Find a human who can take responsibility, even if it's you."
+        . "  You got this error because you tried to assign an urgent task to:"
+        . " $names";
+    }
+  }
+
   $plan->{owners} = \@owners;
   return;
 }
@@ -730,19 +741,6 @@ sub _handle_task ($self, $event, $rch, $text) {
   my $urgent  = $plan->{urgent};
   my $running = $plan->{running};
   my @owners  = $plan->{owners}->@*;
-
-  if ($urgent) {
-    my @virtuals = grep {; $_->is_virtual } @owners;
-    if (@virtuals) {
-      my $names = join q{, }, sort map {; $_->username } @virtuals;
-      return $rch->reply(
-        "Sorry, you can't make urgent tasks for non-humans."
-        . "  Find a human who can take responsibility, even if it's you."
-        . "  You got this error because you tried to assign an urgent task to:"
-        . " $names"
-      );
-    }
-  }
 
   my $arg = {};
 
