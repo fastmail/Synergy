@@ -35,7 +35,7 @@ sub handle_clox ($self, $event, $rch) {
   my $time;
   if ($spec) {
     return $rch->reply(qq{Sorry, I couldn't understand the time "$time".})
-      unless $time = parse_date_for_user($event->from_user, $spec);
+      unless $time = parse_date_for_user($spec, $event->from_user);
   } else {
     $time = DateTime->now;
   }

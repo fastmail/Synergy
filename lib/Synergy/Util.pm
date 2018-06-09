@@ -14,7 +14,6 @@ use Sub::Exporter -setup => [ qw(
   pick_one
 ) ];
 
-
 sub parse_time_hunk ($hunk, $user) {
   my ($prep, $rest) = split ' ', $hunk, 2;
 
