@@ -684,6 +684,38 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
 
   my $rest = delete $plan->{rest};
 
+  my @cmd_lines;
+
+  if ($rest) {
+    my @lines = split /\n/, $rest;
+    push @cmd_lines, shift @lines while @lines && $lines[0] =~ m{\A/};
+    $rest = join qq{\n}, @lines;
+
+    # TODO: make this less slapdash -- rjbs, 2018-06-08
+    my @errors;
+    for my $cmd_line (@cmd_lines) {
+      my @cmd_strs = split m{(?:^|\s+)/}m, $cmd_line;
+      shift @cmd_strs; # the leading / means the first entry is always q{}
+
+      for my $cmd_str (@cmd_strs) {
+        my ($cmd, $rest) = split /\s+/, $cmd_str;
+        if ($cmd eq 'urgent'  or $cmd eq 'u')   { $plan->{urgent}   = 1; next }
+        if ($cmd eq 'running' or $cmd eq 'go')  { $plan->{running}  = 1; next }
+        if ($cmd eq 'assign') {
+          unless ($rest) { push @errors, $cmd_str; next }
+          push $plan->{usernames}->@*, $rest;      next
+        }
+
+        push @errors, $cmd_str;
+      }
+    }
+
+    if (@errors) {
+      $error->{rest} = "Bogus commands: " . join q{ -- }, sort @errors;
+      return;
+    }
+  }
+
   $plan->{description} = sprintf '%screated by %s in response to %s%s',
     ($rest ? "$rest\n\n" : ""),
     $self->hub->name,
@@ -706,13 +738,13 @@ sub task_plan_from_spec ($self, $event, $spec) {
     push $plan{usernames}->@*, $spec->{usernames}->@*;
   }
 
+  $plan{rest} = $rest;
   $plan{name} = $leader;
   $plan{user} = $event->from_user;
-  $plan{rest} = $rest;
 
+  $self->_check_plan_rest($event, \%plan, \%error);
   $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
   $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
-  $self->_check_plan_rest($event, \%plan, \%error);
 
   return (undef, \%error) if %error;
   return (\%plan, undef);

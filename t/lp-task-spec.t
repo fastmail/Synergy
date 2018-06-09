@@ -59,7 +59,7 @@ sub _r_ok {
     $rv[$n],
     $expect,
     $desc,
-  );
+  ) or diag explain(\@rv);
 }
 
 sub plan_ok  {
@@ -137,6 +137,20 @@ plan_ok(
                 .  "\n\ncreated by Synergy in response to (some test event)",
   },
   "lots of old-style flags, plus a description"
+);
+
+plan_ok(
+  "Eat more pie #pies\n/assign roxy\n/go /urgent\nOnly pumpkin, please.",
+  {
+    name        => "Eat more pie",
+    urgent      => 1,
+    running     => 1,
+    project_id  => 2,
+    owners      => [ methods(username => 'roxy') ],
+    description => "Only pumpkin, please."
+                .  "\n\ncreated by Synergy in response to (some test event)",
+  },
+  "some slash commands"
 );
 
 done_testing;
