@@ -678,6 +678,19 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
   return;
 }
 
+sub _check_plan_rest ($self, $event, $plan, $error) {
+  my $via = $event->from_channel->describe_event($event);
+  my $uri = $event->event_uri;
+
+  my $rest = delete $plan->{rest};
+
+  $plan->{description} = sprintf '%screated by %s in response to %s%s',
+    ($rest ? "$rest\n\n" : ""),
+    $self->hub->name,
+    $via,
+    $uri ? "\n\n$uri" : "";
+}
+
 # One option:
 # { text => "eat more pie (!) #project", usernames => [ @usernames ] }
 # { text => "eat more pie␤/urgent /p /assign bob /go␤longer form task" }
@@ -693,20 +706,13 @@ sub task_plan_from_spec ($self, $event, $spec) {
     push $plan{usernames}->@*, $spec->{usernames}->@*;
   }
 
-  $plan{name}        = $leader;
-  $plan{user}        = $event->from_user;
-
-  my $via = $event->from_channel->describe_event($event);
-  my $uri = $event->event_uri;
-
-  $plan{description} = sprintf '%screated by %s in response to %s%s',
-    ($rest ? "$rest\n\n" : ""),
-    $self->hub->name,
-    $via,
-    $uri ? "\n\n$uri" : "";
+  $plan{name} = $leader;
+  $plan{user} = $event->from_user;
+  $plan{rest} = $rest;
 
   $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
   $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
+  $self->_check_plan_rest($event, \%plan, \%error);
 
   return (undef, \%error) if %error;
   return (\%plan, undef);
