@@ -12,6 +12,7 @@ use JSON 2 ();
 use Time::Duration;
 use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
+use Synergy::Timer;
 use Synergy::Util qw(parse_time_hunk pick_one);
 use DateTime;
 use utf8;
