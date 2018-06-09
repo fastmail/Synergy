@@ -1377,6 +1377,17 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  if ($event->text =~ /\A\s*that\s*\z/) {
+    my $key   = join qq{$;}, $event->from_channel->name, $event->from_address;
+    my $last  = $self->get_last_utterance($key);
+
+    unless (length $last) {
+      return $rch->reply("I don't know what 'that' refers to.");
+    }
+
+    $comment = $last;
+  }
+
   my %meta;
   while ($comment =~ s/(?:\A|\s+)(DONE|STOP|CHILL)\z//) {
     $meta{$1}++;
