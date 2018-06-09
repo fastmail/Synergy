@@ -120,7 +120,7 @@ plan_ok(
   {
     name        => "Buy raisins",
     project_id  => 1,
-    running     => 1,
+    start       => 1,
     urgent      => 1,
   },
   "text, project, emoji, stuff"
@@ -131,7 +131,7 @@ plan_ok(
   {
     name        => "Buy raisins",
     project_id  => 1,
-    running     => 1,
+    start       => 1,
     urgent      => 1,
     description => "If you're in Australia, buy sultanas."
                 .  "\n\ncreated by Synergy in response to (some test event)",
@@ -144,7 +144,7 @@ plan_ok(
   {
     name        => "Eat more pie",
     urgent      => 1,
-    running     => 1,
+    start       => 1,
     project_id  => 2,
     owners      => [ methods(username => 'roxy') ],
     estimate    => { low => 3/36, high => 2 },

@@ -557,14 +557,14 @@ sub _handle_timer ($self, $event, $rch, $text) {
 sub _extract_flags_from_task_text ($self, $text) {
   my %flag;
 
-  my $running_emoji
+  my $start_emoji
     = qr{ ⏲   | ⏳  | ⌛️ |  :hourglass(?:_flowing_sand)?: | :timer_clock: }x;
 
   my $urgent_emoji
     = qr{ ❗️  | ‼️   | ❣️  |  :exclamation: }x;
 
   while ($text =~ s/\s*\(([!>]+)\)\s*\z//
-     ||  $text =~ s/\s*($running_emoji|$urgent_emoji)\s*\z//
+     ||  $text =~ s/\s*($start_emoji|$urgent_emoji)\s*\z//
      ||  $text =~ s/\s*(#[a-z0-9]+)\s*\z//i
   ) {
     my $hunk = $1;
@@ -572,12 +572,12 @@ sub _extract_flags_from_task_text ($self, $text) {
       $flag{project}{$hunk} = 1;
       next;
     } elsif ($hunk =~ /[!>]/) {
-      $flag{urgent}  ++ if $hunk =~ /!/;
-      $flag{running} ++ if $hunk =~ />/;
+      $flag{urgent} ++ if $hunk =~ /!/;
+      $flag{start}  ++ if $hunk =~ />/;
       next;
     } else {
-      $flag{urgent}  ++ if $hunk =~ $urgent_emoji;
-      $flag{running} ++ if $hunk =~ $running_emoji;
+      $flag{urgent} ++ if $hunk =~ $urgent_emoji;
+      $flag{start}  ++ if $hunk =~ $start_emoji;
       next;
     }
   }
@@ -702,9 +702,9 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
       for my $cmd_str (@cmd_strs) {
         my ($cmd, $rest) = split /\s+/, $cmd_str;
 
-        if ($cmd eq 'urgent'   or $cmd eq 'u')  { $plan->{urgent}  = 1; next }
-        if ($cmd eq 'start'    or $cmd eq 'go') { $plan->{running} = 1; next }
-        if ($cmd eq 'estimate' or $cmd eq 'e')  {
+        if ($cmd =~ /\A u(?:rgent)? \z/x)       { $plan->{urgent} = 1; next }
+        if ($cmd =~ /\A s(?:tart)? | go \z/x)   { $plan->{start}  = 1; next }
+        if ($cmd =~ /\A e(?:stimate)? \z/x)     {
           my ($low, $high) = split /\s*-\s*/, $rest;
           s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $low, $high;
           my $low_s  = eval { parse_duration($low); };
@@ -716,11 +716,11 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
           }
           next;
         }
-        if ($cmd eq 'project'  or $cmd eq 'p')  {
+        if ($cmd =~ /\A p(?:roject)? \z/x) {
           $plan->{project}{$rest} = 1;
           next;
         }
-        if ($cmd eq 'assign') {
+        if ($cmd =~ /\A a(?:ssign)? \z/x) {
           unless ($rest) {
             push @bad_cmds, $cmd_str;
             next;
@@ -804,7 +804,7 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   # XXX To be removed later. -- rjbs, 2018-06-08
   my $urgent  = $plan->{urgent};
-  my $running = $plan->{running};
+  my $start   = $plan->{start};
   my @owners  = $plan->{owners}->@*;
 
   my $arg = {};
@@ -826,7 +826,7 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my $reply = "Task for $rcpt created: " . $self->item_uri($task->{id});
 
-  if ($plan->{running}) {
+  if ($plan->{start}) {
     my $res = $self->http_post_for_user($event->from_user, "/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $res->decoded_content ); };
     if ($res->is_success && $timer->{running}) {
@@ -1216,20 +1216,20 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
 }
 
 sub _strip_name_flags ($self, $name) {
-  my ($urgent, $running);
+  my ($urgent, $start);
   if ($name =~ s/\s*\(([!>]+)\)\s*\z//) {
     my ($code) = $1;
-    $urgent   = $code =~ /!/;
-    $running  = $code =~ />/;
+    $urgent = $code =~ /!/;
+    $start  = $code =~ />/;
   } elsif ($name =~ s/\s*((?::timer_clock:|:hourglass(?:_flowing_sand)?:|:exclamation:)+)\s*\z//) {
     my ($code) = $1;
-    $urgent   = $code =~ /exclamation/;
-    $running  = $code =~ /timer_clock|hourglass/;
+    $urgent = $code =~ /exclamation/;
+    $start  = $code =~ /timer_clock|hourglass/;
   }
 
   $_[1] = $name;
 
-  return { urgent => $urgent, running => $running };
+  return { urgent => $urgent, start => $start };
 }
 
 sub lp_timer_for_user ($self, $user) {
@@ -1702,10 +1702,10 @@ sub _handle_spent ($self, $event, $rch, $text) {
 
     my $uri = $self->item_uri($task->{id});
 
-    if ($flags->{running}) {
+    if ($flags->{start}) {
       my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
       my $timer = eval { $JSON->decode( $res->decoded_content ); };
-      if ($res->is_success && $timer->{running}) {
+      if ($res->is_success && $timer->{start}) {
         $user->last_lp_timer_id($timer->{id});
         return $rch->reply("I logged that time on task ($task->{name}) and started your timer here: $uri");
       } else {
@@ -1745,7 +1745,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
       activity_id => $task->{activity_id},
       member_id => $user->lp_id,
       work      => $duration / 3600,
-      is_done   => ($flags->{running} ? \0 : \1),
+      is_done   => ($flags->{start} ? \0 : \1),
     }),
   );
 
@@ -1756,7 +1756,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
     );
   }
 
-  if ($flags->{running}) {
+  if ($flags->{start}) {
     my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $res->decoded_content ); };
     if ($res->is_success && $timer->{running}) {
