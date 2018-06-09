@@ -745,7 +745,8 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
         if ($cmd =~ /\A u(?:rgent)? \z/x)       { $plan->{urgent} = 1; next }
         if ($cmd =~ /\A s(?:tart)? | go \z/x)   { $plan->{start}  = 1; next }
         if ($cmd =~ /\A e(?:stimate)? \z/x)     {
-          my ($low, $high) = split /\s*-\s*/, $rest;
+          my ($low, $high) = split /\s*-\s*/, $rest, 2;
+          $high //= $low;
           s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $low, $high;
           my $low_s  = eval { parse_duration($low); };
           my $high_s = eval { parse_duration($high); };
