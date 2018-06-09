@@ -171,4 +171,15 @@ error_ok(
   "tried to assign two different projects"
 );
 
+plan_ok(
+  "Eat more pie #pies\n/e .5",
+  {
+    name        => "Eat more pie",
+    project_id  => 2,
+    estimate    => { low => 0.5, high => 0.5 },
+  },
+  "/estimate with only one number"
+);
+
+
 done_testing;
