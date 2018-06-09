@@ -189,6 +189,37 @@ sub provide_lp_link ($self, $event, $rch) {
   }
 }
 
+has _last_lp_timer_ids => (
+  is => 'ro',
+  isa => 'HashRef',
+  default => sub {  {}  },
+);
+
+sub last_lp_timer_id_for_user ($self, $user, $timer_id) {
+  return $self->_last_lp_timer_ids->{ $user->username };
+}
+
+sub set_last_lp_timer_id_for_user ($self, $user, $timer_id) {
+  $self->_last_lp_timer_ids->{ $user->username } = $timer_id;
+}
+
+sub clear_last_lp_timer_id_for_user ($self, $user, $timer_id) {
+  delete $self->_last_lp_timer_ids->{ $user->username };
+}
+
+sub last_lp_timer_for_user ($self, $user) {
+  return unless $user->lp_auth_header;
+  return unless my $lp_timer_id = $self->last_lp_timer_id_for_user($user);
+
+  my $res = $self->http_get_for_user($user, "/my_timers");
+  return unless $res->is_success;
+
+  my ($timer) = grep {; $_->{id} eq $lp_timer_id }
+                $JSON->decode( $res->decoded_content )->@*;
+
+  return $timer;
+}
+
 has user_timers => (
   is               => 'ro',
   isa              => 'HashRef',
@@ -833,7 +864,7 @@ sub _handle_task ($self, $event, $rch, $text) {
     my $res = $self->http_post_for_user($event->from_user, "/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $res->decoded_content ); };
     if ($res->is_success && $timer->{running}) {
-      $event->from_user->last_lp_timer_id($timer->{id});
+      $self->set_last_lp_timer_id_for_user($event->from_user, $timer->{id});
 
       $reply =~ s/created:/created, timer running:/;
     } else {
@@ -1252,7 +1283,7 @@ sub lp_timer_for_user ($self, $user) {
                 $JSON->decode( $res->decoded_content )->@*;
 
   if ($timer) {
-    $user->last_lp_timer_id($timer->{id});
+    $self->set_last_lp_timer_id_for_user($user, $timer->{id});
   }
 
   return $timer;
@@ -1467,7 +1498,7 @@ sub _handle_start ($self, $event, $rch, $text) {
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
     if ($start_res->is_success && $timer->{running}) {
-      $user->last_lp_timer_id($timer->{id});
+      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
 
       my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
       my $name = $task_res->is_success
@@ -1490,7 +1521,7 @@ sub _handle_start ($self, $event, $rch, $text) {
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
     if ($start_res->is_success && $timer->{running}) {
-      $user->last_lp_timer_id($timer->{id});
+      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
       return $rch->reply("Started task: $task->{name} (" . $self->item_uri($task->{id}) . ")");
     } else {
       return $rch->reply("I couldn't start your next task.");
@@ -1498,19 +1529,6 @@ sub _handle_start ($self, $event, $rch, $text) {
   }
 
   return -1;
-}
-
-sub last_lp_timer_for_user ($self, $user) {
-  return unless $user->lp_auth_header;
-  return unless my $lp_timer_id = $user->last_lp_timer_id;
-
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  return unless $res->is_success;
-
-  my ($timer) = grep {; $_->{id} eq $lp_timer_id }
-                $JSON->decode( $res->decoded_content )->@*;
-
-  return $timer;
 }
 
 sub _handle_resume ($self, $event, $rch, $text) {
@@ -1631,7 +1649,7 @@ sub _handle_reset ($self, $event, $rch, $text) {
   my $restart_timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
   if ($start_res->is_success && $restart_timer->{running}) {
-    $user->last_lp_timer_id($timer->{id});
+    $self->set_last_lp_timer_id_for_user($user, $timer->{id});
     $rch->reply("Okay, I cleared your active timer but left it running.");
   } else {
     $rch->reply("Okay, I cleared your timer but couldn't restart it...sorry!");
@@ -1709,7 +1727,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
       my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
       my $timer = eval { $JSON->decode( $res->decoded_content ); };
       if ($res->is_success && $timer->{start}) {
-        $user->last_lp_timer_id($timer->{id});
+        $self->set_last_lp_timer_id_for_user($user, $timer->{id});
         return $rch->reply("I logged that time on task ($task->{name}) and started your timer here: $uri");
       } else {
         return $rch->reply("I couldn't start the timer on task ($task->{name}), but I logged that time here: $uri");
@@ -1763,7 +1781,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
     my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $res->decoded_content ); };
     if ($res->is_success && $timer->{running}) {
-      $user->last_lp_timer_id($timer->{id});
+      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
       return $rch->reply("I logged that time and started your timer here: $uri");
     } else {
       return $rch->reply("I couldn't start the timer, but I logged that time here: $uri");
