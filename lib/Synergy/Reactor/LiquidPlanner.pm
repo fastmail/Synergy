@@ -124,7 +124,15 @@ sub listener_specs {
       method    => "reload_projects",
       predicate => sub ($, $e) {
         $e->was_targeted &&
-        $e->text =~ /^reload\s+projects\s*$/in;
+        $e->text =~ /^reload\s+projects\s*$/i;
+      },
+    },
+    {
+      name      => "damage-report",
+      method    => "damage_report",
+      predicate => sub ($, $e) {
+        $e->was_targeted &&
+        $e->text =~ /^\s*(damage\s+)?report(for\s+([a-z]+))\s*$/in;
       },
     },
     {
@@ -1853,6 +1861,74 @@ sub _handle_todos ($self, $event, $rch, $text) {
   for my $todo (@todos) {
     $rch->private_reply("- $todo->{title}");
   }
+}
+
+sub _lp_assignment_is_unestimated {
+  my ($self, $assignment) = @_;
+
+  return ($assignment->{low_effort_remaining}  // 0) < 0.00000001
+      && ($assignment->{high_effort_remaining} // 0) < 0.00000001;
+}
+
+sub damage_report ($self, $event, $rch) {
+  my ($who_name) = $event->text =~ /^\s*(?:damage\s+)?report(?:for\s+([a-z]+))\s*$/i;
+  $who_name //= 'me';
+
+  my $target = $self->resolve_name($who_name, $event->from_user->username);
+
+  return $rch->reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
+    unless $target && $target->lp_auth_header;
+
+  my $lp_id = $target->lp_id;
+
+  my $res = $self->http_get_for_user(
+    $target,
+    "/upcoming_tasks?limit=200&member_id=" . $lp_id,
+  );
+
+  unless ($res->is_success) {
+    return $rch->reply("Sorry, I had trouble getting that task list!");
+  }
+
+  my $groups = $JSON->decode( $res->decoded_content );
+  unless (@$groups) {
+    return $rch->reply("Strangely enough, there's no upcoming work!");
+  }
+
+  my $summary = q{};
+  splice @$groups, 4;
+  while (my $group = shift @$groups) {
+    next unless $group->{items}->@*;
+
+    my $count = 0;
+    my $unest = 0;
+    for my $item ($group->{items}->@*) {
+      # upcoming_tasks is meant to act like My Work, in which on-hold tasks are
+      # not shown, but it includes on hold tasks.  bug filed
+      next if $item->{is_on_hold};
+
+      # Project, parent, and package are a complete mess, or at least mystery,
+      # in the LiquidPlanner API.  Here, I'm trying to exclude tasks that are
+      # in a project but not a package, meaning they're basically backlog work.
+      next if $item->{project_id} && ! $item->{package_id};
+
+      $count++;
+      my ($assignment) = grep {; $_->{person_id} == $lp_id }
+                         $item->{assignments}->@*;
+
+      $unest++ if $self->_lp_assignment_is_unestimated($assignment);
+    }
+
+    $summary .= $group->{group} eq 'INBOX'
+              ? 'inbox'
+              : "week of $group->{from}";
+
+    $summary .= sprintf ": %u %s", $count, PL_N('item', $count);
+    $summary .= sprintf ", %u unestimated", $unest if $unest;
+    $summary .= "; " if @$groups;
+  }
+
+  return $rch->reply($summary);
 }
 
 sub reload_projects ($self, $event, $rch) {
