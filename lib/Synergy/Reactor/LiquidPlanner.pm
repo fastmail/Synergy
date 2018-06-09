@@ -554,51 +554,91 @@ sub _handle_timer ($self, $event, $rch, $text) {
   );
 }
 
-sub _handle_task ($self, $event, $rch, $text) {
-  # because of "new task for...";
-  my $what = $text =~ s/\Atask\s+//r;
+sub _extract_flags_from_task_text ($self, $text) {
+  my %flag;
 
-  my ($target, $name) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
+  my $running_emoji
+    = qr{ ⏲   | ⏳  | ⌛️ |  :hourglass(?:_flowing_sand)?: | :timer_clock: }x;
 
-  my $description;
-  ($name, $description) = split /\n+/, $name, 2;
-  $description //= '';
+  my $urgent_emoji
+    = qr{ ❗️  | ‼️   | ❣️  |  :exclamation: }x;
 
-  unless ($target and $name) {
-    return $rch->reply("Does not compute.  Usage:  task for TARGET: TASK");
+  while ($text =~ s/\s*\(([!>]+)\)\s*\z//
+     ||  $text =~ s/\s*($running_emoji|$urgent_emoji)\s*\z//
+     ||  $text =~ s/\s*(#[a-z0-9]+)\s*\z//i
+  ) {
+    my $hunk = $1;
+    if ($hunk =~ s/^#//) {
+      $flag{project}{$hunk} = 1;
+      next;
+    } elsif ($hunk =~ /[!>]/) {
+      $flag{urgent}  ++ if $hunk =~ /!/;
+      $flag{running} ++ if $hunk =~ />/;
+      next;
+    } else {
+      $flag{urgent}  ++ if $hunk =~ $urgent_emoji;
+      $flag{running} ++ if $hunk =~ $running_emoji;
+      next;
+    }
   }
 
-  my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
+  return (
+    $text,
+    %flag,
+  );
+}
+
+sub _check_plan_project ($self, $event, $plan, $error) {
+  my $project = delete $plan->{project};
+
+  if (keys %$project > 1) {
+    $error->{project} = "More than one project specified!";
+    return;
+  }
+
+  my ($project_name) = keys %$project;
+  my $projects = $self->project_named(lc $project_name);
+
+  unless ($projects && @$projects) {
+    $error->{project} = qq{I don't know any LiquidPlanner project with the}
+                      . qq{ nickname "$project".};
+
+    return;
+  }
+
+  if (@$projects > 1) {
+    $error->{project}
+      = qq{More than one LiquidPlanner project has the nickname "$project". }
+      . qq{Their ids are: }
+      . join(q{, }, map {; $_->{id} } @$projects);
+
+    return;
+  }
+
+  $plan->{project_id} = $projects->[0]{id};
+  return;
+}
+
+sub _check_plan_usernames ($self, $event, $plan, $error) {
+  my $usernames = delete $plan->{usernames};
+
   my (@owners, @no_lp, @unknown);
   my %seen;
 
   my %project_id;
-  for my $name (@target_names) {
-    my $target = $self->resolve_name($name, $event->from_user->username);
+  for my $username (@$usernames) {
+    my $target = $self->resolve_name($username, $event->from_user->username);
 
     next if $target && $seen{ $target->username }++;
 
     my $owner_id = $target ? $target->lp_id : undef;
 
-    # Sadly, the following line is not valid:
-    # push(($owner_id ? @owner_ids : @unknown), $owner_id);
     if ($owner_id) {
       push @owners, $target;
-
-      # XXX - From real config! --alh, 2018-03-14
-      my $config;
-      my $project_id = $CONFIG->{liquidplanner}{project}{$target->username};
-      $Logger->log([
-        "Looking for project for %s found %s",
-        $target->username,
-        $project_id // '(undef)',
-      ]);
-
-      $project_id{ $project_id }++ if $project_id;
     } elsif ($target) {
       push @no_lp, $target->username;
     } else {
-      push @unknown, $name;
+      push @unknown, $username;
     }
   }
 
@@ -619,12 +659,77 @@ sub _handle_task ($self, $event, $rch, $text) {
       push @fail, "There's no LiquidPlanner user for $str.";
     }
 
-    return $rch->reply(join(q{  }, @fail));
+    $error->{usernames} = join q{  }, @fail;
+    return;
   }
 
-  my $flags = $self->_strip_name_flags($name);
-  my $urgent = $flags->{urgent};
-  my $start  = $flags->{running};
+  $plan->{owners} = \@owners;
+  return;
+}
+
+# One option:
+# { text => "eat more pie (!) #project", usernames => [ @usernames ] }
+# { text => "eat more pie␤/urgent /p /assign bob /go␤longer form task" }
+sub task_plan_from_spec ($self, $event, $spec) {
+  my ($leader, $rest) = split /\n+/, $spec->{text}, 2;
+
+  my (%plan, %error);
+
+  ($leader, %plan) = $self->_extract_flags_from_task_text($leader);
+
+  if ($spec->{usernames}) {
+    $plan{usernames} //= [];
+    push $plan{usernames}->@*, $spec->{usernames}->@*;
+  }
+
+  $plan{name}        = $leader;
+  $plan{user}        = $event->from_user;
+
+  my $via = $event->from_channel->describe_event($event);
+  my $uri = $event->event_uri;
+
+  $plan{description} = sprintf '%screated by %s in response to %s%s',
+    ($rest ? "$rest\n\n" : ""),
+    $self->hub->name,
+    $via,
+    $uri ? "\n\n$uri" : "";
+
+  $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
+  $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
+
+  return (undef, \%error) if %error;
+  return (\%plan, undef);
+}
+
+sub _handle_task ($self, $event, $rch, $text) {
+  # because of "new task for...";
+  my $what = $text =~ s/\Atask\s+//r;
+
+  my ($target, $spec_text) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
+
+  unless ($target and $spec_text) {
+    return $rch->reply("Does not compute.  Usage:  task for TARGET: TASK");
+  }
+
+  my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
+
+  my ($plan, $error) = $self->task_plan_from_spec(
+    $event,
+    {
+      usernames => [ @target_names ],
+      text      => $spec_text,
+    },
+  );
+
+  if ($error) {
+    my $errors = join q{  }, values %$error;
+    return $rch->reply($errors);
+  }
+
+  # XXX To be removed later. -- rjbs, 2018-06-08
+  my $urgent  = $plan->{urgent};
+  my $running = $plan->{running};
+  my @owners  = $plan->{owners}->@*;
 
   if ($urgent) {
     my @virtuals = grep {; $_->is_virtual } @owners;
@@ -639,30 +744,9 @@ sub _handle_task ($self, $event, $rch, $text) {
     }
   }
 
-  my $via = $rch->channel->describe_event($event);
-  my $user = $event->from_user;
-  $user = undef unless $user && $user->lp_auth_header;
-
-  my $uri = $event->event_uri;
-
-  $description = sprintf '%screated by %s in response to %s%s',
-    ($description ? "$description\n\n" : ""),
-    $self->hub->name,
-    $via,
-    $uri ? "\n\n$uri" : "";
-
-  my $project_id = (keys %project_id)[0] if 1 == keys %project_id;
-
   my $arg = {};
 
-  my $task = $self->_create_lp_task($rch, {
-    name   => $name,
-    urgent => $urgent,
-    user   => $user,
-    owners => \@owners,
-    description => $description,
-    project_id  => $project_id,
-  }, $arg);
+  my $task = $self->_create_lp_task($rch, $plan, $arg);
 
   unless ($task) {
     if ($arg->{already_notified}) {
@@ -679,17 +763,13 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my $reply = "Task for $rcpt created: " . $self->item_uri($task->{id});
 
-  if ($start) {
-    if ($user) {
-      my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
-      my $timer = eval { $JSON->decode( $res->decoded_content ); };
-      if ($res->is_success && $timer->{running}) {
-        $user->last_lp_timer_id($timer->{id});
+  if ($plan->{running}) {
+    my $res = $self->http_post_for_user($event->from_user, "/tasks/$task->{id}/timer/start");
+    my $timer = eval { $JSON->decode( $res->decoded_content ); };
+    if ($res->is_success && $timer->{running}) {
+      $event->from_user->last_lp_timer_id($timer->{id});
 
-        $reply =~ s/created:/created, timer running:/;
-      } else {
-        $reply =~ s/created:/created, timer couldn't be started:/;
-      }
+      $reply =~ s/created:/created, timer running:/;
     } else {
       $reply =~ s/created:/created, timer couldn't be started:/;
     }
