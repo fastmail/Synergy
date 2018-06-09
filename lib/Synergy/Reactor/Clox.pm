@@ -30,7 +30,7 @@ has time_zone_names => (
 sub handle_clox ($self, $event, $rch) {
   $event->mark_handled;
 
-  my (undef, $spec) = split /\s+/, $event->text;
+  my (undef, $spec) = split /\s+/, $event->text, 2;
 
   my $time;
   if ($spec) {
