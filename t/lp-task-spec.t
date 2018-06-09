@@ -181,5 +181,49 @@ plan_ok(
   "/estimate with only one number"
 );
 
+for my $pair ([ riot => 1 ], [ jetta => 2 ]) {
+  my ($username, $p_id) = @$pair;
+
+  plan_ok(
+    {
+      text => "Eat more pie",
+      usernames => [ $username ],
+    },
+    {
+      name        => "Eat more pie",
+      project_id  => $p_id,
+      owners      => [ methods(username => $username) ],
+    },
+    "project id from a user's default project ($username)"
+  );
+}
+
+plan_ok(
+  {
+    text => "Eat more pie\n/assign riot",
+    usernames => [ qw(jetta) ],
+  },
+  {
+    name        => "Eat more pie",
+    owners      => bag(
+      methods(username => 'jetta'),
+      methods(username => 'riot'),
+    )
+  },
+  "when users have conflicting default projects, choose none"
+);
+
+plan_ok(
+  {
+    text => "Eat more pie #gorp",
+    usernames => [ 'jetta' ],
+  },
+  {
+    name        => "Eat more pie",
+    project_id  => 1,
+    owners      => [ methods(username => 'jetta') ],
+  },
+  "explicit project overrides user default"
+);
 
 done_testing;

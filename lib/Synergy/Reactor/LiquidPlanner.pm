@@ -6,7 +6,7 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
-use List::Util qw(first);
+use List::Util qw(first uniq);
 use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration;
@@ -714,6 +714,17 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
     }
   }
 
+  unless ($plan->{project}) {
+    my @projects  = uniq
+                    grep { defined }
+                    map  {; $_->default_project_nickname }
+                    @owners;
+
+    if (@projects == 1) {
+      $plan->{project}{ $projects[0] } = 1;
+    }
+  }
+
   $plan->{owners} = \@owners;
   return;
 }
@@ -811,8 +822,8 @@ sub task_plan_from_spec ($self, $event, $spec) {
   $plan{user} = $event->from_user;
 
   $self->_check_plan_rest($event, \%plan, \%error);
-  $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
   $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
+  $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
 
   $error{name} = "That task name is just too long!  Consider putting more of it in the long description."
     if length $plan{name} > 200;
