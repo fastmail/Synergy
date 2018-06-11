@@ -273,5 +273,14 @@ plan_ok(
   "multi-user /assign"
 );
 
+plan_ok(
+  "Eat more pie\nThis is paragraph 1.\n\nThis is paragraph 2.",
+  {
+    name        => "Eat more pie",
+    description => "This is paragraph 1.\n\nThis is paragraph 2."
+                .  "\n\ncreated by Synergy in response to (some test event)",
+  },
+  "blank lines in long description are preserved"
+);
 
 done_testing;

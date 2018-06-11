@@ -26,11 +26,13 @@ my $LINESEP = qr{(
   (^|\s+) (?<!\\) ---\s*
   |
   \n
-)+}nxs;
+)}nxs;
 
 my sub _split_lines ($input, $n = -1) {
   my @lines = split /$LINESEP/, $input, $n;
   s/\\---/---/ for @lines;
+
+  shift @lines while $lines[0] eq '';
 
   return @lines;
 }
