@@ -789,6 +789,10 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
           next;
         }
         if ($cmd =~ /\A p(?:roject)? \z/x) {
+          unless ($rest) {
+            push @errors, qq{You used /project without a project nickname.};
+            next;
+          }
           $plan->{project}{$rest} = 1;
           next;
         }
