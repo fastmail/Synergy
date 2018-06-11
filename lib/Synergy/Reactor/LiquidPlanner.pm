@@ -616,10 +616,12 @@ sub _extract_flags_from_task_text ($self, $text) {
   my %flag;
 
   my $start_emoji
-    = qr{ ⏲   | ⏳  | ⌛️ |  :hourglass(?:_flowing_sand)?: | :timer_clock: }x;
+    = qr{ ⏲   | ⏳  | ⌛️  | :hourglass(_flowing_sand)?: | :timer_clock: }nx;
 
   my $urgent_emoji
-    = qr{ ❗️  | ‼️   | ❣️  |  :exclamation: }x;
+    = qr{ ❗️  | ‼️   | ❣️   | :exclamation: | :heavy_exclamation_mark:
+                          | :heavy_heart_exclamation_mark_ornament:
+        | 🔥              | :fire: }nx;
 
   while ($text =~ s/\s*\(([!>]+)\)\s*\z//
      ||  $text =~ s/\s*($start_emoji|$urgent_emoji)\s*\z//
