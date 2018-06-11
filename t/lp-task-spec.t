@@ -226,4 +226,39 @@ plan_ok(
   "explicit project overrides user default"
 );
 
+plan_ok(
+  "Eat more pie #pies --- /assign roxy --- /go /urgent --- /e 5m-2 --- Only pumpkin, please.",
+  {
+    name        => "Eat more pie",
+    urgent      => 1,
+    start       => 1,
+    project_id  => 2,
+    owners      => [ methods(username => 'roxy') ],
+    estimate    => { low => 3/36, high => 2 },
+    description => "Only pumpkin, please."
+                .  "\n\ncreated by Synergy in response to (some test event)",
+  },
+  "some slash commands, except with ---"
+);
+
+plan_ok(
+  "Eat more pie --- Only pumpkin, please.",
+  {
+    name        => "Eat more pie",
+    description => "Only pumpkin, please."
+                .  "\n\ncreated by Synergy in response to (some test event)",
+  },
+  "plain ol' ---"
+);
+
+plan_ok(
+  "Eat more pie \\--- Only pumpkin, please. --- /e 1-2",
+  {
+    name        => "Eat more pie --- Only pumpkin, please.",
+    description => "created by Synergy in response to (some test event)",
+    estimate    => { low => 1, high => 2 },
+  },
+  "plain ol' --- except with a backwhack"
+);
+
 done_testing;

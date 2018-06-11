@@ -19,6 +19,22 @@ use utf8;
 
 my $JSON = JSON->new->utf8;
 
+my $LINESEP = qr{(
+  # space or newlines
+  #   then, not a backslash
+  #     then three dashes and maybe some leading spaces
+  (^|\s+) (?<!\\) ---\s*
+  |
+  \n
+)+}nxs;
+
+my sub _split_lines ($input, $n = -1) {
+  my @lines = split /$LINESEP/, $input, $n;
+  s/\\---/---/ for @lines;
+
+  return @lines;
+}
+
 has workspace_id => (
   is  => 'ro',
   isa => 'Int',
@@ -738,7 +754,7 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
   my @cmd_lines;
 
   if ($rest) {
-    my @lines = split /\n/, $rest;
+    my @lines = _split_lines($rest);
     push @cmd_lines, shift @lines while @lines && $lines[0] =~ m{\A/};
     $rest = join qq{\n}, @lines;
 
@@ -806,7 +822,7 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
 # { text => "eat more pie (!) #project", usernames => [ @usernames ] }
 # { text => "eat more pie␤/urgent /p /assign bob /go␤longer form task" }
 sub task_plan_from_spec ($self, $event, $spec) {
-  my ($leader, $rest) = split /\n+/, $spec->{text}, 2;
+  my ($leader, $rest) = _split_lines($spec->{text}, 2);
 
   my (%plan, %error);
 
