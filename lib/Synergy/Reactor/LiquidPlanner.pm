@@ -829,7 +829,7 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
 
 # One option:
 # { text => "eat more pie (!) #project", usernames => [ @usernames ] }
-# { text => "eat more pie␤/urgent /p /assign bob /go␤longer form task" }
+# { text => "eat more pie␤/urgent /p project /assign bob /s␤longer form task" }
 sub task_plan_from_spec ($self, $event, $spec) {
   my ($leader, $rest) = _split_lines($spec->{text}, 2);
 
