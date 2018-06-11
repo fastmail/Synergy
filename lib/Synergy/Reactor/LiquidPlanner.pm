@@ -798,10 +798,10 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
         }
         if ($cmd =~ /\A a(?:ssign)? \z/x) {
           unless ($rest) {
-            push @bad_cmds, $cmd_str;
+            push @errors, qq{You used /assign without any usernames.};
             next;
           }
-          push $plan->{usernames}->@*, $rest;
+          push $plan->{usernames}->@*, split /\s+/, $rest;
           next
         }
 
