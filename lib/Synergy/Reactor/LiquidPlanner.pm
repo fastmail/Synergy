@@ -6,12 +6,13 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
-use List::Util qw(first);
+use List::Util qw(first uniq);
 use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration;
 use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
+use Synergy::Timer;
 use Synergy::Util qw(parse_time_hunk pick_one);
 use DateTime;
 use utf8;
@@ -123,7 +124,15 @@ sub listener_specs {
       method    => "reload_projects",
       predicate => sub ($, $e) {
         $e->was_targeted &&
-        $e->text =~ /^reload\s+projects\s*$/in;
+        $e->text =~ /^reload\s+projects\s*$/i;
+      },
+    },
+    {
+      name      => "damage-report",
+      method    => "damage_report",
+      predicate => sub ($, $e) {
+        $e->was_targeted &&
+        $e->text =~ /^\s*(damage\s+)?report(for\s+([a-z]+))\s*$/in;
       },
     },
     {
@@ -187,6 +196,37 @@ sub provide_lp_link ($self, $event, $rch) {
     );
     $event->mark_handled if $event->was_targeted;   # do better than bort
   }
+}
+
+has _last_lp_timer_ids => (
+  is => 'ro',
+  isa => 'HashRef',
+  default => sub {  {}  },
+);
+
+sub last_lp_timer_id_for_user ($self, $user, $timer_id) {
+  return $self->_last_lp_timer_ids->{ $user->username };
+}
+
+sub set_last_lp_timer_id_for_user ($self, $user, $timer_id) {
+  $self->_last_lp_timer_ids->{ $user->username } = $timer_id;
+}
+
+sub clear_last_lp_timer_id_for_user ($self, $user, $timer_id) {
+  delete $self->_last_lp_timer_ids->{ $user->username };
+}
+
+sub last_lp_timer_for_user ($self, $user) {
+  return unless $user->lp_auth_header;
+  return unless my $lp_timer_id = $self->last_lp_timer_id_for_user($user);
+
+  my $res = $self->http_get_for_user($user, "/my_timers");
+  return unless $res->is_success;
+
+  my ($timer) = grep {; $_->{id} eq $lp_timer_id }
+                $JSON->decode( $res->decoded_content )->@*;
+
+  return $timer;
 }
 
 has user_timers => (
@@ -554,51 +594,91 @@ sub _handle_timer ($self, $event, $rch, $text) {
   );
 }
 
-sub _handle_task ($self, $event, $rch, $text) {
-  # because of "new task for...";
-  my $what = $text =~ s/\Atask\s+//r;
+sub _extract_flags_from_task_text ($self, $text) {
+  my %flag;
 
-  my ($target, $name) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
+  my $start_emoji
+    = qr{ ⏲   | ⏳  | ⌛️ |  :hourglass(?:_flowing_sand)?: | :timer_clock: }x;
 
-  my $description;
-  ($name, $description) = split /\n+/, $name, 2;
-  $description //= '';
+  my $urgent_emoji
+    = qr{ ❗️  | ‼️   | ❣️  |  :exclamation: }x;
 
-  unless ($target and $name) {
-    return $rch->reply("Does not compute.  Usage:  task for TARGET: TASK");
+  while ($text =~ s/\s*\(([!>]+)\)\s*\z//
+     ||  $text =~ s/\s*($start_emoji|$urgent_emoji)\s*\z//
+     ||  $text =~ s/\s*(#[a-z0-9]+)\s*\z//i
+  ) {
+    my $hunk = $1;
+    if ($hunk =~ s/^#//) {
+      $flag{project}{$hunk} = 1;
+      next;
+    } elsif ($hunk =~ /[!>]/) {
+      $flag{urgent} ++ if $hunk =~ /!/;
+      $flag{start}  ++ if $hunk =~ />/;
+      next;
+    } else {
+      $flag{urgent} ++ if $hunk =~ $urgent_emoji;
+      $flag{start}  ++ if $hunk =~ $start_emoji;
+      next;
+    }
   }
 
-  my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
+  return (
+    $text,
+    %flag,
+  );
+}
+
+sub _check_plan_project ($self, $event, $plan, $error) {
+  my $project = delete $plan->{project};
+
+  if (keys %$project > 1) {
+    $error->{project} = "More than one project specified!";
+    return;
+  }
+
+  my ($project_name) = keys %$project;
+  my $projects = $self->project_named(lc $project_name);
+
+  unless ($projects && @$projects) {
+    $error->{project} = qq{I don't know any LiquidPlanner project with the}
+                      . qq{ nickname "$project".};
+
+    return;
+  }
+
+  if (@$projects > 1) {
+    $error->{project}
+      = qq{More than one LiquidPlanner project has the nickname "$project". }
+      . qq{Their ids are: }
+      . join(q{, }, map {; $_->{id} } @$projects);
+
+    return;
+  }
+
+  $plan->{project_id} = $projects->[0]{id};
+  return;
+}
+
+sub _check_plan_usernames ($self, $event, $plan, $error) {
+  my $usernames = delete $plan->{usernames};
+
   my (@owners, @no_lp, @unknown);
   my %seen;
 
   my %project_id;
-  for my $name (@target_names) {
-    my $target = $self->resolve_name($name, $event->from_user->username);
+  for my $username (@$usernames) {
+    my $target = $self->resolve_name($username, $event->from_user->username);
 
     next if $target && $seen{ $target->username }++;
 
     my $owner_id = $target ? $target->lp_id : undef;
 
-    # Sadly, the following line is not valid:
-    # push(($owner_id ? @owner_ids : @unknown), $owner_id);
     if ($owner_id) {
       push @owners, $target;
-
-      # XXX - From real config! --alh, 2018-03-14
-      my $config;
-      my $project_id = $CONFIG->{liquidplanner}{project}{$target->username};
-      $Logger->log([
-        "Looking for project for %s found %s",
-        $target->username,
-        $project_id // '(undef)',
-      ]);
-
-      $project_id{ $project_id }++ if $project_id;
     } elsif ($target) {
       push @no_lp, $target->username;
     } else {
-      push @unknown, $name;
+      push @unknown, $username;
     }
   }
 
@@ -619,50 +699,172 @@ sub _handle_task ($self, $event, $rch, $text) {
       push @fail, "There's no LiquidPlanner user for $str.";
     }
 
-    return $rch->reply(join(q{  }, @fail));
+    $error->{usernames} = join q{  }, @fail;
+    return;
   }
 
-  my $flags = $self->_strip_name_flags($name);
-  my $urgent = $flags->{urgent};
-  my $start  = $flags->{running};
-
-  if ($urgent) {
-    my @virtuals = grep {; $_->is_virtual } @owners;
-    if (@virtuals) {
+  if ($plan->{urgent}) {
+    if (my @virtuals = grep {; $_->is_virtual } @owners) {
       my $names = join q{, }, sort map {; $_->username } @virtuals;
-      return $rch->reply(
-        "Sorry, you can't make urgent tasks for non-humans."
+      $error->{usernames}
+        = "Sorry, you can't make urgent tasks for non-humans."
         . "  Find a human who can take responsibility, even if it's you."
         . "  You got this error because you tried to assign an urgent task to:"
-        . " $names"
-      );
+        . " $names";
     }
   }
 
-  my $via = $rch->channel->describe_event($event);
-  my $user = $event->from_user;
-  $user = undef unless $user && $user->lp_auth_header;
+  unless ($plan->{project}) {
+    my @projects  = uniq
+                    grep { defined }
+                    map  {; $_->default_project_nickname }
+                    @owners;
 
+    if (@projects == 1) {
+      $plan->{project}{ $projects[0] } = 1;
+    }
+  }
+
+  $plan->{owners} = \@owners;
+  return;
+}
+
+sub _check_plan_rest ($self, $event, $plan, $error) {
+  my $via = $event->from_channel->describe_event($event);
   my $uri = $event->event_uri;
 
-  $description = sprintf '%screated by %s in response to %s%s',
-    ($description ? "$description\n\n" : ""),
+  my $rest = delete $plan->{rest};
+
+  my @cmd_lines;
+
+  if ($rest) {
+    my @lines = split /\n/, $rest;
+    push @cmd_lines, shift @lines while @lines && $lines[0] =~ m{\A/};
+    $rest = join qq{\n}, @lines;
+
+    # TODO: make this less slapdash -- rjbs, 2018-06-08
+    my @errors;
+    my @bad_cmds;
+
+    for my $cmd_line (@cmd_lines) {
+      my @cmd_strs = split m{(?:^|\s+)/}m, $cmd_line;
+      shift @cmd_strs; # the leading / means the first entry is always q{}
+
+      for my $cmd_str (@cmd_strs) {
+        my ($cmd, $rest) = split /\s+/, $cmd_str;
+
+        if ($cmd =~ /\A u(?:rgent)? \z/x)       { $plan->{urgent} = 1; next }
+        if ($cmd =~ /\A s(?:tart)? | go \z/x)   { $plan->{start}  = 1; next }
+        if ($cmd =~ /\A e(?:stimate)? \z/x)     {
+          my ($low, $high) = split /\s*-\s*/, $rest, 2;
+          $high //= $low;
+          s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $low, $high;
+          my $low_s  = eval { parse_duration($low); };
+          my $high_s = eval { parse_duration($high); };
+          if (defined $low_s && defined $high_s) {
+            $plan->{estimate} = { low => $low_s / 3600, high => $high_s / 3600 };
+          } else {
+            push @errors, qq{I couldn't understand the /assign estimate "$rest".}
+          }
+          next;
+        }
+        if ($cmd =~ /\A p(?:roject)? \z/x) {
+          $plan->{project}{$rest} = 1;
+          next;
+        }
+        if ($cmd =~ /\A a(?:ssign)? \z/x) {
+          unless ($rest) {
+            push @bad_cmds, $cmd_str;
+            next;
+          }
+          push $plan->{usernames}->@*, $rest;
+          next
+        }
+
+        push @bad_cmds, $cmd_str;
+      }
+    }
+
+    if (@errors or @bad_cmds) {
+      $error->{rest} = @errors ? (join q{  }, @errors) : q{};
+      if (@bad_cmds) {
+        $error->{rest} .= "Bogus commands: " . join q{ -- }, sort @bad_cmds;
+      }
+    }
+
+    return if $error->{rest};
+  }
+
+  $plan->{description} = sprintf '%screated by %s in response to %s%s',
+    ($rest ? "$rest\n\n" : ""),
     $self->hub->name,
     $via,
     $uri ? "\n\n$uri" : "";
+}
 
-  my $project_id = (keys %project_id)[0] if 1 == keys %project_id;
+# One option:
+# { text => "eat more pie (!) #project", usernames => [ @usernames ] }
+# { text => "eat more pie␤/urgent /p /assign bob /go␤longer form task" }
+sub task_plan_from_spec ($self, $event, $spec) {
+  my ($leader, $rest) = split /\n+/, $spec->{text}, 2;
+
+  my (%plan, %error);
+
+  ($leader, %plan) = $self->_extract_flags_from_task_text($leader);
+
+  if ($spec->{usernames}) {
+    $plan{usernames} //= [];
+    push $plan{usernames}->@*, $spec->{usernames}->@*;
+  }
+
+  $plan{rest} = $rest;
+  $plan{name} = $leader;
+  $plan{user} = $event->from_user;
+
+  $self->_check_plan_rest($event, \%plan, \%error);
+  $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
+  $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
+
+  $error{name} = "That task name is just too long!  Consider putting more of it in the long description."
+    if length $plan{name} > 200;
+
+  return (undef, \%error) if %error;
+  return (\%plan, undef);
+}
+
+sub _handle_task ($self, $event, $rch, $text) {
+  # because of "new task for...";
+  my $what = $text =~ s/\Atask\s+//r;
+
+  my ($target, $spec_text) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
+
+  unless ($target and $spec_text) {
+    return $rch->reply("Does not compute.  Usage:  task for TARGET: TASK");
+  }
+
+  my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
+
+  my ($plan, $error) = $self->task_plan_from_spec(
+    $event,
+    {
+      usernames => [ @target_names ],
+      text      => $spec_text,
+    },
+  );
+
+  if ($error) {
+    my $errors = join q{  }, values %$error;
+    return $rch->reply($errors);
+  }
+
+  # XXX To be removed later. -- rjbs, 2018-06-08
+  my $urgent  = $plan->{urgent};
+  my $start   = $plan->{start};
+  my @owners  = $plan->{owners}->@*;
 
   my $arg = {};
 
-  my $task = $self->_create_lp_task($rch, {
-    name   => $name,
-    urgent => $urgent,
-    user   => $user,
-    owners => \@owners,
-    description => $description,
-    project_id  => $project_id,
-  }, $arg);
+  my $task = $self->_create_lp_task($rch, $plan, $arg);
 
   unless ($task) {
     if ($arg->{already_notified}) {
@@ -679,17 +881,13 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my $reply = "Task for $rcpt created: " . $self->item_uri($task->{id});
 
-  if ($start) {
-    if ($user) {
-      my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
-      my $timer = eval { $JSON->decode( $res->decoded_content ); };
-      if ($res->is_success && $timer->{running}) {
-        $user->last_lp_timer_id($timer->{id});
+  if ($plan->{start}) {
+    my $res = $self->http_post_for_user($event->from_user, "/tasks/$task->{id}/timer/start");
+    my $timer = eval { $JSON->decode( $res->decoded_content ); };
+    if ($res->is_success && $timer->{running}) {
+      $self->set_last_lp_timer_id_for_user($event->from_user, $timer->{id});
 
-        $reply =~ s/created:/created, timer running:/;
-      } else {
-        $reply =~ s/created:/created, timer couldn't be started:/;
-      }
+      $reply =~ s/created:/created, timer running:/;
     } else {
       $reply =~ s/created:/created, timer couldn't be started:/;
     }
@@ -788,7 +986,6 @@ sub _handle_task_like ($self, $event, $rch, $command, $count) {
 
   $rch->reply("responses to <$command> are sent privately") if $event->is_public;
 }
-
 
 sub _handle_inbox ($self, $event, $rch, $text) {
   return $self->_handle_task_like($event, $rch, 'inbox', 200);
@@ -984,7 +1181,6 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
   $rch->reply($prefix . $reply);
 }
 
-
 sub resolve_name ($self, $name, $who) {
   return unless $name;
 
@@ -1035,9 +1231,21 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
   $container{parent_id} = delete $container{package_id}
     unless $container{parent_id};
 
+  my sub assignment ($who) {
+    my %est = $my_arg->{estimate}
+            ? (low_effort_remaining  => $my_arg->{estimate}{low},
+               high_effort_remaining => $my_arg->{estimate}{ligh})
+            : ();
+
+    return {
+      person_id => $who,
+      %est,
+    }
+  }
+
   my $payload = { task => {
     name        => $my_arg->{name},
-    assignments => [ map {; { person_id => $_->lp_id } } @{ $my_arg->{owners} } ],
+    assignments => [ map {; assignment($_) } @{ $my_arg->{owners} } ],
     description => $my_arg->{description},
 
     %container,
@@ -1063,20 +1271,20 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
 }
 
 sub _strip_name_flags ($self, $name) {
-  my ($urgent, $running);
+  my ($urgent, $start);
   if ($name =~ s/\s*\(([!>]+)\)\s*\z//) {
     my ($code) = $1;
-    $urgent   = $code =~ /!/;
-    $running  = $code =~ />/;
+    $urgent = $code =~ /!/;
+    $start  = $code =~ />/;
   } elsif ($name =~ s/\s*((?::timer_clock:|:hourglass(?:_flowing_sand)?:|:exclamation:)+)\s*\z//) {
     my ($code) = $1;
-    $urgent   = $code =~ /exclamation/;
-    $running  = $code =~ /timer_clock|hourglass/;
+    $urgent = $code =~ /exclamation/;
+    $start  = $code =~ /timer_clock|hourglass/;
   }
 
   $_[1] = $name;
 
-  return { urgent => $urgent, running => $running };
+  return { urgent => $urgent, start => $start };
 }
 
 sub lp_timer_for_user ($self, $user) {
@@ -1096,7 +1304,7 @@ sub lp_timer_for_user ($self, $user) {
                 $JSON->decode( $res->decoded_content )->@*;
 
   if ($timer) {
-    $user->last_lp_timer_id($timer->{id});
+    $self->set_last_lp_timer_id_for_user($user, $timer->{id});
   }
 
   return $timer;
@@ -1189,6 +1397,17 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  if ($event->text =~ /\A\s*that\s*\z/) {
+    my $key   = join qq{$;}, $event->from_channel->name, $event->from_address;
+    my $last  = $self->get_last_utterance($key);
+
+    unless (length $last) {
+      return $rch->reply("I don't know what 'that' refers to.");
+    }
+
+    $comment = $last;
+  }
+
   my %meta;
   while ($comment =~ s/(?:\A|\s+)(DONE|STOP|CHILL)\z//) {
     $meta{$1}++;
@@ -1271,7 +1490,6 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   $rch->reply("Okay, I've committed $time of work$also. Task was: $task->{name}");
 }
 
-
 sub _handle_abort ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your abort request.")
     unless $text =~ /^timer\b/i;
@@ -1312,7 +1530,7 @@ sub _handle_start ($self, $event, $rch, $text) {
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
     if ($start_res->is_success && $timer->{running}) {
-      $user->last_lp_timer_id($timer->{id});
+      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
 
       my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
       my $name = $task_res->is_success
@@ -1335,27 +1553,14 @@ sub _handle_start ($self, $event, $rch, $text) {
     my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
     if ($start_res->is_success && $timer->{running}) {
-      $user->last_lp_timer_id($timer->{id});
+      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
       return $rch->reply("Started task: $task->{name} (" . $self->item_uri($task->{id}) . ")");
     } else {
       return $rch->reply("I couldn't start your next task.");
     }
   }
 
-  return -1;
-}
-
-sub last_lp_timer_for_user ($self, $user) {
-  return unless $user->lp_auth_header;
-  return unless my $lp_timer_id = $user->last_lp_timer_id;
-
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  return unless $res->is_success;
-
-  my ($timer) = grep {; $_->{id} eq $lp_timer_id }
-                $JSON->decode( $res->decoded_content )->@*;
-
-  return $timer;
+  return $rch->reply(q{You can either say "start LP-TASK-ID" or "start next".});
 }
 
 sub _handle_resume ($self, $event, $rch, $text) {
@@ -1396,7 +1601,6 @@ sub _handle_resume ($self, $event, $rch, $text) {
 
   return $rch->reply("Timer resumed. Task is: $task->{name}");
 }
-
 
 sub _handle_stop ($self, $event, $rch, $text) {
   my $user = $event->from_user;
@@ -1477,7 +1681,7 @@ sub _handle_reset ($self, $event, $rch, $text) {
   my $restart_timer = eval { $JSON->decode( $start_res->decoded_content ); };
 
   if ($start_res->is_success && $restart_timer->{running}) {
-    $user->last_lp_timer_id($timer->{id});
+    $self->set_last_lp_timer_id_for_user($user, $timer->{id});
     $rch->reply("Okay, I cleared your active timer but left it running.");
   } else {
     $rch->reply("Okay, I cleared your timer but couldn't restart it...sorry!");
@@ -1551,11 +1755,11 @@ sub _handle_spent ($self, $event, $rch, $text) {
 
     my $uri = $self->item_uri($task->{id});
 
-    if ($flags->{running}) {
+    if ($flags->{start}) {
       my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
       my $timer = eval { $JSON->decode( $res->decoded_content ); };
-      if ($res->is_success && $timer->{running}) {
-        $user->last_lp_timer_id($timer->{id});
+      if ($res->is_success && $timer->{start}) {
+        $self->set_last_lp_timer_id_for_user($user, $timer->{id});
         return $rch->reply("I logged that time on task ($task->{name}) and started your timer here: $uri");
       } else {
         return $rch->reply("I couldn't start the timer on task ($task->{name}), but I logged that time here: $uri");
@@ -1594,7 +1798,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
       activity_id => $task->{activity_id},
       member_id => $user->lp_id,
       work      => $duration / 3600,
-      is_done   => ($flags->{running} ? \0 : \1),
+      is_done   => ($flags->{start} ? \0 : \1),
     }),
   );
 
@@ -1605,11 +1809,11 @@ sub _handle_spent ($self, $event, $rch, $text) {
     );
   }
 
-  if ($flags->{running}) {
+  if ($flags->{start}) {
     my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
     my $timer = eval { $JSON->decode( $res->decoded_content ); };
     if ($res->is_success && $timer->{running}) {
-      $user->last_lp_timer_id($timer->{id});
+      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
       return $rch->reply("I logged that time and started your timer here: $uri");
     } else {
       return $rch->reply("I couldn't start the timer, but I logged that time here: $uri");
@@ -1669,6 +1873,74 @@ sub _handle_todos ($self, $event, $rch, $text) {
   for my $todo (@todos) {
     $rch->private_reply("- $todo->{title}");
   }
+}
+
+sub _lp_assignment_is_unestimated {
+  my ($self, $assignment) = @_;
+
+  return ($assignment->{low_effort_remaining}  // 0) < 0.00000001
+      && ($assignment->{high_effort_remaining} // 0) < 0.00000001;
+}
+
+sub damage_report ($self, $event, $rch) {
+  my ($who_name) = $event->text =~ /^\s*(?:damage\s+)?report(?:for\s+([a-z]+))\s*$/i;
+  $who_name //= 'me';
+
+  my $target = $self->resolve_name($who_name, $event->from_user->username);
+
+  return $rch->reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
+    unless $target && $target->lp_auth_header;
+
+  my $lp_id = $target->lp_id;
+
+  my $res = $self->http_get_for_user(
+    $target,
+    "/upcoming_tasks?limit=200&member_id=" . $lp_id,
+  );
+
+  unless ($res->is_success) {
+    return $rch->reply("Sorry, I had trouble getting that task list!");
+  }
+
+  my $groups = $JSON->decode( $res->decoded_content );
+  unless (@$groups) {
+    return $rch->reply("Strangely enough, there's no upcoming work!");
+  }
+
+  my $summary = q{};
+  splice @$groups, 4;
+  while (my $group = shift @$groups) {
+    next unless $group->{items}->@*;
+
+    my $count = 0;
+    my $unest = 0;
+    for my $item ($group->{items}->@*) {
+      # upcoming_tasks is meant to act like My Work, in which on-hold tasks are
+      # not shown, but it includes on hold tasks.  bug filed
+      next if $item->{is_on_hold};
+
+      # Project, parent, and package are a complete mess, or at least mystery,
+      # in the LiquidPlanner API.  Here, I'm trying to exclude tasks that are
+      # in a project but not a package, meaning they're basically backlog work.
+      next if $item->{project_id} && ! $item->{package_id};
+
+      $count++;
+      my ($assignment) = grep {; $_->{person_id} == $lp_id }
+                         $item->{assignments}->@*;
+
+      $unest++ if $self->_lp_assignment_is_unestimated($assignment);
+    }
+
+    $summary .= $group->{group} eq 'INBOX'
+              ? 'inbox'
+              : "week of $group->{from}";
+
+    $summary .= sprintf ": %u %s", $count, PL_N('item', $count);
+    $summary .= sprintf ", %u unestimated", $unest if $unest;
+    $summary .= "; " if @$groups;
+  }
+
+  return $rch->reply($summary);
 }
 
 sub reload_projects ($self, $event, $rch) {
