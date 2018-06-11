@@ -771,7 +771,7 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
       shift @cmd_strs; # the leading / means the first entry is always q{}
 
       for my $cmd_str (@cmd_strs) {
-        my ($cmd, $rest) = split /\s+/, $cmd_str;
+        my ($cmd, $rest) = split /\s+/, $cmd_str, 2;
 
         if ($cmd =~ /\A u(?:rgent)? \z/x)       { $plan->{urgent} = 1; next }
         if ($cmd =~ /\A s(?:tart)? | go \z/x)   { $plan->{start}  = 1; next }
