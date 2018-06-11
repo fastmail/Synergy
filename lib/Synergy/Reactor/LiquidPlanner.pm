@@ -233,7 +233,13 @@ sub last_lp_timer_for_user ($self, $user) {
   return unless my $lp_timer_id = $self->last_lp_timer_id_for_user($user);
 
   my $res = $self->http_get_for_user($user, "/my_timers");
-  return unless $res->is_success;
+  unless ($res->is_success) {
+    $Logger->log([
+      "tried to get LP timers for %s but got %s response",
+      $user->username,
+      $res->code,
+    ]);
+  }
 
   my ($timer) = grep {; $_->{id} eq $lp_timer_id }
                 $JSON->decode( $res->decoded_content )->@*;
