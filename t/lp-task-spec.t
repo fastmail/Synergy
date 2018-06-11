@@ -261,4 +261,17 @@ plan_ok(
   "plain ol' --- except with a backwhack"
 );
 
+plan_ok(
+  "Eat more pie\n/assign roxy stormer",
+  {
+    name        => "Eat more pie",
+    owners      => bag(
+      methods(username => 'roxy'),
+      methods(username => 'stormer'),
+    ),
+  },
+  "multi-user /assign"
+);
+
+
 done_testing;
