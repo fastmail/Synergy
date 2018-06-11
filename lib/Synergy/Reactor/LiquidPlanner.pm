@@ -1254,7 +1254,7 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
             : ();
 
     return {
-      person_id => $who,
+      person_id => $who->lp_id,
       %est,
     }
   }
