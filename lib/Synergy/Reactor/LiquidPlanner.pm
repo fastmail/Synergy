@@ -812,6 +812,7 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     if (@errors or @bad_cmds) {
       $error->{rest} = @errors ? (join q{  }, @errors) : q{};
       if (@bad_cmds) {
+        $error->{rest} .= "  " if $error->{rest};
         $error->{rest} .= "Bogus commands: " . join q{ -- }, sort @bad_cmds;
       }
     }
