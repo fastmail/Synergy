@@ -1254,7 +1254,7 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
   my sub assignment ($who) {
     my %est = $my_arg->{estimate}
             ? (low_effort_remaining  => $my_arg->{estimate}{low},
-               high_effort_remaining => $my_arg->{estimate}{ligh})
+               high_effort_remaining => $my_arg->{estimate}{high})
             : ();
 
     return {
