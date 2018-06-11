@@ -882,11 +882,6 @@ sub _handle_task ($self, $event, $rch, $text) {
     return $rch->reply($errors);
   }
 
-  # XXX To be removed later. -- rjbs, 2018-06-08
-  my $urgent  = $plan->{urgent};
-  my $start   = $plan->{start};
-  my @owners  = $plan->{owners}->@*;
-
   my $arg = {};
 
   my $task = $self->_create_lp_task($rch, $plan, $arg);
@@ -902,7 +897,7 @@ sub _handle_task ($self, $event, $rch, $text) {
     }
   }
 
-  my $rcpt = join q{ and }, map {; $_->username } @owners;
+  my $rcpt = join q{ and }, map {; $_->username } $plan->{owners}->@*;
 
   my $reply = "Task for $rcpt created: " . $self->item_uri($task->{id});
 
