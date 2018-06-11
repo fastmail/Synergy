@@ -228,10 +228,6 @@ sub set_last_lp_timer_id_for_user ($self, $user, $timer_id) {
   $self->_last_lp_timer_ids->{ $user->username } = $timer_id;
 }
 
-sub clear_last_lp_timer_id_for_user ($self, $user, $timer_id) {
-  delete $self->_last_lp_timer_ids->{ $user->username };
-}
-
 sub last_lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
   return unless my $lp_timer_id = $self->last_lp_timer_id_for_user($user);
