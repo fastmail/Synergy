@@ -220,7 +220,7 @@ has _last_lp_timer_ids => (
   default => sub {  {}  },
 );
 
-sub last_lp_timer_id_for_user ($self, $user, $timer_id) {
+sub last_lp_timer_id_for_user ($self, $user) {
   return $self->_last_lp_timer_ids->{ $user->username };
 }
 
