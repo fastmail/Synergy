@@ -901,7 +901,10 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my $rcpt = join q{ and }, map {; $_->username } $plan->{owners}->@*;
 
-  my $reply = "Task for $rcpt created: " . $self->item_uri($task->{id});
+  my $reply = join qq{\n},
+    "Task for $rcpt created.",
+    "\N{LINK SYMBOL} " . $self->item_uri($task->{id}),
+    "\N{LOVE LETTER} " . $task->{item_email};
 
   if ($plan->{start}) {
     my $res = $self->http_post_for_user($event->from_user, "/tasks/$task->{id}/timer/start");
