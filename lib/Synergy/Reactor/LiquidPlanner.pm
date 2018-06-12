@@ -203,7 +203,9 @@ sub provide_lp_link ($self, $event, $rch) {
   my $user = $event->from_user;
   return unless $user && $user->lp_auth_header;
 
-  if (my ($task_id) = $event->text =~ /LP([0-9]{8})/) {
+  state $lp_id_re = qr/\bLP([1-9][0-9]{5,10})\b/;
+
+  if (my ($task_id) = $event->text =~ $lp_id_re) {
     my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
     return unless $task_res->is_success;
 
@@ -212,7 +214,11 @@ sub provide_lp_link ($self, $event, $rch) {
     $rch->reply(
       "LP$task_id: $task->{name} (" . $self->item_uri($task_id) . ")"
     );
-    $event->mark_handled if $event->was_targeted;   # do better than bort
+
+    if ($event->was_targeted && $event->text =~ /\A\s* $lp_id_re \s*\z/x) {
+      # do better than bort
+      $event->mark_handled;
+    }
   }
 }
 
