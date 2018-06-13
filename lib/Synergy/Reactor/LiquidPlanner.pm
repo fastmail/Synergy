@@ -213,7 +213,7 @@ sub provide_lp_link ($self, $event, $rch) {
 
     return unless $item_res->is_success;
 
-    my $item = $JSON->decode($item_res->decoded_content);
+    my $item = $JSON->decode($item_res->decoded_content)->[0];
     my $name = $item->{name};
 
     my $reply;
