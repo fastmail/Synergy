@@ -205,15 +205,33 @@ sub provide_lp_link ($self, $event, $rch) {
 
   state $lp_id_re = qr/\bLP([1-9][0-9]{5,10})\b/;
 
-  if (my ($task_id) = $event->text =~ $lp_id_re) {
-    my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
-    return unless $task_res->is_success;
-
-    my $task = $JSON->decode($task_res->decoded_content);
-    my $name = $task->{name};
-    $rch->reply(
-      "LP$task_id: $task->{name} (" . $self->item_uri($task_id) . ")"
+  if (my ($item_id) = $event->text =~ $lp_id_re) {
+    my $item_res = $self->http_get_for_user(
+      $user,
+      "/treeitems/?filter[]=id=$item_id",
     );
+
+    return unless $item_res->is_success;
+
+    my $item = $JSON->decode($item_res->decoded_content);
+    my $name = $item->{name};
+
+    my $reply;
+
+    if ($item->{type} =~ /\A Task | Package | Project \z/x) {
+      my $icon = $item->{type} eq 'Task'    ? "⏺"
+               : $item->{type} eq 'Package' ? "📦"
+               : $item->{type} eq 'Project' ? "📁"
+               :                              "($item->{type})";
+
+      $reply = "LP$item_id: $icon $item->{name} ("
+             .  $self->item_uri($item_id)
+             . ")";
+    } else {
+      $reply = "LP$item_id: is a $item->{type}";
+    }
+
+    $rch->reply($rch);
 
     if ($event->was_targeted && $event->text =~ /\A\s* $lp_id_re \s*\z/x) {
       # do better than bort
