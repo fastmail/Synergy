@@ -231,7 +231,7 @@ sub provide_lp_link ($self, $event, $rch) {
       $reply = "LP$item_id: is a $item->{type}";
     }
 
-    $rch->reply($rch);
+    $rch->reply($reply);
 
     if ($event->was_targeted && $event->text =~ /\A\s* $lp_id_re \s*\z/x) {
       # do better than bort
