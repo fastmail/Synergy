@@ -219,7 +219,7 @@ sub provide_lp_link ($self, $event, $rch) {
     my $reply;
 
     if ($item->{type} =~ /\A Task | Package | Project \z/x) {
-      my $icon = $item->{type} eq 'Task'    ? "⏺"
+      my $icon = $item->{type} eq 'Task'    ? "•"
                : $item->{type} eq 'Package' ? "📦"
                : $item->{type} eq 'Project' ? "📁"
                :                              "($item->{type})";
