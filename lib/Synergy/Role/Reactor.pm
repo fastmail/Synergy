@@ -30,8 +30,8 @@ sub start ($self) { }
 
 sub state { return {} }
 
-sub save_state ($self) {
-  $self->hub->save_state($self, $self->state);
+sub save_state ($self, $state = $self->state) {
+  $self->hub->save_state($self, $state);
 }
 
 sub fetch_state ($self) {
