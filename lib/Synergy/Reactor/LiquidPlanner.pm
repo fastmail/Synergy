@@ -936,9 +936,9 @@ sub _handle_task ($self, $event, $rch, $text) {
     if ($res->is_success && $timer->{running}) {
       $self->set_last_lp_timer_id_for_user($event->from_user, $timer->{id});
 
-      $reply =~ s/created:/created, timer running:/;
+      $reply =~ s/created\./created, timer running./;
     } else {
-      $reply =~ s/created:/created, timer couldn't be started:/;
+      $reply =~ s/created\./created, timer couldn't be started./;
     }
   }
 
