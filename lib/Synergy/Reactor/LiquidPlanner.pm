@@ -929,7 +929,7 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my $rcpt = join q{ and }, map {; $_->username } $plan->{owners}->@*;
 
-  my $reply = "Task for $rcpt created.";
+  my $reply = "Task $task->{id} created, assigned to $rcpt.";
 
   if ($plan->{start}) {
     my $res = $self->http_post_for_user($event->from_user, "/tasks/$task->{id}/timer/start");
@@ -937,9 +937,9 @@ sub _handle_task ($self, $event, $rch, $text) {
     if ($res->is_success && $timer->{running}) {
       $self->set_last_lp_timer_id_for_user($event->from_user, $timer->{id});
 
-      $reply =~ s/created\./created, timer running./;
+      $reply =~ s/\.\z/created, timer running./;
     } else {
-      $reply =~ s/created\./created, timer couldn't be started./;
+      $reply =~ s/\.\z/created, timer couldn't be started./;
     }
   }
 
