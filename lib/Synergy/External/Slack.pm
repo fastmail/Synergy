@@ -162,7 +162,7 @@ sub _send_plain_text ($self, $channel, $text) {
 }
 
 sub _send_rich_text ($self, $channel, $plain, $rich) {
-  $slack->api_call('chat.postMessage', {
+  $self->api_call('chat.postMessage', {
     channel => $channel,
     as_user => 1,
     text    => $rich,

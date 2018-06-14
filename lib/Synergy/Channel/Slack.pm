@@ -168,18 +168,18 @@ sub decode_slack_formatting ($self, $text) {
   return $text;
 }
 
-sub send_message_to_user ($self, $user, $text) {
+sub send_message_to_user ($self, $user, $text, $alts = {}) {
   my $where = $self->slack->dm_channel_for_user($user, $self);
 
-  $self->send_message($where, $text);
+  $self->send_message($where, $text, $alts);
 }
 
-sub send_message ($self, $target, $text) {
+sub send_message ($self, $target, $text, $alts = {}) {
   $text =~ s/&/&amp;/g;
   $text =~ s/</&lt;/g;
   $text =~ s/>/&gt;/g;
 
-  $self->slack->send_message($target, $text);
+  $self->slack->send_message($target, $text, $alts);
 
   return;
 }
