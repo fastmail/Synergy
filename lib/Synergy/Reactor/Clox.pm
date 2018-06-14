@@ -66,8 +66,8 @@ sub handle_clox ($self, $event, $rch) {
 
     use utf8;
     my $str = $tz_time->day_name . ", "
-            . ($tz_nick->{$tz_name} ? $tz_time->format_cldr("H:mm")
-                                    : $tz_time->format_cldr("H:mm vvv"));
+            . ($tz_nick->{$tz_name} ? $tz_time->format_cldr("HH:mm")
+                                    : $tz_time->format_cldr("HH:mm vvv"));
 
     $str = "$tz_nick->{$tz_name} $str" if $tz_nick->{$tz_name};
 
