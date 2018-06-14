@@ -952,8 +952,8 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my $slack = join q{  },
     $reply,
-    (sprintf '<%s|%s>', $item_uri, "\N{LINK SYMBOL}"),
-    (sprintf '<mailto:%s|%s>', $task->{item_email}, "\N{LOVE LETTER}");
+    (sprintf '<%s|%s web>', $item_uri, "\N{LINK SYMBOL}"),
+    (sprintf '<mailto:%s|%s email>', $task->{item_email}, "\N{LOVE LETTER}");
 
   $rch->reply($reply, { slack => $slack });
 }
