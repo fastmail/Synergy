@@ -8,7 +8,7 @@ use namespace::clean;
 with 'Synergy::Role::HubComponent';
 
 requires qw(
-  send_text
+  send_message
   describe_event
   send_message_to_user
 );

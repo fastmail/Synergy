@@ -160,10 +160,10 @@ sub start ($self) {
 }
 
 sub send_message_to_user ($self, $user, $text) {
-  $self->send_text($user->username, $text);
+  $self->send_message($user->username, $text);
 }
 
-sub send_text ($self, $address, $text) {
+sub send_message ($self, $address, $text) {
   my $name = $self->name;
   $self->_stream->write(">>> $name!$address > $text\n");
   return;

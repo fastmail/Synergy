@@ -33,7 +33,7 @@ sub send_message_to_user ($self, $user, $message) {
   $self->record_message({ address => $to_address, text => $message });
 }
 
-sub send_text ($self, $address, $text) {
+sub send_message ($self, $address, $text) {
   $self->record_message({ address => $address, text => $text });
 }
 

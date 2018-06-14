@@ -124,11 +124,11 @@ sub send_message_to_user ($self, $user, $text) {
   my $where = $user->phone;
 
   $Logger->log([ "sending text <$text> to $where" ]);
-  $self->send_text($where, $text);
+  $self->send_message($where, $text);
 }
 
 
-sub send_text ($self, $target, $text) {
+sub send_message ($self, $target, $text) {
   my $from;
 
   unless ($from) {
