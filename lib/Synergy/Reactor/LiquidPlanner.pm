@@ -1026,10 +1026,19 @@ sub _handle_tasks ($self, $event, $rch, $text) {
 
   my $lp_tasks = $self->lp_tasks_for_user($user, $count, 'tasks');
 
+  my $reply = q{};
+  my $slack = q{};
+
   for my $task (splice @$lp_tasks, $start, $per_page) {
-    $rch->private_reply("$task->{name} (" . $self->item_uri($task->{id}) .  ")");
+    my $uri = $self->item_uri($task->{id});
+    $reply .= "$task->{name} ($uri)\n";
+    $slack .= "<$uri|LP$task->{id}> $task->{name}\n";
   }
 
+  chomp $reply;
+  chomp $slack;
+
+  $rch->private_reply($reply, { slack => $slack });
   $rch->reply("responses to <tasks> are sent privately") if $event->is_public;
 }
 
