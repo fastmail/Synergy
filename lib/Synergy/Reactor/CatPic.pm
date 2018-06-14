@@ -21,6 +21,14 @@ sub listener_specs {
       },
     },
     {
+      name      => 'cow-pic',
+      method    => 'handle_cow_pic',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        $e->was_targeted && $e->text =~ /\Acow\s+pic\z/
+      },
+    },
+    {
       name      => 'cat-pic',
       method    => 'handle_cat_pic',
       exclusive => 1,
@@ -50,6 +58,17 @@ sub handle_cat_pic ($self, $event, $rch) {
 
   $rch->reply("Something went wrong getting the kitties! \N{CRYING CAT FACE}");
   return;
+}
+
+sub handle_cow_pic ($self, $event, $rch) {
+  $event->mark_handled;
+
+  $rch->reply(
+    "Moo.",
+    {
+      slack_reaction => { event => $event, reaction => 'cow2' },
+    },
+  );
 }
 
 sub handle_dog_pic ($self, $event, $rch) {

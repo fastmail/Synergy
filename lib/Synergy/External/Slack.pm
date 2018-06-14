@@ -143,9 +143,26 @@ sub flush_queue ($self) {
 }
 
 sub send_message ($self, $channel, $text, $alts = {}) {
-  # TODO: Obviously. -- rjbs, 2018-06-13
-  return $self->_send_plain_text($channel, "Reacji:  $alts->{slack_reaction}")
-    if $alts->{slack_reaction};
+  if (my $r = $alts->{slack_reaction}) {
+    # For annoying reasons, and only for now (I hope), a slack_reaction
+    # alternative must include the inciting event.  If it doesn't, we can't
+    # find the message to which we react!  If we don't have the event, or if
+    # the event isn't from Slack, we'll fall back. -- rjbs, 2018-06-13
+    my $e = $r->{event};
+
+    if ( $e
+      && $e->from_channel->isa('Synergy::Channel::Slack')
+      && $e->from_channel->slack == $self # O_O -- rjbs, 2018-06-13
+    ) {
+      $self->api_call('reactions.add', {
+        name      => $r->{reaction},
+        channel   => $e->transport_data->{channel},
+        timestamp => $e->transport_data->{ts},
+      });
+
+      return;
+    }
+  }
 
   return $self->_send_rich_text($channel, $text, $alts->{slack})
     if $alts->{slack};
