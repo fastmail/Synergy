@@ -939,16 +939,17 @@ sub _handle_task ($self, $event, $rch, $text) {
     }
   }
 
-  my $plain = $reply;
-  my $slack = $reply;
-
   my $item_uri = $self->item_uri($task->{id});
 
-  $plain .= "\n\N{LINK SYMBOL} $item_uri"
-          . "\n\N{LOVE LETTER} " . $task->{item_email};
+  my $plain = join qq{\n},
+    $reply,
+    "\N{LINK SYMBOL} $item_uri",
+    "\N{LOVE LETTER} " . $task->{item_email};
 
-  $slack .= (sprintf '<%s|%s>', $item_uri, "\N{LINK SYMBOL}")
-          . (sprintf '<%s|%s>', $task->{item_email}, "\N{LOVE LETTER}");
+  my $slack = join q{  },
+    $reply,
+    (sprintf '<%s|%s>', $item_uri, "\N{LINK SYMBOL}"),
+    (sprintf '<mailto:%s|%s>', $task->{item_email}, "\N{LOVE LETTER}");
 
   $rch->reply($reply, { slack => $slack });
 }
