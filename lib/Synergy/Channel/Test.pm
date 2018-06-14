@@ -19,7 +19,7 @@ has prefix => (
   default => q{synergy: },
 );
 
-sub send_message_to_user ($self, $user, $message) {
+sub send_message_to_user ($self, $user, @rest) {
   my $to_address = $user->identities->{ $self->name };
 
   unless ($to_address) {
@@ -30,7 +30,7 @@ sub send_message_to_user ($self, $user, $message) {
     );
   }
 
-  $self->record_message({ address => $to_address, text => $message });
+  $self->send_message($to_address, @rest);
 }
 
 sub send_message ($self, $address, $text) {
