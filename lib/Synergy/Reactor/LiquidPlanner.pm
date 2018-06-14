@@ -961,7 +961,7 @@ sub _handle_task ($self, $event, $rch, $text) {
   $rch->reply($reply, { slack => $slack });
 }
 
-sub lp_tasks_for_user ($self, $user, $count, $which='tasks') {
+sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
   my $res = $self->http_get_for_user(
     $user,
     "/upcoming_tasks?limit=200&flat=true&member_id=" . $user->lp_id,
@@ -998,14 +998,32 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks') {
 
   splice @$tasks, $count;
 
-  my $urgent = $CONFIG->{liquidplanner}{package}{urgent};
-  for (@$tasks) {
-    $_->{name} = "[URGENT] $_->{name}"
-      if (grep { $urgent == $_ } $_->{parent_ids}->@*)
-      || (grep { $urgent == $_ } $_->{package_ids}->@*);
+  unless ($arg->{no_prefix}) {
+    my $urgent = $CONFIG->{liquidplanner}{package}{urgent};
+    for (@$tasks) {
+      $_->{name} = "[URGENT] $_->{name}"
+        if (grep { $urgent == $_ } $_->{parent_ids}->@*)
+        || (grep { $urgent == $_ } $_->{package_ids}->@*);
+    }
   }
 
   return $tasks;
+}
+
+sub _send_task_list ($self, $event, $rch, $tasks) {
+  my $reply = q{};
+  my $slack = q{};
+
+  for my $task (@$tasks) {
+    my $uri = $self->item_uri($task->{id});
+    $reply .= "$task->{name} ($uri)\n";
+    $slack .= "<$uri|LP$task->{id}> $task->{name}\n";
+  }
+
+  chomp $reply;
+  chomp $slack;
+
+  $rch->private_reply($reply, { slack => $slack });
 }
 
 sub _handle_tasks ($self, $event, $rch, $text) {
@@ -1025,40 +1043,32 @@ sub _handle_tasks ($self, $event, $rch, $text) {
   my $start = $per_page * ($page - 1);
 
   my $lp_tasks = $self->lp_tasks_for_user($user, $count, 'tasks');
+  my @task_page = splice @$lp_tasks, $start, $per_page;
 
-  my $reply = q{};
-  my $slack = q{};
+  return $rch->reply("you don't have any open tasks right now.  Woah!")
+    unless @task_page;
 
-  for my $task (splice @$lp_tasks, $start, $per_page) {
-    my $uri = $self->item_uri($task->{id});
-    $reply .= "$task->{name} ($uri)\n";
-    $slack .= "<$uri|LP$task->{id}> $task->{name}\n";
-  }
+  $self->_send_task_list($event, $rch, \@task_page);
 
-  chomp $reply;
-  chomp $slack;
-
-  $rch->private_reply($reply, { slack => $slack });
   $rch->reply("responses to <tasks> are sent privately") if $event->is_public;
 }
 
-sub _handle_task_like ($self, $event, $rch, $command, $count) {
+sub _handle_task_like ($self, $event, $rch, $cmd, $count) {
   my $user = $event->from_user;
-  my $lp_tasks = $self->lp_tasks_for_user($user, $count, $command);
+
+  my $arg = $cmd eq 'urgent' ? { no_prefix => 1 } : {};
+  my $lp_tasks = $self->lp_tasks_for_user($user, $count, $cmd, $arg);
 
   unless (@$lp_tasks) {
-    my $suffix = $command =~ /(inbox|urgent)/n
+    my $suffix = $cmd =~ /(inbox|urgent)/n
                ? ' \o/'
                : '';
-    $rch->reply("you don't have any open $command tasks right now.$suffix");
+    $rch->reply("you don't have any open $cmd tasks right now.$suffix");
     return;
   }
 
-  for my $task (@$lp_tasks) {
-    $rch->private_reply("$task->{name} (" . $self->item_uri($task->{id}) .  ")");
-  }
-
-  $rch->reply("responses to <$command> are sent privately") if $event->is_public;
+  $self->_send_task_list($event, $rch, $lp_tasks);
+  $rch->reply("responses to <$cmd> are sent privately") if $event->is_public;
 }
 
 sub _handle_inbox ($self, $event, $rch, $text) {
