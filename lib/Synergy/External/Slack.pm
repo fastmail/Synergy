@@ -143,10 +143,22 @@ sub flush_queue ($self) {
 }
 
 sub send_message ($self, $channel, $text) {
+  $self->_send_plain_text($channel, $text);
+}
+
+sub _send_plain_text ($self, $channel, $text) {
   $self->send_frame({
     type => 'message',
     channel => $channel,
     text    => $text,
+  });
+}
+
+sub _send_rich_text ($self, $channel, $rich) {
+  $slack->api_call('chat.postMessage', {
+    channel => $channel,
+    as_user => 1,
+    text    => $rich,
   });
 }
 
