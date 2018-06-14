@@ -925,10 +925,7 @@ sub _handle_task ($self, $event, $rch, $text) {
 
   my $rcpt = join q{ and }, map {; $_->username } $plan->{owners}->@*;
 
-  my $reply = join qq{\n},
-    "Task for $rcpt created.",
-    "\N{LINK SYMBOL} " . $self->item_uri($task->{id}),
-    "\N{LOVE LETTER} " . $task->{item_email};
+  my $reply = "Task for $rcpt created.";
 
   if ($plan->{start}) {
     my $res = $self->http_post_for_user($event->from_user, "/tasks/$task->{id}/timer/start");
@@ -942,7 +939,18 @@ sub _handle_task ($self, $event, $rch, $text) {
     }
   }
 
-  $rch->reply($reply);
+  my $plain = $reply;
+  my $slack = $reply;
+
+  my $item_uri = $self->item_uri($task->{id});
+
+  $plain .= "\n\N{LINK SYMBOL} $item_uri"
+          . "\n\N{LOVE LETTER} " . $task->{item_email};
+
+  $slack .= (sprintf '<%s|%s>', $item_uri, "\N{LINK SYMBOL}")
+          . (sprintf '<%s|%s>', $task->{item_email}, "\N{LOVE LETTER}");
+
+  $rch->reply($reply, { slack => $slack });
 }
 
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks') {

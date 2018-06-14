@@ -29,14 +29,18 @@ has prefix => (
   default => '',
 );
 
-sub reply ($self, $text) {
+sub reply ($self, $text, $alts = {}) {
   $Logger->log_debug("sending $text to someone");
-  return $self->channel->send_text($self->default_address, $self->prefix . $text);
+  return $self->channel->send_message(
+    $self->default_address,
+    $self->prefix . $text,
+    $alts,
+  );
 }
 
-sub private_reply ($self, $text) {
+sub private_reply ($self, $text, $alts = {}) {
   $Logger->log_debug("sending $text to someone");
-  return $self->channel->send_text($self->private_address, $text);
+  return $self->channel->send_message($self->private_address, $text, $alts);
 }
 
 1;

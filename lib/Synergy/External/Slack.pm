@@ -142,11 +142,30 @@ sub flush_queue ($self) {
   }
 }
 
-sub send_message ($self, $channel, $text) {
+sub send_message ($self, $channel, $text, $alts = {}) {
+  # TODO: Obviously. -- rjbs, 2018-06-13
+  return $self->_send_plain_text($channel, "Reacji:  $alts->{slack_reaction}")
+    if $alts->{slack_reaction};
+
+  return $self->_send_rich_text($channel, $text, $alts->{slack})
+    if $alts->{slack};
+
+  return $self->_send_plain_text($channel, $text);
+}
+
+sub _send_plain_text ($self, $channel, $text) {
   $self->send_frame({
     type => 'message',
     channel => $channel,
     text    => $text,
+  });
+}
+
+sub _send_rich_text ($self, $channel, $plain, $rich) {
+  $slack->api_call('chat.postMessage', {
+    channel => $channel,
+    as_user => 1,
+    text    => $rich,
   });
 }
 

@@ -49,7 +49,7 @@ sub handle_announce ($self, $event, $rch) {
                                : $event->from_address;
 
   $self->hub->channel_named($self->to_channel_name)
-            ->send_text($self->to_address, "$from says: $to_send");
+            ->send_message($self->to_address, "$from says: $to_send");
 
   $rch->reply("Sent!");
   return 1;
