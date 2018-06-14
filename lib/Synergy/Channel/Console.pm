@@ -159,11 +159,11 @@ sub start ($self) {
   $self->hub->loop->add($self->_stream);
 }
 
-sub send_message_to_user ($self, $user, $text) {
-  $self->send_message($user->username, $text);
+sub send_message_to_user ($self, $user, $text, $alts = {}) {
+  $self->send_message($user->username, $text, $alts);
 }
 
-sub send_message ($self, $address, $text) {
+sub send_message ($self, $address, $text, $alts = {}) {
   my $name = $self->name;
   $self->_stream->write(">>> $name!$address > $text\n");
   return;

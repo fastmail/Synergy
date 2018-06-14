@@ -112,7 +112,7 @@ sub http_post {
   return $self->hub->http_request('POST' => @_);
 }
 
-sub send_message_to_user ($self, $user, $text) {
+sub send_message_to_user ($self, $user, $text, $alts = {}) {
   unless ($user->phone) {
     $Logger->log([
       "can't send message, no phone number for %s",
@@ -124,11 +124,10 @@ sub send_message_to_user ($self, $user, $text) {
   my $where = $user->phone;
 
   $Logger->log([ "sending text <$text> to $where" ]);
-  $self->send_message($where, $text);
+  $self->send_message($where, $text, $alts);
 }
 
-
-sub send_message ($self, $target, $text) {
+sub send_message ($self, $target, $text, $alts) {
   my $from;
 
   unless ($from) {
