@@ -1045,12 +1045,12 @@ sub _handle_tasks ($self, $event, $rch, $text) {
   my $lp_tasks = $self->lp_tasks_for_user($user, $count, 'tasks');
   my @task_page = splice @$lp_tasks, $start, $per_page;
 
-  return $rch->reply("you don't have any open tasks right now.  Woah!")
+  return $rch->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
 
   $self->_send_task_list($event, $rch, \@task_page);
 
-  $rch->reply("responses to <tasks> are sent privately") if $event->is_public;
+  $rch->reply("Responses to <tasks> are sent privately.") if $event->is_public;
 }
 
 sub _handle_task_like ($self, $event, $rch, $cmd, $count) {
@@ -1063,12 +1063,12 @@ sub _handle_task_like ($self, $event, $rch, $cmd, $count) {
     my $suffix = $cmd =~ /(inbox|urgent)/n
                ? ' \o/'
                : '';
-    $rch->reply("you don't have any open $cmd tasks right now.$suffix");
+    $rch->reply("You don't have any open $cmd tasks right now.$suffix");
     return;
   }
 
   $self->_send_task_list($event, $rch, $lp_tasks);
-  $rch->reply("responses to <$cmd> are sent privately") if $event->is_public;
+  $rch->reply("Responses to <$cmd> are sent privately.") if $event->is_public;
 }
 
 sub _handle_inbox ($self, $event, $rch, $text) {
@@ -1910,7 +1910,8 @@ sub _handle_spent ($self, $event, $rch, $text) {
 sub _handle_projects ($self, $event, $rch, $text) {
   my @sorted = sort $self->projects;
 
-  $rch->reply("responses to <projects> are sent privately") if $event->is_public;
+  $rch->reply("Responses to <projects> are sent privately.")
+    if $event->is_public;
   $rch->private_reply('Known projects:');
 
   for my $project (@sorted) {
@@ -1949,9 +1950,9 @@ sub _handle_todos ($self, $event, $rch, $text) {
   my $all_todos = $JSON->decode($todo_res->decoded_content);
   my @todos = grep {; ! $_->{is_done} } @$all_todos;
 
-  return $rch->reply("you don't have any open to-do items") unless @todos;
+  return $rch->reply("You don't have any open to-do items.") unless @todos;
 
-  $rch->reply("responses to <todos> are sent privately") if $event->is_public;
+  $rch->reply("Responses to <todos> are sent privately.") if $event->is_public;
   $rch->private_reply('Open to-do items:');
 
   for my $todo (@todos) {
