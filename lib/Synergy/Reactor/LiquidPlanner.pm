@@ -228,14 +228,17 @@ sub provide_lp_link ($self, $event, $rch) {
                : $item->{type} eq 'Project' ? "📁"
                :                              "($item->{type})";
 
-      $reply = "LP$item_id: $icon $item->{name} ("
-             .  $self->item_uri($item_id)
-             . ")";
-    } else {
-      $reply = "LP$item_id: is a $item->{type}";
-    }
+      my $uri = $self->item_uri($item_id);
 
-    $rch->reply($reply);
+      $rch->reply(
+        "LP$item_id: $icon $item->{name} ($uri)",
+        {
+          slack => "<$uri|LP$item_id>: $icon $item->{name}",
+        },
+      );
+    } else {
+      $rch->reply("LP$item_id: is a $item->{type}");
+    }
 
     if ($event->was_targeted && $event->text =~ /\A\s* $lp_id_re \s*\z/x) {
       # do better than bort
