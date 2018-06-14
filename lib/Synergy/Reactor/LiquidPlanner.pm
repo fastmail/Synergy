@@ -214,6 +214,10 @@ sub provide_lp_link ($self, $event, $rch) {
     return unless $item_res->is_success;
 
     my $item = $JSON->decode($item_res->decoded_content)->[0];
+
+    return $rch->reply("I can't anything for LP$item_id.")
+      unless $item;
+
     my $name = $item->{name};
 
     my $reply;
