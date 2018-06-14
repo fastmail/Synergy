@@ -231,9 +231,9 @@ sub provide_lp_link ($self, $event, $rch) {
       my $uri = $self->item_uri($item_id);
 
       $rch->reply(
-        "LP$item_id: $icon $item->{name} ($uri)",
+        "$icon LP$item_id: $item->{name} ($uri)",
         {
-          slack => "<$uri|LP$item_id>: $icon $item->{name}",
+          slack => "$icon <$uri|LP$item_id>: $item->{name}",
         },
       );
     } else {
