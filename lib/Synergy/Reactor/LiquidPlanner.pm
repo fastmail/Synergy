@@ -2123,8 +2123,7 @@ sub _build_package_summary ($self, $package_id, $user) {
 }
 
 sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
-  my $icon = $summary->{name} eq 'Urgent' ? "\N{FIRE}" : "\N{PACKAGE}";
-  my $text = qq{$icon $summary->{name}\n};
+  my $text = "*—[ $summary->{name} ]—*\n";
 
   my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
               $self->hub->user_directory->users;
