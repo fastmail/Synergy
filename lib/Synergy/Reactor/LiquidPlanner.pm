@@ -1849,13 +1849,43 @@ sub _handle_spent ($self, $event, $rch, $text) {
       my $timer = eval { $JSON->decode( $res->decoded_content ); };
       if ($res->is_success && $timer->{start}) {
         $self->set_last_lp_timer_id_for_user($user, $timer->{id});
-        return $rch->reply("I logged that time on task ($task->{name}) and started your timer here: $uri");
+        return $rch->reply(
+          "I logged that time on task ($task->{name}) and started your timer here: $uri",
+          {
+            slack => sprintf(
+              "I logged that time on <%s|LP%s> (%s) and started your timer.",
+              $uri,
+              $task->{id},
+              $task->{name}
+            ),
+          }
+        );
       } else {
-        return $rch->reply("I couldn't start the timer on task ($task->{name}), but I logged that time here: $uri");
+        return $rch->reply(
+          "I couldn't start the timer on task ($task->{name}), but I logged that time here: $uri",
+          {
+            slack => sprintf(
+              "I couldn't start the timer on <%s|LP%s> (%s), but I logged that time.",
+              $uri,
+              $task->{id},
+              $task->{name}
+            ),
+          }
+        );
       }
     }
 
-    return $rch->reply("I logged that time on your task ($task->{name} here: $uri)");
+    return $rch->reply(
+      "I logged that time on your task ($task->{name} here: $uri)",
+      {
+        slack => sprintf(
+          "I logged that time on <%s|LP%s> (%s).",
+          $uri,
+          $task->{id},
+          $task->{name}
+        ),
+      }
+    );
   }
 
   my $arg = {};
@@ -1909,7 +1939,16 @@ sub _handle_spent ($self, $event, $rch, $text) {
     }
   }
 
-  return $rch->reply("I logged that time here: $uri");
+  return $rch->reply(
+    "I logged that time here: $uri",
+    {
+      slack => sprintf(
+        "I logged that time on <%s|LP%s>.",
+        $uri,
+        $task->{id},
+      ),
+    }
+  );
 }
 
 sub _handle_projects ($self, $event, $rch, $text) {
