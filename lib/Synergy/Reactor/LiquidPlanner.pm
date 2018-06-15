@@ -2124,17 +2124,18 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my $text = qq{$icon $summary->{name}\n};
 
   for my $c ($summary->{containers}->@*) {
-    $text .= sprintf "%s <%s|LP%s> %s (%2u/%2u) %s%s\n",
+    $text .= sprintf "%s <%s|LP%s> %s %s%s (%2u/%2u)\n",
       ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
       $self->item_uri($c->{id}),
       $c->{id},
       ($c->{is_done} ? "✓" : "•"),
+      $c->{name},
+      (($c->{owner_id} != $lp_member_id)
+        ? (" _(for $c->{owner_id})_") # XXX resolve this
+        : q{}),
       $c->{done_tasks},
       $c->{total_tasks},
-      (($c->{owner_id} != $lp_member_id)
-        ? ("(for $c->{owner_id}) ") # XXX resolve this
-        : q{}),
-      $c->{name};
+      ;
   }
 
   for my $c ($summary->{tasks}->@*) {
