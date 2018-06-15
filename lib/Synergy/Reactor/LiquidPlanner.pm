@@ -2032,8 +2032,8 @@ sub damage_report ($self, $event, $rch) {
   my $lp_id = $target->lp_id;
 
   my @to_check = (
-    [ inbox  => "\N{INBOX TRAY}" => $CONFIG->{liquidplanner}{package}{inbox}  ],
-    [ urgent => "\N{FIRE}"       => $CONFIG->{liquidplanner}{package}{urgent} ],
+    [ inbox  => "📫" => $CONFIG->{liquidplanner}{package}{inbox}  ],
+    [ urgent => "🔥" => $CONFIG->{liquidplanner}{package}{urgent} ],
   );
 
   if ($event->is_public) {
