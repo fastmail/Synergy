@@ -2127,7 +2127,7 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
               $self->hub->user_directory->users;
 
   for my $c ($summary->{containers}->@*) {
-    $text .= sprintf "%s <%s|LP%s> %s %s%s (%2u/%2u)\n",
+    $text .= sprintf "%s <%s|LP%s> %s %s%s (%u/%u)\n",
       ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
       $self->item_uri($c->{id}),
       $c->{id},
