@@ -2071,15 +2071,14 @@ sub damage_report ($self, $event, $rch) {
     }
 
     $summary .= $group->{group} eq 'INBOX'
-              ? 'inbox'
-              : "week of $group->{from}";
+              ? "\n\N{INBOX TRAY} "
+              : "\n\N{CALENDAR} week of $group->{from}";
 
     $summary .= sprintf ": %u %s", $count, PL_N('item', $count);
     $summary .= sprintf ", %u unestimated", $unest if $unest;
-    $summary .= "; " if @$groups;
   }
 
-  return $rch->reply("Damage report for $who_name: $summary");
+  return $rch->reply("Damage report for $who_name$summary");
 }
 
 sub reload_projects ($self, $event, $rch) {
