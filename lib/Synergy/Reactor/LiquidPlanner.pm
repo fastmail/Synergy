@@ -151,7 +151,7 @@ sub listener_specs {
       method    => "damage_report",
       predicate => sub ($, $e) {
         $e->was_targeted &&
-        $e->text =~ /^\s*(damage\s+)?report(for\s+([a-z]+))\s*$/in;
+        $e->text =~ /^\s*(damage\s+)?report(\s+for\s+([a-z]+))\s*$/in;
       },
     },
     {
