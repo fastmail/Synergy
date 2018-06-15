@@ -2079,13 +2079,172 @@ sub damage_report ($self, $event, $rch) {
     $summary .= "; " if @$groups;
   }
 
-  return $rch->reply("Damage report for $who_name: $summary");
+  # XXX Needs reworking when we have current-iteration tracking.
+  # -- rjbs, 2018-06-15
+  my $pkg_summary   = $self->_build_package_summary(-1, $target);
+  my $slack_summary = $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
+
+  my $reply = "Damage report for $who_name: $summary";
+
+  return $rch->reply(
+    $reply,
+    {
+      slack => "$reply\n\n$slack_summary",
+    },
+  );
 }
 
 sub reload_projects ($self, $event, $rch) {
   $self->_set_projects($self->get_project_nicknames);
   $rch->reply("Projects reloaded");
   $event->mark_handled;
+}
+
+sub _build_package_summary ($self, $package_id, $user) {
+  # This is hard-coded because all the iteration-handling code is buried in
+  # LP-Tools, and merging that with Synergy without making a big pain right now
+  # is... it's not happening this Friday afternoon. -- rjbs, 2018-06-15
+  $package_id = 45565001;
+
+  my $uri = "/treeitems/$package_id?depth=-1";
+
+  my $items_res = $self->http_get_for_master($uri);
+
+  unless ($items_res->is_success) {
+    $Logger->log("error getting tree for package $package_id");
+    return;
+  }
+
+  my $tree = $JSON->decode($items_res->decoded_content);
+  my $summary = summarize_iteration($tree, $user->lp_id);
+}
+
+sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
+  my $icon = $summary->{name} eq 'Urgent' ? "\N{FIRE}" : "\N{PACKAGE}";
+  my $text = qq{$icon $summary->{name}\n};
+
+  for my $c ($summary->{containers}->@*) {
+    $text .= sprintf "%s <%s|LP%s> %s %s (%2u/%2u) %s%s\n",
+      ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
+      $self->item_uri($c->{id}),
+      $c->{id},
+      ($c->{is_done} ? "✓" : "•"),
+      $c->{done_tasks},
+      $c->{total_tasks},
+      (($c->{owner_id} != $lp_member_id)
+        ? ("(for $c->{owner_id}) ") # XXX resolve this
+        : q{}),
+      $c->{name};
+  }
+
+  for my $c ($summary->{tasks}->@*) {
+    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+      "🌀",
+      $self->item_uri($c->{id}),
+      $c->{id},
+      ($c->{is_done} ? "✓" : "•"),
+      $c->{name};
+  }
+
+  for my $c ($summary->{others}->@*) {
+    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+      "⁉️",
+      $self->item_uri($c->{id}),
+      $c->{id},
+      ($c->{is_done} ? "✓" : "•"),
+      $c->{name} . " ($c->{type})";
+  }
+
+  chomp $text;
+  return $text;
+}
+
+sub summarize_iteration ($item, $member_id) {
+  my @containers;
+  my @tasks;
+  my @others;
+
+  CHILD: for my $c (@{ $item->{children} // []}) {
+    next CHILD unless $c->{assignments};
+
+    if ($c->{type} eq 'Task') {
+      my ($assign) = grep {; $_->{person_id} == $member_id }
+                     $c->{assignments}->@*;
+
+      next unless $assign;
+
+      push @tasks, {
+        id        => $c->{id},
+        type      => $c->{type},
+        name      => $c->{name},
+        is_done   => $c->{is_done},
+      };
+
+      next CHILD;
+    }
+
+    if ($c->{type} eq 'Project' or $c->{type} eq 'Package') {
+      my $summary = {
+        id        => $c->{id},
+        type      => $c->{type},
+        name      => $c->{name},
+        is_done   => $c->{is_done},
+        owner_id  => $c->{assignments}[0]{person_id},
+
+        total_tasks => 0,
+        done_tasks  => 0,
+      };
+
+      summarize_container($c, $summary, $member_id);
+
+      next CHILD unless $summary->{total_tasks}
+                 or     $summary->{owner_id} == $member_id;
+
+      push @containers, $summary;
+      next CHILD;
+    }
+
+    # I don't think can ever happen, but let's Be Prepared. -- rjbs, 2018-06-15
+    {
+      my ($assign) = grep {; $_->{person_id} == $member_id }
+                     $c->{assignments}->@*;
+
+      next CHILD unless $assign;
+
+      push @others, {
+        id        => $c->{id},
+        type      => $c->{type},
+        name      => $c->{name},
+        is_done   => $c->{is_done},
+      };
+    }
+  }
+
+  return {
+    name        => $item->{name},
+    containers  => \@containers,
+    tasks       => \@tasks,
+    (@others ? (others => \@others) : ()),
+  };
+}
+
+sub summarize_container ($item, $summary, $member_id) {
+  CHILD: for my $c (@{ $item->{children} // []}) {
+    if ($c->{type} eq 'Task') {
+      my ($assign) = grep {; $_->{person_id} == $member_id }
+                     $c->{assignments}->@*;
+
+      next CHILD unless $assign;
+
+      $summary->{total_tasks}++;
+      $summary->{done_tasks}++ if $assign->{is_done};
+      next CHILD;
+    }
+
+    summarize_container($c, $summary, $member_id);
+  }
+
+  return;
 }
 
 1;
