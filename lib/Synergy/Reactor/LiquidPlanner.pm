@@ -930,35 +930,40 @@ sub _handle_task ($self, $event, $rch, $text) {
     }
   }
 
-  my $rcpt = join q{ and }, map {; $_->username } $plan->{owners}->@*;
-
-  my $reply = "Task $task->{id} created, assigned to $rcpt.";
+  my $reply_base = "created, assigned to "
+                 . join q{ and }, map {; $_->username } $plan->{owners}->@*;
 
   if ($plan->{start}) {
-    my $res = $self->http_post_for_user($event->from_user, "/tasks/$task->{id}/timer/start");
+    my $res = $self->http_post_for_user(
+      $event->from_user,
+      "/tasks/$task->{id}/timer/start",
+    );
+
     my $timer = eval { $JSON->decode( $res->decoded_content ); };
+
     if ($res->is_success && $timer->{running}) {
       $self->set_last_lp_timer_id_for_user($event->from_user, $timer->{id});
 
-      $reply =~ s/\.\z/, timer running./;
+      $reply_base .= q{, timer started};
     } else {
-      $reply =~ s/\.\z/, timer couldn't be started./;
+      $reply_base .= q{, but the timer couldn't be started};
     }
   }
 
   my $item_uri = $self->item_uri($task->{id});
 
   my $plain = join qq{\n},
-    $reply,
+    "LP$task->{id} $reply_base.",
     "\N{LINK SYMBOL} $item_uri",
     "\N{LOVE LETTER} " . $task->{item_email};
 
-  my $slack = join q{  },
-    $reply,
-    (sprintf '<%s|%s web>', $item_uri, "\N{LINK SYMBOL}"),
-    (sprintf '<mailto:%s|%s email>', $task->{item_email}, "\N{LOVE LETTER}");
+  my $slack = sprintf "<%s|LP%s> %s. (<mailto:%s|email>)",
+    $item_uri,
+    $task->{id},
+    $reply_base,
+    $task->{item_email};
 
-  $rch->reply($reply, { slack => $slack });
+  $rch->reply($plain, { slack => $slack });
 }
 
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
