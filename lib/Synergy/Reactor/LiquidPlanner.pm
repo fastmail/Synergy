@@ -2043,7 +2043,7 @@ sub damage_report ($self, $event, $rch) {
     my $uri = "/treeitems/$package_id?depth=-1"
             . "&flat=1"
             . "&filter[]=is_done is false"
-            . "&filter[]=owner_id is $lp_id";
+            . "&filter[]=owner_id=$lp_id";
 
     my $check_res = $self->http_get_for_master($uri);
 
