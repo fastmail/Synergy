@@ -2055,7 +2055,7 @@ sub damage_report ($self, $event, $rch) {
     my $unest = 0;
     my $total = 0;
 
-    my @items = $JSON->decode($check_res->decoded_content->@*);
+    my @items = $JSON->decode($check_res->decoded_content)->@*;
     for my $item (@items) {
       next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
       my ($assign) = grep {; $_->{person_id} == $lp_id }
