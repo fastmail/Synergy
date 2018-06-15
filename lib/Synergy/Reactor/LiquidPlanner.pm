@@ -2036,6 +2036,12 @@ sub damage_report ($self, $event, $rch) {
     [ urgent => "\N{FIRE}"       => $CONFIG->{liquidplanner}{package}{urgent} ],
   );
 
+  if ($event->is_public) {
+    $rch->reply("I'm generating that report now, and I'll send it to you privately in just a moment.");
+  } else {
+    $rch->reply("I'm generating that report now, it'll be just a moment");
+  }
+
   my @summaries = ("Damage report for $who_name:");
 
   CHK: for my $check (@to_check) {
@@ -2089,7 +2095,7 @@ sub damage_report ($self, $event, $rch) {
 
   my $reply = join qq{\n}, @summaries;
 
-  return $rch->reply(
+  return $rch->private_reply(
     $reply,
     {
       slack => $slack_summary,
