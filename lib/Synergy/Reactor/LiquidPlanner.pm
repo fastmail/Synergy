@@ -2020,7 +2020,6 @@ sub damage_report ($self, $event, $rch) {
     ( \s+ for \s+ (?<who> [a-z]+ ) )
     \s*
   \z/nix;
-
   my $who_name = $+{who} // $event->from_user->username;
 
   my $target = $self->resolve_name($who_name, $event->from_user->username);
@@ -2032,59 +2031,63 @@ sub damage_report ($self, $event, $rch) {
 
   my $lp_id = $target->lp_id;
 
-  my $res = $self->http_get_for_user(
-    $target,
-    "/upcoming_tasks?limit=200&member_id=" . $lp_id,
+  my @to_check = (
+    [ inbox  => "\N{INBOX TRAY}" => $CONFIG->{package}{inbox}  ],
+    [ urgent => "\N{FIRE}"       => $CONFIG->{package}{urgent} ],
   );
 
-  unless ($res->is_success) {
-    return $rch->reply("Sorry, I had trouble getting that task list!");
-  }
+  my @summaries = ("Damage report for $who_name:");
 
-  my $groups = $JSON->decode( $res->decoded_content );
-  unless (@$groups) {
-    return $rch->reply("Strangely enough, there's no upcoming work!");
-  }
+  CHK: for my $check (@to_check) {
+    my ($label, $icon, $package_id) = @$check;
+    my $uri = "/treeitems/$package_id?depth=-1"
+            . "&flat=1"
+            . "&filter[]=is_done is false"
+            . "&filter[]=owner_id is $lp_id";
 
-  my $summary = q{};
-  splice @$groups, 4;
-  while (my $group = shift @$groups) {
-    next unless $group->{items}->@*;
+    my $check_res = $self->http_get_for_master($uri);
 
-    my $count = 0;
-    my $unest = 0;
-    for my $item ($group->{items}->@*) {
-      # upcoming_tasks is meant to act like My Work, in which on-hold tasks are
-      # not shown, but it includes on hold tasks.  bug filed
-      next if $item->{is_on_hold};
-
-      # Project, parent, and package are a complete mess, or at least mystery,
-      # in the LiquidPlanner API.  Here, I'm trying to exclude tasks that are
-      # in a project but not a package, meaning they're basically backlog work.
-      next if $item->{project_id} && ! $item->{package_id};
-
-      $count++;
-      my ($assignment) = grep {; $_->{person_id} == $lp_id }
-                         $item->{assignments}->@*;
-
-      $unest++ if $self->_lp_assignment_is_unestimated($assignment);
+    unless ($check_res->is_success) {
+      push @summaries, "❌ Couldn't produce a report on $label tasks.";
+      next CHK;
     }
 
-    $summary .= $group->{group} eq 'INBOX'
-              ? 'inbox'
-              : "week of $group->{from}";
+    my $unest = 0;
+    my $total = 0;
 
-    $summary .= sprintf ": %u %s", $count, PL_N('item', $count);
+    my @items = $JSON->decode($check_res->decoded_content->@*);
+    for my $item (@items) {
+      next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
+      my ($assign) = grep {; $_->{person_id} == $lp_id }
+                     $item->{assignments}->@*;
+
+      next unless $assign and ! $assign->{is_done};
+
+      $total++;
+      $unest++ if $self->_lp_assignment_is_unestimated($assign);
+    }
+
+    next CHK unless $total;
+
+    my $summary = sprintf "%s %s: %u %s",
+      $icon,
+      ucfirst $label,
+      $total,
+      PL_N('task', $total);
+
     $summary .= sprintf ", %u unestimated", $unest if $unest;
-    $summary .= "; " if @$groups;
+
+    push @summaries, $summary;
   }
 
   # XXX Needs reworking when we have current-iteration tracking.
   # -- rjbs, 2018-06-15
   my $pkg_summary   = $self->_build_package_summary(-1, $target);
-  my $slack_summary = $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
+  my $slack_summary = join qq{\n},
+                      @summaries,
+                      $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
 
-  my $reply = "Damage report for $who_name: $summary";
+  my $reply = join qq{\n}, @summaries;
 
   return $rch->reply(
     $reply,
