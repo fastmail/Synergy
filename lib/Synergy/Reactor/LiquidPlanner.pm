@@ -2123,6 +2123,9 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my $icon = $summary->{name} eq 'Urgent' ? "\N{FIRE}" : "\N{PACKAGE}";
   my $text = qq{$icon $summary->{name}\n};
 
+  my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+              $self->hub->user_directory->users;
+
   for my $c ($summary->{containers}->@*) {
     $text .= sprintf "%s <%s|LP%s> %s %s%s (%2u/%2u)\n",
       ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
@@ -2131,7 +2134,7 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
       ($c->{is_done} ? "✓" : "•"),
       $c->{name},
       (($c->{owner_id} != $lp_member_id)
-        ? (" _(for $c->{owner_id})_") # XXX resolve this
+        ? (" _(for @{[ $by_lp{$c->{owner_id}} // 'someone else']})_")
         : q{}),
       $c->{done_tasks},
       $c->{total_tasks},
