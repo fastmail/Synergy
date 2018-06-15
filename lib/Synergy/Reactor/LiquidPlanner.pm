@@ -6,6 +6,7 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
+use Lingua::EN::Inflect qw(PL_N);
 use List::Util qw(first uniq);
 use Net::Async::HTTP;
 use JSON 2 ();
