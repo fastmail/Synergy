@@ -151,7 +151,7 @@ sub listener_specs {
       method    => "damage_report",
       predicate => sub ($, $e) {
         $e->was_targeted &&
-        $e->text =~ /^\s*(damage\s+)?report(\s+for\s+([a-z]+))\s*$/in;
+        $e->text =~ /^\s*(damage\s+)?report(\s+for\s+([a-z]+))?\s*$/in;
       },
     },
     {
@@ -2013,10 +2013,19 @@ sub _lp_assignment_is_unestimated {
 }
 
 sub damage_report ($self, $event, $rch) {
-  my ($who_name) = $event->text =~ /^\s*(?:damage\s+)?report(?:for\s+([a-z]+))\s*$/i;
-  $who_name //= 'me';
+  $event->text =~ /\A
+    \s*
+    ( damage \s+ )?
+    report
+    ( \s+ for \s+ (?<who> [a-z]+ ) )
+    \s*
+  \z/nix;
+
+  my $who_name = $+{who} // $event->from_user->username;
 
   my $target = $self->resolve_name($who_name, $event->from_user->username);
+
+  $event->mark_handled;
 
   return $rch->reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
     unless $target && $target->lp_auth_header;
@@ -2070,7 +2079,7 @@ sub damage_report ($self, $event, $rch) {
     $summary .= "; " if @$groups;
   }
 
-  return $rch->reply($summary);
+  return $rch->reply("Damage report for $who_name: $summary");
 }
 
 sub reload_projects ($self, $event, $rch) {
