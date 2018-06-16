@@ -1001,6 +1001,17 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
     }
   }
 
+  if (my $log_hrs = $plan->{log_hours}) {
+    my $track_ok = $self->_track_time($event->from_user, $task, $log_hrs);
+
+    if ($track_ok) {
+      my $time = sprintf '%0.2fh', $log_hrs;
+      $reply_base .= ".  I logged $time for you.";
+    } else {
+      $reply_base .= ".  I couldn't log time it!";
+    }
+  }
+
   my $item_uri = $self->item_uri($task->{id});
 
   my $plain = join qq{\n},
