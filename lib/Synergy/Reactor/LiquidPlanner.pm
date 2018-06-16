@@ -957,6 +957,10 @@ sub _handle_task ($self, $event, $rch, $text) {
     },
   );
 
+  $self->_execute_task_plan($event, $rch, $plan, $error);
+}
+
+sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
   if ($error) {
     my $errors = join q{  }, values %$error;
     return $rch->reply($errors);
