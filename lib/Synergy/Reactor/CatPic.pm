@@ -130,14 +130,6 @@ sub listener_specs {
       },
     },
     {
-      name      => 'cow-pic',
-      method    => 'handle_cow_pic',
-      exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /\Acow\s+pic\z/
-      },
-    },
-    {
       name      => 'cat-pic',
       method    => 'handle_cat_pic',
       exclusive => 1,
