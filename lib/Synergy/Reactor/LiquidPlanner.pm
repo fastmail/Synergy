@@ -1902,146 +1902,65 @@ sub _handle_spent ($self, $event, $rch, $text) {
   my $workspace_id = $self->workspace_id;
 
   if (
-    $name =~ m{^\s*(?:https://app.liquidplanner.com/space/$workspace_id/.*/)?([0-9]+)/?\s*\z}
+    $name =~ m{\A\s*(?:https://app.liquidplanner.com/space/$workspace_id/.*/)?([0-9]+)P?/?\s*\z}
   ) {
-    my ($task_id, $comment) = ($1, $2);
-    $comment //= "";
-
-    my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
-
-    my $activity_id;
-    unless ($task_res->is_success) {
-      return $rch->reply("I couldn't log the work because I couldn't find the task.");
-    }
-
-    my $task = $JSON->decode($task_res->decoded_content);
-    $activity_id = $task->{activity_id};
-
-    unless ($activity_id) {
-      return $rch->reply("I couldn't log the work because the task doesn't have a defined activity.");
-    }
-
-    my $res = $self->http_post_for_user($user,
-      "/tasks/$task->{id}/track_time",
-      Content_Type => 'application/json',
-      Content => $JSON->encode({
-        activity_id => $task->{activity_id},
-        member_id => $user->lp_id,
-        work      => $duration / 3600,
-        ($comment ? (comment => $comment ) : ()),
-      }),
-    );
-
-    unless ($res->is_success) {
-      $Logger->log("error tracking time: " . $res->as_string);
-      return $rch->reply("I couldn't log your time, sorry.");
-    }
-
-    my $uri = $self->item_uri($task->{id});
-
-    if ($flags->{start}) {
-      my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
-      my $timer = eval { $JSON->decode( $res->decoded_content ); };
-      if ($res->is_success && $timer->{start}) {
-        $self->set_last_lp_timer_id_for_user($user, $timer->{id});
-        return $rch->reply(
-          "I logged that time on task ($task->{name}) and started your timer here: $uri",
-          {
-            slack => sprintf(
-              "I logged that time on <%s|LP%s> (%s) and started your timer.",
-              $uri,
-              $task->{id},
-              $task->{name}
-            ),
-          }
-        );
-      } else {
-        return $rch->reply(
-          "I couldn't start the timer on task ($task->{name}), but I logged that time here: $uri",
-          {
-            slack => sprintf(
-              "I couldn't start the timer on <%s|LP%s> (%s), but I logged that time.",
-              $uri,
-              $task->{id},
-              $task->{name}
-            ),
-          }
-        );
-      }
-    }
-
-    return $rch->reply(
-      "I logged that time on your task ($task->{name} here: $uri)",
-      {
-        slack => sprintf(
-          "I logged that time on <%s|LP%s> (%s).",
-          $uri,
-          $task->{id},
-          $task->{name}
-        ),
-      }
-    );
+    my ($task_id) = ($1, $2);
+    return $self->_spent_on_existing($event, $rch, $task_id, $flags, $duration);
   }
 
-  my $arg = {};
+  my ($plan, $error) = $self->task_plan_from_spec(
+    $event,
+    {
+      usernames => [ $event->from_user->username ],
+      text      => $name,
+    },
+  );
 
-  my $task = $self->_create_lp_task($rch, {
-    name   => $name,
-    urgent => $flags->{urgent},
-    user   => $user,
-    owners => [ $user ],
-    description => 'Created by Synergy in response to a "spent" command.', # XXX
-  }, $arg);
+  $plan->{log_hours} = $duration / 3600;
+  $self->_execute_task_plan($event, $rch, $plan, $error);
+}
 
-  unless ($task) {
-    if ($arg->{already_notified}) {
-      return;
-    } else {
-      return $rch->reply(
-        "Sorry, something went wrong when I tried to make that task.",
-      );
-    }
+sub _spent_on_existing ($self, $event, $rch, $task_id, $flags, $duration) {
+  my $user = $event->from_user;
+  my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
+
+  unless ($task_res->is_success) {
+    return $rch->reply("I couldn't log the work because I couldn't find the task.");
+  }
+
+  my $task = $JSON->decode($task_res->decoded_content);
+  my $activity_id = $task->{activity_id};
+
+  unless ($activity_id) {
+    return $rch->reply("I couldn't log the work because the task doesn't have a defined activity!");
+  }
+
+  my $track_ok = $self->_track_time($user, $task, $duration / 3600);
+
+  unless ($track_ok) {
+    return $rch->reply("I couldn't log your time, sorry.");
   }
 
   my $uri = $self->item_uri($task->{id});
 
-  my $res = $self->http_post_for_user($user,
-    "/tasks/$task->{id}/track_time",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({
-      activity_id => $task->{activity_id},
-      member_id => $user->lp_id,
-      work      => $duration / 3600,
-      is_done   => ($flags->{start} ? \0 : \1),
-    }),
-  );
+  my $plain_base = qq{I logged that time on "$task->{name}"};
+  my $slack_base = sprintf qq{I logged that time on <%s|LP%s> ("%s")},
+    $uri,
+    $task->{id},
+    $task->{name};
 
-  unless ($res->is_success) {
-    $Logger->log("error tracking time: " . $res->as_string);
-    return $rch->reply(
-      "I was able to create the task, but not log your time.  Drat.  $uri",
-    );
-  }
-
-  if ($flags->{start}) {
-    my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
-    my $timer = eval { $JSON->decode( $res->decoded_content ); };
-    if ($res->is_success && $timer->{running}) {
-      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
-      return $rch->reply("I logged that time and started your timer here: $uri");
-    } else {
-      return $rch->reply("I couldn't start the timer, but I logged that time here: $uri");
-    }
+  if ($flags->{start} && $self->_start_timer($user, $task)) {
+    $plain_base .= " and started your timer";
+    $slack_base .= " and started your timer";
+  } else {
+    $plain_base .= ", but I couldn't start your timer";
+    $slack_base .= ", but I couldn't start your timer";
   }
 
   return $rch->reply(
-    "I logged that time here: $uri",
+    "$plain_base.\n$uri",
     {
-      slack => sprintf(
-        "I logged that time on <%s|LP%s>.",
-        $uri,
-        $task->{id},
-      ),
+      slack => "$slack_base.",
     }
   );
 }
