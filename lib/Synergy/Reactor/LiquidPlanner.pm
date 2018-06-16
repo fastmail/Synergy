@@ -800,46 +800,34 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     my @errors;
     my @bad_cmds;
 
+    my %alias = (
+      a   => 'assign',
+      e   => 'estimate',
+      go  => 'start',
+      l   => 'log',
+      p   => 'project',
+      s   => 'start',
+      u   => 'urgent',
+    );
+
     for my $cmd_line (@cmd_lines) {
       my @cmd_strs = split m{(?:^|\s+)/}m, $cmd_line;
       shift @cmd_strs; # the leading / means the first entry is always q{}
 
-      for my $cmd_str (@cmd_strs) {
+      CMDSTR: for my $cmd_str (@cmd_strs) {
         my ($cmd, $rest) = split /\s+/, $cmd_str, 2;
 
-        if ($cmd =~ /\A u(?:rgent)? \z/x)       { $plan->{urgent} = 1; next }
-        if ($cmd =~ /\A s(?:tart)? | go \z/x)   { $plan->{start}  = 1; next }
-        if ($cmd =~ /\A e(?:stimate)? \z/x)     {
-          my ($low, $high) = split /\s*-\s*/, $rest, 2;
-          $high //= $low;
-          s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $low, $high;
-          my $low_s  = eval { parse_duration($low); };
-          my $high_s = eval { parse_duration($high); };
-          if (defined $low_s && defined $high_s) {
-            $plan->{estimate} = { low => $low_s / 3600, high => $high_s / 3600 };
-          } else {
-            push @errors, qq{I couldn't understand the /assign estimate "$rest".}
-          }
-          next;
-        }
-        if ($cmd =~ /\A p(?:roject)? \z/x) {
-          unless ($rest) {
-            push @errors, qq{You used /project without a project nickname.};
-            next;
-          }
-          $plan->{project}{$rest} = 1;
-          next;
-        }
-        if ($cmd =~ /\A a(?:ssign)? \z/x) {
-          unless ($rest) {
-            push @errors, qq{You used /assign without any usernames.};
-            next;
-          }
-          push $plan->{usernames}->@*, split /\s+/, $rest;
-          next
+        $cmd = $alias{$cmd} if $alias{$cmd};
+
+        my $method = $self->can("_task_subcmd_$cmd");
+        unless ($method) {
+          push @bad_cmds, $cmd_str;
+          next CMDSTR;
         }
 
-        push @bad_cmds, $cmd_str;
+        if (my $error = $self->$method($rest, $plan)) {
+          push @errors, $error;
+        }
       }
     }
 
@@ -859,6 +847,64 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     $self->hub->name,
     $via,
     $uri ? "\n\n$uri" : "";
+}
+
+sub _task_subcmd_urgent ($self, $rest, $plan) {
+  return "The /urgent command takes no arguments." if $rest;
+  $plan->{urgent} = 1;
+  return;
+}
+
+sub _task_subcmd_start ($self, $rest, $plan) {
+  return "The /start command takes no arguments." if $rest;
+  $plan->{start} = 1;
+  return;
+}
+
+sub _task_subcmd_estimate ($self, $rest, $plan) {
+  my ($low, $high) = split /\s*-\s*/, $rest, 2;
+  $high //= $low;
+  s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $low, $high;
+  my $low_s  = eval { parse_duration($low); };
+  my $high_s = eval { parse_duration($high); };
+
+  if (defined $low_s && defined $high_s) {
+    $plan->{estimate} = { low => $low_s / 3600, high => $high_s / 3600 };
+    return;
+  }
+
+  return qq{I couldn't understand the /assign estimate "$rest".}
+}
+
+sub _task_subcmd_project ($self, $rest, $plan) {
+  return qq{You used /project without a project nickname.} unless $rest;
+  $plan->{project}{$rest} = 1;
+  return;
+}
+
+sub _task_subcmd_assign ($self, $rest, $plan) {
+  return qq{You used /assign without any usernames.} unless $rest;
+  push $plan->{usernames}->@*, split /\s+/, $rest;
+  return;
+}
+
+sub _task_subcmd_log ($self, $rest, $plan) {
+  my $dur = $rest;
+
+  s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $dur;
+  my $secs = eval { parse_duration($dur) };
+
+  return qq{I couldn't understand the /log duration "$rest".}
+    unless defined $secs;
+
+  if ($secs > 12 * 86_400) {
+    my $dur_restr = duration($secs);
+    return qq{You said to spend "$rest" which I read as $dur_restr.  }
+         . qq{That's too long!};
+  }
+
+  $plan->{log_hours} = $secs / 3600;
+  return;
 }
 
 # One option:
