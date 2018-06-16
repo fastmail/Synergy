@@ -118,7 +118,7 @@ sub listener_specs {
       name      => 'misc-pic',
       method    => 'handle_misc_pic',
       predicate => sub ($self, $e) {
-        $e->text =~ /(\w+)\s+pic\z/ && $PIC_FOR{$1}
+        $e->text =~ /(\w+)\s+pic/ && $PIC_FOR{$1}
       },
     },
     {
@@ -165,7 +165,11 @@ sub handle_misc_pic ($self, $event, $rch) {
   my $text = $event->text;
   while ($text =~ /(\w+)\s+pic/g) {
     my $name = $1;
+    $Logger->log("looking for $1 pic");
     next unless my $e = $PIC_FOR{$name};
+
+    # If this is all they said, okay.
+    $event->mark_handled if $text =~ /\A \s* $1 \s+ pic \s* \z/x;
 
     my $emoji = substr $e->{emoji}, (int rand length $e->{emoji}), 1;
 
