@@ -1483,23 +1483,6 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
   return $task;
 }
 
-sub _strip_name_flags ($self, $name) {
-  my ($urgent, $start);
-  if ($name =~ s/\s*\(([!>]+)\)\s*\z//) {
-    my ($code) = $1;
-    $urgent = $code =~ /!/;
-    $start  = $code =~ />/;
-  } elsif ($name =~ s/\s*((?::timer_clock:|:hourglass(?:_flowing_sand)?:|:exclamation:)+)\s*\z//) {
-    my ($code) = $1;
-    $urgent = $code =~ /exclamation/;
-    $start  = $code =~ /timer_clock|hourglass/;
-  }
-
-  $_[1] = $name;
-
-  return { urgent => $urgent, start => $start };
-}
-
 sub lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
 
