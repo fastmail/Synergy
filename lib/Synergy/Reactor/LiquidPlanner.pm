@@ -721,7 +721,7 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
 
   my %project_id;
   for my $username (@$usernames) {
-    my $target = $self->resolve_name($username, $event->from_user->username);
+    my $target = $self->resolve_name($username, $event->from_user);
 
     next if $target && $seen{ $target->username }++;
 
@@ -1394,18 +1394,6 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
   $rch->reply($prefix . $reply);
 }
 
-sub resolve_name ($self, $name, $who) {
-  return unless $name;
-
-  $name = lc $name;
-  $name = $who if $name eq 'me' || $name eq 'my' || $name eq 'myself' || $name eq 'i';
-
-  my $user = $self->hub->user_directory->user_by_name($name);
-  $user ||= $self->hub->user_directory->user_by_nickname($name);
-
-  return $user;
-}
-
 sub _create_lp_task ($self, $rch, $my_arg, $arg) {
   my %container = (
     package_id  => $my_arg->{urgent}
@@ -2051,7 +2039,7 @@ sub damage_report ($self, $event, $rch) {
   \z/nix;
   my $who_name = $+{who} // $event->from_user->username;
 
-  my $target = $self->resolve_name($who_name, $event->from_user->username);
+  my $target = $self->resolve_name($who_name, $event->from_user);
 
   $event->mark_handled;
 

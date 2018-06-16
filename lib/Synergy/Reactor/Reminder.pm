@@ -91,8 +91,7 @@ sub handle_remind ($self, $event, $rch) {
     return;
   }
 
-  my $to_user = $self->hub->user_directory
-                          ->resolve_name($who, $event->from_user);
+  my $to_user = $self->resolve_name($who, $event->from_user);
 
   unless ($to_user) {
     $rch->reply(qq{Sorry, I don't know who "$who" is.});

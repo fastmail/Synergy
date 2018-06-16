@@ -87,13 +87,16 @@ sub reload_user ($self, $username, $data) {
   $self->_set_user($username, $new_user);
 }
 
-sub resolve_name ($self, $name, $who) {
+sub resolve_name ($self, $name, $resolving_user) {
   return unless $name;
 
   $name = lc $name;
-  return $who if $name eq 'me' || $name eq 'my' || $name eq 'myself' || $name eq 'i';
+
+  return $resolving_user
+    if $name eq 'me' || $name eq 'my' || $name eq 'myself' || $name eq 'i';
 
   my $user = $self->user_named($name);
+
   unless ($user) {
     ($user) = grep {; grep { $_ eq $name } $_->nicknames } $self->users;
   }

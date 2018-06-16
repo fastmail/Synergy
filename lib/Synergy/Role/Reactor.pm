@@ -38,5 +38,9 @@ sub fetch_state ($self) {
   $self->hub->fetch_state($self);
 }
 
+sub resolve_name ($self, $name, $resolving_user) {
+  $self->hub->user_directory->resolve_name($name, $resolving_user);
+}
+
 no Moose::Role;
 1;
