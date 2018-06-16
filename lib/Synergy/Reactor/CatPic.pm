@@ -108,6 +108,15 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 🦏 rhinoceros
 🦐 shrimp
 🦑 squid
+🦓 zebra
+🦒 giraffe
+🦔 hedgehog
+🦕 sauropod
+🦖 trex           t-rex
+🦖 t-rex          t-rex
+🦗 cricket
+🦕 dinosaur       sauropod
+🦖 dinosaur       t-rex
 END_EMOJI
 
 register_pic($_) for split /\n/, $EMOJI_CONFIG;
