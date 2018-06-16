@@ -802,6 +802,7 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
 
     my %alias = (
       a   => 'assign',
+      d   => 'done',
       e   => 'estimate',
       go  => 'start',
       l   => 'log',
@@ -885,6 +886,12 @@ sub _task_subcmd_project ($self, $rest, $plan) {
 sub _task_subcmd_assign ($self, $rest, $plan) {
   return qq{You used /assign without any usernames.} unless $rest;
   push $plan->{usernames}->@*, split /\s+/, $rest;
+  return;
+}
+
+sub _task_subcmd_done ($self, $rest, $plan) {
+  return qq{The /done command takes no arguments.} if $rest;
+  $plan->{done} = 1;
   return;
 }
 
@@ -1002,13 +1009,34 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
   }
 
   if (my $log_hrs = $plan->{log_hours}) {
-    my $track_ok = $self->_track_time($event->from_user, $task, $log_hrs);
+    my $track_ok = $self->_track_time(
+      $event->from_user,
+      $task,
+      $log_hrs,
+      undef,
+      $plan->{done},
+    );
 
     if ($track_ok) {
       my $time = sprintf '%0.2fh', $log_hrs;
-      $reply_base .= ".  I logged $time for you.";
+      $reply_base .= ".  I logged $time for you";
+      $reply_base .= " and marked your work done" if $plan->{done};
     } else {
-      $reply_base .= ".  I couldn't log time it!";
+      $reply_base .= ".  I couldn't log time it";
+    }
+  } elsif ($plan->{done}) {
+    my $track_ok = $self->_track_time(
+      $event->from_user,
+      $task,
+      0,
+      undef,
+      $plan->{done},
+    );
+
+    if ($track_ok) {
+      $reply_base .= ".  I marked your work done";
+    } else {
+      $reply_base .= ".  I couldn't mark your work done";
     }
   }
 
@@ -1041,7 +1069,7 @@ sub _start_timer ($self, $user, $task) {
   return 1;
 }
 
-sub _track_time ($self, $user, $task, $hours, $comment = undef) {
+sub _track_time ($self, $user, $task, $hours, $comment = undef, $done = 0) {
   my $res = $self->http_post_for_user(
     $user,
     "/tasks/$task->{id}/track_time",
@@ -1050,6 +1078,7 @@ sub _track_time ($self, $user, $task, $hours, $comment = undef) {
       activity_id => $task->{activity_id},
       member_id => $user->lp_id,
       work      => $hours,
+      is_done   => ($done ? \1 : \0),
 
       ($comment ? (comment => $comment) : ()),
     }),
@@ -1916,7 +1945,13 @@ sub _handle_spent ($self, $event, $rch, $text) {
     },
   );
 
+  # In other words, if the timer isn't going to be running, close the task.  If
+  # you want to create a task with time already on it without closing it or
+  # starting the timer, you can use normal task creation with /commands.
+  $plan->{done} = 1 unless $plan->{start};
+
   $plan->{log_hours} = $duration / 3600;
+
   $self->_execute_task_plan($event, $rch, $plan, $error);
 }
 
@@ -1935,7 +1970,7 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $flags, $duration) {
     return $rch->reply("I couldn't log the work because the task doesn't have a defined activity!");
   }
 
-  my $track_ok = $self->_track_time($user, $task, $duration / 3600);
+  my $track_ok = $self->_track_time($user, $task, $duration / 3600, undef, 0);
 
   unless ($track_ok) {
     return $rch->reply("I couldn't log your time, sorry.");
