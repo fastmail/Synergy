@@ -1028,6 +1028,39 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
   $rch->reply($plain, { slack => $slack });
 }
 
+sub _start_timer ($self, $user, $task) {
+  my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
+  return unless $res->is_success;
+
+  my $timer = eval { $JSON->decode( $res->decoded_content ); };
+
+  # What does this mean?  Copied and pasted. -- rjbs, 2018-06-16
+  return unless $timer->{start};
+
+  $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+  return 1;
+}
+
+sub _track_time ($self, $user, $task, $hours, $comment = undef) {
+  my $res = $self->http_post_for_user(
+    $user,
+    "/tasks/$task->{id}/track_time",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({
+      activity_id => $task->{activity_id},
+      member_id => $user->lp_id,
+      work      => $hours,
+
+      ($comment ? (comment => $comment) : ()),
+    }),
+  );
+
+  $Logger->log("error tracking time: " . $res->as_string)
+    unless $res->is_success;
+
+  return $res->is_success;
+}
+
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
   my $res = $self->http_get_for_user(
     $user,
