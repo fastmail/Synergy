@@ -10,8 +10,117 @@ use Synergy::Logger '$Logger';
 use experimental qw(signatures);
 use namespace::clean;
 
+my %PIC_FOR;
+
+sub register_pic {
+  my ($emoji, $name, $slackname) = split /\s+/, $_[0];
+  my $e = $PIC_FOR{$name} ||= { emoji => q{}, slacknames => {} };
+
+  $e->{emoji} .= $emoji;
+  $e->{slacknames}{$slackname // $name} = 1;
+  return;
+}
+
+my $EMOJI_CONFIG = <<'END_EMOJI';
+🐀 rat
+🐭 mouse
+🐁 mouse          mouse2
+🐂 ox
+🐃 water_buffalo
+🐄 cow            cow2
+🐮 cow
+🐅 tiger          tiger2
+🐯 tiger
+🐆 leopard
+🐇 rabbit         rabbit2
+🐰 rabbit
+🐈 cat            cat2
+🐱 cat
+🐉 dragon
+🐲 dragon         dragon_face
+🐊 crocodile
+🐋 whale          whale2
+🐳 whale
+🐌 snail
+🐍 snake
+🐎 horse          racehorse
+🐴 horse
+🐏 ram
+🐐 goat
+🐑 sheep
+🐒 monkey
+🐵 monkey         monkey_face
+🙈 monkey         see_no_evil
+🙉 monkey         hear_no_evil
+🙊 monkey         speak_no_evil
+🐓 rooster
+🐔 chicken
+🥚 chicken        egg
+🐶 dog
+🐕 dog            dog2
+🐖 pig            pig2
+🥓 pig            bacon
+🐗 boar
+🐘 elephant
+🐙 octopus
+🐛 bug
+🐜 ant
+🐝 bee
+🐞 ladybug
+🐟 fish
+🐠 fish           tropical_fish
+🐡 fish           blowfish
+🐡 blowfish
+🐢 turtle
+🐣 chick          hatching_chick
+🐤 chick          baby_chick
+🐥 chick          hatched_cick
+🐦 bird
+🐧 penguin
+🐨 koala
+🐩 poodle
+🐩 dog            poodle
+🐪 camel          dromedary_camel
+🐫 camel
+🐬 dolphin
+🐷 pig
+🐸 frog
+🐹 hamster
+🐺 wolf
+🐻 bear
+🐼 panda
+🐿 chipmunk
+🦀 crab
+🦁 lion
+🦂 scorpion
+🦃 turkey
+🦄 unicorn
+🦅 eagle
+🦆 duck
+🦇 bat
+🦈 shark
+🦉 owl
+🦊 fox            fox_face
+🦋 butterfly
+🦌 deer
+🦍 gorilla
+🦎 lizard
+🦏 rhinoceros
+🦐 shrimp
+🦑 squid
+END_EMOJI
+
+register_pic($_) for split /\n/, $EMOJI_CONFIG;
+
 sub listener_specs {
   return (
+    {
+      name      => 'misc-pic',
+      method    => 'handle_misc_pic',
+      predicate => sub ($self, $e) {
+        $e->text =~ /(\w+)\s+pic\z/ && $PIC_FOR{$1}
+      },
+    },
     {
       name      => 'dog-pic',
       method    => 'handle_dog_pic',
@@ -60,15 +169,29 @@ sub handle_cat_pic ($self, $event, $rch) {
   return;
 }
 
-sub handle_cow_pic ($self, $event, $rch) {
-  $event->mark_handled;
+sub handle_misc_pic ($self, $event, $rch) {
+  my $text = $event->text;
+  while ($text =~ /(\w+)\s+pic/g) {
+    my $name = $1;
+    next unless my $e = $PIC_FOR{$name};
 
-  $rch->reply(
-    "Moo.",
-    {
-      slack_reaction => { event => $event, reaction => 'cow2' },
-    },
-  );
+    my $emoji = substr $e->{emoji}, (int rand length $e->{emoji}), 1;
+
+    my @slack_names = keys $e->{slacknames}->%*;
+    my $slack = @slack_names[ int rand @slack_names ];
+
+    # Weak. -- rjbs, 2018-06-16
+    return unless $rch->channel->isa('Synergy::Channel::Slack');
+
+    $rch->reply(
+      "$emoji",
+      {
+        slack_reaction => { event => $event, reaction => $slack },
+      },
+    );
+  }
+
+  return;
 }
 
 sub handle_dog_pic ($self, $event, $rch) {
