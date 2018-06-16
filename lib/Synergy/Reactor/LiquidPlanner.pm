@@ -1926,15 +1926,13 @@ sub _handle_spent ($self, $event, $rch, $text) {
     );
   }
 
-  my $flags = $self->_strip_name_flags($name);
-
   my $workspace_id = $self->workspace_id;
 
   if (
     $name =~ m{\A\s*(?:https://app.liquidplanner.com/space/$workspace_id/.*/)?([0-9]+)P?/?\s*\z}
   ) {
     my ($task_id) = ($1, $2);
-    return $self->_spent_on_existing($event, $rch, $task_id, $flags, $duration);
+    return $self->_spent_on_existing($event, $rch, $task_id, $duration);
   }
 
   my ($plan, $error) = $self->task_plan_from_spec(
@@ -1955,7 +1953,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
   $self->_execute_task_plan($event, $rch, $plan, $error);
 }
 
-sub _spent_on_existing ($self, $event, $rch, $task_id, $flags, $duration) {
+sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   my $user = $event->from_user;
   my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
 
@@ -1984,13 +1982,13 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $flags, $duration) {
     $task->{id},
     $task->{name};
 
-  if ($flags->{start} && $self->_start_timer($user, $task)) {
-    $plain_base .= " and started your timer";
-    $slack_base .= " and started your timer";
-  } else {
-    $plain_base .= ", but I couldn't start your timer";
-    $slack_base .= ", but I couldn't start your timer";
-  }
+  # if ($flags->{start} && $self->_start_timer($user, $task)) {
+  #   $plain_base .= " and started your timer";
+  #   $slack_base .= " and started your timer";
+  # } else {
+  #   $plain_base .= ", but I couldn't start your timer";
+  #   $slack_base .= ", but I couldn't start your timer";
+  # }
 
   return $rch->reply(
     "$plain_base.\n$uri",
