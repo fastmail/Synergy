@@ -1,6 +1,8 @@
 use v5.24.0;
 package Synergy::Reactor::CatPic;
 
+use utf8;
+
 use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor';
@@ -177,23 +179,32 @@ sub handle_misc_pic ($self, $event, $rch) {
     $Logger->log("looking for $1 pic");
     next unless my $e = $PIC_FOR{$name};
 
+    my $exact = $text =~ /\A \s* $1 \s+ pic \s* \z/x;
+
     # If this is all they said, okay.
-    $event->mark_handled if $text =~ /\A \s* $1 \s+ pic \s* \z/x;
+    $event->mark_handled if $exact;
 
     my $emoji = substr $e->{emoji}, (int rand length $e->{emoji}), 1;
 
     my @slack_names = keys $e->{slacknames}->%*;
     my $slack = @slack_names[ int rand @slack_names ];
 
-    # Weak. -- rjbs, 2018-06-16
-    return unless $rch->channel->isa('Synergy::Channel::Slack');
+    if ($rch->channel->isa('Synergy::Channel::Slack')) {
+      return $rch->reply(
+        $emoji,
+        {
+          slack_reaction => { event => $event, reaction => $slack },
+        },
+      );
+    }
 
-    $rch->reply(
-      "$emoji",
-      {
-        slack_reaction => { event => $event, reaction => $slack },
-      },
-    );
+    # This is sort of a mess.  If someone addresses us from not-Slack, we don't
+    # want to play dumb, but we don't want to give stupid replies to SMS
+    # because they contained "cat pic" embedded in them.  So if we're not Slack
+    # (and by this point we know we're not) and the message is exactly a pic
+    # request, we'll give an emoji reply.
+    $rch->reply($emoji) if $exact;
+    return;
   }
 
   return;
