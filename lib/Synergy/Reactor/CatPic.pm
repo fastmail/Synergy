@@ -130,7 +130,7 @@ sub listener_specs {
       name      => 'misc-pic',
       method    => 'handle_misc_pic',
       predicate => sub ($self, $e) {
-        $e->text =~ /(\w+)\s+pic/ && $PIC_FOR{$1}
+        $e->text =~ /(\w+)\s+pic/i && $PIC_FOR{lc $1}
       },
     },
     {
@@ -138,7 +138,7 @@ sub listener_specs {
       method    => 'handle_dog_pic',
       exclusive => 1,
       predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /\Adog\s+pic\z/
+        $e->was_targeted && $e->text =~ /\Adog\s+pic\z/i
       },
     },
     {
@@ -146,7 +146,7 @@ sub listener_specs {
       method    => 'handle_cat_pic',
       exclusive => 1,
       predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /\Acat\s+(pic|jpg|gif|png)\z/
+        $e->was_targeted && $e->text =~ /\Acat\s+(pic|jpg|gif|png)\z/i
       },
     },
   );
@@ -155,7 +155,7 @@ sub listener_specs {
 sub handle_cat_pic ($self, $event, $rch) {
   $event->mark_handled;
 
-  my (undef, $fmt) = split /\s+/, $event->text, 2;
+  my (undef, $fmt) = split /\s+/, lc $event->text, 2;
   $fmt = q{jpg,gif,png} if $fmt eq 'pic';
 
   my $res = $self->hub->http->GET(
@@ -175,12 +175,12 @@ sub handle_cat_pic ($self, $event, $rch) {
 
 sub handle_misc_pic ($self, $event, $rch) {
   my $text = $event->text;
-  while ($text =~ /(\w+)\s+pic/g) {
-    my $name = $1;
-    $Logger->log("looking for $1 pic");
+  while ($text =~ /(\w+)\s+pic/ig) {
+    my $name = lc $1;
+    $Logger->log("looking for $name pic");
     next unless my $e = $PIC_FOR{$name};
 
-    my $exact = $text =~ /\A \s* $1 \s+ pic \s* \z/x;
+    my $exact = $text =~ /\A \s* $name \s+ pic \s* \z/x;
 
     # If this is all they said, okay.
     $event->mark_handled if $exact;
