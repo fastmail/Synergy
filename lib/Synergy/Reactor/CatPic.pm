@@ -29,6 +29,7 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 🐁 mouse          mouse2
 🐂 ox
 🐃 water_buffalo
+🐃 buffalo        water_buffalo
 🐄 cow            cow2
 🐮 cow
 🐅 tiger          tiger2
