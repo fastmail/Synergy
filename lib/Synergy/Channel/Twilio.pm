@@ -26,8 +26,14 @@ has numbers => (
   required => 1,
 );
 
+has http_path => (
+  is  => 'ro',
+  isa => 'Str',
+  default => '/sms',
+);
+
 sub start ($self) {
-  $self->hub->server->register_path('/sms', sub ($req) {
+  $self->hub->server->register_path($self->http_path, sub ($req) {
     my $param = $req->parameters;
     my $from  = $param->{From} // '';
 
