@@ -183,7 +183,7 @@ sub dispatch_event ($self, $event, $rch) {
   $text =~ s/\Ago{3,}d(?=\s)/good/;
   $text =~  s/^done, /done /;   # ugh
 
-  my ($what, $rest) = $text =~ /^([^\s]+)\s*(.*)/s;
+  my ($what, $rest) = split /\s+/, $text, 2;
   $what &&= lc $what;
 
   # It's not handled yet, but it will have been by the time we return!
@@ -1878,7 +1878,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my ($dur_str, $name) = $text =~ /\A(.+?)(?:\s*:|\s*\son)\s+(\S.+)\Z/;
+  my ($dur_str, $name) = $text =~ /\A(\V+?)(?:\s*:|\s*\son)\s+(\S.+)\z/s;
   unless ($dur_str && $name) {
     return $rch->reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
   }
