@@ -44,26 +44,26 @@ sub start ($self) {
   $self->slack->client->{on_frame} = sub ($client, $frame) {
     return unless $frame;
 
-    my $event;
-    unless (eval { $event = $JSON->decode($frame) }) {
+    my $slack_event;
+    unless (eval { $slack_event = $JSON->decode($frame) }) {
       $Logger->log("error decoding frame content: <$frame> <$@>");
       return;
     }
 
-    if (! $event->{type} && $event->{reply_to}) {
-      unless ($event->{ok}) {
-        $Logger->log([ "failed to send a response: %s", $event ]);
+    if (! $slack_event->{type} && $slack_event->{reply_to}) {
+      unless ($slack_event->{ok}) {
+        $Logger->log([ "failed to send a response: %s", $slack_event ]);
       }
 
       return;
     }
 
-    if ($event->{type} eq 'hello') {
+    if ($slack_event->{type} eq 'hello') {
       $self->slack->setup;
       return;
     }
 
-    if ($event->{type} eq 'pong') {
+    if ($slack_event->{type} eq 'pong') {
       my $pong_timer = $self->slack->pong_timer;
       $pong_timer->stop;
       $self->loop->remove($pong_timer);
@@ -72,7 +72,7 @@ sub start ($self) {
     }
 
     # XXX dispatch these better
-    return unless $event->{type} eq 'message';
+    return unless $slack_event->{type} eq 'message';
 
     unless ($self->slack->is_ready) {
       $Logger->log("ignoring message, we aren't ready yet");
@@ -80,16 +80,16 @@ sub start ($self) {
       return;
     }
 
-    if ($event->{subtype}) {
+    if ($slack_event->{subtype}) {
       $Logger->log([
         "refusing to respond to message with subtype %s",
-        $event->{subtype},
+        $slack_event->{subtype},
       ]);
       return;
     }
 
-    return if $event->{bot_id};
-    return if $self->slack->username($event->{user}) eq 'synergy';
+    return if $slack_event->{bot_id};
+    return if $self->slack->username($slack_event->{user}) eq 'synergy';
 
     # Ok, so we need to be able to look up the DM channels. If a bot replies
     # over the websocket connection, it doesn't have a bot id. So we need to
@@ -97,20 +97,20 @@ sub start ($self) {
     # say "screw you, buddy," in which case we'll return undef, which we'll
     # understand as "we will not ever respond to this person anyway. Thanks,
     # Slack. -- michael, 2018-03-15
-    my $private_addr = $self->slack->dm_channel_for_address($event->{user});
+    my $private_addr = $self->slack->dm_channel_for_address($slack_event->{user});
     return unless $private_addr;
 
     my $from_user = $self->hub->user_directory->user_by_channel_and_address(
-      $self->name, $event->{user}
+      $self->name, $slack_event->{user}
     );
 
     my $from_username = $from_user
                       ? $from_user->username
-                      : $self->slack->username($event->{user});
+                      : $self->slack->username($slack_event->{user});
 
     # decode text
     my $me = $self->slack->own_name;
-    my $text = $self->decode_slack_formatting($event->{text});
+    my $text = $self->decode_slack_formatting($slack_event->{text});
 
     my $was_targeted;
 
@@ -118,28 +118,28 @@ sub start ($self) {
       $was_targeted = !! $1;
     }
 
-    my $is_public = $event->{channel} =~ /^C/;
+    my $is_public = $slack_event->{channel} =~ /^C/;
     $was_targeted = 1 if not $is_public;   # private replies are always targeted
 
-    my $evt = Synergy::Event->new({
+    my $event = Synergy::Event->new({
       type => 'message',
       text => $text,
       was_targeted => $was_targeted,
       is_public => $is_public,
       from_channel => $self,
-      from_address => $event->{user},
+      from_address => $slack_event->{user},
       ( $from_user ? ( from_user => $from_user ) : () ),
-      transport_data => $event,
+      transport_data => $slack_event,
     });
 
     my $rch = Synergy::ReplyChannel->new(
       channel => $self,
-      default_address => $event->{channel},
+      default_address => $slack_event->{channel},
       private_address => $private_addr,
       ( $is_public ? ( prefix => "$from_username: " ) : () ),
     );
 
-    $self->hub->handle_event($evt, $rch);
+    $self->hub->handle_event($event, $rch);
   };
 }
 
