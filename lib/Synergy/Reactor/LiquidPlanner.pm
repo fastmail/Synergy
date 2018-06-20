@@ -1878,7 +1878,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my ($dur_str, $name) = $text =~ /\A(.+?)(?:\s*:|\s*\son)\s+(\S.+)\z/;
+  my ($dur_str, $name) = $text =~ /\A(.+?)(?:\s*:|\s*\son)\s+(\S.+)\Z/;
   unless ($dur_str && $name) {
     return $rch->reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
   }
