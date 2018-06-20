@@ -122,8 +122,15 @@ sub start ($self) {
       $was_targeted = !! $1;
     }
 
-    my $is_public = $slack_event->{channel} =~ /^C/;
-    $was_targeted = 1 if not $is_public;   # private replies are always targeted
+    # Three kinds of channels, I think:
+    # C - public channel
+    # D - direct one-on-one message
+    # G - group chat
+    #
+    # Only public channels public.
+    # Everything is targeted if it's sent in direct message.
+    my $is_public    = $slack_event->{channel} =~ /^C/;
+    $was_targeted = 1 if $slack_event->{channel} =~ /^D/;
 
     my $event = Synergy::Event->new({
       type => 'message',
