@@ -9,19 +9,8 @@ with 'Synergy::Role::Reactor';
 
 use Synergy::Logger '$Logger';
 
-use experimental qw(signatures);
+use experimental qw(lexical_subs signatures);
 use namespace::clean;
-
-my %PIC_FOR;
-
-sub register_pic {
-  my ($emoji, $name, $slackname) = split /\s+/, $_[0];
-  my $e = $PIC_FOR{$name} ||= { emoji => q{}, slacknames => {} };
-
-  $e->{emoji} .= $emoji;
-  $e->{slacknames}{$slackname // $name} = 1;
-  return;
-}
 
 my $EMOJI_CONFIG = <<'END_EMOJI';
 🐀 rat
@@ -123,15 +112,48 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 🦖 dinosaur       t-rex
 END_EMOJI
 
-register_pic($_) for split /\n/, $EMOJI_CONFIG;
+has _reactions => (
+  is  => 'ro',
+  isa => 'HashRef',
+  traits  => [ 'Hash' ],
+  builder => '_build_reactions',
+  handles => {
+    reaction_for     => 'get',
+    has_reaction_for => 'exists',
+  },
+);
+
+my sub register_pic_line ($registry, $line) {
+  my ($emoji, $name, $slackname) = split /\s+/, $line;
+  my $e = $registry->{$name} ||= { emoji => q{}, slacknames => {} };
+
+  $e->{emoji} .= $emoji;
+  $e->{slacknames}{$slackname // $name} = 1;
+  return;
+}
+
+sub _built_in_reactions {
+  state %reactions;
+  return {%reactions} if %reactions;
+
+  register_pic_line(\%reactions, $_) for split /\n+/, $EMOJI_CONFIG;
+
+  return {%reactions};
+}
+
+sub _build_reactions ($self, @) {
+  $self->_built_in_reactions;
+}
 
 sub listener_specs {
+  my ($reactor) = @_;
+
   return (
     {
       name      => 'misc-pic',
       method    => 'handle_misc_pic',
       predicate => sub ($self, $e) {
-        $e->text =~ /(\w+)\s+pic/i && $PIC_FOR{lc $1}
+        $e->text =~ /(\w+)\s+pic/i && $reactor->has_reaction_for(lc $1);
       },
     },
     {
@@ -179,7 +201,7 @@ sub handle_misc_pic ($self, $event, $rch) {
   while ($text =~ /(\w+)\s+pic/ig) {
     my $name = lc $1;
     $Logger->log("looking for $name pic");
-    next unless my $e = $PIC_FOR{$name};
+    next unless my $e = $self->reaction_for($name);
 
     my $exact = $text =~ /\A \s* $name \s+ pic \s* \z/x;
 
