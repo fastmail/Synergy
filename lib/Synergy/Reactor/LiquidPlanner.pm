@@ -51,7 +51,7 @@ sub _lp_base_uri ($self) {
 }
 
 sub _link_base_uri ($self) {
-  return sprintf "https://app.liquidplanner.com/space/%s/projects/show/",
+  return sprintf "https://app.liquidplanner.com/space/%s/projects/panel/",
     $self->workspace_id;
 }
 
