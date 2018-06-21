@@ -85,6 +85,7 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 🐩 dog            poodle
 🐪 camel          dromedary_camel
 🐫 camel
+🐫 perl           camel
 🐬 dolphin
 🐷 pig
 🐸 frog
