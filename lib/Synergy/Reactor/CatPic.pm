@@ -125,11 +125,18 @@ has _reactions => (
 );
 
 my sub register_pic_line ($registry, $line) {
-  my ($emoji, $name, $slackname) = split /\s+/, $line;
-  my $e = $registry->{$name} ||= { emoji => q{}, slacknames => {} };
+  my ($name, %to_set);
 
-  $e->{emoji} .= $emoji;
-  $e->{slacknames}{$slackname // $name} = 1;
+  ($to_set{emoji}, $name, $to_set{slackname}) = split /\s+/, $line;
+  $to_set{slackname} //= $name;
+
+  my $e = $registry->{$name} ||= { emoji => [], slackname => [] };
+
+  for my $type (qw( emoji slackname )) {
+    push $e->{$type}->@*, $to_set{$type}
+      unless grep {; $_ eq $to_set{$type} } $e->{$type}->@*;
+  }
+
   return;
 }
 
@@ -225,10 +232,8 @@ sub handle_misc_pic ($self, $event, $rch) {
     # If this is all they said, okay.
     $event->mark_handled if $exact;
 
-    my $emoji = substr $e->{emoji}, (int rand length $e->{emoji}), 1;
-
-    my @slack_names = keys $e->{slacknames}->%*;
-    my $slack = @slack_names[ int rand @slack_names ];
+    my $emoji  = $e->{emoji}->[ int rand $e->{emoji}->@* ];
+    my $slack  = $e->{slackname}->[ int rand $e->{slackname}->@* ];
 
     if ($rch->channel->isa('Synergy::Channel::Slack')) {
       return $rch->reply(
