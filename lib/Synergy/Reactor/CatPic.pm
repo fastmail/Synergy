@@ -113,8 +113,9 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 END_EMOJI
 
 has _reactions => (
-  is  => 'ro',
-  isa => 'HashRef',
+  is    => 'ro',
+  isa   => 'HashRef',
+  lazy  => 1,
   traits  => [ 'Hash' ],
   builder => '_build_reactions',
   handles => {
@@ -141,8 +142,24 @@ sub _built_in_reactions {
   return {%reactions};
 }
 
+has extra_reactions_file => (
+  is  => 'ro',
+  isa => 'Str',
+  predicate => 'has_extra_reactions_file',
+);
+
 sub _build_reactions ($self, @) {
-  $self->_built_in_reactions;
+  my $reactions = $self->_built_in_reactions;
+
+  if ($self->has_extra_reactions_file) {
+    my $file = $self->extra_reactions_file;
+    open my $fh, '<', $file or confess("can't open $file for reading: $!");
+    my $contents = do { local $/; <$fh> };
+    close $fh;
+    register_pic_line($reactions, $_) for split /\n+/, $contents;
+  }
+
+  return $reactions;
 }
 
 sub listener_specs {
