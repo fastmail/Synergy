@@ -695,14 +695,14 @@ sub _check_plan_project ($self, $event, $plan, $error) {
 
   unless ($projects && @$projects) {
     $error->{project} = qq{I don't know any LiquidPlanner project with the}
-                      . qq{ nickname "$project".};
+                      . qq{ nickname "$project_name".};
 
     return;
   }
 
   if (@$projects > 1) {
     $error->{project}
-      = qq{More than one LiquidPlanner project has the nickname "$project". }
+      = qq{More than one LiquidPlanner project has the nickname "$project_name". }
       . qq{Their ids are: }
       . join(q{, }, map {; $_->{id} } @$projects);
 
