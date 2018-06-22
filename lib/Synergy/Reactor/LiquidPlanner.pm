@@ -2054,9 +2054,15 @@ sub damage_report ($self, $event, $rch) {
   );
 
   if ($event->is_public) {
-    $rch->reply("I'm generating that report now, and I'll send it to you privately in just a moment.");
+    $rch->reply(
+      "I'm generating that report now, and I'll send it to you privately in just a moment.",
+      { slack_reaction => { event => $event, reaction => 'hourglass_flowing_sand' } },
+    );
   } else {
-    $rch->reply("I'm generating that report now, it'll be just a moment");
+    $rch->reply(
+      "I'm generating that report now, it'll be just a moment",
+      { slack_reaction => { event => $event, reaction => 'hourglass_flowing_sand' } },
+    );
   }
 
   my @summaries = ("Damage report for $who_name:");
@@ -2111,6 +2117,11 @@ sub damage_report ($self, $event, $rch) {
                       $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
 
   my $reply = join qq{\n}, @summaries;
+
+  $rch->private_reply(
+    "Report sent!",
+    { slack_reaction => { event => $event, reaction => '-hourglass_flowing_sand' } },
+  );
 
   return $rch->private_reply(
     $reply,

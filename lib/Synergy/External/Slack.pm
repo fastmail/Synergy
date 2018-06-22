@@ -154,11 +154,15 @@ sub send_message ($self, $channel, $text, $alts = {}) {
       && $e->from_channel->isa('Synergy::Channel::Slack')
       && $e->from_channel->slack == $self # O_O -- rjbs, 2018-06-13
     ) {
-      $self->api_call('reactions.add', {
-        name      => $r->{reaction},
-        channel   => $e->transport_data->{channel},
-        timestamp => $e->transport_data->{ts},
-      });
+      my $remove = $r->{reaction} =~ s/^-//;
+      $self->api_call(
+        ($remove ? 'reactions.remove' : 'reactions.add'),
+        {
+          name      => $r->{reaction},
+          channel   => $e->transport_data->{channel},
+          timestamp => $e->transport_data->{ts},
+        }
+      );
 
       return;
     }
