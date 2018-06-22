@@ -2249,6 +2249,21 @@ sub summarize_iteration ($item, $member_id) {
     }
   }
 
+  @containers = sort {
+    # projects before packages
+    return -1 if $a->{type} eq 'Project' and $b->{type} ne 'Project';
+    return  1 if $b->{type} eq 'Project' and $a->{type} ne 'Project';
+    # owned-by-self before owned-by-other
+    return -1 if  $a->{owner_id} == $member_id
+              and $b->{owner_id} != $member_id;
+    return 1  if  $b->{owner_id} == $member_id
+              and $a->{owner_id} != $member_id;
+
+    # TODO: then by task priority, but actually here I have implemented by name
+    # because it's easier for now -- rjbs, 2018-06-21
+    return fc $a->{name} cmp fc $b->{name};
+  } @containers;
+
   return {
     name        => $item->{name},
     containers  => \@containers,
