@@ -2162,6 +2162,18 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
               $self->hub->user_directory->users;
 
+  my @sparkles = grep {; $_->{name} =~ /\A✨/ } $summary->{tasks}->@*;
+  my @tasks    = grep {; $_->{name} !~ /\A✨/ } $summary->{tasks}->@*;
+
+  for my $c (@sparkles) {
+    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+      "✨",
+      $self->item_uri($c->{id}),
+      $c->{id},
+      ($c->{is_done} ? "✓" : "•"),
+      $c->{name};
+  }
+
   for my $c ($summary->{containers}->@*) {
     $text .= sprintf "%s <%s|LP%s> %s %s%s (%u/%u)\n",
       ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
@@ -2177,7 +2189,7 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
       ;
   }
 
-  for my $c ($summary->{tasks}->@*) {
+  for my $c (@tasks) {
     $text .= sprintf "%s <%s|LP%s> %s %s\n",
       "🌀",
       $self->item_uri($c->{id}),
