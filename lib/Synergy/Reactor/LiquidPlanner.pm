@@ -1621,15 +1621,6 @@ sub _handle_commit ($self, $event, $rch, $comment) {
     return $rch->reply("I couldn't log the work because the task doesn't have a defined activity.");
   }
 
-  my $restart = $meta{STOP} ? 0 : 1;
-
-  my $content = $JSON->encode({
-    is_done => $meta{DONE} ? \1 : \0,
-    comment => $comment,
-    restart => \$restart,
-    activity_id => $activity_id,
-  });
-
   if ($meta{STOP} and ! $sy_timer->chilling) {
     if ($meta{CHILL}) {
       $sy_timer->chill_until_active(1);
@@ -1640,9 +1631,25 @@ sub _handle_commit ($self, $event, $rch, $comment) {
     }
   }
 
+  # get timer
+  # get task
+  # track_time
+  # clear timer
+  # maybe: stop timer
+
+  my $content = $JSON->encode({
+    work    => $lp_timer->{running_time},
+    is_done => $meta{DONE} ? \1 : \0,
+    comment => $comment,
+    activity_id => $activity_id,
+    reduce_estimate => \1,
+  });
+
+  my $task_base = "/tasks/$lp_timer->{item_id}";
+
   my $commit_res = $self->http_post_for_user(
     $user,
-    "/tasks/$lp_timer->{item_id}/timer/commit",
+    "$task_base/track_time",
     Content => $content,
     Content_Type => 'application/json',
   );
@@ -1656,12 +1663,24 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   $sy_timer->clear_last_nag;
   $self->save_state;
 
-  if ($restart) {
-    my $start_res = $self->http_post_for_user(
-      $user,
-      "/tasks/$lp_timer->{item_id}/timer/start",
-    );
-    $meta{RESTARTFAIL} = ! $start_res->is_success;
+  {
+    my $clear_res = $self->http_post_for_user($user, "$task_base/timer/clear");
+    unless ($clear_res->is_success) {
+      $Logger->log(
+        "error clearing timer on $task_base: " . $clear_res->decoded_content
+      );
+      $meta{CLEARFAIL} = ! $clear_res->is_success;
+    }
+  }
+
+  unless ($meta{STOP}) {
+    my $start_res = $self->http_post_for_user($user, "$task_base/timer/start");
+    unless ($start_res->is_success) {
+      $Logger->log(
+        "error starting timer on $task_base: " . $start_res->decoded_content
+      );
+      $meta{STARTFAIL} = ! $start_res->is_success;
+    }
   }
 
   my $also
@@ -1669,6 +1688,16 @@ sub _handle_commit ($self, $event, $rch, $comment) {
     : $meta{CHILL} ? " stopped the timer, and will chill until you're back"
     : $meta{STOP}  ? " and stopped the timer"
     :                "";
+
+  my @errors = (
+    ($meta{CLEARFAIL} ? ("I couldn't clear the timer's old value")  : ()),
+    ($meta{STARTFAIL} ? ("I couldn't restart the timer")            : ()),
+  );
+
+  if (@errors) {
+    $also .= ".  I had trouble, though:  "
+          .  join q{ and }, @errors;
+  }
 
   my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
   $rch->reply("Okay, I've committed $time of work$also. Task was: $task->{name}");
