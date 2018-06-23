@@ -1757,7 +1757,15 @@ sub _handle_start ($self, $event, $rch, $text) {
                ? $JSON->decode($task_res->decoded_content)->{name}
                : '??';
 
-      return $rch->reply("Started task: $name (" .  $self->item_uri($timer->{item_id}) .")");
+      my $uri   = $self->item_uri($timer->{item_id});
+      my $text  = "Started task: $name ($uri)";
+      my $slack = sprintf "Started task <%s|LP%s>: %s",
+        $uri, $timer->{item_id}, $name;
+
+      return $rch->reply(
+        $text,
+        { slack => $slack },
+      );
     } else {
       return $rch->reply("I couldn't start the timer for $text.");
     }
@@ -1774,7 +1782,16 @@ sub _handle_start ($self, $event, $rch, $text) {
 
     if ($start_res->is_success && $timer->{running}) {
       $self->set_last_lp_timer_id_for_user($user, $timer->{id});
-      return $rch->reply("Started task: $task->{name} (" . $self->item_uri($task->{id}) . ")");
+
+      my $uri   = $self->item_uri($task->{id});
+      my $text  = "Started task: $task->{name} ($uri)";
+      my $slack = sprintf "Started task <%s|LP%s>: %s",
+        $uri, $task->{id}, $task->{name};
+
+      return $rch->reply(
+        $text,
+        { slack => $slack },
+      );
     } else {
       return $rch->reply("I couldn't start your next task.");
     }
