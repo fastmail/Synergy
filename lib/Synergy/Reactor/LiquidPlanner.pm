@@ -641,8 +641,15 @@ sub _handle_timer ($self, $event, $rch, $text) {
 
   my $url = $self->item_uri($timer->{item_id});
 
+  my $base  = "Your timer has been running for $time, work on";
+  my $slack = sprintf '%s: <%s|LP%s> %s',
+    $base, $url, $timer->{item_id}, $name;
+
   return $rch->reply(
-    "Your timer has been running for $time, work on: $name <$url>",
+    "$base: $name ($url)",
+    {
+      slack => $slack,
+    },
   );
 }
 
