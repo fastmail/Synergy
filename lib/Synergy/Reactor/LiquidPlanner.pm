@@ -1707,7 +1707,19 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   }
 
   my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
-  $rch->reply("Okay, I've committed $time of work$also. Task was: $task->{name}");
+
+  my $uri   = $self->item_uri($lp_timer->{item_id});
+  my $base  = "Okay, I've committed $time of work$also.  The task was:";
+  my $text  = "$base $task->{name} ($uri)";
+  my $slack = sprintf '%s  <%s|LP%s> %s',
+    $base, $uri, $lp_timer->{item_id}, $task->{name};
+
+  $rch->reply(
+    $text,
+    {
+      slack => $slack,
+    }
+  );
 }
 
 sub _handle_abort ($self, $event, $rch, $text) {
