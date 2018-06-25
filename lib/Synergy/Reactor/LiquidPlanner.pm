@@ -392,10 +392,8 @@ has projects => (
   isa => 'HashRef',
   traits => [ 'Hash' ],
   handles => {
-    project_ids   => 'values',
-    projects      => 'keys',
-    project_named => 'get',
-    project_pairs => 'kv',
+    projects            => 'keys',
+    project_by_shortcut => 'get',
   },
   lazy => 1,
   default => sub ($self) {
@@ -404,9 +402,21 @@ has projects => (
   writer    => '_set_projects',
 );
 
-sub start ($self) {
-  $self->projects;
+has tasks => (
+  isa => 'HashRef',
+  traits => [ 'Hash' ],
+  handles => {
+    tasks             => 'keys',
+    task_by_shortcut  => 'get',
+  },
+  lazy => 1,
+  default => sub ($self) {
+    $self->get_task_shortcuts;
+  },
+  writer    => '_set_tasks',
+);
 
+sub start ($self) {
   if (my $state = $self->fetch_state) {
     if (my $timer_state = $state->{user_timers}) {
       for my $username (keys %$timer_state) {
@@ -529,42 +539,45 @@ sub nag ($self, $timer, @) {
   }
 }
 
-sub get_project_shortcuts {
-  my ($self) = @_;
+sub _get_treeitem_shortcuts {
+  my ($self, $type) = @_;
 
-  my $query = "/projects?filter[]=custom_field:'Synergy Project Shortcut' is_set&filter[]=is_done is false";
+  my $query = "/treeitems?filter[]=item_type=$type&filter[]=custom_field:'Synergy $type Shortcut' is_set&filter[]=is_done is false";
   my $res = $self->http_get_for_master("$query");
   return {} unless $res && $res->is_success;
 
-  my %project_dict;
+  my %dict;
 
-  my @projects = @{ $JSON->decode( $res->decoded_content ) };
-  for my $project (@projects) {
+  my @items = @{ $JSON->decode( $res->decoded_content ) };
+  for my $item (@items) {
     # Impossible, right?
-    next unless my $nick = $project->{custom_field_values}{'Synergy Project Shortcut'};
+    next unless my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
 
     # We'll deal with conflicts later. -- rjbs, 2018-01-22
-    $project_dict{ lc $nick } //= [];
+    $dict{ lc $shortcut } //= [];
 
     # But don't add the same project twice. -- michael, 2018-04-24
-    my @existing = grep {; $_->{id} eq $project->{id} } $project_dict{ lc $nick }->@*;
+    my @existing = grep {; $_->{id} eq $item->{id} } $dict{ lc $shortcut }->@*;
     if (@existing) {
-      $Logger->log([ "Duplicate project found; got %s, conflicts with %s",
-        $project,
+      $Logger->log([ "Duplicate \l$type found; got %s, conflicts with %s",
+        $item,
         \@existing
       ]);
       next;
     }
 
-    push $project_dict{ lc $nick }->@*, {
-      id        => $project->{id},
-      shortcut  => $nick,
-      name      => $project->{name},
+    push $dict{ lc $shortcut }->@*, {
+      id        => $item->{id},
+      shortcut  => $shortcut,
+      name      => $item->{name},
     };
   }
 
-  return \%project_dict;
+  return \%dict;
 }
+
+sub get_project_shortcuts ($self) { $self->_get_treeitem_shortcuts('Project') }
+sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 
 sub http_get_for_user ($self, $user, $path, @arg) {
   return $self->hub->http_get(
@@ -698,7 +711,7 @@ sub _check_plan_project ($self, $event, $plan, $error) {
   }
 
   my ($project_name) = keys %$project;
-  my $projects = $self->project_named(lc $project_name);
+  my $projects = $self->project_by_shortcut(lc $project_name);
 
   unless ($projects && @$projects) {
     $error->{project} = qq{I don't know any LiquidPlanner project with the}
@@ -1414,7 +1427,7 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
   if ($my_arg->{name} =~ s/#(.*)$//) {
     my $project = lc $1;
 
-    my $projects = $self->project_named($project);
+    my $projects = $self->project_by_shortcut($project);
 
     unless ($projects && @$projects) {
       $arg->{already_notified} = 1;
@@ -2042,7 +2055,7 @@ sub _handle_projects ($self, $event, $rch, $text) {
   $rch->private_reply('Known projects:');
 
   for my $project (@sorted) {
-    my $id = $self->project_named($project)->[0]->{id};   # cool, LP
+    my $id = $self->project_by_shortcut($project)->[0]->{id};   # cool, LP
     $rch->private_reply("$project (" . $self->item_uri($id) . ")");
   }
 }
