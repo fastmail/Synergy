@@ -968,6 +968,10 @@ sub _handle_task ($self, $event, $rch, $text) {
   # because of "new task for...";
   my $what = $text =~ s/\Atask\s+//r;
 
+  if ($text =~ /\A \s* shortcuts \s* \z/xi) {
+    return $self->_handle_task_shortcuts($event, $rch, $text);
+  }
+
   my ($target, $spec_text) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
 
   unless ($target and $spec_text) {
@@ -2057,6 +2061,19 @@ sub _handle_projects ($self, $event, $rch, $text) {
   for my $project (@sorted) {
     my $id = $self->project_by_shortcut($project)->[0]->{id};   # cool, LP
     $rch->private_reply("$project (" . $self->item_uri($id) . ")");
+  }
+}
+
+sub _handle_task_shortcuts ($self, $event, $rch, $text) {
+  my @sorted = sort $self->tasks;
+
+  $rch->reply("Responses to <task shortcuts> are sent privately.")
+    if $event->is_public;
+  $rch->private_reply('Known tasks:');
+
+  for my $task (@sorted) {
+    my $id = $self->task_by_shortcut($task)->[0]->{id};   # cool, LP
+    $rch->private_reply("$task (" . $self->item_uri($id) . ")");
   }
 }
 
