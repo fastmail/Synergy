@@ -139,11 +139,11 @@ sub listener_specs {
       }
     },
     {
-      name      => "reload-projects",
-      method    => "reload_projects",
+      name      => "reload-shortcuts",
+      method    => "reload_shortcuts",
       predicate => sub ($, $e) {
         $e->was_targeted &&
-        $e->text =~ /^reload\s+projects\s*$/i;
+        $e->text =~ /^reload\s+shortcuts\s*$/i;
       },
     },
     {
@@ -2226,9 +2226,10 @@ sub damage_report ($self, $event, $rch) {
   );
 }
 
-sub reload_projects ($self, $event, $rch) {
+sub reload_shortcuts ($self, $event, $rch) {
   $self->_set_projects($self->get_project_shortcuts);
-  $rch->reply("Projects reloaded");
+  $self->_set_tasks($self->get_task_shortcuts);
+  $rch->reply("Shortcuts reloaded");
   $event->mark_handled;
 }
 
