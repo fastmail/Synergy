@@ -1984,7 +1984,16 @@ sub _handle_spent ($self, $event, $rch, $text) {
   if (
     $name =~ m{\A\s*(?:https://app.liquidplanner.com/space/$workspace_id/.*/)?([0-9]+)P?/?\s*\z}
   ) {
-    my ($task_id) = ($1, $2);
+    my ($task_id) = ($1);
+    return $self->_spent_on_existing($event, $rch, $task_id, $duration);
+  }
+
+  if ($name =~ m{\A\s*\*(\w+)\s*\z}) {
+    my $task = $self->task_by_shortcut(lc $1);
+    return $self->reply(qq{I don't know a task with the shortcut "$1".})
+      unless $task;
+
+    my $task_id = $task->[0]{id};
     return $self->_spent_on_existing($event, $rch, $task_id, $duration);
   }
 
