@@ -95,7 +95,7 @@ has business_hours => (
   },
 );
 
-has default_project_nickname => (is => 'ro', isa => 'Str');
+has default_project_shortcut => (is => 'ro', isa => 'Str');
 
 has lp_id    => (is => 'ro', isa => 'Int', predicate => 'has_lp_id');
 has lp_token => (is => 'ro', isa => 'Str', predicate => 'has_lp_token');
