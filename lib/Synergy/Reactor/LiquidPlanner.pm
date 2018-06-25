@@ -399,7 +399,7 @@ has projects => (
   },
   lazy => 1,
   default => sub ($self) {
-    $self->get_project_nicknames;
+    $self->get_project_shortcuts;
   },
   writer    => '_set_projects',
 );
@@ -529,10 +529,10 @@ sub nag ($self, $timer, @) {
   }
 }
 
-sub get_project_nicknames {
+sub get_project_shortcuts {
   my ($self) = @_;
 
-  my $query = "/projects?filter[]=custom_field:Nickname is_set&filter[]=is_done is false";
+  my $query = "/projects?filter[]=custom_field:'Synergy Project Shortcut' is_set&filter[]=is_done is false";
   my $res = $self->http_get_for_master("$query");
   return {} unless $res && $res->is_success;
 
@@ -541,7 +541,7 @@ sub get_project_nicknames {
   my @projects = @{ $JSON->decode( $res->decoded_content ) };
   for my $project (@projects) {
     # Impossible, right?
-    next unless my $nick = $project->{custom_field_values}{Nickname};
+    next unless my $nick = $project->{custom_field_values}{'Synergy Project Shortcut'};
 
     # We'll deal with conflicts later. -- rjbs, 2018-01-22
     $project_dict{ lc $nick } //= [];
@@ -558,7 +558,7 @@ sub get_project_nicknames {
 
     push $project_dict{ lc $nick }->@*, {
       id        => $project->{id},
-      nickname  => $nick,
+      shortcut  => $nick,
       name      => $project->{name},
     };
   }
@@ -702,14 +702,14 @@ sub _check_plan_project ($self, $event, $plan, $error) {
 
   unless ($projects && @$projects) {
     $error->{project} = qq{I don't know any LiquidPlanner project with the}
-                      . qq{ nickname "$project_name".};
+                      . qq{ shortcut "$project_name".};
 
     return;
   }
 
   if (@$projects > 1) {
     $error->{project}
-      = qq{More than one LiquidPlanner project has the nickname "$project_name". }
+      = qq{More than one LiquidPlanner project has the shortcut "$project_name". }
       . qq{Their ids are: }
       . join(q{, }, map {; $_->{id} } @$projects);
 
@@ -778,7 +778,7 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
   unless ($plan->{project}) {
     my @projects  = uniq
                     grep { defined }
-                    map  {; $_->default_project_nickname }
+                    map  {; $_->default_project_shortcut }
                     @owners;
 
     if (@projects == 1) {
@@ -885,7 +885,7 @@ sub _task_subcmd_estimate ($self, $rest, $plan) {
 }
 
 sub _task_subcmd_project ($self, $rest, $plan) {
-  return qq{You used /project without a project nickname.} unless $rest;
+  return qq{You used /project without a project shortcut.} unless $rest;
   $plan->{project}{$rest} = 1;
   return;
 }
@@ -1427,7 +1427,7 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
 
     if (@$projects > 1) {
       return $rch->reply(
-          "More than one LiquidPlanner project has the nickname '$project'. "
+          "More than one LiquidPlanner project has the shortcut '$project'. "
         . "Their ids are: "
         . join(q{, }, map {; $_->{id} } @$projects),
       );
@@ -2197,7 +2197,7 @@ sub damage_report ($self, $event, $rch) {
 }
 
 sub reload_projects ($self, $event, $rch) {
-  $self->_set_projects($self->get_project_nicknames);
+  $self->_set_projects($self->get_project_shortcuts);
   $rch->reply("Projects reloaded");
   $event->mark_handled;
 }
