@@ -268,17 +268,8 @@ sub last_lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
   return unless my $lp_timer_id = $self->last_lp_timer_id_for_user($user);
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  unless ($res->is_success) {
-    $Logger->log([
-      "tried to get LP timers for %s but got %s response",
-      $user->username,
-      $res->code,
-    ]);
-  }
-
   my ($timer) = grep {; $_->{id} eq $lp_timer_id }
-                $JSON->decode( $res->decoded_content )->@*;
+                $self->lp_client_for_user($user)->my_timers;
 
   return $timer;
 }
@@ -648,20 +639,12 @@ sub _handle_timer ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-
-  unless ($res->is_success) {
-    $Logger->log("failed to get timer: " . $res->as_string);
-
-    return $rch->reply("I couldn't get your timer. Sorry!");
-  }
-
-  my @timers = grep {; $_->{running} }
-               @{ $JSON->decode( $res->decoded_content ) };
+  my $lpc   = $self->lp_client_for_user($user);
+  my $timer = $lpc->my_running_timer;
 
   my $sy_timer = $self->timer_for_user($user);
 
-  unless (@timers) {
+  unless ($timer) {
     my $nag = $sy_timer->last_relevant_nag;
     my $msg;
     if (! $nag) {
@@ -675,21 +658,12 @@ sub _handle_timer ($self, $event, $rch, $text) {
     return $rch->reply($msg);
   }
 
-  if (@timers > 1) {
-    $rch->reply(
-      "Woah.  LiquidPlanner says you have more than one active timer!",
-    );
-  }
-
-  my $timer = $timers[0];
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
-  my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
 
-  my $task = $task_res->is_success
-           ? $JSON->decode($task_res->decoded_content)
-           : { id => $timer->{item_id}, name => '??' };
+  my $task = $lpc->get_item($timer->{item_id})
+          // { id => $timer->{item_id}, name => '??' };
 
-  my $url = $self->item_uri($timer->{item_id});
+  my $url = $self->item_uri($task->{id});
 
   my $base  = "Your timer has been running for $time, work on";
   my $slack = sprintf '%s: %s %s',
@@ -1375,15 +1349,8 @@ sub _handle_good ($self, $event, $rch, $text) {
   }
 
   if ($stop) {
-    my $res = $self->http_get_for_user($user, "/my_timers");
-
-    if ($res->is_success) {
-      my @timers = grep {; $_->{running} }
-                   @{ $JSON->decode( $res->decoded_content ) };
-
-      if (@timers) {
-        return $rch->reply("You've got a running timer!  You should commit it.");
-      }
+    if ($self->lp_client_for_user($user)->my_running_timer) {
+      return $rch->reply("You've got a running timer!  You should commit it.");
     }
   }
 
@@ -1533,18 +1500,7 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
 sub lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  unless ($res->is_success) {
-    $Logger->log([
-      "couldn't get timer for %s: %s",
-      $user->username,
-      $res->as_string,
-    ]);
-    return -1;
-  }
-
-  my ($timer) = grep {; $_->{running} }
-                $JSON->decode( $res->decoded_content )->@*;
+  my $timer = $self->lp_client_for_user($user)->my_running_timer;
 
   if ($timer) {
     $self->set_last_lp_timer_id_for_user($user, $timer->{id});
@@ -1593,15 +1549,9 @@ sub _handle_chill ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  if ($res->is_success) {
-    my @timers = grep {; $_->{running} }
-                 @{ $JSON->decode( $res->decoded_content ) };
-
-    if (@timers) {
-      return $rch->reply("You've got a running timer!  Use 'commit' instead.");
-    }
-  } # XXX - Error handling? -- alh, 2018-03-16
+  if ($self->lp_client_for_user($user)->my_running_timer) {
+    return $rch->reply("You've got a running timer!  Use 'commit' instead.");
+  }
 
   my $sy_timer = $self->timer_for_user($user);
 
@@ -1780,12 +1730,7 @@ sub _handle_abort ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-
-  return $rch->reply("Something went wrong") unless $res->is_success;
-
-  my ($timer) = grep {; $_->{running} }
-                $JSON->decode( $res->decoded_content )->@*;
+  my $timer = $self->lp_client_for_user($user)->my_running_timer;
 
   return $rch->reply("You don't have an active timer to abort.")
     unless $timer;
@@ -1912,11 +1857,7 @@ sub _handle_stop ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your stop request.")
     unless $text eq 'timer';
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  return $rch->reply("Something went wrong") unless $res->is_success;
-
-  my ($timer) = grep {; $_->{running} }
-                $JSON->decode( $res->decoded_content )->@*;
+  my $timer = $self->lp_client_for_user($user)->my_running_timer;
 
   return $rch->reply("You don't have any active timers to stop.") unless $timer;
 
@@ -1960,12 +1901,7 @@ sub _handle_reset ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your reset request. (try 'reset timer')")
     unless ($text // 'timer') eq 'timer';
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-
-  return $rch->reply("Something went wrong") unless $res->is_success;
-
-  my ($timer) = grep {; $_->{running} }
-                $JSON->decode( $res->decoded_content )->@*;
+  my $timer = $self->lp_client_for_user($user)->my_running_timer;
 
   $rch->reply("You don't have an active timer to abort.") unless $timer;
 

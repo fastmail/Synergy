@@ -88,6 +88,20 @@ sub get_item ($self, $item_id) {
   return $item;
 }
 
+sub my_timers ($self) {
+  my $res = $self->http_get("/my_timers");
+
+  return unless $res->is_success;
+
+  $JSON->decode( $res->decoded_content )->@*;
+}
+
+sub my_running_timer ($self) {
+  # Treat as impossible, for now, >1 running timer. -- rjbs, 2018-06-26
+  my ($timer) = grep {; $_->{running} } $self->my_timers;
+  return $timer;
+}
+
 # get timers for user
 # get shortcuts for tasks, projects
 # create lp task
