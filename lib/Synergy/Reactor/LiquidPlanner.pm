@@ -586,20 +586,13 @@ sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 
 sub lp_client_for_user ($self, $user) {
   Synergy::LPC->new({
-    workspace_id => $self->workspace_id,
-    http_get_callback => sub ($, $path, @arg) {
-      $self->hub->http_get(
-        $self->_lp_base_uri . $path,
-        @arg,
-        Authorization => $user->lp_auth_header,
-      );
+    auth_token    => $user->lp_auth_header,
+    workspace_id  => $self->workspace_id,
+    http_get_callback => sub ($, $uri, @arg) {
+      $self->hub->http_get($uri, @arg);
     },
-    http_post_callback => sub ($, $path, @arg) {
-      $self->hub->http_post(
-        $self->_lp_base_uri . $path,
-        @arg,
-        Authorization => $user->lp_auth_header,
-      );
+    http_post_callback => sub ($, $uri, @arg) {
+      $self->hub->http_post($uri, @arg);
     },
   });
 }

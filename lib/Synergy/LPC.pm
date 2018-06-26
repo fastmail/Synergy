@@ -19,24 +19,20 @@ has workspace_id => (
   required => 1,
 );
 
+has auth_token => (
+  is  => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
 sub _lp_base_uri ($self) {
   return "https://app.liquidplanner.com/api/workspaces/" . $self->workspace_id;
-}
-
-sub _link_base_uri ($self) {
-  return sprintf "https://app.liquidplanner.com/space/%s/projects/panel/",
-    $self->workspace_id;
-}
-
-sub item_uri ($self, $task_id) {
-  return $self->_link_base_uri . $task_id;
 }
 
 my $CONFIG;  # XXX use real config
 
 $CONFIG = {
   liquidplanner => {
-    workspace => 14822,
     package => {
       inbox     => 6268529,
       urgent    => 11388082,
@@ -59,7 +55,7 @@ has http_get_callback => (
   isa => 'CodeRef',
   traits => [ 'Code' ],
   required => 1,
-  handles  => { 'http_get' => 'execute_method' },
+  handles  => { 'http_get_raw' => 'execute_method' },
 );
 
 has http_post_callback => (
@@ -67,8 +63,18 @@ has http_post_callback => (
   isa => 'CodeRef',
   traits => [ 'Code' ],
   required => 1,
-  handles  => { 'http_post' => 'execute_method' },
+  handles  => { 'http_post_raw' => 'execute_method' },
 );
+
+sub http_get ($self, $path, @arg) {
+  my $uri = $self->_lp_base_uri . $path;
+  $self->http_get_raw($uri, @arg, Authorization => $self->auth_token);
+}
+
+sub http_post ($self, $path, @arg) {
+  my $uri = $self->_lp_base_uri . $path;
+  $self->http_post_raw($uri, @arg, Authorization => $self->auth_token);
+}
 
 sub get_item ($self, $item_id) {
   my $item_res = $self->http_get(
@@ -82,7 +88,6 @@ sub get_item ($self, $item_id) {
   return $item;
 }
 
-# get item/task by id
 # get timers for user
 # get shortcuts for tasks, projects
 # create lp task
