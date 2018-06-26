@@ -60,6 +60,12 @@ sub item_uri ($self, $task_id) {
   return $self->_link_base_uri . $task_id;
 }
 
+sub _slack_item_link ($self, $item) {
+  sprintf "<%s|LP>\N{THIN SPACE}%s",
+    $self->item_uri($item->{id}),
+    $item->{id};
+}
+
 my $CONFIG;  # XXX use real config
 
 $CONFIG = {
@@ -229,7 +235,8 @@ sub provide_lp_link ($self, $event, $rch) {
       $rch->reply(
         "$icon LP$item_id: $item->{name} ($uri)",
         {
-          slack => "$icon <$uri|LP$item_id>: $item->{name}",
+          slack => sprintf '%s %s: %s',
+            $icon, $self->_slack_item_link($item), $item->{name},
         },
       );
     } else {
@@ -685,18 +692,18 @@ sub _handle_timer ($self, $event, $rch, $text) {
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
   my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
 
-  my $name = $task_res->is_success
-           ? $JSON->decode($task_res->decoded_content)->{name}
-           : '??';
+  my $task = $task_res->is_success
+           ? $JSON->decode($task_res->decoded_content)
+           : { id => $timer->{item_id}, name => '??' };
 
   my $url = $self->item_uri($timer->{item_id});
 
   my $base  = "Your timer has been running for $time, work on";
-  my $slack = sprintf '%s: <%s|LP%s> %s',
-    $base, $url, $timer->{item_id}, $name;
+  my $slack = sprintf '%s: %s %s',
+    $base, $url, $self->_slack_item_link($task), $task->{name};
 
   return $rch->reply(
-    "$base: $name ($url)",
+    "$base: $task->{name} ($url)",
     {
       slack => $slack,
     },
@@ -1108,9 +1115,8 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
     "\N{LINK SYMBOL} $item_uri",
     "\N{LOVE LETTER} " . $task->{item_email};
 
-  my $slack = sprintf "<%s|LP%s> %s. (<mailto:%s|email>)",
-    $item_uri,
-    $task->{id},
+  my $slack = sprintf "%s %s. (<mailto:%s|email>)",
+    $self->_slack_item_link($task),
     $reply_base,
     $task->{item_email};
 
@@ -1207,7 +1213,7 @@ sub _send_task_list ($self, $event, $rch, $tasks) {
   for my $task (@$tasks) {
     my $uri = $self->item_uri($task->{id});
     $reply .= "$task->{name} ($uri)\n";
-    $slack .= "<$uri|LP$task->{id}> $task->{name}\n";
+    $slack .= $self->_slack_item_link($task->{id}) . " $task->{name}\n";
   }
 
   chomp $reply;
@@ -1763,8 +1769,8 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $uri   = $self->item_uri($lp_timer->{item_id});
   my $base  = "Okay, I've committed $time of work$also.  The task was:";
   my $text  = "$base $task->{name} ($uri)";
-  my $slack = sprintf '%s  <%s|LP%s> %s',
-    $base, $uri, $lp_timer->{item_id}, $task->{name};
+  my $slack = sprintf '%s  %s %s',
+    $base, $self->_slack_item_link($task), $task->{name};
 
   $rch->reply(
     $text,
@@ -1817,14 +1823,14 @@ sub _handle_start ($self, $event, $rch, $text) {
       $self->set_last_lp_timer_id_for_user($user, $timer->{id});
 
       my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
-      my $name = $task_res->is_success
-               ? $JSON->decode($task_res->decoded_content)->{name}
-               : '??';
+      my $task = $task_res->is_success
+               ? $JSON->decode($task_res->decoded_content)
+               : { id => $timer->{item_id}, name => '??' };
 
       my $uri   = $self->item_uri($timer->{item_id});
-      my $text  = "Started task: $name ($uri)";
-      my $slack = sprintf "Started task <%s|LP%s>: %s",
-        $uri, $timer->{item_id}, $name;
+      my $text  = "Started task: $task->{name} ($uri)";
+      my $slack = sprintf "Started task %s: %s",
+        $self->_slack_item_link($task), $task->{name};
 
       return $rch->reply(
         $text,
@@ -1849,8 +1855,8 @@ sub _handle_start ($self, $event, $rch, $text) {
 
       my $uri   = $self->item_uri($task->{id});
       my $text  = "Started task: $task->{name} ($uri)";
-      my $slack = sprintf "Started task <%s|LP%s>: %s",
-        $uri, $task->{id}, $task->{name};
+      my $slack = sprintf "Started task %s: %s",
+        $self->_slack_item_link($task), $task->{name};
 
       return $rch->reply(
         $text,
@@ -2074,9 +2080,8 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   my $uri = $self->item_uri($task->{id});
 
   my $plain_base = qq{I logged that time on "$task->{name}"};
-  my $slack_base = sprintf qq{I logged that time on <%s|LP%s> ("%s")},
-    $uri,
-    $task->{id},
+  my $slack_base = sprintf qq{I logged that time on %s ("%s")},
+    $self->_slack_item_link($task),
     $task->{name};
 
   # if ($flags->{start} && $self->_start_timer($user, $task)) {
@@ -2306,19 +2311,17 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my @tasks    = grep {; $_->{name} !~ /\A✨/ } $summary->{tasks}->@*;
 
   for my $c (@sparkles) {
-    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+    $text .= sprintf "%s %s %s %s\n",
       "✨",
-      $self->item_uri($c->{id}),
-      $c->{id},
+      $self->_slack_item_link($c),
       ($c->{is_done} ? "✓" : "•"),
       $c->{name};
   }
 
   for my $c ($summary->{containers}->@*) {
-    $text .= sprintf "%s <%s|LP%s> %s %s%s (%u/%u)\n",
+    $text .= sprintf "%s %s %s %s%s (%u/%u)\n",
       ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
-      $self->item_uri($c->{id}),
-      $c->{id},
+      $self->_slack_item_link($c),
       ($c->{is_done} ? "✓" : "•"),
       $c->{name},
       (($c->{owner_id} != $lp_member_id)
@@ -2330,19 +2333,17 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   }
 
   for my $c (@tasks) {
-    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+    $text .= sprintf "%s %s %s %s\n",
       "🌀",
-      $self->item_uri($c->{id}),
-      $c->{id},
+      $self->_slack_item_link($c),
       ($c->{is_done} ? "✓" : "•"),
       $c->{name};
   }
 
   for my $c ($summary->{others}->@*) {
-    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+    $text .= sprintf "%s %s %s %s\n",
       "⁉️",
-      $self->item_uri($c->{id}),
-      $c->{id},
+      $self->_slack_item_link($c),
       ($c->{is_done} ? "✓" : "•"),
       $c->{name} . " ($c->{type})";
   }
