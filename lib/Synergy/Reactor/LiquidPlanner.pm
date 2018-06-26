@@ -215,10 +215,14 @@ sub provide_lp_link ($self, $event, $rch) {
   state $lp_id_re = qr/\bLP([1-9][0-9]{5,10})\b/;
 
   if (my ($item_id) = $event->text =~ $lp_id_re) {
-    my $item = $self->lp_client_for_user($user)->get_item($item_id);
+    my $item_res = $self->lp_client_for_user($user)->get_item($item_id);
+
+    unless ($item_res->is_success) {
+      return $rch->reply("Sorry, something went wrong getting looking for LP$item_id");
+    }
 
     return $rch->reply("I can't find anything for LP$item_id.")
-      unless $item;
+      unless my $item = $item_res->payload;
 
     my $name = $item->{name};
 
@@ -268,8 +272,11 @@ sub last_lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
   return unless my $lp_timer_id = $self->last_lp_timer_id_for_user($user);
 
-  my ($timer) = grep {; $_->{id} eq $lp_timer_id }
-                $self->lp_client_for_user($user)->my_timers;
+  my $timers_res = $self->lp_client_for_user($user)->my_timers;
+
+  return unless $timers_res->is_success;
+
+  my ($timer) = grep {; $_->{id} eq $lp_timer_id } $timers_res->payload_list;
 
   return $timer;
 }
@@ -579,6 +586,7 @@ sub lp_client_for_user ($self, $user) {
   Synergy::LPC->new({
     auth_token    => $user->lp_auth_header,
     workspace_id  => $self->workspace_id,
+    logger_callback   => sub { $Logger },
     http_get_callback => sub ($, $uri, @arg) {
       $self->hub->http_get($uri, @arg);
     },
@@ -639,8 +647,13 @@ sub _handle_timer ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $lpc   = $self->lp_client_for_user($user);
-  my $timer = $lpc->my_running_timer;
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
+
+  return $rch->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
+
+  my $timer = $timer_res->payload;
 
   my $sy_timer = $self->timer_for_user($user);
 
@@ -660,8 +673,10 @@ sub _handle_timer ($self, $event, $rch, $text) {
 
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
 
-  my $task = $lpc->get_item($timer->{item_id})
-          // { id => $timer->{item_id}, name => '??' };
+  my $task_res = $lpc->get_item($timer->{item_id});
+
+  my $task = ($task_res->is_success && $task_res->payload)
+          || { id => $timer->{item_id}, name => '??' };
 
   my $url = $self->item_uri($task->{id});
 
@@ -1349,9 +1364,12 @@ sub _handle_good ($self, $event, $rch, $text) {
   }
 
   if ($stop) {
-    if ($self->lp_client_for_user($user)->my_running_timer) {
-      return $rch->reply("You've got a running timer!  You should commit it.");
-    }
+    my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
+    return $rch->reply("I couldn't figure out whether you had a running timer, so I gave up.")
+      if $timer_res->is_failure;
+
+    return $rch->reply("You've got a running timer!  You should commit it.")
+      if $timer_res->has_payload;
   }
 
   if ($end_of_day && (my $sy_timer = $self->timer_for_user($user))) {
@@ -1500,7 +1518,11 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
 sub lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
 
-  my $timer = $self->lp_client_for_user($user)->my_running_timer;
+  my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
+
+  return unless $timer_res->is_success;
+
+  my $timer = $timer_res->payload;
 
   if ($timer) {
     $self->set_last_lp_timer_id_for_user($user, $timer->{id});
@@ -1549,8 +1571,11 @@ sub _handle_chill ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  if ($self->lp_client_for_user($user)->my_running_timer) {
-    return $rch->reply("You've got a running timer!  Use 'commit' instead.");
+  {
+    my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
+
+    return $rch->reply("You've got a running timer!  You should commit it.")
+      if $timer_res->is_success && $timer_res->has_payload;
   }
 
   my $sy_timer = $self->timer_for_user($user);
@@ -1730,17 +1755,20 @@ sub _handle_abort ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
-  my $timer = $self->lp_client_for_user($user)->my_running_timer;
+  my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
-  return $rch->reply("You don't have an active timer to abort.")
-    unless $timer;
+  return $rch->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
+
+  return $rch->reply("You don't have a running timer to abort.")
+    unless my $timer = $timer_res->payload;
 
   my $stop_res = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/stop");
   my $clr_res  = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/clear");
 
   if ($stop_res->is_success and $clr_res->is_success) {
     $self->timer_for_user($user)->clear_last_nag;
-    $rch->reply("Okay, I stopped and cleared your active timer.");
+    $rch->reply("Okay, I stopped and cleared your timer.");
   } else {
     $rch->reply("Something went wrong aborting your timer.");
   }
@@ -1760,10 +1788,10 @@ sub _handle_start ($self, $event, $rch, $text) {
     if ($start_res->is_success && $timer->{running}) {
       $self->set_last_lp_timer_id_for_user($user, $timer->{id});
 
-      my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
-      my $task = $task_res->is_success
-               ? $JSON->decode($task_res->decoded_content)
-               : { id => $timer->{item_id}, name => '??' };
+      my $task_res = $self->lp_client_for_user($user)
+                          ->get_item($timer->{item_id});
+      my $task = ($task_res->is_success && $task_res->payload)
+              || { id => $timer->{item_id}, name => '??' };
 
       my $uri   = $self->item_uri($timer->{item_id});
       my $text  = "Started task: $task->{name} ($uri)";
@@ -1857,16 +1885,20 @@ sub _handle_stop ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your stop request.")
     unless $text eq 'timer';
 
-  my $timer = $self->lp_client_for_user($user)->my_running_timer;
+  my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
-  return $rch->reply("You don't have any active timers to stop.") unless $timer;
+  return $rch->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
+
+  return $rch->reply("You don't have a running timer to stop.")
+    unless my $timer = $timer_res->payload;
 
   my $stop_res = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/stop");
-  return $rch->reply("I couldn't stop your active timer.")
+  return $rch->reply("I couldn't stop your timer.")
     unless $stop_res->is_success;
 
   $self->timer_for_user($user)->clear_last_nag;
-  return $rch->reply("Okay, I stopped your active timer.");
+  return $rch->reply("Okay, I stopped your timer.");
 }
 
 sub _handle_done ($self, $event, $rch, $text) {
@@ -1901,9 +1933,13 @@ sub _handle_reset ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your reset request. (try 'reset timer')")
     unless ($text // 'timer') eq 'timer';
 
-  my $timer = $self->lp_client_for_user($user)->my_running_timer;
+  my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
-  $rch->reply("You don't have an active timer to abort.") unless $timer;
+  return $rch->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
+
+  return $rch->reply("You don't have a running timer to reset.")
+    unless my $timer = $timer_res->payload;
 
   my $task_id = $timer->{item_id};
   my $clr_res  = $self->http_post_for_user($user, "/tasks/$task_id/timer/clear");
@@ -1918,9 +1954,9 @@ sub _handle_reset ($self, $event, $rch, $text) {
 
   if ($start_res->is_success && $restart_timer->{running}) {
     $self->set_last_lp_timer_id_for_user($user, $timer->{id});
-    $rch->reply("Okay, I cleared your active timer but left it running.");
+    $rch->reply("Okay, I cleared your timer and left it running.");
   } else {
-    $rch->reply("Okay, I cleared your timer but couldn't restart it...sorry!");
+    $rch->reply("Okay, I cleared your timer but couldn't restart it... sorry!");
   }
 }
 
