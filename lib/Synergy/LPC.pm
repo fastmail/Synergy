@@ -128,7 +128,7 @@ sub get_item ($self, $item_id) {
   my $lp_res = $self->http_get("/treeitems/?filter[]=id=$item_id");
 
   return $lp_res unless $lp_res->is_success;
-  return $lp_res->_success($lp_res->payload->[0]);
+  return _success($lp_res->payload->[0]);
 }
 
 sub my_timers ($self) {
