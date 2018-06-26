@@ -13,6 +13,7 @@ use JSON 2 ();
 use Time::Duration;
 use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
+use Synergy::LPC; # LiquidPlanner Client, of course
 use Synergy::Timer;
 use Synergy::Util qw(parse_time_hunk pick_one);
 use DateTime;
@@ -208,14 +209,7 @@ sub provide_lp_link ($self, $event, $rch) {
   state $lp_id_re = qr/\bLP([1-9][0-9]{5,10})\b/;
 
   if (my ($item_id) = $event->text =~ $lp_id_re) {
-    my $item_res = $self->http_get_for_user(
-      $user,
-      "/treeitems/?filter[]=id=$item_id",
-    );
-
-    return unless $item_res->is_success;
-
-    my $item = $JSON->decode($item_res->decoded_content)->[0];
+    my $item = $self->lp_client_for_user($user)->get_item($item_id);
 
     return $rch->reply("I can't find anything for LP$item_id.")
       unless $item;
@@ -582,6 +576,26 @@ sub _get_treeitem_shortcuts {
 
 sub get_project_shortcuts ($self) { $self->_get_treeitem_shortcuts('Project') }
 sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
+
+sub lp_client_for_user ($self, $user) {
+  Synergy::LPC->new({
+    workspace_id => $self->workspace_id,
+    http_get_callback => sub ($, $path, @arg) {
+      $self->hub->http_get(
+        $self->_lp_base_uri . $path,
+        @arg,
+        Authorization => $user->lp_auth_header,
+      );
+    },
+    http_post_callback => sub ($, $path, @arg) {
+      $self->hub->http_post(
+        $self->_lp_base_uri . $path,
+        @arg,
+        Authorization => $user->lp_auth_header,
+      );
+    },
+  });
+}
 
 sub http_get_for_user ($self, $user, $path, @arg) {
   return $self->hub->http_get(
