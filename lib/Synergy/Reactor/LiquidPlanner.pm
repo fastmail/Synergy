@@ -13,6 +13,7 @@ use JSON 2 ();
 use Time::Duration;
 use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
+use Synergy::LPC; # LiquidPlanner Client, of course
 use Synergy::Timer;
 use Synergy::Util qw(parse_time_hunk pick_one);
 use DateTime;
@@ -57,6 +58,12 @@ sub _link_base_uri ($self) {
 
 sub item_uri ($self, $task_id) {
   return $self->_link_base_uri . $task_id;
+}
+
+sub _slack_item_link ($self, $item) {
+  sprintf "<%s|LP>\N{THIN SPACE}%s",
+    $self->item_uri($item->{id}),
+    $item->{id};
 }
 
 my $CONFIG;  # XXX use real config
@@ -208,17 +215,14 @@ sub provide_lp_link ($self, $event, $rch) {
   state $lp_id_re = qr/\bLP([1-9][0-9]{5,10})\b/;
 
   if (my ($item_id) = $event->text =~ $lp_id_re) {
-    my $item_res = $self->http_get_for_user(
-      $user,
-      "/treeitems/?filter[]=id=$item_id",
-    );
+    my $item_res = $self->lp_client_for_user($user)->get_item($item_id);
 
-    return unless $item_res->is_success;
-
-    my $item = $JSON->decode($item_res->decoded_content)->[0];
+    unless ($item_res->is_success) {
+      return $rch->reply("Sorry, something went wrong getting looking for LP$item_id");
+    }
 
     return $rch->reply("I can't find anything for LP$item_id.")
-      unless $item;
+      unless my $item = $item_res->payload;
 
     my $name = $item->{name};
 
@@ -235,7 +239,8 @@ sub provide_lp_link ($self, $event, $rch) {
       $rch->reply(
         "$icon LP$item_id: $item->{name} ($uri)",
         {
-          slack => "$icon <$uri|LP$item_id>: $item->{name}",
+          slack => sprintf '%s %s: %s',
+            $icon, $self->_slack_item_link($item), $item->{name},
         },
       );
     } else {
@@ -267,17 +272,11 @@ sub last_lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
   return unless my $lp_timer_id = $self->last_lp_timer_id_for_user($user);
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  unless ($res->is_success) {
-    $Logger->log([
-      "tried to get LP timers for %s but got %s response",
-      $user->username,
-      $res->code,
-    ]);
-  }
+  my $timers_res = $self->lp_client_for_user($user)->my_timers;
 
-  my ($timer) = grep {; $_->{id} eq $lp_timer_id }
-                $JSON->decode( $res->decoded_content )->@*;
+  return unless $timers_res->is_success;
+
+  my ($timer) = grep {; $_->{id} eq $lp_timer_id } $timers_res->payload_list;
 
   return $timer;
 }
@@ -546,14 +545,20 @@ sub nag ($self, $timer, @) {
 sub _get_treeitem_shortcuts {
   my ($self, $type) = @_;
 
-  my $query = "/treeitems?filter[]=item_type=$type&filter[]=custom_field:'Synergy $type Shortcut' is_set&filter[]=is_done is false";
-  my $res = $self->http_get_for_master("$query");
-  return {} unless $res && $res->is_success;
+  my $lpc = $self->lp_client_for_master;
+  my $res = $lpc->query_items({
+    filters => [
+      [ item_type => '='  => $type    ],
+      [ is_done   => is   => 'false'  ],
+      [ "custom_field:'Synergy $type Shortcut'" => 'is_set' ],
+    ],
+  });
+
+  return {} unless $res->is_success;
 
   my %dict;
 
-  my @items = @{ $JSON->decode( $res->decoded_content ) };
-  for my $item (@items) {
+  for my $item ($res->payload_list) {
     # Impossible, right?
     next unless my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
 
@@ -583,12 +588,26 @@ sub _get_treeitem_shortcuts {
 sub get_project_shortcuts ($self) { $self->_get_treeitem_shortcuts('Project') }
 sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 
-sub http_get_for_user ($self, $user, $path, @arg) {
-  return $self->hub->http_get(
-    $self->_lp_base_uri . $path,
-    @arg,
-    Authorization => $user->lp_auth_header,
-  );
+sub lp_client_for_user ($self, $user) {
+  Synergy::LPC->new({
+    auth_token    => $user->lp_auth_header,
+    workspace_id  => $self->workspace_id,
+    logger_callback   => sub { $Logger },
+    http_get_callback => sub ($, $uri, @arg) {
+      $self->hub->http_get($uri, @arg);
+    },
+    http_post_callback => sub ($, $uri, @arg) {
+      $self->hub->http_post($uri, @arg);
+    },
+  });
+}
+
+sub lp_client_for_master ($self) {
+  my ($master) = $self->hub->user_directory->master_users;
+
+  Carp::confess("No master users configured") unless $master;
+
+  $self->lp_client_for_user($master);
 }
 
 sub http_post_for_user ($self, $user, $path, @arg) {
@@ -597,16 +616,6 @@ sub http_post_for_user ($self, $user, $path, @arg) {
     @arg,
     Authorization => $user->lp_auth_header,
   );
-}
-
-sub http_get_for_master ($self, $path, @arg) {
-  my ($master) = $self->hub->user_directory->master_users;
-  unless ($master) {
-    $Logger->log("No master users configured");
-    return;
-  }
-
-  $self->http_get_for_user($master, $path, @arg);
 }
 
 sub _handle_last ($self, $event, $rch, $text) {
@@ -634,20 +643,17 @@ sub _handle_timer ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
 
-  unless ($res->is_success) {
-    $Logger->log("failed to get timer: " . $res->as_string);
+  return $rch->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
 
-    return $rch->reply("I couldn't get your timer. Sorry!");
-  }
-
-  my @timers = grep {; $_->{running} }
-               @{ $JSON->decode( $res->decoded_content ) };
+  my $timer = $timer_res->payload;
 
   my $sy_timer = $self->timer_for_user($user);
 
-  unless (@timers) {
+  unless ($timer) {
     my $nag = $sy_timer->last_relevant_nag;
     my $msg;
     if (! $nag) {
@@ -661,28 +667,21 @@ sub _handle_timer ($self, $event, $rch, $text) {
     return $rch->reply($msg);
   }
 
-  if (@timers > 1) {
-    $rch->reply(
-      "Woah.  LiquidPlanner says you have more than one active timer!",
-    );
-  }
-
-  my $timer = $timers[0];
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
-  my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
 
-  my $name = $task_res->is_success
-           ? $JSON->decode($task_res->decoded_content)->{name}
-           : '??';
+  my $task_res = $lpc->get_item($timer->{item_id});
 
-  my $url = $self->item_uri($timer->{item_id});
+  my $task = ($task_res->is_success && $task_res->payload)
+          || { id => $timer->{item_id}, name => '??' };
+
+  my $url = $self->item_uri($task->{id});
 
   my $base  = "Your timer has been running for $time, work on";
-  my $slack = sprintf '%s: <%s|LP%s> %s',
-    $base, $url, $timer->{item_id}, $name;
+  my $slack = sprintf '%s: %s %s %s',
+    $base, $url, $self->_slack_item_link($task), $task->{name};
 
   return $rch->reply(
-    "$base: $name ($url)",
+    "$base: $task->{name} ($url)",
     {
       slack => $slack,
     },
@@ -1020,6 +1019,8 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
     return $rch->reply($errors);
   }
 
+  my $lpc = $self->lp_client_for_user($event->from_user);
+
   my $arg = {};
 
   my $task = $self->_create_lp_task($rch, $plan, $arg);
@@ -1039,15 +1040,13 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
                  . join q{ and }, map {; $_->username } $plan->{owners}->@*;
 
   if ($plan->{start}) {
-    my $res = $self->http_post_for_user(
-      $event->from_user,
-      "/tasks/$task->{id}/timer/start",
-    );
+    my $res = $lpc->start_timer_for_task_id($task->{id});
 
-    my $timer = eval { $JSON->decode( $res->decoded_content ); };
-
-    if ($res->is_success && $timer->{running}) {
-      $self->set_last_lp_timer_id_for_user($event->from_user, $timer->{id});
+    if ($res->is_success) {
+      $self->set_last_lp_timer_id_for_user(
+        $event->from_user,
+        $res->payload->{id}
+      );
 
       $reply_base .= q{, timer started};
     } else {
@@ -1056,13 +1055,12 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
   }
 
   if (my $log_hrs = $plan->{log_hours}) {
-    my $track_ok = $self->_track_time(
-      $event->from_user,
-      $task,
-      $log_hrs,
-      undef,
-      $plan->{done},
-    );
+    my $track_ok = $lpc->track_time({
+      task => $task,
+      work => $log_hrs,
+      done => $plan->{done},
+      member_id => $event->from_user->lp_id,
+    });
 
     if ($track_ok) {
       my $time = sprintf '%0.2fh', $log_hrs;
@@ -1072,13 +1070,12 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
       $reply_base .= ".  I couldn't log time it";
     }
   } elsif ($plan->{done}) {
-    my $track_ok = $self->_track_time(
-      $event->from_user,
-      $task,
-      0,
-      undef,
-      $plan->{done},
-    );
+    my $track_ok = $lpc->track_time({
+      task => $task,
+      work => 0,
+      done => $plan->{done},
+      member_id => $event->from_user->lp_id,
+    });
 
     if ($track_ok) {
       $reply_base .= ".  I marked your work done";
@@ -1094,9 +1091,8 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
     "\N{LINK SYMBOL} $item_uri",
     "\N{LOVE LETTER} " . $task->{item_email};
 
-  my $slack = sprintf "<%s|LP%s> %s. (<mailto:%s|email>)",
-    $item_uri,
-    $task->{id},
+  my $slack = sprintf "%s %s. (<mailto:%s|email>)",
+    $self->_slack_item_link($task),
     $reply_base,
     $task->{item_email};
 
@@ -1104,60 +1100,33 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
 }
 
 sub _start_timer ($self, $user, $task) {
-  my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
+  my $res = $self->lp_client_for_user($user)
+                 ->start_timer_for_task_id($task->{id});
+
   return unless $res->is_success;
 
-  my $timer = eval { $JSON->decode( $res->decoded_content ); };
-
   # What does this mean?  Copied and pasted. -- rjbs, 2018-06-16
-  return unless $timer->{start};
+  return unless $res->payload->{start};
 
-  $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+  $self->set_last_lp_timer_id_for_user($user, $res->payload->{id});
   return 1;
 }
 
-sub _track_time ($self, $user, $task, $hours, $comment = undef, $done = 0) {
-  my $res = $self->http_post_for_user(
-    $user,
-    "/tasks/$task->{id}/track_time",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({
-      activity_id => $task->{activity_id},
-      member_id => $user->lp_id,
-      work      => $hours,
-      is_done   => ($done ? \1 : \0),
-
-      ($comment ? (comment => $comment) : ()),
-    }),
-  );
-
-  $Logger->log("error tracking time: " . $res->as_string)
-    unless $res->is_success;
-
-  return $res->is_success;
-}
-
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
-  my $res = $self->http_get_for_user(
-    $user,
-    "/upcoming_tasks?limit=200&flat=true&member_id=" . $user->lp_id,
-  );
+  my $lpc = $self->lp_client_for_user($user);
 
-  unless ($res->is_success) {
-    $Logger->log("failed to get tasks from LiquidPlanner: " . $res->as_string);
-    return;
-  }
+  my $res = $lpc->upcoming_tasks_for_member_id($user->lp_id);
 
-  my $tasks = $JSON->decode( $res->decoded_content );
+  return unless $res->is_success;
 
-  @$tasks = grep {; $_->{type} eq 'Task' } @$tasks;
+  my @tasks = grep {; $_->{type} eq 'Task' } $res->payload_list;
 
   if ($which eq 'tasks') {
-    @$tasks = grep {;
+    @tasks = grep {;
       (! grep { $CONFIG->{liquidplanner}{package}{inbox} == $_ } $_->{parent_ids}->@*)
       &&
       (! grep { $CONFIG->{liquidplanner}{package}{inbox} == $_ } $_->{package_ids}->@*)
-    } @$tasks;
+    } @tasks;
   } else {
     my $package_id = $CONFIG->{liquidplanner}{package}{ $which };
     unless ($package_id) {
@@ -1165,25 +1134,25 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
       return;
     }
 
-    @$tasks = grep {;
+    @tasks = grep {;
       (grep { $package_id == $_ } $_->{parent_ids}->@*)
       ||
       (grep { $package_id == $_ } $_->{package_ids}->@*)
-    } @$tasks;
+    } @tasks;
   }
 
-  splice @$tasks, $count;
+  splice @tasks, $count;
 
   unless ($arg->{no_prefix}) {
     my $urgent = $CONFIG->{liquidplanner}{package}{urgent};
-    for (@$tasks) {
+    for (@tasks) {
       $_->{name} = "[URGENT] $_->{name}"
         if (grep { $urgent == $_ } $_->{parent_ids}->@*)
         || (grep { $urgent == $_ } $_->{package_ids}->@*);
     }
   }
 
-  return $tasks;
+  return \@tasks;
 }
 
 sub _send_task_list ($self, $event, $rch, $tasks) {
@@ -1193,7 +1162,7 @@ sub _send_task_list ($self, $event, $rch, $tasks) {
   for my $task (@$tasks) {
     my $uri = $self->item_uri($task->{id});
     $reply .= "$task->{name} ($uri)\n";
-    $slack .= "<$uri|LP$task->{id}> $task->{name}\n";
+    $slack .= $self->_slack_item_link($task) . " $task->{name}\n";
   }
 
   chomp $reply;
@@ -1362,16 +1331,12 @@ sub _handle_good ($self, $event, $rch, $text) {
   }
 
   if ($stop) {
-    my $res = $self->http_get_for_user($user, "/my_timers");
+    my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
+    return $rch->reply("I couldn't figure out whether you had a running timer, so I gave up.")
+      if $timer_res->is_failure;
 
-    if ($res->is_success) {
-      my @timers = grep {; $_->{running} }
-                   @{ $JSON->decode( $res->decoded_content ) };
-
-      if (@timers) {
-        return $rch->reply("You've got a running timer!  You should commit it.");
-      }
-    }
+    return $rch->reply("You've got a running timer!  You should commit it.")
+      if $timer_res->has_payload;
   }
 
   if ($end_of_day && (my $sy_timer = $self->timer_for_user($user))) {
@@ -1520,18 +1485,11 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
 sub lp_timer_for_user ($self, $user) {
   return unless $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  unless ($res->is_success) {
-    $Logger->log([
-      "couldn't get timer for %s: %s",
-      $user->username,
-      $res->as_string,
-    ]);
-    return -1;
-  }
+  my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
-  my ($timer) = grep {; $_->{running} }
-                $JSON->decode( $res->decoded_content )->@*;
+  return unless $timer_res->is_success;
+
+  my $timer = $timer_res->payload;
 
   if ($timer) {
     $self->set_last_lp_timer_id_for_user($user, $timer->{id});
@@ -1580,15 +1538,12 @@ sub _handle_chill ($self, $event, $rch, $text) {
   return $rch->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  if ($res->is_success) {
-    my @timers = grep {; $_->{running} }
-                 @{ $JSON->decode( $res->decoded_content ) };
+  {
+    my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
-    if (@timers) {
-      return $rch->reply("You've got a running timer!  Use 'commit' instead.");
-    }
-  } # XXX - Error handling? -- alh, 2018-03-16
+    return $rch->reply("You've got a running timer!  You should commit it.")
+      if $timer_res->is_success && $timer_res->has_payload;
+  }
 
   my $sy_timer = $self->timer_for_user($user);
 
@@ -1627,6 +1582,8 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  my $lpc = $self->lp_client_for_user($user);
+
   if ($event->text =~ /\A\s*that\s*\z/) {
     my $last  = $self->get_last_utterance($event->source_identifier);
 
@@ -1653,13 +1610,13 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $sy_timer = $self->timer_for_user($user);
   return $rch->reply("You don't timer-capable.") unless $sy_timer;
 
-  my $task_res = $self->http_get_for_user($user, "/tasks/$lp_timer->{item_id}");
+  my $task_res = $lpc->get_item($lp_timer->{item_id});
 
   unless ($task_res->is_success) {
     return $rch->reply("I couldn't log the work because I couldn't find the current task's activity id.");
   }
 
-  my $task = $JSON->decode($task_res->decoded_content);
+  my $task = $task_res->payload;
   my $activity_id = $task->{activity_id};
 
   unless ($activity_id) {
@@ -1682,26 +1639,18 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   # clear timer
   # maybe: stop timer
 
-  my $content = $JSON->encode({
-    work    => $lp_timer->{running_time},
-    is_done => $meta{DONE} ? \1 : \0,
-    comment => $comment,
-    activity_id => $activity_id,
-    reduce_estimate => \1,
-  });
-
   my $task_base = "/tasks/$lp_timer->{item_id}";
 
-  my $commit_res = $self->http_post_for_user(
-    $user,
-    "$task_base/track_time",
-    Content => $content,
-    Content_Type => 'application/json',
-  );
+  my $commit_res = $lpc->track_time({
+    task  => $task,
+    work  => $lp_timer->{running_time},
+    done  => $meta{DONE},
+    comment => $comment,
+    member_id => $user->lp_id,
+  });
 
   unless ($commit_res->is_success) {
     $self->save_state;
-    $Logger->log([ "bad timer commit response: %s", $commit_res->as_string ]);
     return $rch->reply("I couldn't commit your work, sorry.");
   }
 
@@ -1709,23 +1658,13 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   $self->save_state;
 
   {
-    my $clear_res = $self->http_post_for_user($user, "$task_base/timer/clear");
-    unless ($clear_res->is_success) {
-      $Logger->log(
-        "error clearing timer on $task_base: " . $clear_res->decoded_content
-      );
-      $meta{CLEARFAIL} = ! $clear_res->is_success;
-    }
+    my $clear_res = $lpc->clear_timer_for_task_id($task->{id});
+    $meta{CLEARFAIL} = ! $clear_res->is_success;
   }
 
   unless ($meta{STOP}) {
-    my $start_res = $self->http_post_for_user($user, "$task_base/timer/start");
-    unless ($start_res->is_success) {
-      $Logger->log(
-        "error starting timer on $task_base: " . $start_res->decoded_content
-      );
-      $meta{STARTFAIL} = ! $start_res->is_success;
-    }
+    my $start_res = $lpc->start_timer_for_task_id($task->{id});
+    $meta{STARTFAIL} = ! $start_res->is_success;
   }
 
   my $also
@@ -1749,8 +1688,8 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $uri   = $self->item_uri($lp_timer->{item_id});
   my $base  = "Okay, I've committed $time of work$also.  The task was:";
   my $text  = "$base $task->{name} ($uri)";
-  my $slack = sprintf '%s  <%s|LP%s> %s',
-    $base, $uri, $lp_timer->{item_id}, $task->{name};
+  my $slack = sprintf '%s  %s %s',
+    $base, $self->_slack_item_link($task), $task->{name};
 
   $rch->reply(
     $text,
@@ -1767,22 +1706,21 @@ sub _handle_abort ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
 
-  return $rch->reply("Something went wrong") unless $res->is_success;
+  return $rch->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
 
-  my ($timer) = grep {; $_->{running} }
-                $JSON->decode( $res->decoded_content )->@*;
+  return $rch->reply("You don't have a running timer to abort.")
+    unless my $timer = $timer_res->payload;
 
-  return $rch->reply("You don't have an active timer to abort.")
-    unless $timer;
-
-  my $stop_res = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/stop");
-  my $clr_res  = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/clear");
+  my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
+  my $clr_res  = $lpc->clear_timer_for_task_id($timer->{item_id});
 
   if ($stop_res->is_success and $clr_res->is_success) {
     $self->timer_for_user($user)->clear_last_nag;
-    $rch->reply("Okay, I stopped and cleared your active timer.");
+    $rch->reply("Okay, I stopped and cleared your timer.");
   } else {
     $rch->reply("Something went wrong aborting your timer.");
   }
@@ -1792,25 +1730,27 @@ sub _handle_start ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  my $lpc = $self->lp_client_for_user($user);
+
   if ($text =~ /\A[0-9]+\z/) {
+    my $task_id = $text;
+
     # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
     # TODO: print the description of the task instead of its number -- rjbs,
     # 2016-01-25
-    my $start_res = $self->http_post_for_user($user, "/tasks/$text/timer/start");
-    my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
+    my $start_res = $lpc->start_timer_for_task_id($task_id);
 
-    if ($start_res->is_success && $timer->{running}) {
-      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+    if ($start_res->is_success) {
+      $self->set_last_lp_timer_id_for_user($user, $start_res->payload->{id});
 
-      my $task_res = $self->http_get_for_user($user, "/tasks/$timer->{item_id}");
-      my $name = $task_res->is_success
-               ? $JSON->decode($task_res->decoded_content)->{name}
-               : '??';
+      my $task_res = $lpc->get_item($task_id);
+      my $task = ($task_res->is_success && $task_res->payload)
+              || { id => $task_id, name => '??' };
 
-      my $uri   = $self->item_uri($timer->{item_id});
-      my $text  = "Started task: $name ($uri)";
-      my $slack = sprintf "Started task <%s|LP%s>: %s",
-        $uri, $timer->{item_id}, $name;
+      my $uri   = $self->item_uri($task_id);
+      my $text  = "Started task: $task->{name} ($uri)";
+      my $slack = sprintf "Started task %s: %s",
+        $self->_slack_item_link($task), $task->{name};
 
       return $rch->reply(
         $text,
@@ -1827,16 +1767,15 @@ sub _handle_start ($self, $event, $rch, $text) {
     }
 
     my $task = $lp_tasks->[0];
-    my $start_res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
-    my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
+    my $start_res = $lpc->start_timer_for_task_id($task->{id});
 
-    if ($start_res->is_success && $timer->{running}) {
-      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+    if ($start_res->is_success) {
+      $self->set_last_lp_timer_id_for_user($user, $start_res->payload->{id});
 
       my $uri   = $self->item_uri($task->{id});
       my $text  = "Started task: $task->{name} ($uri)";
-      my $slack = sprintf "Started task <%s|LP%s>: %s",
-        $uri, $task->{id}, $task->{name};
+      my $slack = sprintf "Started task %s: %s",
+        $self->_slack_item_link($task), $task->{name};
 
       return $rch->reply(
         $text,
@@ -1854,16 +1793,18 @@ sub _handle_resume ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  my $lpc = $self->lp_client_for_user($user);
+
   my $lp_timer = $self->lp_timer_for_user($user);
 
   if ($lp_timer && ref $lp_timer) {
-    my $task_res = $self->http_get_for_user($user, "/tasks/$lp_timer->{item_id}");
+    my $task_res = $lpc->get_item($lp_timer->{item_id});
 
     unless ($task_res->is_success) {
-      return $rch->reply("You already have a running timer (but I couldn't figure out its task...)");
+      return $rch->reply("You already have a running timer (but I couldn't figure out its task…)");
     }
 
-    my $task = $JSON->decode($task_res->decoded_content);
+    my $task = $task_res->payload;
     return $rch->reply("You already have a running timer ($task->{name})");
   }
 
@@ -1873,14 +1814,14 @@ sub _handle_resume ($self, $event, $rch, $text) {
     return $rch->reply("I'm not aware of any previous timer you had running. Sorry!");
   }
 
-  my $task_res = $self->http_get_for_user($user, "/tasks/$last_lp_timer->{item_id}");
+  my $task_res = $lpc->get_item($last_lp_timer->{item_id});
 
   unless ($task_res->is_success) {
-    return $rch->reply("I found your timer but I couldn't figure out its task...");
+    return $rch->reply("I found your timer but I couldn't figure out its task…");
   }
 
-  my $task = $JSON->decode($task_res->decoded_content);
-  my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
+  my $task = $task_res->payload;
+  my $res  = $lpc->start_timer_for_task_id($task->{id});
 
   unless ($res->is_success) {
     return $rch->reply("I failed to resume the timer for $task->{name}, sorry!");
@@ -1899,20 +1840,21 @@ sub _handle_stop ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your stop request.")
     unless $text eq 'timer';
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
-  return $rch->reply("Something went wrong") unless $res->is_success;
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
 
-  my ($timer) = grep {; $_->{running} }
-                $JSON->decode( $res->decoded_content )->@*;
+  return $rch->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
 
-  return $rch->reply("You don't have any active timers to stop.") unless $timer;
+  return $rch->reply("You don't have a running timer to stop.")
+    unless my $timer = $timer_res->payload;
 
-  my $stop_res = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/stop");
-  return $rch->reply("I couldn't stop your active timer.")
+  my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
+  return $rch->reply("I couldn't stop your timer.")
     unless $stop_res->is_success;
 
   $self->timer_for_user($user)->clear_last_nag;
-  return $rch->reply("Okay, I stopped your active timer.");
+  return $rch->reply("Okay, I stopped your timer.");
 }
 
 sub _handle_done ($self, $event, $rch, $text) {
@@ -1944,34 +1886,34 @@ sub _handle_reset ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  my $lpc = $self->lp_client_for_user($user);
+
   return $rch->reply("I didn't understand your reset request. (try 'reset timer')")
     unless ($text // 'timer') eq 'timer';
 
-  my $res = $self->http_get_for_user($user, "/my_timers");
+  my $timer_res = $lpc->my_running_timer;
 
-  return $rch->reply("Something went wrong") unless $res->is_success;
+  return $rch->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
 
-  my ($timer) = grep {; $_->{running} }
-                $JSON->decode( $res->decoded_content )->@*;
-
-  $rch->reply("You don't have an active timer to abort.") unless $timer;
+  return $rch->reply("You don't have a running timer to reset.")
+    unless my $timer = $timer_res->payload;
 
   my $task_id = $timer->{item_id};
-  my $clr_res  = $self->http_post_for_user($user, "/tasks/$task_id/timer/clear");
+  my $clr_res = $lpc->clear_timer_for_task_id($task_id);
 
   return $rch->reply("Something went wrong resetting your timer.")
     unless $clr_res->is_success;
 
   $self->timer_for_user($user)->clear_last_nag;
 
-  my $start_res = $self->http_post_for_user($user, "/tasks/$task_id/timer/start");
-  my $restart_timer = eval { $JSON->decode( $start_res->decoded_content ); };
+  my $start_res = $lpc->stop_timer_for_task_id($task_id);
 
-  if ($start_res->is_success && $restart_timer->{running}) {
+  if ($start_res->is_success) {
     $self->set_last_lp_timer_id_for_user($user, $timer->{id});
-    $rch->reply("Okay, I cleared your active timer but left it running.");
+    $rch->reply("Okay, I cleared your timer and left it running.");
   } else {
-    $rch->reply("Okay, I cleared your timer but couldn't restart it...sorry!");
+    $rch->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
   }
 }
 
@@ -2038,20 +1980,27 @@ sub _handle_spent ($self, $event, $rch, $text) {
 
 sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   my $user = $event->from_user;
-  my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
+
+  my $lpc = $self->lp_client_for_user($user);
+
+  my $task_res = $lpc->get_item($task_id);
 
   unless ($task_res->is_success) {
     return $rch->reply("I couldn't log the work because I couldn't find the task.");
   }
 
-  my $task = $JSON->decode($task_res->decoded_content);
+  my $task = $task_res->payload;
   my $activity_id = $task->{activity_id};
 
   unless ($activity_id) {
     return $rch->reply("I couldn't log the work because the task doesn't have a defined activity!");
   }
 
-  my $track_ok = $self->_track_time($user, $task, $duration / 3600, undef, 0);
+  my $track_ok = $lpc->track_time({
+    task => $task,
+    work => $duration / 3600,
+    member_id => $user->lp_id,
+  });
 
   unless ($track_ok) {
     return $rch->reply("I couldn't log your time, sorry.");
@@ -2060,9 +2009,8 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   my $uri = $self->item_uri($task->{id});
 
   my $plain_base = qq{I logged that time on "$task->{name}"};
-  my $slack_base = sprintf qq{I logged that time on <%s|LP%s> ("%s")},
-    $uri,
-    $task->{id},
+  my $slack_base = sprintf qq{I logged that time on %s ("%s")},
+    $self->_slack_item_link($task),
     $task->{name};
 
   # if ($flags->{start} && $self->_start_timer($user, $task)) {
@@ -2116,26 +2064,24 @@ sub _handle_todo ($self, $event, $rch, $text) {
     return $rch->reply("Sorry, I can only make todo items for you");
   }
 
-  my $res = $self->http_post_for_user($user,
-    "/todo_items",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({ todo_item => { title => $desc } }),
-  );
+  my $lpc = $self->lp_client_for_user($user);
 
-  my $reply = $res->is_success
-            ? "I added \"$desc\" to your todo list."
-            : "Sorry, I couldn't add that todo... for... some reason.";
+  my $todo_res = $lpc->create_todo_item({ title => $desc });
+
+  my $reply = $todo_res->is_success
+            ? qq{I added "$desc" to your todo list.}
+            : "Sorry, I couldn't add that todo… for… some reason.";
 
   return $rch->reply($reply);
 }
 
 sub _handle_todos ($self, $event, $rch, $text) {
   my $user = $event->from_user;
-  my $todo_res = $self->http_get_for_user($user, "/todo_items");
+  my $lpc  = $self->lp_client_for_user($user);
+  my $todo_res = $lpc->todo_items;
   return unless $todo_res->is_success;
 
-  my $all_todos = $JSON->decode($todo_res->decoded_content);
-  my @todos = grep {; ! $_->{is_done} } @$all_todos;
+  my @todos = grep {; ! $_->{is_done} } $todo_res->payload_list;
 
   return $rch->reply("You don't have any open to-do items.") unless @todos;
 
@@ -2194,12 +2140,18 @@ sub damage_report ($self, $event, $rch) {
 
   CHK: for my $check (@to_check) {
     my ($label, $icon, $package_id) = @$check;
-    my $uri = "/treeitems/$package_id?depth=-1"
-            . "&flat=1"
-            . "&filter[]=is_done is false"
-            . "&filter[]=owner_id=$lp_id";
 
-    my $check_res = $self->http_get_for_master($uri);
+    my $check_res = $self->lp_client_for_master->query_items({
+      in    => $package_id,
+      flags => {
+        depth => -1,
+        flat  => 1,
+      },
+      filters => [
+        [ is_done   => 'is',  'false' ],
+        [ owner_id  => '=',   $lp_id  ],
+      ],
+    });
 
     unless ($check_res->is_success) {
       push @summaries, "❌ Couldn't produce a report on $label tasks.";
@@ -2209,8 +2161,7 @@ sub damage_report ($self, $event, $rch) {
     my $unest = 0;
     my $total = 0;
 
-    my @items = $JSON->decode($check_res->decoded_content)->@*;
-    for my $item (@items) {
+    for my $item ($check_res->payload_list) {
       next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
       my ($assign) = grep {; $_->{person_id} == $lp_id }
                      $item->{assignments}->@*;
@@ -2269,17 +2220,17 @@ sub _build_package_summary ($self, $package_id, $user) {
   # is... it's not happening this Friday afternoon. -- rjbs, 2018-06-15
   $package_id = 45841484;
 
-  my $uri = "/treeitems/$package_id?depth=-1";
-
-  my $items_res = $self->http_get_for_master($uri);
+  my $items_res = $self->lp_client_for_master->query_items({
+    in    => $package_id,
+    flags => { depth => -1 },
+  });
 
   unless ($items_res->is_success) {
     $Logger->log("error getting tree for package $package_id");
     return;
   }
 
-  my $tree = $JSON->decode($items_res->decoded_content);
-  my $summary = summarize_iteration($tree, $user->lp_id);
+  my $summary = summarize_iteration($items_res->payload, $user->lp_id);
 }
 
 sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
@@ -2292,19 +2243,17 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my @tasks    = grep {; $_->{name} !~ /\A✨/ } $summary->{tasks}->@*;
 
   for my $c (@sparkles) {
-    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+    $text .= sprintf "%s %s %s %s\n",
       "✨",
-      $self->item_uri($c->{id}),
-      $c->{id},
+      $self->_slack_item_link($c),
       ($c->{is_done} ? "✓" : "•"),
       $c->{name};
   }
 
   for my $c ($summary->{containers}->@*) {
-    $text .= sprintf "%s <%s|LP%s> %s %s%s (%u/%u)\n",
+    $text .= sprintf "%s %s %s %s%s (%u/%u)\n",
       ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
-      $self->item_uri($c->{id}),
-      $c->{id},
+      $self->_slack_item_link($c),
       ($c->{is_done} ? "✓" : "•"),
       $c->{name},
       (($c->{owner_id} != $lp_member_id)
@@ -2316,19 +2265,17 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   }
 
   for my $c (@tasks) {
-    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+    $text .= sprintf "%s %s %s %s\n",
       "🌀",
-      $self->item_uri($c->{id}),
-      $c->{id},
+      $self->_slack_item_link($c),
       ($c->{is_done} ? "✓" : "•"),
       $c->{name};
   }
 
   for my $c ($summary->{others}->@*) {
-    $text .= sprintf "%s <%s|LP%s> %s %s\n",
+    $text .= sprintf "%s %s %s %s\n",
       "⁉️",
-      $self->item_uri($c->{id}),
-      $c->{id},
+      $self->_slack_item_link($c),
       ($c->{is_done} ? "✓" : "•"),
       $c->{name} . " ($c->{type})";
   }
