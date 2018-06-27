@@ -28,7 +28,7 @@ sub start ($self) {
 
     if ($to_channel && $to_address) {
       $self->hub->channel_named($to_channel)
-           ->send_text($to_address, "Restarted!");
+           ->send_message($to_address, "Restarted!");
     }
 
     # Notified. Maybe. Don't notify again
