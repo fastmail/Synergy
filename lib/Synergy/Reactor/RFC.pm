@@ -7,6 +7,8 @@ with 'Synergy::Role::Reactor';
 use experimental qw(signatures);
 use namespace::clean;
 
+use JSON ();
+
 sub listener_specs {
   return {
     name      => 'rfc-mention',
@@ -15,6 +17,34 @@ sub listener_specs {
     predicate => sub ($self, $e) {
       return unless $e->text =~ /RFC\s*[0-9]+/i; },
   };
+}
+
+has rfc_index_file => (
+  is  => 'ro',
+  isa => 'Str',
+  predicate => 'has_rfc_index_file',
+);
+
+has title_index => (
+  reader  => '_title_index',
+  isa     => 'HashRef',
+  lazy    => 1,
+  builder => '_build_title_index',
+);
+
+sub _build_title_index ($self, @) {
+  return {} unless $self->has_rfc_index_file;
+
+  my $file = $self->rfc_index_file;
+  open my $fh, '<', $file or confess("can't open $file for reading: $!");
+  my $contents = do { local $/; <$fh> };
+  my $index = JSON->new->decode($contents);
+
+  return $index;
+}
+
+sub rfc_title_for ($self, $number) {
+  $self->_title_index->{$number};
 }
 
 sub handle_rfc ($self, $event, $rch) {
@@ -32,10 +62,12 @@ sub handle_rfc ($self, $event, $rch) {
     return;
   }
 
+  my $title = $self->rfc_title_for($num);
+
   $rch->reply(
-    "RFC $num: $link",
+    ($title ? "RFC $num: $title\n$link" : "RFC $num - $link"),
     {
-      slack => "<$link|RFC $num>"
+      slack => "<$link|RFC $num>" . ($title ? ": $title" : q{})
     }
   );
 
