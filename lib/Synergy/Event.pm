@@ -26,6 +26,15 @@ has from_user => (
   isa => 'Synergy::User',
 );
 
+# This, together with from_channel and from_address can uniquely
+# identify someone and where they contacted us. Get this unique
+# identifier from ->source_identifier
+has conversation_address => (
+  is => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
 has transport_data => (
   is => 'ro',
 );
@@ -62,6 +71,19 @@ sub event_uri ($self) {
 sub BUILD ($self, @) {
   confess "only 'message' events exist for now"
     unless $self->type eq 'message';
+}
+
+sub source_identifier ($self) {
+  # A unique identifier for where this message came
+  # from. Must include the incoming from_address
+  # and outgoing conversation_address because
+  # of things like slack where from_address
+  # could be a user, but they may have spoken
+  # in a pm, a channel, or a group conversation
+  my $key = join qq{$;},
+    $self->from_channel->name,
+    $self->from_address,
+    $self->conversation_address;
 }
 
 1;

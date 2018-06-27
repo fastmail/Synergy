@@ -99,6 +99,7 @@ sub start ($self) {
       from_address => $from,
       from_user    => $who, # we already gave up if no user -- rjbs, 2018-03-15
       transport_data => $param,
+      conversation_address => $from,
     });
 
     my $rch = Synergy::ReplyChannel->new(

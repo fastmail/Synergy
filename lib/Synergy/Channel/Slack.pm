@@ -141,6 +141,7 @@ sub start ($self) {
       from_address => $slack_event->{user},
       ( $from_user ? ( from_user => $from_user ) : () ),
       transport_data => $slack_event,
+      conversation_address => $slack_event->{channel},
     });
 
     my $rch = Synergy::ReplyChannel->new(
