@@ -145,7 +145,7 @@ sub my_running_timer ($self) {
 }
 
 sub query_items ($self, $arg) {
-  my $query = URI->new("/treeitems");
+  my $query = URI->new("/treeitems" . ($arg->{in} ? "/$arg->{in}" : q{}));
 
   for my $flag (keys $arg->{flags}->%*) {
     $query->query_param($flag => $arg->{flags}{$flag});

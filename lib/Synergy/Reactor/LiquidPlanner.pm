@@ -2192,12 +2192,18 @@ sub damage_report ($self, $event, $rch) {
 
   CHK: for my $check (@to_check) {
     my ($label, $icon, $package_id) = @$check;
-    my $uri = "/treeitems/$package_id?depth=-1"
-            . "&flat=1"
-            . "&filter[]=is_done is false"
-            . "&filter[]=owner_id=$lp_id";
 
-    my $check_res = $self->http_get_for_master($uri);
+    my $check_res = $self->lp_client_for_master->query_items({
+      in    => $package_id,
+      flags => {
+        depth => -1,
+        flat  => 1,
+      },
+      filters => [
+        [ is_done   => 'is',  'false' ],
+        [ owner_id  => '=',   $lp_id  ],
+      ],
+    });
 
     unless ($check_res->is_success) {
       push @summaries, "❌ Couldn't produce a report on $label tasks.";
@@ -2207,8 +2213,7 @@ sub damage_report ($self, $event, $rch) {
     my $unest = 0;
     my $total = 0;
 
-    my @items = $JSON->decode($check_res->decoded_content)->@*;
-    for my $item (@items) {
+    for my $item ($check_res->payload_list) {
       next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
       my ($assign) = grep {; $_->{person_id} == $lp_id }
                      $item->{assignments}->@*;
@@ -2267,17 +2272,17 @@ sub _build_package_summary ($self, $package_id, $user) {
   # is... it's not happening this Friday afternoon. -- rjbs, 2018-06-15
   $package_id = 45841484;
 
-  my $uri = "/treeitems/$package_id?depth=-1";
-
-  my $items_res = $self->http_get_for_master($uri);
+  my $items_res = $self->lp_client_for_master->query_items({
+    in    => $package_id,
+    flags => { depth => -1 },
+  });
 
   unless ($items_res->is_success) {
     $Logger->log("error getting tree for package $package_id");
     return;
   }
 
-  my $tree = $JSON->decode($items_res->decoded_content);
-  my $summary = summarize_iteration($tree, $user->lp_id);
+  my $summary = summarize_iteration($items_res->payload, $user->lp_id);
 }
 
 sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
