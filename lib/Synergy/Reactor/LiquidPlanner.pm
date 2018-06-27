@@ -545,9 +545,16 @@ sub nag ($self, $timer, @) {
 sub _get_treeitem_shortcuts {
   my ($self, $type) = @_;
 
-  my $query = "/treeitems?filter[]=item_type=$type&filter[]=custom_field:'Synergy $type Shortcut' is_set&filter[]=is_done is false";
-  my $res = $self->http_get_for_master("$query");
-  return {} unless $res && $res->is_success;
+  my $lpc = $self->lp_client_for_master;
+  my $res = $lpc->query_items({
+    filters => [
+      [ item_type => '='  => $type    ],
+      [ is_done   => is   => 'false'  ],
+      [ "custom_field:'Synergy $type Shortcut'" => 'is_set' ],
+    ],
+  });
+
+  return {} unless $res->is_success;
 
   my %dict;
 

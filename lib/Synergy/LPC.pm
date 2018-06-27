@@ -144,6 +144,21 @@ sub my_running_timer ($self) {
   return _success($timer);
 }
 
+sub query_items ($self, $arg) {
+  my $query = URI->new("/treeitems");
+
+  for my $flag (keys $arg->{flags}->%*) {
+    $query->query_param($flag => $arg->{flags}{$flag});
+  }
+
+  for my $filter ($arg->{filters}->@*) {
+    my $string = join q{ }, @$filter;
+    $query->query_param_append('filter[]' => $string);
+  }
+
+  return $self->http_get("$query");
+}
+
 # get shortcuts for tasks, projects
 # create lp task
 # start timer
