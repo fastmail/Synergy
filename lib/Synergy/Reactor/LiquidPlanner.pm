@@ -1077,6 +1077,7 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
       task => $task,
       work => $log_hrs,
       done => $plan->{done},
+      member_id => $event->from_user->lp_id,
     });
 
     if ($track_ok) {
@@ -1091,6 +1092,7 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
       task => $task,
       work => 0,
       done => $plan->{done},
+      member_id => $event->from_user->lp_id,
     });
 
     if ($track_ok) {
@@ -1662,6 +1664,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
     work  => $lp_timer->{running_time},
     done  => $meta{DONE},
     comment => $comment,
+    member_id => $user->lp_id,
   });
 
   unless ($commit_res->is_success) {
@@ -2013,6 +2016,7 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   my $track_ok = $lpc->track_time({
     task => $task,
     work => $duration / 3600,
+    member_id => $user->lp_id,
   });
 
   unless ($track_ok) {
