@@ -1073,13 +1073,11 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
   }
 
   if (my $log_hrs = $plan->{log_hours}) {
-    my $track_ok = $self->_track_time(
-      $event->from_user,
-      $task,
-      $log_hrs,
-      undef,
-      $plan->{done},
-    );
+    my $track_ok = $lpc->track_time({
+      task => $task,
+      work => $log_hrs,
+      done => $plan->{done},
+    });
 
     if ($track_ok) {
       my $time = sprintf '%0.2fh', $log_hrs;
@@ -1089,13 +1087,11 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
       $reply_base .= ".  I couldn't log time it";
     }
   } elsif ($plan->{done}) {
-    my $track_ok = $self->_track_time(
-      $event->from_user,
-      $task,
-      0,
-      undef,
-      $plan->{done},
-    );
+    my $track_ok = $lpc->track_time({
+      task => $task,
+      work => 0,
+      done => $plan->{done},
+    });
 
     if ($track_ok) {
       $reply_base .= ".  I marked your work done";
@@ -1130,27 +1126,6 @@ sub _start_timer ($self, $user, $task) {
 
   $self->set_last_lp_timer_id_for_user($user, $res->payload->{id});
   return 1;
-}
-
-sub _track_time ($self, $user, $task, $hours, $comment = undef, $done = 0) {
-  my $res = $self->http_post_for_user(
-    $user,
-    "/tasks/$task->{id}/track_time",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({
-      activity_id => $task->{activity_id},
-      member_id => $user->lp_id,
-      work      => $hours,
-      is_done   => ($done ? \1 : \0),
-
-      ($comment ? (comment => $comment) : ()),
-    }),
-  );
-
-  $Logger->log("error tracking time: " . $res->as_string)
-    unless $res->is_success;
-
-  return $res->is_success;
 }
 
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
@@ -1680,26 +1655,17 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   # clear timer
   # maybe: stop timer
 
-  my $content = $JSON->encode({
-    work    => $lp_timer->{running_time},
-    is_done => $meta{DONE} ? \1 : \0,
-    comment => $comment,
-    activity_id => $activity_id,
-    reduce_estimate => \1,
-  });
-
   my $task_base = "/tasks/$lp_timer->{item_id}";
 
-  my $commit_res = $self->http_post_for_user(
-    $user,
-    "$task_base/track_time",
-    Content => $content,
-    Content_Type => 'application/json',
-  );
+  my $commit_res = $lpc->track_time({
+    task  => $task,
+    work  => $lp_timer->{running_time},
+    done  => $meta{DONE},
+    comment => $comment,
+  });
 
   unless ($commit_res->is_success) {
     $self->save_state;
-    $Logger->log([ "bad timer commit response: %s", $commit_res->as_string ]);
     return $rch->reply("I couldn't commit your work, sorry.");
   }
 
@@ -2031,6 +1997,8 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   my $user = $event->from_user;
   my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
 
+  my $lpc = $self->lp_client_for_user($user);
+
   unless ($task_res->is_success) {
     return $rch->reply("I couldn't log the work because I couldn't find the task.");
   }
@@ -2042,7 +2010,10 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
     return $rch->reply("I couldn't log the work because the task doesn't have a defined activity!");
   }
 
-  my $track_ok = $self->_track_time($user, $task, $duration / 3600, undef, 0);
+  my $track_ok = $lpc->track_time({
+    task => $task,
+    work => $duration / 3600,
+  });
 
   unless ($track_ok) {
     return $rch->reply("I couldn't log your time, sorry.");

@@ -180,11 +180,26 @@ sub clear_timer_for_task_id ($self, $task_id) {
   return $self->http_post("/tasks/$task_id/timer/clear");
 }
 
+sub track_time ($self, $arg) {
+  Carp::confess("no task")      unless my $task = $arg->{task};
+  Carp::confess("no work")      unless defined $arg->{work};
+  Carp::confess("no member_id") unless $arg->{member_id};
+
+  return $self->http_post(
+    "/tasks/$task->{id}/track_time",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({
+      activity_id => $task->{activity_id},
+      member_id => $arg->{member_id},
+      work      => $arg->{work},
+      is_done   => ($arg->{done} ? \1 : \0),
+
+      ($arg->{comment} ? (comment => $arg->{comment}) : ()),
+    }),
+  );
+}
+
 # create lp task
-# start timer
-# stop timer
-# reset timer
-# track time on task
 
 # get current iteration data
 
