@@ -18,9 +18,19 @@ sub listener_specs {
 }
 
 sub handle_rfc ($self, $event, $rch) {
-  my ($num) = $event->text =~ /RFC\s*([0-9]+)/i;
+  my $text = $event->text;
 
-  my $link = 'https://tools.ietf.org/html/rfc' . $num;
+  my ($num, $link) = $self->extract_rfc($text);
+
+  unless (defined $num && defined $link) {
+    if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+/ix) {
+      $rch->reply("Oddly, I could not figure out what RFC you meant");
+
+      $event->mark_handled;
+    }
+
+    return;
+  }
 
   $rch->reply(
     "RFC $num: $link",
@@ -29,9 +39,35 @@ sub handle_rfc ($self, $event, $rch) {
     }
   );
 
-  if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+ \s*\z/ix) {
+  if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+ \s*/ix) {
     $event->mark_handled;
   }
+}
+
+my $sec_dig = qr/[0-9]+(?:[.-])?(?:[0-9]+)?/;
+
+sub extract_rfc ($self, $text) {
+  return unless $text =~ s/RFC\s*([0-9]+)//ig;
+
+  my $num = $1;
+
+  my $section;
+
+  if ($text =~ /^\s*#($sec_dig)/g) {
+    $section = $1;
+  } elsif ($text =~ /^\s*#?section\s*#?\s*($sec_dig)/g) {
+    $section = $1;
+  }
+
+  $section =~ s/-/./ if $section;
+
+  my $link = 'https://tools.ietf.org/html/rfc' . $num;
+
+  if ($section) {
+    $link .= "#section-$section";
+  }
+
+  return ($num, $link);
 }
 
 1;
