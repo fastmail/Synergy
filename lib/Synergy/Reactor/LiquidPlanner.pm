@@ -596,6 +596,14 @@ sub lp_client_for_user ($self, $user) {
   });
 }
 
+sub lp_client_for_master ($self) {
+  my ($master) = $self->hub->user_directory->master_users;
+
+  Carp::confess("No master users configured") unless $master;
+
+  $self->lp_client_for_user($master);
+}
+
 sub http_get_for_user ($self, $user, $path, @arg) {
   return $self->hub->http_get(
     $self->_lp_base_uri . $path,
