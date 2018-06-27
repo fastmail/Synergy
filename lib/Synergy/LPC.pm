@@ -165,14 +165,27 @@ sub upcoming_tasks_for_member_id ($self, $member_id) {
   );
 }
 
-# get shortcuts for tasks, projects
+sub start_timer_for_task_id ($self, $task_id) {
+  my $start_res = $self->http_post("/tasks/$task_id/timer/start");
+  return $start_res unless $start_res->is_success;
+  return _failure unless $start_res->payload->{running}; # Really??
+  return $start_res;
+}
+
+sub stop_timer_for_task_id ($self, $task_id) {
+  return $self->http_post("/tasks/$task_id/timer/stop");
+}
+
+sub clear_timer_for_task_id ($self, $task_id) {
+  return $self->http_post("/tasks/$task_id/timer/clear");
+}
+
 # create lp task
 # start timer
 # stop timer
 # reset timer
 # track time on task
 
-# generic treeitem get (for damage report)
 # get current iteration data
 
 # ?? create todo items

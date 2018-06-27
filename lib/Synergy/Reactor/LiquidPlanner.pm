@@ -1037,6 +1037,8 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
     return $rch->reply($errors);
   }
 
+  my $lpc = $self->lp_client_for_user($event->from_user);
+
   my $arg = {};
 
   my $task = $self->_create_lp_task($rch, $plan, $arg);
@@ -1056,15 +1058,13 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
                  . join q{ and }, map {; $_->username } $plan->{owners}->@*;
 
   if ($plan->{start}) {
-    my $res = $self->http_post_for_user(
-      $event->from_user,
-      "/tasks/$task->{id}/timer/start",
-    );
+    my $res = $lpc->start_timer_for_task_id($task->{id});
 
-    my $timer = eval { $JSON->decode( $res->decoded_content ); };
-
-    if ($res->is_success && $timer->{running}) {
-      $self->set_last_lp_timer_id_for_user($event->from_user, $timer->{id});
+    if ($res->is_success) {
+      $self->set_last_lp_timer_id_for_user(
+        $event->from_user,
+        $res->payload->{id}
+      );
 
       $reply_base .= q{, timer started};
     } else {
@@ -1120,15 +1120,15 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
 }
 
 sub _start_timer ($self, $user, $task) {
-  my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
+  my $res = $self->lp_client_for_user($user)
+                 ->start_timer_for_task_id($task->{id});
+
   return unless $res->is_success;
 
-  my $timer = eval { $JSON->decode( $res->decoded_content ); };
-
   # What does this mean?  Copied and pasted. -- rjbs, 2018-06-16
-  return unless $timer->{start};
+  return unless $res->payload->{start};
 
-  $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+  $self->set_last_lp_timer_id_for_user($user, $res->payload->{id});
   return 1;
 }
 
@@ -1623,6 +1623,8 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  my $lpc = $self->lp_client_for_user($user);
+
   if ($event->text =~ /\A\s*that\s*\z/) {
     my $last  = $self->get_last_utterance($event->source_identifier);
 
@@ -1705,23 +1707,13 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   $self->save_state;
 
   {
-    my $clear_res = $self->http_post_for_user($user, "$task_base/timer/clear");
-    unless ($clear_res->is_success) {
-      $Logger->log(
-        "error clearing timer on $task_base: " . $clear_res->decoded_content
-      );
-      $meta{CLEARFAIL} = ! $clear_res->is_success;
-    }
+    my $clear_res = $lpc->clear_timer_for_task_id($task->{id});
+    $meta{CLEARFAIL} = ! $clear_res->is_success;
   }
 
   unless ($meta{STOP}) {
-    my $start_res = $self->http_post_for_user($user, "$task_base/timer/start");
-    unless ($start_res->is_success) {
-      $Logger->log(
-        "error starting timer on $task_base: " . $start_res->decoded_content
-      );
-      $meta{STARTFAIL} = ! $start_res->is_success;
-    }
+    my $start_res = $lpc->start_timer_for_task_id($task->{id});
+    $meta{STARTFAIL} = ! $start_res->is_success;
   }
 
   my $also
@@ -1763,7 +1755,8 @@ sub _handle_abort ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
-  my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
 
   return $rch->reply("Sorry, something went wrong getting your timer.")
     unless $timer_res->is_success;
@@ -1771,8 +1764,8 @@ sub _handle_abort ($self, $event, $rch, $text) {
   return $rch->reply("You don't have a running timer to abort.")
     unless my $timer = $timer_res->payload;
 
-  my $stop_res = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/stop");
-  my $clr_res  = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/clear");
+  my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
+  my $clr_res  = $lpc->clear_timer_for_task_id($timer->{item_id});
 
   if ($stop_res->is_success and $clr_res->is_success) {
     $self->timer_for_user($user)->clear_last_nag;
@@ -1786,22 +1779,24 @@ sub _handle_start ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  my $lpc = $self->lp_client_for_user($user);
+
   if ($text =~ /\A[0-9]+\z/) {
+    my $task_id = $text;
+
     # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
     # TODO: print the description of the task instead of its number -- rjbs,
     # 2016-01-25
-    my $start_res = $self->http_post_for_user($user, "/tasks/$text/timer/start");
-    my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
+    my $start_res = $lpc->start_timer_for_task_id($task_id);
 
-    if ($start_res->is_success && $timer->{running}) {
-      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+    if ($start_res->is_success) {
+      $self->set_last_lp_timer_id_for_user($user, $start_res->payload->{id});
 
-      my $task_res = $self->lp_client_for_user($user)
-                          ->get_item($timer->{item_id});
+      my $task_res = $lpc->get_item($task_id);
       my $task = ($task_res->is_success && $task_res->payload)
-              || { id => $timer->{item_id}, name => '??' };
+              || { id => $task_id, name => '??' };
 
-      my $uri   = $self->item_uri($timer->{item_id});
+      my $uri   = $self->item_uri($task_id);
       my $text  = "Started task: $task->{name} ($uri)";
       my $slack = sprintf "Started task %s: %s",
         $self->_slack_item_link($task), $task->{name};
@@ -1821,11 +1816,10 @@ sub _handle_start ($self, $event, $rch, $text) {
     }
 
     my $task = $lp_tasks->[0];
-    my $start_res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
-    my $timer = eval { $JSON->decode( $start_res->decoded_content ); };
+    my $start_res = $lpc->start_timer_for_task_id($task->{id});
 
-    if ($start_res->is_success && $timer->{running}) {
-      $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+    if ($start_res->is_success) {
+      $self->set_last_lp_timer_id_for_user($user, $start_res->payload->{id});
 
       my $uri   = $self->item_uri($task->{id});
       my $text  = "Started task: $task->{name} ($uri)";
@@ -1847,6 +1841,8 @@ sub _handle_start ($self, $event, $rch, $text) {
 sub _handle_resume ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+
+  my $lpc = $self->lp_client_for_user($user);
 
   my $lp_timer = $self->lp_timer_for_user($user);
 
@@ -1874,7 +1870,7 @@ sub _handle_resume ($self, $event, $rch, $text) {
   }
 
   my $task = $JSON->decode($task_res->decoded_content);
-  my $res = $self->http_post_for_user($user, "/tasks/$task->{id}/timer/start");
+  my $res  = $lpc->start_timer_for_task_id($task->{id});
 
   unless ($res->is_success) {
     return $rch->reply("I failed to resume the timer for $task->{name}, sorry!");
@@ -1893,7 +1889,8 @@ sub _handle_stop ($self, $event, $rch, $text) {
   return $rch->reply("I didn't understand your stop request.")
     unless $text eq 'timer';
 
-  my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
 
   return $rch->reply("Sorry, something went wrong getting your timer.")
     unless $timer_res->is_success;
@@ -1901,7 +1898,7 @@ sub _handle_stop ($self, $event, $rch, $text) {
   return $rch->reply("You don't have a running timer to stop.")
     unless my $timer = $timer_res->payload;
 
-  my $stop_res = $self->http_post_for_user($user, "/tasks/$timer->{item_id}/timer/stop");
+  my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
   return $rch->reply("I couldn't stop your timer.")
     unless $stop_res->is_success;
 
@@ -1938,10 +1935,12 @@ sub _handle_reset ($self, $event, $rch, $text) {
   my $user = $event->from_user;
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
+  my $lpc = $self->lp_client_for_user($user);
+
   return $rch->reply("I didn't understand your reset request. (try 'reset timer')")
     unless ($text // 'timer') eq 'timer';
 
-  my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
+  my $timer_res = $lpc->my_running_timer;
 
   return $rch->reply("Sorry, something went wrong getting your timer.")
     unless $timer_res->is_success;
@@ -1950,17 +1949,16 @@ sub _handle_reset ($self, $event, $rch, $text) {
     unless my $timer = $timer_res->payload;
 
   my $task_id = $timer->{item_id};
-  my $clr_res  = $self->http_post_for_user($user, "/tasks/$task_id/timer/clear");
+  my $clr_res = $lpc->clear_timer_for_task_id($task_id);
 
   return $rch->reply("Something went wrong resetting your timer.")
     unless $clr_res->is_success;
 
   $self->timer_for_user($user)->clear_last_nag;
 
-  my $start_res = $self->http_post_for_user($user, "/tasks/$task_id/timer/start");
-  my $restart_timer = eval { $JSON->decode( $start_res->decoded_content ); };
+  my $start_res = $lpc->stop_timer_for_task_id($task_id);
 
-  if ($start_res->is_success && $restart_timer->{running}) {
+  if ($start_res->is_success) {
     $self->set_last_lp_timer_id_for_user($user, $timer->{id});
     $rch->reply("Okay, I cleared your timer and left it running.");
   } else {
