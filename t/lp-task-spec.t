@@ -51,6 +51,7 @@ sub _r_ok {
     from_user    => $synergy->user_directory->user_named('stormer'),
     from_channel => $synergy->channel_named('test-channel'),
     was_targeted => 1,
+    conversation_address => 'stormer',
   });
 
   my @rv = $lp->task_plan_from_spec($event, $spec);
