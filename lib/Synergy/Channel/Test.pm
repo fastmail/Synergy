@@ -66,6 +66,7 @@ sub _inject_event ($self, $arg) {
     from_address => $from_address,
     from_channel => $self,
     was_targeted => $had_prefix,
+    conversation_address => 'public',
   });
 
   my $rch = Synergy::ReplyChannel->new({
