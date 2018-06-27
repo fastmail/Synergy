@@ -82,6 +82,7 @@ $CONFIG = {
 };
 
 my %KNOWN = (
+  last      => \&_handle_last,
   timer     => \&_handle_timer,
   task      => \&_handle_task,
   tasks     => \&_handle_tasks,
@@ -361,9 +362,12 @@ sub record_utterance ($self, $event, $rch) {
   # We're not going to support "++ that" by people who are not users.
   return unless $event->from_user;
 
-  my $key = join qq{$;}, $event->from_channel->name, $event->from_address;
+  if ($event->text =~ /^last$/i) {
+    return;
+  }
 
-  $self->set_last_utterance($key, $event->text);
+  $self->set_last_utterance($event->source_identifier, $event->text);
+
   return;
 }
 
@@ -603,6 +607,25 @@ sub http_get_for_master ($self, $path, @arg) {
   }
 
   $self->http_get_for_user($master, $path, @arg);
+}
+
+sub _handle_last ($self, $event, $rch, $text) {
+  my $user = $event->from_user;
+
+  return $rch->reply($ERR_NO_LP)
+    unless $user && $user->lp_auth_header;
+
+  return if length $text;
+
+  $event->mark_handled;
+
+  if (my $last = $self->get_last_utterance(
+    $event->source_identifier
+  )) {
+    $rch->reply("The last thing you said here was: $last");
+  } else {
+    $rch->reply("You haven't said anything here yet that I've seen (ignoring 'last')");
+  }
 }
 
 sub _handle_timer ($self, $event, $rch, $text) {
@@ -1250,8 +1273,7 @@ sub _handle_plus_plus ($self, $event, $rch, $text) {
   my $pretend = "task for $who: $text";
 
   if ($text =~ /\A\s*that\s*\z/) {
-    my $key   = join qq{$;}, $event->from_channel->name, $event->from_address;
-    my $last  = $self->get_last_utterance($key);
+    my $last  = $self->get_last_utterance($event->source_identifier);
 
     unless (length $last) {
       return $rch->reply("I don't know what 'that' refers to.");
@@ -1606,8 +1628,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
   if ($event->text =~ /\A\s*that\s*\z/) {
-    my $key   = join qq{$;}, $event->from_channel->name, $event->from_address;
-    my $last  = $self->get_last_utterance($key);
+    my $last  = $self->get_last_utterance($event->source_identifier);
 
     unless (length $last) {
       return $rch->reply("I don't know what 'that' refers to.");

@@ -141,9 +141,11 @@ sub _event_from_text ($self, $text) {
     }
   }
 
-  $arg{transport_data}{default_reply_address} //= $arg{is_public}
-    ? $self->default_public_reply_address
-    : $arg{from_address};
+  $arg{conversation_address}
+    =   $arg{transport_data}{default_reply_address}
+    //= $arg{is_public}
+      ? $self->default_public_reply_address
+      : $arg{from_address};
 
   my $user = $self->hub->user_directory->user_by_channel_and_address(
     $self,
