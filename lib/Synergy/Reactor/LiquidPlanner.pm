@@ -610,14 +610,6 @@ sub lp_client_for_master ($self) {
   $self->lp_client_for_user($master);
 }
 
-sub http_get_for_user ($self, $user, $path, @arg) {
-  return $self->hub->http_get(
-    $self->_lp_base_uri . $path,
-    @arg,
-    Authorization => $user->lp_auth_header,
-  );
-}
-
 sub http_post_for_user ($self, $user, $path, @arg) {
   return $self->hub->http_post(
     $self->_lp_base_uri . $path,
@@ -2072,14 +2064,12 @@ sub _handle_todo ($self, $event, $rch, $text) {
     return $rch->reply("Sorry, I can only make todo items for you");
   }
 
-  my $res = $self->http_post_for_user($user,
-    "/todo_items",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({ todo_item => { title => $desc } }),
-  );
+  my $lpc = $self->lp_client_for_user($user);
 
-  my $reply = $res->is_success
-            ? "I added \"$desc\" to your todo list."
+  my $todo_res = $lpc->create_todo_item({ title => $desc });
+
+  my $reply = $todo_res->is_success
+            ? qq{I added "$desc" to your todo list.}
             : "Sorry, I couldn't add that todo… for… some reason.";
 
   return $rch->reply($reply);
@@ -2087,11 +2077,11 @@ sub _handle_todo ($self, $event, $rch, $text) {
 
 sub _handle_todos ($self, $event, $rch, $text) {
   my $user = $event->from_user;
-  my $todo_res = $self->http_get_for_user($user, "/todo_items");
+  my $lpc  = $self->lp_client_for_user($user);
+  my $todo_res = $lpc->todo_items;
   return unless $todo_res->is_success;
 
-  my $all_todos = $JSON->decode($todo_res->decoded_content);
-  my @todos = grep {; ! $_->{is_done} } @$all_todos;
+  my @todos = grep {; ! $_->{is_done} } $todo_res->payload_list;
 
   return $rch->reply("You don't have any open to-do items.") unless @todos;
 

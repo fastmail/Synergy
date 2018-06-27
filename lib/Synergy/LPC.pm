@@ -206,6 +206,18 @@ sub track_time ($self, $arg) {
 # ?? create todo items
 # ?? list todo items
 
+sub todo_items ($self) {
+  return $self->http_get("/todo_items");
+}
+
+sub create_todo_item ($self, $todo) {
+  return $self->http_post(
+    "/todo_items",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({ todo_item => $todo }),
+  );
+}
+
 package LPC::Result::Success {
   use Moose;
   use MooseX::StrictConstructor;
