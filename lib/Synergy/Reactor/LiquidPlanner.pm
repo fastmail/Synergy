@@ -626,16 +626,6 @@ sub http_post_for_user ($self, $user, $path, @arg) {
   );
 }
 
-sub http_get_for_master ($self, $path, @arg) {
-  my ($master) = $self->hub->user_directory->master_users;
-  unless ($master) {
-    $Logger->log("No master users configured");
-    return;
-  }
-
-  $self->http_get_for_user($master, $path, @arg);
-}
-
 sub _handle_last ($self, $event, $rch, $text) {
   my $user = $event->from_user;
 
@@ -1628,13 +1618,13 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $sy_timer = $self->timer_for_user($user);
   return $rch->reply("You don't timer-capable.") unless $sy_timer;
 
-  my $task_res = $self->http_get_for_user($user, "/tasks/$lp_timer->{item_id}");
+  my $task_res = $lpc->get_item($lp_timer->{item_id});
 
   unless ($task_res->is_success) {
     return $rch->reply("I couldn't log the work because I couldn't find the current task's activity id.");
   }
 
-  my $task = $JSON->decode($task_res->decoded_content);
+  my $task = $task_res->payload;
   my $activity_id = $task->{activity_id};
 
   unless ($activity_id) {
@@ -1816,13 +1806,13 @@ sub _handle_resume ($self, $event, $rch, $text) {
   my $lp_timer = $self->lp_timer_for_user($user);
 
   if ($lp_timer && ref $lp_timer) {
-    my $task_res = $self->http_get_for_user($user, "/tasks/$lp_timer->{item_id}");
+    my $task_res = $lpc->get_item($lp_timer->{item_id});
 
     unless ($task_res->is_success) {
-      return $rch->reply("You already have a running timer (but I couldn't figure out its task...)");
+      return $rch->reply("You already have a running timer (but I couldn't figure out its task…)");
     }
 
-    my $task = $JSON->decode($task_res->decoded_content);
+    my $task = $task_res->payload;
     return $rch->reply("You already have a running timer ($task->{name})");
   }
 
@@ -1832,13 +1822,13 @@ sub _handle_resume ($self, $event, $rch, $text) {
     return $rch->reply("I'm not aware of any previous timer you had running. Sorry!");
   }
 
-  my $task_res = $self->http_get_for_user($user, "/tasks/$last_lp_timer->{item_id}");
+  my $task_res = $lpc->get_item($last_lp_timer->{item_id});
 
   unless ($task_res->is_success) {
-    return $rch->reply("I found your timer but I couldn't figure out its task...");
+    return $rch->reply("I found your timer but I couldn't figure out its task…");
   }
 
-  my $task = $JSON->decode($task_res->decoded_content);
+  my $task = $task_res->payload;
   my $res  = $lpc->start_timer_for_task_id($task->{id});
 
   unless ($res->is_success) {
@@ -1931,7 +1921,7 @@ sub _handle_reset ($self, $event, $rch, $text) {
     $self->set_last_lp_timer_id_for_user($user, $timer->{id});
     $rch->reply("Okay, I cleared your timer and left it running.");
   } else {
-    $rch->reply("Okay, I cleared your timer but couldn't restart it... sorry!");
+    $rch->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
   }
 }
 
@@ -1998,15 +1988,16 @@ sub _handle_spent ($self, $event, $rch, $text) {
 
 sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   my $user = $event->from_user;
-  my $task_res = $self->http_get_for_user($user, "/tasks/$task_id");
 
   my $lpc = $self->lp_client_for_user($user);
+
+  my $task_res = $lpc->get_item($task_id);
 
   unless ($task_res->is_success) {
     return $rch->reply("I couldn't log the work because I couldn't find the task.");
   }
 
-  my $task = $JSON->decode($task_res->decoded_content);
+  my $task = $task_res->payload;
   my $activity_id = $task->{activity_id};
 
   unless ($activity_id) {
@@ -2089,7 +2080,7 @@ sub _handle_todo ($self, $event, $rch, $text) {
 
   my $reply = $res->is_success
             ? "I added \"$desc\" to your todo list."
-            : "Sorry, I couldn't add that todo... for... some reason.";
+            : "Sorry, I couldn't add that todo… for… some reason.";
 
   return $rch->reply($reply);
 }
