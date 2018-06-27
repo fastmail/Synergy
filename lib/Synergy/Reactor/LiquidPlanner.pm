@@ -558,8 +558,7 @@ sub _get_treeitem_shortcuts {
 
   my %dict;
 
-  my @items = @{ $JSON->decode( $res->decoded_content ) };
-  for my $item (@items) {
+  for my $item ($res->payload_list) {
     # Impossible, right?
     next unless my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
 
