@@ -1154,26 +1154,20 @@ sub _track_time ($self, $user, $task, $hours, $comment = undef, $done = 0) {
 }
 
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
-  my $res = $self->http_get_for_user(
-    $user,
-    "/upcoming_tasks?limit=200&flat=true&member_id=" . $user->lp_id,
-  );
+  my $lpc = $self->lp_client_for_user($user);
 
-  unless ($res->is_success) {
-    $Logger->log("failed to get tasks from LiquidPlanner: " . $res->as_string);
-    return;
-  }
+  my $res = $lpc->upcoming_tasks_for_member_id($user->lp_id);
 
-  my $tasks = $JSON->decode( $res->decoded_content );
+  return unless $res->is_success;
 
-  @$tasks = grep {; $_->{type} eq 'Task' } @$tasks;
+  my @tasks = grep {; $_->{type} eq 'Task' } $res->payload_list;
 
   if ($which eq 'tasks') {
-    @$tasks = grep {;
+    @tasks = grep {;
       (! grep { $CONFIG->{liquidplanner}{package}{inbox} == $_ } $_->{parent_ids}->@*)
       &&
       (! grep { $CONFIG->{liquidplanner}{package}{inbox} == $_ } $_->{package_ids}->@*)
-    } @$tasks;
+    } @tasks;
   } else {
     my $package_id = $CONFIG->{liquidplanner}{package}{ $which };
     unless ($package_id) {
@@ -1181,25 +1175,25 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
       return;
     }
 
-    @$tasks = grep {;
+    @tasks = grep {;
       (grep { $package_id == $_ } $_->{parent_ids}->@*)
       ||
       (grep { $package_id == $_ } $_->{package_ids}->@*)
-    } @$tasks;
+    } @tasks;
   }
 
-  splice @$tasks, $count;
+  splice @tasks, $count;
 
   unless ($arg->{no_prefix}) {
     my $urgent = $CONFIG->{liquidplanner}{package}{urgent};
-    for (@$tasks) {
+    for (@tasks) {
       $_->{name} = "[URGENT] $_->{name}"
         if (grep { $urgent == $_ } $_->{parent_ids}->@*)
         || (grep { $urgent == $_ } $_->{package_ids}->@*);
     }
   }
 
-  return $tasks;
+  return \@tasks;
 }
 
 sub _send_task_list ($self, $event, $rch, $tasks) {

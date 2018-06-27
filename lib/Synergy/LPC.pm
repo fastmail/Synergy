@@ -159,13 +159,18 @@ sub query_items ($self, $arg) {
   return $self->http_get("$query");
 }
 
+sub upcoming_tasks_for_member_id ($self, $member_id) {
+  return $self->http_get(
+    "/upcoming_tasks?limit=200&flat=true&member_id=$member_id",
+  );
+}
+
 # get shortcuts for tasks, projects
 # create lp task
 # start timer
 # stop timer
 # reset timer
 # track time on task
-# get upcoming tasks for member
 
 # generic treeitem get (for damage report)
 # get current iteration data
