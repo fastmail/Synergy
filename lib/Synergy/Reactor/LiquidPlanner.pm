@@ -265,7 +265,7 @@ sub set_last_lp_timer_task_id_for_user ($self, $user, $task_id) {
 
 sub last_lp_timer_task_id_for_user ($self, $user) {
   return unless $user->lp_auth_header;
-  return $self->last_lp_timer_task_id_for_user($user);
+  return $self->_last_lp_timer_task_ids->{ $user->username };
 }
 
 has user_timers => (
