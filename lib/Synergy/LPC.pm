@@ -199,12 +199,15 @@ sub track_time ($self, $arg) {
   );
 }
 
-# create lp task
+sub create_task ($self, $task) {
+  return $self->http_post(
+    "/tasks",
+    Content_Type => 'application/json',
+    Content => $JSON->encode($task),
+  );
+}
 
 # get current iteration data
-
-# ?? create todo items
-# ?? list todo items
 
 sub todo_items ($self) {
   return $self->http_get("/todo_items");

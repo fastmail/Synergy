@@ -610,14 +610,6 @@ sub lp_client_for_master ($self) {
   $self->lp_client_for_user($master);
 }
 
-sub http_post_for_user ($self, $user, $path, @arg) {
-  return $self->hub->http_post(
-    $self->_lp_base_uri . $path,
-    @arg,
-    Authorization => $user->lp_auth_header,
-  );
-}
-
 sub _handle_last ($self, $event, $rch, $text) {
   my $user = $event->from_user;
 
@@ -1357,6 +1349,8 @@ sub _handle_expand ($self, $event, $rch, $text) {
 sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
   my $user = $event->from_user;
 
+  my $lpc = $self->lp_client_for($user);
+
   unless ($expand_target && $expand_target =~ /\S/) {
     my @names = sort $user->defined_expandoes;
     return $rch->reply($prefix . "You don't have any expandoes") unless @names;
@@ -1372,27 +1366,26 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
 
   my (@ok, @fail);
   for my $task (@tasks) {
-    my $payload = { task => {
-      name        => $task,
-      parent_id   => $parent,
-      assignments => [ { person_id => $user->lp_id } ],
-      description => $desc,
-    } };
+    my $payload = {
+      task => {
+        name        => $task,
+        parent_id   => $parent,
+        assignments => [ { person_id => $user->lp_id } ],
+        description => $desc,
+      }
+    };
 
     $Logger->log([ "creating LP task: %s", $payload ]);
 
-    my $res = $self->http_post_for_user($user,
-      "/tasks",
-      Content_Type => 'application/json',
-      Content => $JSON->encode($payload),
-    );
+    my $res = $lpc->create_task($payload);
+
     if ($res->is_success) {
       push @ok, $task;
     } else {
-      $Logger->log([ "error creating LP task: %s", $res->decoded_content ]);
       push @fail, $task;
     }
   }
+
   my $reply;
   if (@ok) {
     $reply = "I created your $expand_target tasks: " . join(q{; }, @ok);
@@ -1402,6 +1395,7 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
   } else {
     $reply = "Something impossible happened.  How exciting!";
   }
+
   $rch->reply($prefix . $reply);
 }
 
@@ -1455,31 +1449,24 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
     }
   }
 
-  my $payload = { task => {
-    name        => $my_arg->{name},
-    assignments => [ map {; assignment($_) } @{ $my_arg->{owners} } ],
-    description => $my_arg->{description},
+  my $payload = {
+    task => {
+      name        => $my_arg->{name},
+      assignments => [ map {; assignment($_) } @{ $my_arg->{owners} } ],
+      description => $my_arg->{description},
 
-    %container,
-  } };
+      %container,
+    }
+  };
 
   my $as_user = $my_arg->{user} // $self->master_lp_user;
+  my $lpc = $self->lp_client_for_user($as_user);
 
-  my $res = $self->http_post_for_user(
-    $as_user,
-    "/tasks",
-    Content_Type => 'application/json',
-    Content => $JSON->encode($payload),
-  );
+  my $res = $lpc->create_task($payload);
 
-  unless ($res->is_success) {
-    $Logger->log("error creating task: " . $res->as_string);
-    return;
-  }
+  return unless $res->is_success;
 
-  my $task = $JSON->decode($res->decoded_content);
-
-  return $task;
+  return $res->payload;
 }
 
 sub lp_timer_for_user ($self, $user) {
