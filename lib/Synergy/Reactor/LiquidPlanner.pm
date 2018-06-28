@@ -1788,13 +1788,13 @@ sub _handle_resume ($self, $event, $rch, $text) {
     return $rch->reply("You already have a running timer ($task->{name})");
   }
 
-  my $last_lp_timer = $self->last_lp_timer_for_user($user);
+  my $task_id = $self->last_lp_timer_task_id_for_user($user);
 
-  unless ($last_lp_timer) {
+  unless ($task_id) {
     return $rch->reply("I'm not aware of any previous timer you had running. Sorry!");
   }
 
-  my $task_res = $lpc->get_item($last_lp_timer->{item_id});
+  my $task_res = $lpc->get_item($task_id);
 
   unless ($task_res->is_success) {
     return $rch->reply("I found your timer but I couldn't figure out its task…");
