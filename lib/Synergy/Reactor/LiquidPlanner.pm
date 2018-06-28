@@ -253,31 +253,19 @@ sub provide_lp_link ($self, $event, $rch) {
   }
 }
 
-has _last_lp_timer_ids => (
+has _last_lp_timer_task_ids => (
   is => 'ro',
   isa => 'HashRef',
   default => sub {  {}  },
 );
 
-sub last_lp_timer_id_for_user ($self, $user) {
-  return $self->_last_lp_timer_ids->{ $user->username };
+sub set_last_lp_timer_task_id_for_user ($self, $user, $task_id) {
+  $self->_last_lp_timer_task_ids->{ $user->username } = $task_id;
 }
 
-sub set_last_lp_timer_id_for_user ($self, $user, $timer_id) {
-  $self->_last_lp_timer_ids->{ $user->username } = $timer_id;
-}
-
-sub last_lp_timer_for_user ($self, $user) {
+sub last_lp_timer_task_id_for_user ($self, $user) {
   return unless $user->lp_auth_header;
-  return unless my $lp_timer_id = $self->last_lp_timer_id_for_user($user);
-
-  my $timers_res = $self->lp_client_for_user($user)->my_timers;
-
-  return unless $timers_res->is_success;
-
-  my ($timer) = grep {; $_->{id} eq $lp_timer_id } $timers_res->payload_list;
-
-  return $timer;
+  return $self->last_lp_timer_task_id_for_user($user);
 }
 
 has user_timers => (
@@ -1034,10 +1022,7 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
     my $res = $lpc->start_timer_for_task_id($task->{id});
 
     if ($res->is_success) {
-      $self->set_last_lp_timer_id_for_user(
-        $event->from_user,
-        $res->payload->{id}
-      );
+      $self->set_last_lp_timer_task_id_for_user($event->from_user, $task->{id});
 
       $reply_base .= q{, timer started};
     } else {
@@ -1099,7 +1084,7 @@ sub _start_timer ($self, $user, $task) {
   # What does this mean?  Copied and pasted. -- rjbs, 2018-06-16
   return unless $res->payload->{start};
 
-  $self->set_last_lp_timer_id_for_user($user, $res->payload->{id});
+  $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
   return 1;
 }
 
@@ -1487,7 +1472,7 @@ sub lp_timer_for_user ($self, $user) {
   my $timer = $timer_res->payload;
 
   if ($timer) {
-    $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+    $self->set_last_lp_timer_task_id_for_user($user, $timer->{item_id});
   }
 
   return $timer;
@@ -1736,7 +1721,7 @@ sub _handle_start ($self, $event, $rch, $text) {
     my $start_res = $lpc->start_timer_for_task_id($task_id);
 
     if ($start_res->is_success) {
-      $self->set_last_lp_timer_id_for_user($user, $start_res->payload->{id});
+      $self->set_last_lp_timer_task_id_for_user($user, $task_id);
 
       my $task_res = $lpc->get_item($task_id);
       my $task = ($task_res->is_success && $task_res->payload)
@@ -1765,7 +1750,7 @@ sub _handle_start ($self, $event, $rch, $text) {
     my $start_res = $lpc->start_timer_for_task_id($task->{id});
 
     if ($start_res->is_success) {
-      $self->set_last_lp_timer_id_for_user($user, $start_res->payload->{id});
+      $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
 
       my $uri   = $self->item_uri($task->{id});
       my $text  = "Started task: $task->{name} ($uri)";
@@ -1905,7 +1890,7 @@ sub _handle_reset ($self, $event, $rch, $text) {
   my $start_res = $lpc->stop_timer_for_task_id($task_id);
 
   if ($start_res->is_success) {
-    $self->set_last_lp_timer_id_for_user($user, $timer->{id});
+    $self->set_last_lp_timer_task_id_for_user($user, $task_id);
     $rch->reply("Okay, I cleared your timer and left it running.");
   } else {
     $rch->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
