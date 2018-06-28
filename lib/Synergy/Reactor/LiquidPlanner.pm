@@ -194,17 +194,16 @@ sub dispatch_event ($self, $event, $rch) {
   my ($what, $rest) = split /\s+/, $text, 2;
   $what &&= lc $what;
 
-  # It's not handled yet, but it will have been by the time we return!
-  $event->mark_handled;
-
   # we can be polite even to non-lp-enabled users
   return $self->_handle_good($event, $rch, $rest) if $what eq 'good';
 
   unless ($event->from_user->lp_auth_header) {
+    $event->mark_handled;
     $rch->reply($ERR_NO_LP);
     return 1;
   }
 
+  $event->mark_handled;
   return $KNOWN{$what}->($self, $event, $rch, $rest)
 }
 
@@ -1314,9 +1313,11 @@ sub _handle_good ($self, $event, $rch, $text) {
     $reply =~ s/%n/$user->username/ge;
   }
 
-  return $rch->reply($reply) if $reply and not $user->lp_auth_header;
+  if ($reply and not $user->lp_auth_header) {
+    $event->mark_handled;
+    return $rch->reply($reply);
+  }
 
-  # TODO: implement expandos
   if ($expand && $user->tasks_for_expando($expand)) {
     $self->expand_tasks($rch, $event, $expand, "$reply  ");
     $reply = '';
@@ -1324,11 +1325,15 @@ sub _handle_good ($self, $event, $rch, $text) {
 
   if ($stop) {
     my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
-    return $rch->reply("I couldn't figure out whether you had a running timer, so I gave up.")
-      if $timer_res->is_failure;
+    if ($timer_res->is_failure) {
+      $event->mark_handled;
+      return $rch->reply("I couldn't figure out whether you had a running timer, so I gave up.")
+    }
 
-    return $rch->reply("You've got a running timer!  You should commit it.")
-      if $timer_res->has_payload;
+    if ($timer_res->has_payload) {
+      $event->mark_handled;
+      return $rch->reply("You've got a running timer!  You should commit it.")
+    }
   }
 
   if ($end_of_day && (my $sy_timer = $self->timer_for_user($user))) {
@@ -1337,7 +1342,10 @@ sub _handle_good ($self, $event, $rch, $text) {
     $self->save_state;
   }
 
-  return $rch->reply($reply) if $reply;
+  if ($reply) {
+    $event->mark_handled;
+    return $rch->reply($reply);
+  }
 }
 
 sub _handle_expand ($self, $event, $rch, $text) {
