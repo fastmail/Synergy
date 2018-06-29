@@ -36,7 +36,7 @@ sub handle_set ($self, $event) {
 
   return unless $component;
 
-  $self->_error_no_prefs($event, $comp_name)
+  return $self->_error_no_prefs($event, $comp_name)
     unless $component->can('set_preference');
 
   $component->set_preference($event, $pref_name, $pref_value);
