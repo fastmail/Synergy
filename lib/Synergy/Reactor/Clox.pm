@@ -27,7 +27,7 @@ has time_zone_names => (
   default => sub {  {}  },
 );
 
-sub handle_clox ($self, $event, $rch) {
+sub handle_clox ($self, $event) {
   $event->mark_handled;
 
   my (undef, $spec) = split /\s+/, $event->text, 2;

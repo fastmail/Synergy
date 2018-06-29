@@ -176,7 +176,7 @@ sub listener_specs {
   );
 }
 
-sub dispatch_event ($self, $event, $rch) {
+sub dispatch_event ($self, $event) {
   unless ($event->from_user) {
     $event->reply("Sorry, I don't know who you are.");
     $event->mark_handled;
@@ -195,7 +195,7 @@ sub dispatch_event ($self, $event, $rch) {
   $what &&= lc $what;
 
   # we can be polite even to non-lp-enabled users
-  return $self->_handle_good($event, $rch, $rest) if $what eq 'good';
+  return $self->_handle_good($event, $rest) if $what eq 'good';
 
   unless ($event->from_user->lp_auth_header) {
     $event->mark_handled;
@@ -204,10 +204,10 @@ sub dispatch_event ($self, $event, $rch) {
   }
 
   $event->mark_handled;
-  return $KNOWN{$what}->($self, $event, $rch, $rest)
+  return $KNOWN{$what}->($self, $event, $rest)
 }
 
-sub provide_lp_link ($self, $event, $rch) {
+sub provide_lp_link ($self, $event) {
   my $user = $event->from_user;
   return unless $user && $user->lp_auth_header;
 
@@ -349,7 +349,7 @@ has last_utterances => (
   },
 );
 
-sub record_utterance ($self, $event, $rch) {
+sub record_utterance ($self, $event) {
   # We're not going to support "++ that" by people who are not users.
   return unless $event->from_user;
 
@@ -362,7 +362,7 @@ sub record_utterance ($self, $event, $rch) {
   return;
 }
 
-sub see_if_back ($self, $event, $rch) {
+sub see_if_back ($self, $event) {
   # We're not going to support "++ that" by people who are not users.
   return unless $event->from_user;
 
@@ -608,7 +608,7 @@ sub lp_client_for_master ($self) {
   $self->lp_client_for_user($master);
 }
 
-sub _handle_last ($self, $event, $rch, $text) {
+sub _handle_last ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
@@ -627,7 +627,7 @@ sub _handle_last ($self, $event, $rch, $text) {
   }
 }
 
-sub _handle_timer ($self, $event, $rch, $text) {
+sub _handle_timer ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
@@ -976,12 +976,12 @@ sub task_plan_from_spec ($self, $event, $spec) {
   return (\%plan, undef);
 }
 
-sub _handle_task ($self, $event, $rch, $text) {
+sub _handle_task ($self, $event, $text) {
   # because of "new task for...";
   my $what = $text =~ s/\Atask\s+//r;
 
   if ($text =~ /\A \s* shortcuts \s* \z/xi) {
-    return $self->_handle_task_shortcuts($event, $rch, $text);
+    return $self->_handle_task_shortcuts($event, $text);
   }
 
   my ($target, $spec_text) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
@@ -1000,10 +1000,10 @@ sub _handle_task ($self, $event, $rch, $text) {
     },
   );
 
-  $self->_execute_task_plan($event, $rch, $plan, $error);
+  $self->_execute_task_plan($event, $plan, $error);
 }
 
-sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
+sub _execute_task_plan ($self, $event, $plan, $error) {
   if ($error) {
     my $errors = join q{  }, values %$error;
     return $event->reply($errors);
@@ -1142,7 +1142,7 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
   return \@tasks;
 }
 
-sub _send_task_list ($self, $event, $rch, $tasks) {
+sub _send_task_list ($self, $event, $tasks) {
   my $reply = q{};
   my $slack = q{};
 
@@ -1155,10 +1155,10 @@ sub _send_task_list ($self, $event, $rch, $tasks) {
   chomp $reply;
   chomp $slack;
 
-  $rch->private_reply($reply, { slack => $slack });
+  $event->private_reply($reply, { slack => $slack });
 }
 
-sub _handle_tasks ($self, $event, $rch, $text) {
+sub _handle_tasks ($self, $event, $text) {
   my $user = $event->from_user;
   my ($how_many) = $text =~ /\Atasks\s+([0-9]+)\z/;
 
@@ -1180,12 +1180,12 @@ sub _handle_tasks ($self, $event, $rch, $text) {
   return $event->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
 
-  $self->_send_task_list($event, $rch, \@task_page);
+  $self->_send_task_list($event, \@task_page);
 
   $event->reply("Responses to <tasks> are sent privately.") if $event->is_public;
 }
 
-sub _handle_task_like ($self, $event, $rch, $cmd, $count) {
+sub _handle_task_like ($self, $event, $cmd, $count) {
   my $user = $event->from_user;
 
   my $arg = $cmd eq 'urgent' ? { no_prefix => 1 } : {};
@@ -1199,23 +1199,23 @@ sub _handle_task_like ($self, $event, $rch, $cmd, $count) {
     return;
   }
 
-  $self->_send_task_list($event, $rch, $lp_tasks);
+  $self->_send_task_list($event, $lp_tasks);
   $event->reply("Responses to <$cmd> are sent privately.") if $event->is_public;
 }
 
-sub _handle_inbox ($self, $event, $rch, $text) {
-  return $self->_handle_task_like($event, $rch, 'inbox', 200);
+sub _handle_inbox ($self, $event, $text) {
+  return $self->_handle_task_like($event, 'inbox', 200);
 }
 
-sub _handle_urgent ($self, $event, $rch, $text) {
-  return $self->_handle_task_like($event, $rch, 'urgent', 100);
+sub _handle_urgent ($self, $event, $text) {
+  return $self->_handle_task_like($event, 'urgent', 100);
 }
 
-sub _handle_recurring ($self, $event, $rch, $text) {
-  return $self->_handle_task_like($event, $rch, 'recurring', 100);
+sub _handle_recurring ($self, $event, $text) {
+  return $self->_handle_task_like($event, 'recurring', 100);
 }
 
-sub _handle_plus_plus ($self, $event, $rch, $text) {
+sub _handle_plus_plus ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
@@ -1238,17 +1238,17 @@ sub _handle_plus_plus ($self, $event, $rch, $text) {
     $pretend = "task for $who: $last";
   }
 
-  return $self->_handle_task($event, $rch, $pretend);
+  return $self->_handle_task($event, $pretend);
 }
 
-sub _handle_angle_angle ($self, $event, $rch, $text) {
+sub _handle_angle_angle ($self, $event, $text) {
   my ($target, $rest) = split /\s+/, $text, 2;
 
   $target =~ s/:$//;
 
   my $pretend = "task for $target: $rest";
 
-  return $self->_handle_task($event, $rch, $pretend);
+  return $self->_handle_task($event, $pretend);
 }
 
 my @BYE = (
@@ -1269,7 +1269,7 @@ my @BYE = (
   "Farewell, %n.",
 );
 
-sub _handle_good ($self, $event, $rch, $text) {
+sub _handle_good ($self, $event, $text) {
   my $user = $event->from_user;
 
   my ($what) = $text =~ /^([a-z_]+)/i;
@@ -1315,7 +1315,7 @@ sub _handle_good ($self, $event, $rch, $text) {
   }
 
   if ($expand && $user->tasks_for_expando($expand)) {
-    $self->expand_tasks($rch, $event, $expand, "$reply  ");
+    $self->expand_tasks($event, $expand, "$reply  ");
     $reply = '';
   }
 
@@ -1344,13 +1344,13 @@ sub _handle_good ($self, $event, $rch, $text) {
   }
 }
 
-sub _handle_expand ($self, $event, $rch, $text) {
+sub _handle_expand ($self, $event, $text) {
   my $user = $event->from_user;
   my ($what) = $text =~ /^([a-z_]+)/i;
-  $self->expand_tasks($rch, $event, $what);
+  $self->expand_tasks($event, $what);
 }
 
-sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
+sub expand_tasks ($self, $event, $expand_target, $prefix='') {
   my $user = $event->from_user;
 
   my $lpc = $self->lp_client_for($user);
@@ -1366,7 +1366,7 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
     unless @tasks;
 
   my $parent = $CONFIG->{liquidplanner}{package}{recurring};
-  my $desc = $rch->channel->describe_event($event);
+  my $desc = $event->from_channel->describe_event($event);
 
   my (@ok, @fail);
   for my $task (@tasks) {
@@ -1489,7 +1489,7 @@ sub lp_timer_for_user ($self, $user) {
   return $timer;
 }
 
-sub _handle_showtime ($self, $event, $rch, $text) {
+sub _handle_showtime ($self, $event, $text) {
   my $user  = $event->from_user;
   my $timer = $user
             ? $self->timer_for_user($user)
@@ -1516,14 +1516,14 @@ sub _handle_showtime ($self, $event, $rch, $text) {
   return;
 }
 
-sub _handle_shows ($self, $event, $rch, $text) {
-  return $self->_handle_chill($event, $rch, 'until tomorrow')
+sub _handle_shows ($self, $event, $text) {
+  return $self->_handle_chill($event, 'until tomorrow')
     if $text =~ /\s*over\s*[+!.]*\s*/i;
 
   return;
 }
 
-sub _handle_chill ($self, $event, $rch, $text) {
+sub _handle_chill ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
@@ -1565,11 +1565,11 @@ sub _handle_chill ($self, $event, $rch, $text) {
   $event->reply("Okay, no more nagging until $when");
 }
 
-sub _handle_triple_zed ($self, $event, $rch, $text) {
-  $self->_handle_chill($event, $rch, "");
+sub _handle_triple_zed ($self, $event, $text) {
+  $self->_handle_chill($event, "");
 }
 
-sub _handle_commit ($self, $event, $rch, $comment) {
+sub _handle_commit ($self, $event, $comment) {
   my $user = $event->from_user;
   return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
@@ -1690,7 +1690,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   );
 }
 
-sub _handle_abort ($self, $event, $rch, $text) {
+sub _handle_abort ($self, $event, $text) {
   return $event->reply("I didn't understand your abort request.")
     unless $text =~ /^timer\b/i;
 
@@ -1717,7 +1717,7 @@ sub _handle_abort ($self, $event, $rch, $text) {
   }
 }
 
-sub _handle_start ($self, $event, $rch, $text) {
+sub _handle_start ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
@@ -1729,7 +1729,7 @@ sub _handle_start ($self, $event, $rch, $text) {
       unless $task;
 
     my $task_id = $task->[0]{id};
-    return $self->_handle_start_existing($event, $rch, $task_id);
+    return $self->_handle_start_existing($event, $task_id);
   }
 
   if ($text =~ /\A[0-9]+\z/) {
@@ -1742,7 +1742,7 @@ sub _handle_start ($self, $event, $rch, $text) {
     return $event->reply("Sorry, I couldn't find that task.")
       if $task_res->is_nil;
 
-    return $self->_handle_start_existing($event, $rch, $task_res->payload);
+    return $self->_handle_start_existing($event, $task_res->payload);
   }
 
   if ($text eq 'next') {
@@ -1775,7 +1775,7 @@ sub _handle_start ($self, $event, $rch, $text) {
   return $event->reply(q{You can either say "start LP-TASK-ID" or "start next".});
 }
 
-sub _handle_start_existing ($self, $event, $rch, $task) {
+sub _handle_start_existing ($self, $event, $task) {
   # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
   # TODO: print the description of the task instead of its number -- rjbs,
   # 2016-01-25
@@ -1800,7 +1800,7 @@ sub _handle_start_existing ($self, $event, $rch, $task) {
   }
 }
 
-sub _handle_resume ($self, $event, $rch, $text) {
+sub _handle_resume ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
@@ -1841,7 +1841,7 @@ sub _handle_resume ($self, $event, $rch, $text) {
   return $event->reply("Timer resumed. Task is: $task->{name}");
 }
 
-sub _handle_stop ($self, $event, $rch, $text) {
+sub _handle_stop ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
@@ -1868,7 +1868,7 @@ sub _handle_stop ($self, $event, $rch, $text) {
   return $event->reply("Okay, I stopped your timer.");
 }
 
-sub _handle_done ($self, $event, $rch, $text) {
+sub _handle_done ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
@@ -1887,13 +1887,13 @@ sub _handle_done ($self, $event, $rch, $text) {
       if $chill && $next;
   }
 
-  $self->_handle_commit($event, $rch, 'DONE');
-  $self->_handle_start($event, $rch, 'next') if $next;
-  $self->_handle_chill($event, $rch, "until I'm back") if $chill;
+  $self->_handle_commit($event, 'DONE');
+  $self->_handle_start($event, 'next') if $next;
+  $self->_handle_chill($event, "until I'm back") if $chill;
   return;
 }
 
-sub _handle_reset ($self, $event, $rch, $text) {
+sub _handle_reset ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
@@ -1928,7 +1928,7 @@ sub _handle_reset ($self, $event, $rch, $text) {
   }
 }
 
-sub _handle_spent ($self, $event, $rch, $text) {
+sub _handle_spent ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
@@ -1959,7 +1959,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
     $name =~ m{\A\s*(?:https://app.liquidplanner.com/space/$workspace_id/.*/)?([0-9]+)P?/?\s*\z}
   ) {
     my ($task_id) = ($1);
-    return $self->_spent_on_existing($event, $rch, $task_id, $duration);
+    return $self->_spent_on_existing($event, $task_id, $duration);
   }
 
   if ($name =~ m{\A\s*\*(\w+)\s*\z}) {
@@ -1968,7 +1968,7 @@ sub _handle_spent ($self, $event, $rch, $text) {
       unless $task;
 
     my $task_id = $task->[0]{id};
-    return $self->_spent_on_existing($event, $rch, $task_id, $duration);
+    return $self->_spent_on_existing($event, $task_id, $duration);
   }
 
   my ($plan, $error) = $self->task_plan_from_spec(
@@ -1986,10 +1986,10 @@ sub _handle_spent ($self, $event, $rch, $text) {
 
   $plan->{log_hours} = $duration / 3600;
 
-  $self->_execute_task_plan($event, $rch, $plan, $error);
+  $self->_execute_task_plan($event, $plan, $error);
 }
 
-sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
+sub _spent_on_existing ($self, $event, $task_id, $duration) {
   my $user = $event->from_user;
 
   my $lpc = $self->lp_client_for_user($user);
@@ -2040,33 +2040,33 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   );
 }
 
-sub _handle_projects ($self, $event, $rch, $text) {
+sub _handle_projects ($self, $event, $text) {
   my @sorted = sort $self->projects;
 
   $event->reply("Responses to <projects> are sent privately.")
     if $event->is_public;
-  $rch->private_reply('Known projects:');
+  $event->private_reply('Known projects:');
 
   for my $project (@sorted) {
     my $id = $self->project_by_shortcut($project)->[0]->{id};   # cool, LP
-    $rch->private_reply("$project (" . $self->item_uri($id) . ")");
+    $event->private_reply("$project (" . $self->item_uri($id) . ")");
   }
 }
 
-sub _handle_task_shortcuts ($self, $event, $rch, $text) {
+sub _handle_task_shortcuts ($self, $event, $text) {
   my @sorted = sort $self->tasks;
 
   $event->reply("Responses to <task shortcuts> are sent privately.")
     if $event->is_public;
-  $rch->private_reply('Known tasks:');
+  $event->private_reply('Known tasks:');
 
   for my $task (@sorted) {
     my $id = $self->task_by_shortcut($task)->[0]->{id};   # cool, LP
-    $rch->private_reply("$task (" . $self->item_uri($id) . ")");
+    $event->private_reply("$task (" . $self->item_uri($id) . ")");
   }
 }
 
-sub _handle_todo ($self, $event, $rch, $text) {
+sub _handle_todo ($self, $event, $text) {
   my $user = $event->from_user;
   my $desc = $text;
 
@@ -2086,7 +2086,7 @@ sub _handle_todo ($self, $event, $rch, $text) {
   return $event->reply($reply);
 }
 
-sub _handle_todos ($self, $event, $rch, $text) {
+sub _handle_todos ($self, $event, $text) {
   my $user = $event->from_user;
   my $lpc  = $self->lp_client_for_user($user);
   my $todo_res = $lpc->todo_items;
@@ -2097,10 +2097,10 @@ sub _handle_todos ($self, $event, $rch, $text) {
   return $event->reply("You don't have any open to-do items.") unless @todos;
 
   $event->reply("Responses to <todos> are sent privately.") if $event->is_public;
-  $rch->private_reply('Open to-do items:');
+  $event->private_reply('Open to-do items:');
 
   for my $todo (@todos) {
-    $rch->private_reply("- $todo->{title}");
+    $event->private_reply("- $todo->{title}");
   }
 }
 
@@ -2111,7 +2111,7 @@ sub _lp_assignment_is_unestimated {
       && ($assignment->{high_effort_remaining} // 0) < 0.00000001;
 }
 
-sub damage_report ($self, $event, $rch) {
+sub damage_report ($self, $event) {
   $event->text =~ /\A
     \s*
     ( damage \s+ )?
@@ -2205,12 +2205,12 @@ sub damage_report ($self, $event, $rch) {
 
   my $reply = join qq{\n}, @summaries;
 
-  $rch->private_reply(
+  $event->private_reply(
     "Report sent!",
     { slack_reaction => { event => $event, reaction => '-hourglass_flowing_sand' } },
   );
 
-  return $rch->private_reply(
+  return $event->private_reply(
     $reply,
     {
       slack => $slack_summary,
@@ -2218,7 +2218,7 @@ sub damage_report ($self, $event, $rch) {
   );
 }
 
-sub reload_shortcuts ($self, $event, $rch) {
+sub reload_shortcuts ($self, $event) {
   $self->_set_projects($self->get_project_shortcuts);
   $self->_set_tasks($self->get_task_shortcuts);
   $event->reply("Shortcuts reloaded");

@@ -19,7 +19,7 @@ sub listener_specs {
   };
 }
 
-sub handle_emit ($self, $event, $rch) {
+sub handle_emit ($self, $event) {
   my (undef, $text) = split /\s+/, $event->text, 2;
 
   $event->reply("$text", { slack => "$text" });

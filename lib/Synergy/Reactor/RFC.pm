@@ -47,7 +47,7 @@ sub rfc_title_for ($self, $number) {
   $self->_title_index->{$number};
 }
 
-sub handle_rfc ($self, $event, $rch) {
+sub handle_rfc ($self, $event) {
   my $text = $event->text;
 
   my ($num, $link) = $self->extract_rfc($text);

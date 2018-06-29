@@ -31,7 +31,7 @@ sub start ($self) {
     unless $channel;
 }
 
-sub handle_page ($self, $event, $rch) {
+sub handle_page ($self, $event) {
   $event->mark_handled;
 
   my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):\s+(.*)/is;

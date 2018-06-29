@@ -69,13 +69,7 @@ sub _inject_event ($self, $arg) {
     conversation_address => 'public',
   });
 
-  my $rch = Synergy::ReplyChannel->new({
-    channel => $self,
-    default_address => 'public',
-    private_address => 'private',
-  });
-
-  $self->hub->handle_event($event, $rch);
+  $self->hub->handle_event($event);
   return;
 }
 

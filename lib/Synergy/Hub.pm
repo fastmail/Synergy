@@ -160,7 +160,7 @@ for my $pair (
   });
 }
 
-sub handle_event ($self, $event, $rch) {
+sub handle_event ($self, $event) {
   $Logger->log([
     "%s event from %s/%s: %s",
     $event->type,
@@ -178,7 +178,7 @@ sub handle_event ($self, $event, $rch) {
   }
 
   if (1 < grep {; $_->[1]->is_exclusive } @hits) {
-    $rch->reply("Sorry, I find that message ambiguous.");
+    $event->reply("Sorry, I find that message ambiguous.");
     return;
   }
 
@@ -187,7 +187,7 @@ sub handle_event ($self, $event, $rch) {
     my $method  = $hit->[1]->method;
 
     try {
-      $reactor->$method($event, $rch);
+      $reactor->$method($event);
     } catch {
       my $error = $_;
 
@@ -195,7 +195,7 @@ sub handle_event ($self, $event, $rch) {
 
       my $rname = $reactor->name;
 
-      $rch->reply("My $rname reactor crashed while handling your message.  Sorry!");
+      $event->reply("My $rname reactor crashed while handling your message.  Sorry!");
       $Logger->log([
         "error with %s listener on %s: %s",
         $hit->[1]->name,
@@ -211,7 +211,7 @@ sub handle_event ($self, $event, $rch) {
     my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
     @replies = 'Does not compute.' unless @replies;
 
-    $rch->reply($replies[ rand @replies ]);
+    $event->reply($replies[ rand @replies ]);
     return;
   }
 

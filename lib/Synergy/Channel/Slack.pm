@@ -145,14 +145,7 @@ sub start ($self) {
       conversation_address => $slack_event->{channel},
     });
 
-    my $rch = Synergy::ReplyChannel->new(
-      channel => $self,
-      default_address => $slack_event->{channel},
-      private_address => $private_addr,
-      ( $is_public ? ( prefix => "$from_username: " ) : () ),
-    );
-
-    $self->hub->handle_event($event, $rch);
+    $self->hub->handle_event($event);
   };
 }
 

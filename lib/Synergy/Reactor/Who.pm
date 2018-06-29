@@ -18,7 +18,7 @@ sub listener_specs {
   };
 }
 
-sub handle_who ($self, $event, $rch) {
+sub handle_who ($self, $event) {
   $event->mark_handled;
 
   my ($what) = $event->text =~ /^who\s*(.*)/;

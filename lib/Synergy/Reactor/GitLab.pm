@@ -85,7 +85,7 @@ sub listener_specs {
   };
 }
 
-sub handle_reload ($self, $event, $rch) {
+sub handle_reload ($self, $event) {
   $event->mark_handled;
 
   return $event->reply("Sorry, I don't know who you are.")
@@ -97,13 +97,13 @@ sub handle_reload ($self, $event, $rch) {
 
   $what =~ s/^\s*|\s*$//g;
 
-  return $self->handle_my_config($event, $rch)  if $what eq 'my config';
-  return $self->handle_all_config($event, $rch) if $what eq 'all user config';
+  return $self->handle_my_config($event)  if $what eq 'my config';
+  return $self->handle_all_config($event) if $what eq 'all user config';
 
   return $event->reply("I don't know how to reload <$what>");
 }
 
-sub handle_my_config ($self, $event, $rch) {
+sub handle_my_config ($self, $event) {
   my $username = $event->from_user->username;
   my ($ok, $error) = $self->_update_user_config($username);
 
@@ -111,7 +111,7 @@ sub handle_my_config ($self, $event, $rch) {
   return $event->reply("error reloading config: $error");
 }
 
-sub handle_all_config ($self, $event, $rch) {
+sub handle_all_config ($self, $event) {
   return $event->reply("Sorry, only the master user can do that")
     unless $event->from_user->is_master;
 

@@ -50,7 +50,7 @@ sub start ($self) {
   return;
 }
 
-sub handle_remind ($self, $event, $rch) {
+sub handle_remind ($self, $event) {
   my $text = $event->text;
 
   # XXX: I think $event->reply should do this. -- rjbs, 2018-03-16

@@ -60,7 +60,7 @@ sub listener_specs {
   };
 }
 
-sub handle_upgrade ($self, $event, $rch) {
+sub handle_upgrade ($self, $event) {
   $event->mark_handled;
 
   my $old_version = $self->get_version;
@@ -106,7 +106,7 @@ sub handle_upgrade ($self, $event, $rch) {
 
   $self->save_state({
     restart_channel_name => $event->from_channel->name,
-    restart_to_address   => $rch->default_address,
+    restart_to_address   => $event->conversation_address,
   });
 
   my $timer = IO::Async::Timer::Countdown->new(
@@ -119,7 +119,7 @@ sub handle_upgrade ($self, $event, $rch) {
   $timer->start;
 }
 
-sub handle_version ($self, $event, $rch) {
+sub handle_version ($self, $event) {
   $event->reply("My version is: " . $self->get_version);
 
   $event->mark_handled;

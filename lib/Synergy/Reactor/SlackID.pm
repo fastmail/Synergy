@@ -40,13 +40,13 @@ sub listener_specs {
   );
 }
 
-sub handle_event ($self, $event, $rch) {
+sub handle_event ($self, $event) {
   $event->mark_handled;
 
   if ($event->text =~ /slackid \@?(\w+)/) {
     my $who = $1;
     my $user = first { $_->{name} eq $who }
-               values $rch->channel->slack->users->%*;
+               values $event->from_channel->slack->users->%*;
 
     return $event->reply("Sorry, I don't know who $who is")
       unless $user;
@@ -56,7 +56,7 @@ sub handle_event ($self, $event, $rch) {
 
   if ($event->text =~ /slackid #(\w+)/) {
     my $ch_name = $1;
-    my $channel = $rch->channel->slack->channel_named($ch_name);
+    my $channel = $event->from_channel->slack->channel_named($ch_name);
 
     return $event->reply("Sorry, I can't find #$ch_name.")
       unless $channel;
@@ -67,7 +67,7 @@ sub handle_event ($self, $event, $rch) {
   return $event->reply(qq{Sorry, I don't know how to resolve that.});
 }
 
-sub handle_reload_slack ($self, $event, $rch) {
+sub handle_reload_slack ($self, $event) {
   my ($what) = $event->text =~ /^reload slack (users|channels)/i;
 
   if ($what eq 'users') {

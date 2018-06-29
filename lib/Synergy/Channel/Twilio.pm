@@ -102,13 +102,7 @@ sub start ($self) {
       conversation_address => $from,
     });
 
-    my $rch = Synergy::ReplyChannel->new(
-      channel => $self,
-      default_address => $from,
-      private_address => $from,
-    );
-
-    $self->hub->handle_event($evt, $rch);
+    $self->hub->handle_event($evt);
 
     return [ 200, [ 'Content-Type', 'text/plain' ], [ "" ] ];
   });

@@ -60,16 +60,7 @@ sub _build_stream {
 
           my $event = $channel->_event_from_text($text);
 
-          my $rch = Synergy::ReplyChannel->new(
-            channel => $channel,
-            prefix  => ($event->from_user
-                        ? $event->from_user->username
-                        : $event->from_address) . ": ",
-            default_address => $event->transport_data->{default_reply_address},
-            private_address => $event->from_address,
-          );
-
-          $channel->hub->handle_event($event, $rch);
+          $channel->hub->handle_event($event);
        }
 
        return 0;

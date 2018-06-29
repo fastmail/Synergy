@@ -199,7 +199,7 @@ sub listener_specs {
   );
 }
 
-sub handle_cat_pic ($self, $event, $rch) {
+sub handle_cat_pic ($self, $event) {
   $event->mark_handled;
 
   my (undef, $fmt) = split /\s+/, lc $event->text, 2;
@@ -220,7 +220,7 @@ sub handle_cat_pic ($self, $event, $rch) {
   return;
 }
 
-sub handle_misc_pic ($self, $event, $rch) {
+sub handle_misc_pic ($self, $event) {
   my $text = $event->text;
   while ($text =~ /(\w+)\s+pic/ig) {
     my $name = lc $1;
@@ -235,7 +235,7 @@ sub handle_misc_pic ($self, $event, $rch) {
     my $emoji  = $e->{emoji}->[ int rand $e->{emoji}->@* ];
     my $slack  = $e->{slackname}->[ int rand $e->{slackname}->@* ];
 
-    if ($rch->channel->isa('Synergy::Channel::Slack')) {
+    if ($event->from_channel->isa('Synergy::Channel::Slack')) {
       return $event->reply(
         $emoji,
         {
@@ -256,7 +256,7 @@ sub handle_misc_pic ($self, $event, $rch) {
   return;
 }
 
-sub handle_dog_pic ($self, $event, $rch) {
+sub handle_dog_pic ($self, $event) {
   $event->mark_handled;
 
   my $res = $self->hub->http_get(

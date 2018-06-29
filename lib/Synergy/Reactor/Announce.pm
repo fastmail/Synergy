@@ -35,7 +35,7 @@ sub start ($self) {
     unless $channel;
 }
 
-sub handle_announce ($self, $event, $rch) {
+sub handle_announce ($self, $event) {
   $event->mark_handled;
 
   if ($event->from_channel->name eq $self->to_channel_name) {

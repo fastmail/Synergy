@@ -15,7 +15,7 @@ sub listener_specs {
   };
 }
 
-sub echo ($self, $event, $rch) {
+sub echo ($self, $event) {
   my $from_str = $event->from_user ? $event->from_user->username
                                    : $event->from_address;
 
