@@ -756,8 +756,8 @@ sub _handle_timer ($self, $event, $text) {
   my $url = $self->item_uri($task->{id});
 
   my $base  = "Your timer has been running for $time, work on";
-  my $slack = sprintf '%s: %s %s %s',
-    $base, $url, $self->_slack_item_link($task), $task->{name};
+  my $slack = sprintf '%s: %s %s',
+    $base, $self->_slack_item_link($task), $task->{name};
 
   return $event->reply(
     "$base: $task->{name} ($url)",
