@@ -312,7 +312,7 @@ sub provide_lp_link ($self, $event) {
   my $item_res = $lpc->get_item($item_id);
 
   unless ($item_res->is_success) {
-    return $event->reply("Sorry, something went wrong getting looking for that task.");
+    return $event->reply("Sorry, something went wrong looking for that task.");
   }
 
   return $event->reply("I can't find anything for LP$item_id.")
