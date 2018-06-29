@@ -407,6 +407,17 @@ has tasks => (
 );
 
 sub start ($self) {
+  my $timer = IO::Async::Timer::Periodic->new(
+    interval => 300,
+    on_tick  => sub ($timer, @arg) { $self->nag($timer); },
+  );
+
+  $self->hub->loop->add($timer);
+
+  $timer->start;
+}
+
+after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
     if (my $timer_state = $state->{user_timers}) {
       for my $username (keys %$timer_state) {
@@ -428,16 +439,7 @@ sub start ($self) {
 
     $self->save_state;
   }
-
-  my $timer = IO::Async::Timer::Periodic->new(
-    interval => 300,
-    on_tick  => sub ($timer, @arg) { $self->nag($timer); },
-  );
-
-  $self->hub->loop->add($timer);
-
-  $timer->start;
-}
+};
 
 sub nag ($self, $timer, @) {
   $Logger->log("considering nagging");
