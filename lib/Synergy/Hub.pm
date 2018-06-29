@@ -11,6 +11,8 @@ use Synergy::Logger '$Logger';
 
 use DBI;
 use JSON::MaybeXS;
+use YAML::XS;
+use TOML;
 use Module::Runtime qw(require_module);
 use Synergy::UserDirectory;
 use Path::Tiny ();
@@ -300,6 +302,17 @@ sub _slurp_json_file ($filename) {
   return JSON::MaybeXS->new->decode($json);
 }
 
+sub _slurp_toml_file ($filename) {
+  my $file = Path::Tiny::path($filename);
+  confess "config file does not exist" unless -e $file;
+  my $toml = $file->slurp_utf8;
+  my ($data, $err) = from_toml($toml);
+  unless ($data) {
+    die "Error parsing toml file $filename: $err\n";
+  }
+  return $data;
+}
+
 sub synergize_file {
   my $class = shift;
   my ($loop, $filename) = @_ == 2 ? @_
@@ -308,6 +321,7 @@ sub synergize_file {
 
   my $reader  = $filename =~ /\.ya?ml\z/ ? sub { YAML::XS::LoadFile($_[0]) }
               : $filename =~ /\.json\z/  ? \&_slurp_json_file
+              : $filename =~ /\.toml\z/  ? \&_slurp_toml_file
               : confess "don't know how to synergize_file $filename";
 
   return $class->synergize(
