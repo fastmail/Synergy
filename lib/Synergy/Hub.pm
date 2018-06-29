@@ -115,6 +115,7 @@ has server => (
   },
 );
 
+my %channel_and_reactor_names;
 
 for my $pair (
   [ qw( channel channels ) ],
@@ -143,7 +144,11 @@ for my $pair (
     code  => sub ($self, $thing) {
       my $name = $thing->name;
 
-      confess("$s named $name is already registered") if $self->$exists($name);
+      if (my $what = $channel_and_reactor_names{$name}) {
+        confess("$what named '$name' exists: cannot register $s named '$name'");
+      }
+
+      $channel_and_reactor_names{$name} = $s;
 
       $self->$add($name, $thing);
       $thing->register_with_hub($self);
