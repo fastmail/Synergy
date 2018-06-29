@@ -31,15 +31,47 @@ has project_id => (
   required => 1,
 );
 
-sub start ($self) {
-  my ($ok, $errors) = $self->_reload_all;
-  return if $ok;
+has user_config => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits  => [ 'Hash' ],
+  lazy => 1,
+  default => sub { {} },
+  writer => '_set_user_config',
+  handles => {
+    set_user  => 'set',
+  },
+);
 
-  $Logger->log([
-    "error doing initial user config load from GitLab: %s",
-    $errors,
-  ]);
+around register_with_hub => sub ($orig, $self, @args) {
+  $self->$orig(@args);
+
+  if (my $state = $self->fetch_state) {
+    $self->_set_user_config($state);
+  }
+};
+
+sub start ($self) {
+  my $timer = IO::Async::Timer::Countdown->new(
+    delay => 60,
+    on_expire => sub {
+      $Logger->log("fetching user config from GitLab");
+
+      my ($ok, $errors) = $self->_reload_all;
+      return if $ok;
+
+      $Logger->log([
+        "error doing initial user config load from GitLab: %s",
+        $errors,
+      ]);
+    }
+  );
+
+  $timer->start;
+  $self->hub->loop->add($timer);
 }
+
+sub state ($self) { return $self->user_config }
 
 sub listener_specs {
   return {
@@ -141,6 +173,8 @@ sub _update_user_config ($self, $username) {
   return (undef, "error with YAML in config") unless $uconfig;
 
   $self->hub->user_directory->reload_user($username, $uconfig);
+  $self->set_user($username => $uconfig);
+  $self->save_state;
   return (1, undef);
 }
 
