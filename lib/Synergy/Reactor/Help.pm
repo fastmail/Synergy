@@ -16,11 +16,12 @@ sub listener_specs {
     exclusive => 1,
     predicate => sub ($self, $e) {
       return unless $e->was_targeted;
-      return 1 if $e->text =~ /\A help (?: \s+ (.+) )? \z/ix;
+      return 1 if $e->text =~ /\A h[ae]lp (?: \s+ (.+) )? \z/ix;
       return;
     },
     help_entries => [
-      { title => "help", text => "provides help with using the bot" },
+      { title => "help", text => "help: list all the topics with help" },
+      { title => "help", text => "help TOPIC: provide help on " },
     ],
   };
 }
@@ -36,7 +37,8 @@ sub handle_help ($self, $event) {
 
   unless ($rest) {
     my $help_str = join q{, }, uniq sort map {; $_->{title} } @help;
-    $event->reply("Help entries: $help_str");
+    $event->reply(qq{You can say "help TOPIC" for help on a topic.  }
+                . qq{Here are topics I know about: $help_str});
     return;
   }
 
