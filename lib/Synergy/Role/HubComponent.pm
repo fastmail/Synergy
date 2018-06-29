@@ -33,5 +33,15 @@ sub register_with_hub ($self, $hub) {
   return;
 }
 
+sub state { return {} }
+
+sub save_state ($self, $state = $self->state) {
+  $self->hub->save_state($self, $state);
+}
+
+sub fetch_state ($self) {
+  $self->hub->fetch_state($self);
+}
+
 no Moose::Role;
 1;
