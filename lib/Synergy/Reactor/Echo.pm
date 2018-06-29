@@ -23,7 +23,7 @@ sub echo ($self, $event, $rch) {
     $from_str,
     $event->text;
 
-  $rch->reply($response);
+  $event->reply($response);
   $event->mark_handled;
 }
 

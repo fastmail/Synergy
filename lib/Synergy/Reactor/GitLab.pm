@@ -88,7 +88,7 @@ sub listener_specs {
 sub handle_reload ($self, $event, $rch) {
   $event->mark_handled;
 
-  return $rch->reply("Sorry, I don't know who you are.")
+  return $event->reply("Sorry, I don't know who you are.")
     unless $event->from_user;
 
   my $text = $event->text;
@@ -100,26 +100,26 @@ sub handle_reload ($self, $event, $rch) {
   return $self->handle_my_config($event, $rch)  if $what eq 'my config';
   return $self->handle_all_config($event, $rch) if $what eq 'all user config';
 
-  return $rch->reply("I don't know how to reload <$what>");
+  return $event->reply("I don't know how to reload <$what>");
 }
 
 sub handle_my_config ($self, $event, $rch) {
   my $username = $event->from_user->username;
   my ($ok, $error) = $self->_update_user_config($username);
 
-  return $rch->reply("your configuration has been reloaded") if $ok;
-  return $rch->reply("error reloading config: $error");
+  return $event->reply("your configuration has been reloaded") if $ok;
+  return $event->reply("error reloading config: $error");
 }
 
 sub handle_all_config ($self, $event, $rch) {
-  return $rch->reply("Sorry, only the master user can do that")
+  return $event->reply("Sorry, only the master user can do that")
     unless $event->from_user->is_master;
 
   my ($ok, $errors) = $self->_reload_all;
-  return $rch->reply("user config reloaded") if $ok;
+  return $event->reply("user config reloaded") if $ok;
 
   my $who = join ', ', sort @$errors;
-  return $rch->reply("encounted errors while reloading following users: $who");
+  return $event->reply("encounted errors while reloading following users: $who");
 }
 
 sub _reload_all ($self) {

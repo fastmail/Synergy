@@ -73,23 +73,23 @@ sub handle_upgrade ($self, $event, $rch) {
     "status --porcelain --untracked-files=no",
     \$status,
   )) {
-    $rch->reply("Failed to git status: $status_err");
+    $event->reply("Failed to git status: $status_err");
 
     return;
   } elsif ($status) {
-    $rch->reply("git directory dirty, can't upgrade: $status");
+    $event->reply("git directory dirty, can't upgrade: $status");
 
     return;
   }
 
   if (my $fetch_err = $self->git_do("fetch $spec")) {
-    $rch->reply("git fetch $spec failed: $fetch_err");
+    $event->reply("git fetch $spec failed: $fetch_err");
 
     return;
   }
 
   if (my $reset_err = $self->git_do("reset --hard FETCH_HEAD")) {
-    $rch->reply("git reset --hard FETCH_HEAD failed: $reset_err");
+    $event->reply("git reset --hard FETCH_HEAD failed: $reset_err");
 
     return;
   }
@@ -97,12 +97,12 @@ sub handle_upgrade ($self, $event, $rch) {
   my $new_version = $self->get_version;
 
   if ($new_version eq $old_version) {
-    $rch->reply("Looks like we're already at the latest! ($new_version)");
+    $event->reply("Looks like we're already at the latest! ($new_version)");
 
     return;
   }
 
-  $rch->reply("Upgraded from $old_version to $new_version; Restarting...");
+  $event->reply("Upgraded from $old_version to $new_version; Restarting...");
 
   $self->save_state({
     restart_channel_name => $event->from_channel->name,
@@ -120,7 +120,7 @@ sub handle_upgrade ($self, $event, $rch) {
 }
 
 sub handle_version ($self, $event, $rch) {
-  $rch->reply("My version is: " . $self->get_version);
+  $event->reply("My version is: " . $self->get_version);
 
   $event->mark_handled;
 

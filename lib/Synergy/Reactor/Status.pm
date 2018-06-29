@@ -22,7 +22,7 @@ sub listener_specs {
 
 sub handle_status ($self, $event, $rch) {
   my $uptime = duration(time - $^T);
-  $rch->reply("Online for $uptime.");
+  $event->reply("Online for $uptime.");
   $event->mark_handled;
 }
 

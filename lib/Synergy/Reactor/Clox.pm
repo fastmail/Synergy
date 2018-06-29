@@ -34,7 +34,7 @@ sub handle_clox ($self, $event, $rch) {
 
   my $time;
   if ($spec) {
-    return $rch->reply(qq{Sorry, I couldn't understand the time "$time".})
+    return $event->reply(qq{Sorry, I couldn't understand the time "$time".})
       unless $time = parse_date_for_user($spec, $event->from_user);
   } else {
     $time = DateTime->now;
@@ -89,7 +89,7 @@ sub handle_clox ($self, $event, $rch) {
   my $reply = "In Internet Time\N{TRADE MARK SIGN} $its $beats.  That's...\n";
   $reply .= join q{}, map {; "> $_\n" } @times;
 
-  $rch->reply($reply);
+  $event->reply($reply);
 }
 
 1;

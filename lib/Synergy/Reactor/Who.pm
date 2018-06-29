@@ -25,22 +25,22 @@ sub handle_who ($self, $event, $rch) {
   $what =~ s/\s*\?*\z//;
 
   if ($what =~ /\A\s*(is|are)\s+(you|synergy)\s*\z/) {
-    return $rch->reply(
+    return $event->reply(
       qq!I am Synergy, a holographic computer designed to be the ultimate audio-visual entertainment synthesizer.  I also help out with the timekeeping.!);
   }
 
   return -1 unless $what =~ s/\A(is|am)\s+//n;
 
   my $who = $self->resolve_name($what, $event->from_user);
-  return $rch->reply(qq!I don't know who "$what" is.!) if ! $who;
+  return $event->reply(qq!I don't know who "$what" is.!) if ! $who;
 
   my $whois = sprintf "%s (%s)", $who->username, $who->realname;
 
   if ($what eq $who->username) {
-    return $rch->reply(qq{"$what" is $whois.});
+    return $event->reply(qq{"$what" is $whois.});
   }
 
-  $rch->reply(qq["$what" is an alias for $whois.]);
+  $event->reply(qq["$what" is an alias for $whois.]);
 }
 
 1;

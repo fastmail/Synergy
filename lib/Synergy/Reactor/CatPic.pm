@@ -212,11 +212,11 @@ sub handle_cat_pic ($self, $event, $rch) {
 
   if ($res->code =~ /\A3..\z/) {
     my $loc = $res->header('Location');
-    $rch->reply($loc);
+    $event->reply($loc);
     return;
   }
 
-  $rch->reply("Something went wrong getting the kitties! \N{CRYING CAT FACE}");
+  $event->reply("Something went wrong getting the kitties! \N{CRYING CAT FACE}");
   return;
 }
 
@@ -236,7 +236,7 @@ sub handle_misc_pic ($self, $event, $rch) {
     my $slack  = $e->{slackname}->[ int rand $e->{slackname}->@* ];
 
     if ($rch->channel->isa('Synergy::Channel::Slack')) {
-      return $rch->reply(
+      return $event->reply(
         $emoji,
         {
           slack_reaction => { event => $event, reaction => $slack },
@@ -249,7 +249,7 @@ sub handle_misc_pic ($self, $event, $rch) {
     # because they contained "cat pic" embedded in them.  So if we're not Slack
     # (and by this point we know we're not) and the message is exactly a pic
     # request, we'll give an emoji reply.
-    $rch->reply($emoji) if $exact;
+    $event->reply($emoji) if $exact;
     return;
   }
 
@@ -267,12 +267,12 @@ sub handle_dog_pic ($self, $event, $rch) {
   my $error = $@;
 
   if ($json && $json->{status} eq 'success') {
-    $rch->reply($json->{message});
+    $event->reply($json->{message});
     return;
   }
 
   $Logger->log("doggo error: $error") if $error;
-  $rch->reply("Something went wrong getting the doggos!");
+  $event->reply("Something went wrong getting the doggos!");
   return;
 }
 

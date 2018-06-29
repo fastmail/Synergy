@@ -54,7 +54,7 @@ sub handle_rfc ($self, $event, $rch) {
 
   unless (defined $num && defined $link) {
     if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+/ix) {
-      $rch->reply("Oddly, I could not figure out what RFC you meant");
+      $event->reply("Oddly, I could not figure out what RFC you meant");
 
       $event->mark_handled;
     }
@@ -64,7 +64,7 @@ sub handle_rfc ($self, $event, $rch) {
 
   my $title = $self->rfc_title_for($num);
 
-  $rch->reply(
+  $event->reply(
     ($title ? "RFC $num: $title\n$link" : "RFC $num - $link"),
     {
       slack => "<$link|RFC $num>" . ($title ? ": $title" : q{})

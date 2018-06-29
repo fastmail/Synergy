@@ -21,10 +21,10 @@ sub listener_specs {
 
 sub handle_eject ($self, $event, $rch) {
   $event->mark_handled;
-  return $rch->reply('only the master user can do that')
+  return $event->reply('only the master user can do that')
     unless $event->from_user && $event->from_user->is_master;
 
-  $rch->reply('Good bye.');
+  $event->reply('Good bye.');
 
   my $timer = IO::Async::Timer::Countdown->new(
     delay => 1,

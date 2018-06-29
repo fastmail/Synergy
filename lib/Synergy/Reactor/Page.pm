@@ -37,19 +37,19 @@ sub handle_page ($self, $event, $rch) {
   my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):\s+(.*)/is;
 
   unless (length $who and length $what) {
-    $rch->reply("usage: page USER: MESSAGE");
+    $event->reply("usage: page USER: MESSAGE");
     return;
   }
 
   my $user = $self->hub->user_directory->user_by_name($who);
 
   unless ($user) {
-    $rch->reply("I don't know who '$who' is. Sorry :confused:");
+    $event->reply("I don't know who '$who' is. Sorry :confused:");
     return;
   }
 
   unless ($user->identities->{ $self->page_channel_name } || $user->has_phone) {
-    $rch->reply("I don't know how to page $who, sorry.");
+    $event->reply("I don't know how to page $who, sorry.");
     return;
   }
 
@@ -59,7 +59,7 @@ sub handle_page ($self, $event, $rch) {
                                : $event->from_address;
 
   $page_channel->send_message_to_user($user, "$from says: $what");
-  $rch->reply("Page sent!");
+  $event->reply("Page sent!");
 }
 
 1;

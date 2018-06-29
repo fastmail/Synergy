@@ -178,7 +178,7 @@ sub listener_specs {
 
 sub dispatch_event ($self, $event, $rch) {
   unless ($event->from_user) {
-    $rch->reply("Sorry, I don't know who you are.");
+    $event->reply("Sorry, I don't know who you are.");
     $event->mark_handled;
     return 1;
   }
@@ -199,7 +199,7 @@ sub dispatch_event ($self, $event, $rch) {
 
   unless ($event->from_user->lp_auth_header) {
     $event->mark_handled;
-    $rch->reply($ERR_NO_LP);
+    $event->reply($ERR_NO_LP);
     return 1;
   }
 
@@ -217,10 +217,10 @@ sub provide_lp_link ($self, $event, $rch) {
     my $item_res = $self->lp_client_for_user($user)->get_item($item_id);
 
     unless ($item_res->is_success) {
-      return $rch->reply("Sorry, something went wrong getting looking for LP$item_id");
+      return $event->reply("Sorry, something went wrong getting looking for LP$item_id");
     }
 
-    return $rch->reply("I can't find anything for LP$item_id.")
+    return $event->reply("I can't find anything for LP$item_id.")
       unless my $item = $item_res->payload;
 
     my $name = $item->{name};
@@ -235,7 +235,7 @@ sub provide_lp_link ($self, $event, $rch) {
 
       my $uri = $self->item_uri($item_id);
 
-      $rch->reply(
+      $event->reply(
         "$icon LP$item_id: $item->{name} ($uri)",
         {
           slack => sprintf '%s %s: %s',
@@ -243,7 +243,7 @@ sub provide_lp_link ($self, $event, $rch) {
         },
       );
     } else {
-      $rch->reply("LP$item_id: is a $item->{type}");
+      $event->reply("LP$item_id: is a $item->{type}");
     }
 
     if ($event->was_targeted && $event->text =~ /\A\s* $lp_id_re \s*\z/x) {
@@ -378,7 +378,7 @@ sub see_if_back ($self, $event, $rch) {
     $timer->chill_until_active(0);
     $timer->clear_chilltill;
     $self->save_state;
-    $rch->reply("You're back!  No longer chilling.")
+    $event->reply("You're back!  No longer chilling.")
       if $timer->is_business_hours;
   }
 }
@@ -611,7 +611,7 @@ sub lp_client_for_master ($self) {
 sub _handle_last ($self, $event, $rch, $text) {
   my $user = $event->from_user;
 
-  return $rch->reply($ERR_NO_LP)
+  return $event->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
   return if length $text;
@@ -621,22 +621,22 @@ sub _handle_last ($self, $event, $rch, $text) {
   if (my $last = $self->get_last_utterance(
     $event->source_identifier
   )) {
-    $rch->reply("The last thing you said here was: $last");
+    $event->reply("The last thing you said here was: $last");
   } else {
-    $rch->reply("You haven't said anything here yet that I've seen (ignoring 'last')");
+    $event->reply("You haven't said anything here yet that I've seen (ignoring 'last')");
   }
 }
 
 sub _handle_timer ($self, $event, $rch, $text) {
   my $user = $event->from_user;
 
-  return $rch->reply($ERR_NO_LP)
+  return $event->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
 
-  return $rch->reply("Sorry, something went wrong getting your timer.")
+  return $event->reply("Sorry, something went wrong getting your timer.")
     unless $timer_res->is_success;
 
   my $timer = $timer_res->payload;
@@ -654,7 +654,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
       $msg = "Like I keep telling you, you don't have a running timer!";
     }
 
-    return $rch->reply($msg);
+    return $event->reply($msg);
   }
 
   my $time = concise( duration( $timer->{running_time} * 3600 ) );
@@ -670,7 +670,7 @@ sub _handle_timer ($self, $event, $rch, $text) {
   my $slack = sprintf '%s: %s %s %s',
     $base, $url, $self->_slack_item_link($task), $task->{name};
 
-  return $rch->reply(
+  return $event->reply(
     "$base: $task->{name} ($url)",
     {
       slack => $slack,
@@ -987,7 +987,7 @@ sub _handle_task ($self, $event, $rch, $text) {
   my ($target, $spec_text) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
 
   unless ($target and $spec_text) {
-    return $rch->reply("Does not compute.  Usage:  task for TARGET: TASK");
+    return $event->reply("Does not compute.  Usage:  task for TARGET: TASK");
   }
 
   my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
@@ -1006,20 +1006,20 @@ sub _handle_task ($self, $event, $rch, $text) {
 sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
   if ($error) {
     my $errors = join q{  }, values %$error;
-    return $rch->reply($errors);
+    return $event->reply($errors);
   }
 
   my $lpc = $self->lp_client_for_user($event->from_user);
 
   my $arg = {};
 
-  my $task = $self->_create_lp_task($rch, $plan, $arg);
+  my $task = $self->_create_lp_task($event, $plan, $arg);
 
   unless ($task) {
     if ($arg->{already_notified}) {
       return;
     } else {
-      return $rch->reply(
+      return $event->reply(
         "Sorry, something went wrong when I tried to make that task.",
         $arg,
       );
@@ -1083,7 +1083,7 @@ sub _execute_task_plan ($self, $event, $rch, $plan, $error) {
     $reply_base,
     $task->{item_email};
 
-  $rch->reply($plain, { slack => $slack });
+  $event->reply($plain, { slack => $slack });
 }
 
 sub _start_timer ($self, $user, $task) {
@@ -1166,7 +1166,7 @@ sub _handle_tasks ($self, $event, $rch, $text) {
   my $page = $how_many && $how_many > 0 ? $how_many : 1;
 
   unless ($page <= 10) {
-    return $rch->reply(
+    return $event->reply(
       "If it's not in your first ten pages, better go to the web.",
     );
   }
@@ -1177,12 +1177,12 @@ sub _handle_tasks ($self, $event, $rch, $text) {
   my $lp_tasks = $self->lp_tasks_for_user($user, $count, 'tasks');
   my @task_page = splice @$lp_tasks, $start, $per_page;
 
-  return $rch->reply("You don't have any open tasks right now.  Woah!")
+  return $event->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
 
   $self->_send_task_list($event, $rch, \@task_page);
 
-  $rch->reply("Responses to <tasks> are sent privately.") if $event->is_public;
+  $event->reply("Responses to <tasks> are sent privately.") if $event->is_public;
 }
 
 sub _handle_task_like ($self, $event, $rch, $cmd, $count) {
@@ -1195,12 +1195,12 @@ sub _handle_task_like ($self, $event, $rch, $cmd, $count) {
     my $suffix = $cmd =~ /(inbox|urgent)/n
                ? ' \o/'
                : '';
-    $rch->reply("You don't have any open $cmd tasks right now.$suffix");
+    $event->reply("You don't have any open $cmd tasks right now.$suffix");
     return;
   }
 
   $self->_send_task_list($event, $rch, $lp_tasks);
-  $rch->reply("Responses to <$cmd> are sent privately.") if $event->is_public;
+  $event->reply("Responses to <$cmd> are sent privately.") if $event->is_public;
 }
 
 sub _handle_inbox ($self, $event, $rch, $text) {
@@ -1218,11 +1218,11 @@ sub _handle_recurring ($self, $event, $rch, $text) {
 sub _handle_plus_plus ($self, $event, $rch, $text) {
   my $user = $event->from_user;
 
-  return $rch->reply($ERR_NO_LP)
+  return $event->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
   unless (length $text) {
-    return $rch->reply("Thanks, but I'm only as awesome as my creators.");
+    return $event->reply("Thanks, but I'm only as awesome as my creators.");
   }
 
   my $who     = $event->from_user->username;
@@ -1232,7 +1232,7 @@ sub _handle_plus_plus ($self, $event, $rch, $text) {
     my $last  = $self->get_last_utterance($event->source_identifier);
 
     unless (length $last) {
-      return $rch->reply("I don't know what 'that' refers to.");
+      return $event->reply("I don't know what 'that' refers to.");
     }
 
     $pretend = "task for $who: $last";
@@ -1311,7 +1311,7 @@ sub _handle_good ($self, $event, $rch, $text) {
 
   if ($reply and not $user->lp_auth_header) {
     $event->mark_handled;
-    return $rch->reply($reply);
+    return $event->reply($reply);
   }
 
   if ($expand && $user->tasks_for_expando($expand)) {
@@ -1323,12 +1323,12 @@ sub _handle_good ($self, $event, $rch, $text) {
     my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
     if ($timer_res->is_failure) {
       $event->mark_handled;
-      return $rch->reply("I couldn't figure out whether you had a running timer, so I gave up.")
+      return $event->reply("I couldn't figure out whether you had a running timer, so I gave up.")
     }
 
     if ($timer_res->has_payload) {
       $event->mark_handled;
-      return $rch->reply("You've got a running timer!  You should commit it.")
+      return $event->reply("You've got a running timer!  You should commit it.")
     }
   }
 
@@ -1340,7 +1340,7 @@ sub _handle_good ($self, $event, $rch, $text) {
 
   if ($reply) {
     $event->mark_handled;
-    return $rch->reply($reply);
+    return $event->reply($reply);
   }
 }
 
@@ -1357,12 +1357,12 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
 
   unless ($expand_target && $expand_target =~ /\S/) {
     my @names = sort $user->defined_expandoes;
-    return $rch->reply($prefix . "You don't have any expandoes") unless @names;
-    return $rch->reply($prefix . "Your expandoes: " . (join q{, }, @names));
+    return $event->reply($prefix . "You don't have any expandoes") unless @names;
+    return $event->reply($prefix . "Your expandoes: " . (join q{, }, @names));
   }
 
   my @tasks = $user->tasks_for_expando($expand_target);
-  return $rch->reply($prefix . "You don't have an expando for <$expand_target>")
+  return $event->reply($prefix . "You don't have an expando for <$expand_target>")
     unless @tasks;
 
   my $parent = $CONFIG->{liquidplanner}{package}{recurring};
@@ -1400,10 +1400,10 @@ sub expand_tasks ($self, $rch, $event, $expand_target, $prefix='') {
     $reply = "Something impossible happened.  How exciting!";
   }
 
-  $rch->reply($prefix . $reply);
+  $event->reply($prefix . $reply);
 }
 
-sub _create_lp_task ($self, $rch, $my_arg, $arg) {
+sub _create_lp_task ($self, $event, $my_arg, $arg) {
   my %container = (
     package_id  => $my_arg->{urgent}
                 ? $CONFIG->{liquidplanner}{package}{urgent}
@@ -1421,14 +1421,14 @@ sub _create_lp_task ($self, $rch, $my_arg, $arg) {
     unless ($projects && @$projects) {
       $arg->{already_notified} = 1;
 
-      return $rch->reply(
+      return $event->reply(
           "I am not aware of a project named '$project'. (Try 'projects' "
         . "to see what projects I know about.)",
       );
     }
 
     if (@$projects > 1) {
-      return $rch->reply(
+      return $event->reply(
           "More than one LiquidPlanner project has the shortcut '$project'. "
         . "Their ids are: "
         . join(q{, }, map {; $_->{id} } @$projects),
@@ -1495,20 +1495,20 @@ sub _handle_showtime ($self, $event, $rch, $text) {
             ? $self->timer_for_user($user)
             : undef;
 
-  return $rch->reply($ERR_NO_LP)
+  return $event->reply($ERR_NO_LP)
     unless $timer;
 
   if ($timer->has_chilltill and $timer->chilltill > time) {
     if ($timer->is_business_hours) {
-      $rch->reply("Okay, back to work!");
+      $event->reply("Okay, back to work!");
     } else {
-      $rch->reply("Back to normal business hours, then.");
+      $event->reply("Back to normal business hours, then.");
     }
   } elsif ($timer->is_business_hours) {
-    $rch->reply("I thought it was already showtime!");
+    $event->reply("I thought it was already showtime!");
   } else {
     $timer->start_showtime;
-    return $rch->reply("Okay, business hours extended!");
+    return $event->reply("Okay, business hours extended!");
   }
 
   $timer->clear_chilltill;
@@ -1526,13 +1526,13 @@ sub _handle_shows ($self, $event, $rch, $text) {
 sub _handle_chill ($self, $event, $rch, $text) {
   my $user = $event->from_user;
 
-  return $rch->reply($ERR_NO_LP)
+  return $event->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
   {
     my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
-    return $rch->reply("You've got a running timer!  You should commit it.")
+    return $event->reply("You've got a running timer!  You should commit it.")
       if $timer_res->is_success && $timer_res->has_payload;
   }
 
@@ -1543,11 +1543,11 @@ sub _handle_chill ($self, $event, $rch, $text) {
   if (! length $text or $text =~ /^until\s+I'm\s+back\s*$/i) {
     $sy_timer->chill_until_active(1);
     $self->save_state;
-    return $rch->reply("Okay, I'll stop pestering you until you've active again.");
+    return $event->reply("Okay, I'll stop pestering you until you've active again.");
   }
 
   my $time = parse_time_hunk($text, $user);
-  return $rch->reply("Sorry, I couldn't parse '$text' into a time")
+  return $event->reply("Sorry, I couldn't parse '$text' into a time")
     unless $time;
 
   my $when = DateTime->from_epoch(
@@ -1556,13 +1556,13 @@ sub _handle_chill ($self, $event, $rch, $text) {
   )->format_cldr("yyyy-MM-dd HH:mm zzz");
 
   if ($time <= time) {
-    $rch->reply("That sounded like you want to chill until the past ($when).");
+    $event->reply("That sounded like you want to chill until the past ($when).");
     return;
   }
 
   $sy_timer->chilltill($time);
   $self->save_state;
-  $rch->reply("Okay, no more nagging until $when");
+  $event->reply("Okay, no more nagging until $when");
 }
 
 sub _handle_triple_zed ($self, $event, $rch, $text) {
@@ -1571,7 +1571,7 @@ sub _handle_triple_zed ($self, $event, $rch, $text) {
 
 sub _handle_commit ($self, $event, $rch, $comment) {
   my $user = $event->from_user;
-  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -1579,7 +1579,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
     my $last  = $self->get_last_utterance($event->source_identifier);
 
     unless (length $last) {
-      return $rch->reply("I don't know what 'that' refers to.");
+      return $event->reply("I don't know what 'that' refers to.");
     }
 
     $comment = $last;
@@ -1595,23 +1595,23 @@ sub _handle_commit ($self, $event, $rch, $comment) {
 
   my $lp_timer = $self->lp_timer_for_user($user);
 
-  return $rch->reply("You don't seem to have a running timer.")
+  return $event->reply("You don't seem to have a running timer.")
     unless $lp_timer && ref $lp_timer; # XXX <-- stupid return type
 
   my $sy_timer = $self->timer_for_user($user);
-  return $rch->reply("You don't timer-capable.") unless $sy_timer;
+  return $event->reply("You don't timer-capable.") unless $sy_timer;
 
   my $task_res = $lpc->get_item($lp_timer->{item_id});
 
   unless ($task_res->is_success) {
-    return $rch->reply("I couldn't log the work because I couldn't find the current task's activity id.");
+    return $event->reply("I couldn't log the work because I couldn't find the current task's activity id.");
   }
 
   my $task = $task_res->payload;
   my $activity_id = $task->{activity_id};
 
   unless ($activity_id) {
-    return $rch->reply("I couldn't log the work because the task doesn't have a defined activity.");
+    return $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
   }
 
   if ($meta{STOP} and ! $sy_timer->chilling) {
@@ -1642,7 +1642,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
 
   unless ($commit_res->is_success) {
     $self->save_state;
-    return $rch->reply("I couldn't commit your work, sorry.");
+    return $event->reply("I couldn't commit your work, sorry.");
   }
 
   $sy_timer->clear_last_nag;
@@ -1682,7 +1682,7 @@ sub _handle_commit ($self, $event, $rch, $comment) {
   my $slack = sprintf '%s  %s %s',
     $base, $self->_slack_item_link($task), $task->{name};
 
-  $rch->reply(
+  $event->reply(
     $text,
     {
       slack => $slack,
@@ -1691,19 +1691,19 @@ sub _handle_commit ($self, $event, $rch, $comment) {
 }
 
 sub _handle_abort ($self, $event, $rch, $text) {
-  return $rch->reply("I didn't understand your abort request.")
+  return $event->reply("I didn't understand your abort request.")
     unless $text =~ /^timer\b/i;
 
   my $user = $event->from_user;
-  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
 
-  return $rch->reply("Sorry, something went wrong getting your timer.")
+  return $event->reply("Sorry, something went wrong getting your timer.")
     unless $timer_res->is_success;
 
-  return $rch->reply("You don't have a running timer to abort.")
+  return $event->reply("You don't have a running timer to abort.")
     unless my $timer = $timer_res->payload;
 
   my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
@@ -1711,15 +1711,15 @@ sub _handle_abort ($self, $event, $rch, $text) {
 
   if ($stop_res->is_success and $clr_res->is_success) {
     $self->timer_for_user($user)->clear_last_nag;
-    $rch->reply("Okay, I stopped and cleared your timer.");
+    $event->reply("Okay, I stopped and cleared your timer.");
   } else {
-    $rch->reply("Something went wrong aborting your timer.");
+    $event->reply("Something went wrong aborting your timer.");
   }
 }
 
 sub _handle_start ($self, $event, $rch, $text) {
   my $user = $event->from_user;
-  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -1736,10 +1736,10 @@ sub _handle_start ($self, $event, $rch, $text) {
     my $task_id = $text;
     my $task_res = $lpc->get_item($task_id);
 
-    return $rch->reply("Sorry, something went wrong trying to find that task.")
+    return $event->reply("Sorry, something went wrong trying to find that task.")
       if $task_res->is_success;
 
-    return $rch->reply("Sorry, I couldn't find that task.")
+    return $event->reply("Sorry, I couldn't find that task.")
       if $task_res->is_nil;
 
     return $self->_handle_start_existing($event, $rch, $task_res->payload);
@@ -1749,7 +1749,7 @@ sub _handle_start ($self, $event, $rch, $text) {
     my $lp_tasks = $self->lp_tasks_for_user($user, 1);
 
     unless ($lp_tasks && $lp_tasks->[0]) {
-      return $rch->reply("I can't get your tasks to start the next one.");
+      return $event->reply("I can't get your tasks to start the next one.");
     }
 
     my $task = $lp_tasks->[0];
@@ -1763,16 +1763,16 @@ sub _handle_start ($self, $event, $rch, $text) {
       my $slack = sprintf "Started task %s: %s",
         $self->_slack_item_link($task), $task->{name};
 
-      return $rch->reply(
+      return $event->reply(
         $text,
         { slack => $slack },
       );
     } else {
-      return $rch->reply("I couldn't start your next task.");
+      return $event->reply("I couldn't start your next task.");
     }
   }
 
-  return $rch->reply(q{You can either say "start LP-TASK-ID" or "start next".});
+  return $event->reply(q{You can either say "start LP-TASK-ID" or "start next".});
 }
 
 sub _handle_start_existing ($self, $event, $rch, $task) {
@@ -1791,18 +1791,18 @@ sub _handle_start_existing ($self, $event, $rch, $task) {
     my $slack = sprintf "Started task %s: %s",
       $self->_slack_item_link($task), $task->{name};
 
-    return $rch->reply(
+    return $event->reply(
       $text,
       { slack => $slack },
     );
   } else {
-    return $rch->reply("Sorry, something went wrong and I couldn't start the timer.");
+    return $event->reply("Sorry, something went wrong and I couldn't start the timer.");
   }
 }
 
 sub _handle_resume ($self, $event, $rch, $text) {
   my $user = $event->from_user;
-  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -1812,65 +1812,65 @@ sub _handle_resume ($self, $event, $rch, $text) {
     my $task_res = $lpc->get_item($lp_timer->{item_id});
 
     unless ($task_res->is_success) {
-      return $rch->reply("You already have a running timer (but I couldn't figure out its task…)");
+      return $event->reply("You already have a running timer (but I couldn't figure out its task…)");
     }
 
     my $task = $task_res->payload;
-    return $rch->reply("You already have a running timer ($task->{name})");
+    return $event->reply("You already have a running timer ($task->{name})");
   }
 
   my $task_id = $self->last_lp_timer_task_id_for_user($user);
 
   unless ($task_id) {
-    return $rch->reply("I'm not aware of any previous timer you had running. Sorry!");
+    return $event->reply("I'm not aware of any previous timer you had running. Sorry!");
   }
 
   my $task_res = $lpc->get_item($task_id);
 
   unless ($task_res->is_success) {
-    return $rch->reply("I found your timer but I couldn't figure out its task…");
+    return $event->reply("I found your timer but I couldn't figure out its task…");
   }
 
   my $task = $task_res->payload;
   my $res  = $lpc->start_timer_for_task_id($task->{id});
 
   unless ($res->is_success) {
-    return $rch->reply("I failed to resume the timer for $task->{name}, sorry!");
+    return $event->reply("I failed to resume the timer for $task->{name}, sorry!");
   }
 
-  return $rch->reply("Timer resumed. Task is: $task->{name}");
+  return $event->reply("Timer resumed. Task is: $task->{name}");
 }
 
 sub _handle_stop ($self, $event, $rch, $text) {
   my $user = $event->from_user;
-  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
-  return $rch->reply("Quit it!  I'm telling mom!")
+  return $event->reply("Quit it!  I'm telling mom!")
     if $text =~ /\Ahitting yourself[.!]*\z/;
 
-  return $rch->reply("I didn't understand your stop request.")
+  return $event->reply("I didn't understand your stop request.")
     unless $text eq 'timer';
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
 
-  return $rch->reply("Sorry, something went wrong getting your timer.")
+  return $event->reply("Sorry, something went wrong getting your timer.")
     unless $timer_res->is_success;
 
-  return $rch->reply("You don't have a running timer to stop.")
+  return $event->reply("You don't have a running timer to stop.")
     unless my $timer = $timer_res->payload;
 
   my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
-  return $rch->reply("I couldn't stop your timer.")
+  return $event->reply("I couldn't stop your timer.")
     unless $stop_res->is_success;
 
   $self->timer_for_user($user)->clear_last_nag;
-  return $rch->reply("Okay, I stopped your timer.");
+  return $event->reply("Okay, I stopped your timer.");
 }
 
 sub _handle_done ($self, $event, $rch, $text) {
   my $user = $event->from_user;
-  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
   my $next;
   my $chill;
@@ -1883,7 +1883,7 @@ sub _handle_done ($self, $event, $rch, $text) {
       return -1;
     }
 
-    return $rch->reply("No, it's nonsense to chill /and/ start a new task!")
+    return $event->reply("No, it's nonsense to chill /and/ start a new task!")
       if $chill && $next;
   }
 
@@ -1895,25 +1895,25 @@ sub _handle_done ($self, $event, $rch, $text) {
 
 sub _handle_reset ($self, $event, $rch, $text) {
   my $user = $event->from_user;
-  return $rch->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
 
   my $lpc = $self->lp_client_for_user($user);
 
-  return $rch->reply("I didn't understand your reset request. (try 'reset timer')")
+  return $event->reply("I didn't understand your reset request. (try 'reset timer')")
     unless ($text // 'timer') eq 'timer';
 
   my $timer_res = $lpc->my_running_timer;
 
-  return $rch->reply("Sorry, something went wrong getting your timer.")
+  return $event->reply("Sorry, something went wrong getting your timer.")
     unless $timer_res->is_success;
 
-  return $rch->reply("You don't have a running timer to reset.")
+  return $event->reply("You don't have a running timer to reset.")
     unless my $timer = $timer_res->payload;
 
   my $task_id = $timer->{item_id};
   my $clr_res = $lpc->clear_timer_for_task_id($task_id);
 
-  return $rch->reply("Something went wrong resetting your timer.")
+  return $event->reply("Something went wrong resetting your timer.")
     unless $clr_res->is_success;
 
   $self->timer_for_user($user)->clear_last_nag;
@@ -1922,32 +1922,32 @@ sub _handle_reset ($self, $event, $rch, $text) {
 
   if ($start_res->is_success) {
     $self->set_last_lp_timer_task_id_for_user($user, $task_id);
-    $rch->reply("Okay, I cleared your timer and left it running.");
+    $event->reply("Okay, I cleared your timer and left it running.");
   } else {
-    $rch->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
+    $event->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
   }
 }
 
 sub _handle_spent ($self, $event, $rch, $text) {
   my $user = $event->from_user;
 
-  return $rch->reply($ERR_NO_LP)
+  return $event->reply($ERR_NO_LP)
     unless $user && $user->lp_auth_header;
 
   my ($dur_str, $name) = $text =~ /\A(\V+?)(?:\s*:|\s*\son)\s+(\S.+)\z/s;
   unless ($dur_str && $name) {
-    return $rch->reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
+    return $event->reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
   }
 
   my $duration;
   my $ok = eval { $duration = parse_duration($dur_str); 1 };
   unless ($ok) {
-    return $rch->reply("I didn't understand how long you spent!");
+    return $event->reply("I didn't understand how long you spent!");
   }
 
   if ($duration > 12 * 86_400) {
     my $dur_restr = duration($duration);
-    return $rch->reply(
+    return $event->reply(
         qq{You said to spend "$dur_str" which I read as $dur_restr.  }
       . qq{That's too long!},
     );
@@ -1997,14 +1997,14 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   my $task_res = $lpc->get_item($task_id);
 
   unless ($task_res->is_success) {
-    return $rch->reply("I couldn't log the work because I couldn't find the task.");
+    return $event->reply("I couldn't log the work because I couldn't find the task.");
   }
 
   my $task = $task_res->payload;
   my $activity_id = $task->{activity_id};
 
   unless ($activity_id) {
-    return $rch->reply("I couldn't log the work because the task doesn't have a defined activity!");
+    return $event->reply("I couldn't log the work because the task doesn't have a defined activity!");
   }
 
   my $track_ok = $lpc->track_time({
@@ -2014,7 +2014,7 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   });
 
   unless ($track_ok) {
-    return $rch->reply("I couldn't log your time, sorry.");
+    return $event->reply("I couldn't log your time, sorry.");
   }
 
   my $uri = $self->item_uri($task->{id});
@@ -2032,7 +2032,7 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
   #   $slack_base .= ", but I couldn't start your timer";
   # }
 
-  return $rch->reply(
+  return $event->reply(
     "$plain_base.\n$uri",
     {
       slack => "$slack_base.",
@@ -2043,7 +2043,7 @@ sub _spent_on_existing ($self, $event, $rch, $task_id, $duration) {
 sub _handle_projects ($self, $event, $rch, $text) {
   my @sorted = sort $self->projects;
 
-  $rch->reply("Responses to <projects> are sent privately.")
+  $event->reply("Responses to <projects> are sent privately.")
     if $event->is_public;
   $rch->private_reply('Known projects:');
 
@@ -2056,7 +2056,7 @@ sub _handle_projects ($self, $event, $rch, $text) {
 sub _handle_task_shortcuts ($self, $event, $rch, $text) {
   my @sorted = sort $self->tasks;
 
-  $rch->reply("Responses to <task shortcuts> are sent privately.")
+  $event->reply("Responses to <task shortcuts> are sent privately.")
     if $event->is_public;
   $rch->private_reply('Known tasks:');
 
@@ -2072,7 +2072,7 @@ sub _handle_todo ($self, $event, $rch, $text) {
 
   # If it's for somebody else, it should be a task instead
   if ($desc =~ /^for\s+\S+?:/) {
-    return $rch->reply("Sorry, I can only make todo items for you");
+    return $event->reply("Sorry, I can only make todo items for you");
   }
 
   my $lpc = $self->lp_client_for_user($user);
@@ -2083,7 +2083,7 @@ sub _handle_todo ($self, $event, $rch, $text) {
             ? qq{I added "$desc" to your todo list.}
             : "Sorry, I couldn't add that todo… for… some reason.";
 
-  return $rch->reply($reply);
+  return $event->reply($reply);
 }
 
 sub _handle_todos ($self, $event, $rch, $text) {
@@ -2094,9 +2094,9 @@ sub _handle_todos ($self, $event, $rch, $text) {
 
   my @todos = grep {; ! $_->{is_done} } $todo_res->payload_list;
 
-  return $rch->reply("You don't have any open to-do items.") unless @todos;
+  return $event->reply("You don't have any open to-do items.") unless @todos;
 
-  $rch->reply("Responses to <todos> are sent privately.") if $event->is_public;
+  $event->reply("Responses to <todos> are sent privately.") if $event->is_public;
   $rch->private_reply('Open to-do items:');
 
   for my $todo (@todos) {
@@ -2125,7 +2125,7 @@ sub damage_report ($self, $event, $rch) {
 
   $event->mark_handled;
 
-  return $rch->reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
+  return $event->reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
     unless $target && $target->lp_auth_header;
 
   my $lp_id = $target->lp_id;
@@ -2136,12 +2136,12 @@ sub damage_report ($self, $event, $rch) {
   );
 
   if ($event->is_public) {
-    $rch->reply(
+    $event->reply(
       "I'm generating that report now, and I'll send it to you privately in just a moment.",
       { slack_reaction => { event => $event, reaction => 'hourglass_flowing_sand' } },
     );
   } else {
-    $rch->reply(
+    $event->reply(
       "I'm generating that report now, it'll be just a moment",
       { slack_reaction => { event => $event, reaction => 'hourglass_flowing_sand' } },
     );
@@ -2221,7 +2221,7 @@ sub damage_report ($self, $event, $rch) {
 sub reload_shortcuts ($self, $event, $rch) {
   $self->_set_projects($self->get_project_shortcuts);
   $self->_set_tasks($self->get_task_shortcuts);
-  $rch->reply("Shortcuts reloaded");
+  $event->reply("Shortcuts reloaded");
   $event->mark_handled;
 }
 

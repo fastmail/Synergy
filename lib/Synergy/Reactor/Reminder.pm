@@ -53,11 +53,11 @@ sub start ($self) {
 sub handle_remind ($self, $event, $rch) {
   my $text = $event->text;
 
-  # XXX: I think $rch->reply should do this. -- rjbs, 2018-03-16
+  # XXX: I think $event->reply should do this. -- rjbs, 2018-03-16
   $event->mark_handled;
 
   unless ($event->from_user) {
-    $rch->reply("I don't know who you are, so I'm not going to do that.");
+    $event->reply("I don't know who you are, so I'm not going to do that.");
     return;
   }
 
@@ -78,7 +78,7 @@ sub handle_remind ($self, $event, $rch) {
   $_ = fc $_ for ($who, $prep, $dur_str, $want_page);
 
   my $fail = sub {
-    $rch->reply('usage: remind WHO (in|at) (time) [with page]: (reminder)');
+    $event->reply('usage: remind WHO (in|at) (time) [with page]: (reminder)');
     return;
   };
 
@@ -87,14 +87,14 @@ sub handle_remind ($self, $event, $rch) {
   }
 
   if ($want_page && ! $self->page_channel_name) {
-    $rch->reply("Sorry, I can't send pages.");
+    $event->reply("Sorry, I can't send pages.");
     return;
   }
 
   my $to_user = $self->resolve_name($who, $event->from_user);
 
   unless ($to_user) {
-    $rch->reply(qq{Sorry, I don't know who "$who" is.});
+    $event->reply(qq{Sorry, I don't know who "$who" is.});
     return;
   }
 
@@ -131,7 +131,7 @@ sub handle_remind ($self, $event, $rch) {
     to_username     => $to_user->username,
   });
 
-  $rch->reply(
+  $event->reply(
     sprintf "Okay, I'll remind %s at %s.",
       $target,
       $to_user->format_datetime( DateTime->from_epoch(epoch => $time) ),

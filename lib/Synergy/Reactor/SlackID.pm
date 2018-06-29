@@ -48,23 +48,23 @@ sub handle_event ($self, $event, $rch) {
     my $user = first { $_->{name} eq $who }
                values $rch->channel->slack->users->%*;
 
-    return $rch->reply("Sorry, I don't know who $who is")
+    return $event->reply("Sorry, I don't know who $who is")
       unless $user;
 
-    return $rch->reply("The Slack id for $who is $user->{id}");
+    return $event->reply("The Slack id for $who is $user->{id}");
   }
 
   if ($event->text =~ /slackid #(\w+)/) {
     my $ch_name = $1;
     my $channel = $rch->channel->slack->channel_named($ch_name);
 
-    return $rch->reply("Sorry, I can't find #$ch_name.")
+    return $event->reply("Sorry, I can't find #$ch_name.")
       unless $channel;
 
-    return $rch->reply("The Slack id for #$ch_name is $channel->{id}");
+    return $event->reply("The Slack id for #$ch_name is $channel->{id}");
   }
 
-  return $rch->reply(qq{Sorry, I don't know how to resolve that.});
+  return $event->reply(qq{Sorry, I don't know how to resolve that.});
 }
 
 sub handle_reload_slack ($self, $event, $rch) {
@@ -74,13 +74,13 @@ sub handle_reload_slack ($self, $event, $rch) {
     $event->mark_handled;
     $event->from_channel->slack->load_users;
     $event->from_channel->slack->load_dm_channels;
-    return $rch->reply('Slack users reloaded');
+    return $event->reply('Slack users reloaded');
   }
 
   if ($what eq 'channels') {
     $event->mark_handled;
     $event->from_channel->slack->load_channels;
-    return $rch->reply('Slack channels reloaded');
+    return $event->reply('Slack channels reloaded');
   }
 
   # Don't mark handled, will fall back to "does not compute"
