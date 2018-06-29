@@ -109,6 +109,7 @@ has server => (
   lazy => 1,
   default => sub ($self) {
     my $s = Synergy::HTTPServer->new({
+      name        => '_http_server',
       server_port => $self->server_port,
     });
 

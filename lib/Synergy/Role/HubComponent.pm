@@ -2,13 +2,19 @@ use v5.24.0;
 package Synergy::Role::HubComponent;
 
 use Moose::Role;
+use Moose::Util::TypeConstraints;
 
 use experimental qw(signatures);
 use namespace::clean;
 
+subtype 'IdentifierStr'
+  => as 'Str'
+  => where { $_ =~ /\A[_a-z][-_a-z0-9]*\z/i }
+  => message { "Hub component names must be valid identifiers: '$_' is not." };
+
 has name => (
   is  => 'ro',
-  isa => 'Str',
+  isa => 'IdentifierStr',
   default => sub ($self, @) { ref $self },
 );
 

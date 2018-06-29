@@ -31,6 +31,7 @@ has slack => (
     my $slack = Synergy::External::Slack->new(
       loop    => $self->loop,
       api_key => $self->api_key,
+      name    => '_external_slack',
     );
 
     $slack->register_with_hub($self->hub);
