@@ -140,7 +140,7 @@ sub my_running_timer ($self) {
   my $timer_res = $self->my_timers;
   return $timer_res unless $timer_res->is_success;
 
-  my ($timer) = grep {; $_->{running} } $self->my_timers->payload_list;
+  my ($timer) = grep {; $_->{running} } $timer_res->payload_list;
   return _success($timer);
 }
 
