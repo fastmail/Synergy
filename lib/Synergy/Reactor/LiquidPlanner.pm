@@ -1826,7 +1826,7 @@ sub _handle_start ($self, $event, $text) {
     my $task_res = $lpc->get_item($task_id);
 
     return $event->reply("Sorry, something went wrong trying to find that task.")
-      if $task_res->is_success;
+      unless $task_res->is_success;
 
     return $event->reply("Sorry, I couldn't find that task.")
       if $task_res->is_nil;
