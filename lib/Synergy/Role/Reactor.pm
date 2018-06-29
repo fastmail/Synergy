@@ -15,12 +15,14 @@ has listeners => (
   traits  => [ 'Array' ],
   handles => { listeners => 'elements' },
   default => sub ($self, @) {
-    # { name, predicate, exclusive, method }
-    my @listeners = map {;
-      Synergy::Listener->new({
-        $_->%{ qw( name predicate exclusive method ) }
+    my @listeners;
+    for my $spec ($self->listener_specs) {
+      push @listeners, Synergy::Listener->new({
+        $spec->%{ qw( exclusive name predicate method ) },
+        (exists $spec->{help_entries} ? (help_entries => $spec->{help_entries})
+                                      : ()),
       });
-    } $self->listener_specs;
+    }
 
     return \@listeners;
   },

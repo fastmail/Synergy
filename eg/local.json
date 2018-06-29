@@ -7,6 +7,7 @@
   },
   "reactors": {
     "clox"    : { "class": "Synergy::Reactor::Clox" },
+    "help"    : { "class": "Synergy::Reactor::Help" },
     "who"     : { "class": "Synergy::Reactor::Who" },
     "page"    : {
       "class": "Synergy::Reactor::Page",
