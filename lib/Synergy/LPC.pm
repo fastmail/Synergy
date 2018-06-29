@@ -11,6 +11,8 @@ use Synergy::LPC; # LiquidPlanner Client, of course
 use DateTime;
 use utf8;
 use URI::Find;
+use Safe::Isa;
+use Future;
 
 my $JSON = JSON->new->utf8;
 
@@ -56,6 +58,18 @@ sub _http_failure ($self, $http_res, $desc = undef) {
     $http_res->as_string,
   ]);
   return _failure;
+}
+
+sub _future_failure ($self, $e, $desc) {
+  $self->log([
+    "error with future during %s: %s",
+    $desc,
+    $e,
+  ]);
+
+  my $failure = _failure;
+
+  return Future->done($failure);
 }
 
 my $CONFIG;  # XXX use real config
@@ -104,6 +118,33 @@ sub http_get ($self, $path, @arg) {
     Authorization => $self->auth_token,
   );
 
+  if ($http_res->$_isa('Future')) {
+    my $when_done = Future->new;
+
+    $http_res->on_ready(sub {
+      my $f = shift;
+
+      if (my $e = $f->failure) {
+        $when_done->done($self->_future_failure("http_get", $e));
+
+        return;
+      }
+
+      my $res = $http_res->get;
+
+      unless ($res->is_success) {
+        $when_done->($self->_http_failure($res));
+
+        return;
+      }
+
+      my $payload = $JSON->decode($res->decoded_content);
+      $when_done->done(_success($payload));
+    });
+
+    return $when_done;
+  }
+
   return $self->_http_failure($http_res) unless $http_res->is_success;
 
   my $payload = $JSON->decode($http_res->decoded_content);
@@ -118,6 +159,33 @@ sub http_post ($self, $path, @arg) {
     @arg,
     Authorization => $self->auth_token,
   );
+
+  if ($http_res->$_isa('Future')) {
+    my $when_done = Future->new;
+
+    $http_res->on_ready(sub {
+      my $f = shift;
+
+      if (my $e = $f->failure) {
+        $when_done->done($self->_future_failure("http_post", $e));
+
+        return;
+      }
+
+      my $res = $http_res->get;
+
+      unless ($res->is_success) {
+        $when_done->($self->_http_failure($res));
+
+        return;
+      }
+
+      my $payload = $JSON->decode($res->decoded_content);
+      $when_done->done(_success($payload));
+    });
+
+    return $when_done;
+  }
 
   return $self->_http_failure($http_res) unless $http_res->is_success;
 

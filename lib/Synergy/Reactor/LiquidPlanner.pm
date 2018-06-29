@@ -752,7 +752,7 @@ sub _get_treeitem_shortcuts {
 sub get_project_shortcuts ($self) { $self->_get_treeitem_shortcuts('Project') }
 sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 
-sub lp_client_for_user ($self, $user) {
+sub lp_client_for_user ($self, $user, $async = 0) {
   Synergy::LPC->new({
     auth_token    => $self->auth_header_for($user),
     workspace_id  => $self->workspace_id,
@@ -760,21 +760,29 @@ sub lp_client_for_user ($self, $user) {
 
     ($self->activity_id ? (single_activity_id => $self->activity_id) : ()),
 
-    http_get_callback => sub ($, $uri, @arg) {
-      $self->hub->http_get($uri, @arg);
+    http_get_callback => sub ($, $uri, %arg) {
+      if ($async) {
+        $arg{async} = 1;
+      }
+
+      $self->hub->http_get($uri, %arg);
     },
-    http_post_callback => sub ($, $uri, @arg) {
-      $self->hub->http_post($uri, @arg);
+    http_post_callback => sub ($, $uri, %arg) {
+      if ($async) {
+        $arg{async} = 1;
+      }
+
+      return $self->hub->http_post($uri, %arg);
     },
   });
 }
 
-sub lp_client_for_master ($self) {
+sub lp_client_for_master ($self, $async = 0) {
   my ($master) = $self->hub->user_directory->master_users;
 
   Carp::confess("No master users configured") unless $master;
 
-  $self->lp_client_for_user($master);
+  $self->lp_client_for_user($master, $async);
 }
 
 sub _handle_last ($self, $event, $text) {
@@ -2568,10 +2576,19 @@ sub damage_report ($self, $event) {
 
   my @summaries = ("Damage report for $who_name:");
 
+  my @waiting;
+
+  # XXX Needs reworking when we have current-iteration tracking.
+  # -- rjbs, 2018-06-15
+
+  # Do this first. It's slow. -- alh, 2018-06-29
+  my $pkg_summary   = $self->_build_package_summary(-1, $target, $event);
+  push @waiting, $pkg_summary;
+
   CHK: for my $check (@to_check) {
     my ($label, $icon, $package_id) = @$check;
 
-    my $check_res = $self->lp_client_for_master->query_items({
+    my $check_future = $self->lp_client_for_master("async")->query_items({
       in    => $package_id,
       flags => {
         depth => -1,
@@ -2583,69 +2600,102 @@ sub damage_report ($self, $event) {
       ],
     });
 
-    unless ($check_res->is_success) {
-      push @summaries, "❌ Couldn't produce a report on $label tasks.";
-      next CHK;
-    }
+    $check_future->on_ready(sub {
+      my $f = shift;
 
-    my $unest = 0;
-    my $total = 0;
+      if (my $e = $f->failure) {
+        # XXX Add to summaries or bail totally?
+        $event->reply("Something went horribly wrong: $e");
 
-    my @ages;
+        return;
+      }
 
-    my $now = time;
+      my $check_res = $f->get;
 
-    for my $item ($check_res->payload_list) {
-      next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
-      my ($assign) = grep {; $_->{person_id} == $lp_id }
-                     $item->{assignments}->@*;
+      unless ($check_res->is_success) {
+        push @summaries, "❌ Couldn't produce a report on $label tasks.";
+        return;
+      }
 
-      next unless $assign and ! $assign->{is_done};
+      my $unest = 0;
+      my $total = 0;
 
-      $total++;
-      $unest++ if $self->_lp_assignment_is_unestimated($assign);
+      my @ages;
 
-      push @ages, $now
-        - DateTime::Format::ISO8601->parse_datetime($item->{updated_at})->epoch;
-    }
+      my $now = time;
 
-    next CHK unless $total;
+      for my $item ($check_res->payload_list) {
+        next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
+        my ($assign) = grep {; $_->{person_id} == $lp_id }
+                       $item->{assignments}->@*;
 
-    my $avg_age = sum0(@ages) / @ages;
+        next unless $assign and ! $assign->{is_done};
 
-    my $summary = sprintf "%s %s: %u %s (avg. untouched time: %s)",
-      $icon,
-      ucfirst $label,
-      $total,
-      PL_N('task', $total),
-      concise(duration($avg_age));
+        $total++;
+        $unest++ if $self->_lp_assignment_is_unestimated($assign);
 
-    $summary .= sprintf ", %u unestimated", $unest if $unest;
+        push @ages, $now
+          - DateTime::Format::ISO8601->parse_datetime($item->{updated_at})->epoch;
+      }
 
-    push @summaries, $summary;
+      return unless $total;
+
+      my $avg_age = sum0(@ages) / @ages;
+
+      my $summary = sprintf "%s %s: %u %s (avg. untouched time: %s)",
+        $icon,
+        ucfirst $label,
+        $total,
+        PL_N('task', $total),
+        concise(duration($avg_age));
+
+      $summary .= sprintf ", %u unestimated", $unest if $unest;
+
+      push @summaries, $summary;
+    });
+
+    push @waiting, $check_future;
   }
 
-  # XXX Needs reworking when we have current-iteration tracking.
-  # -- rjbs, 2018-06-15
-  my $pkg_summary   = $self->_build_package_summary(-1, $target);
-  my $slack_summary = join qq{\n},
+  my $when_done = Future->new;
+
+  my $want = 0+@waiting;
+  my $have = 0;
+
+  $_->on_ready(sub {
+    $have++;
+
+    if ($want == $have) {
+      $when_done->done($pkg_summary->get, @summaries);
+    }
+  }) for @waiting;
+
+  $when_done->on_ready(sub {
+    my $f = shift;
+
+    my ($pkg_summary, @summaries) = $f->get;
+
+    my $slack_summary = join qq{\n},
                       @summaries,
                       $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
 
-  my $reply = join qq{\n}, @summaries;
+    my $reply = join qq{\n}, @summaries;
 
-  $event->private_reply(
-    "Report sent!",
-    { slack_reaction => { event => $event, reaction => '-hourglass_flowing_sand' } },
-  );
+    $event->private_reply(
+      "Report sent!",
+      { slack_reaction => { event => $event, reaction => '-hourglass_flowing_sand' } },
+    );
 
-  my $method = $event->is_public ? 'private_reply' : 'reply';
-  return $event->$method(
-    $reply,
-    {
-      slack => $slack_summary,
-    },
-  );
+    my $method = $event->is_public ? 'private_reply' : 'reply';
+    return $event->$method(
+      $reply,
+      {
+        slack => $slack_summary,
+      },
+    );
+  });
+
+  return;
 }
 
 sub reload_shortcuts ($self, $event) {
@@ -2655,23 +2705,40 @@ sub reload_shortcuts ($self, $event) {
   $event->mark_handled;
 }
 
-sub _build_package_summary ($self, $package_id, $user) {
+sub _build_package_summary ($self, $package_id, $user, $event) {
   # This is hard-coded because all the iteration-handling code is buried in
   # LP-Tools, and merging that with Synergy without making a big pain right now
   # is... it's not happening this Friday afternoon. -- rjbs, 2018-06-15
   $package_id = 46281988;
 
-  my $items_res = $self->lp_client_for_master->query_items({
+  my $items_res = $self->lp_client_for_master("async")->query_items({
     in    => $package_id,
     flags => { depth => -1 },
   });
 
-  unless ($items_res->is_success) {
-    $Logger->log("error getting tree for package $package_id");
-    return;
-  }
+  my $when_done = Future->new;
 
-  my $summary = summarize_iteration($items_res->payload, $user->lp_id);
+  $items_res->on_ready(sub{
+    my $f = shift;
+
+    if (my $e = $f->failure) {
+      # XXX Bail totally?
+      $event->reply("Something went horribly wrong here: $e");
+    }
+
+    my $items_res = $f->get;
+
+    unless ($items_res->is_success) {
+      $Logger->log("error getting tree for package $package_id");
+      return;
+    }
+
+    my $summary = summarize_iteration($items_res->payload, $user->lp_id);
+
+    $when_done->done($summary);
+  });
+
+  return $when_done;
 }
 
 sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
