@@ -236,8 +236,8 @@ sub set_loop ($self, $loop) {
 
   $self->server->start;
 
-  $_->start for $self->channels;
   $_->start for $self->reactors;
+  $_->start for $self->channels;
 
   return $loop;
 }
