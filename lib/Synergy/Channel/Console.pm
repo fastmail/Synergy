@@ -7,7 +7,6 @@ use JSON::MaybeXS;
 
 use Synergy::External::Slack;
 use Synergy::Event;
-use Synergy::ReplyChannel;
 use Synergy::Logger '$Logger';
 
 use namespace::autoclean;

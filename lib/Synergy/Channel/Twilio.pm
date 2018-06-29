@@ -8,7 +8,6 @@ use JSON::MaybeXS qw(encode_json decode_json);
 use Synergy::Logger '$Logger';
 
 use Synergy::Event;
-use Synergy::ReplyChannel;
 
 use namespace::autoclean;
 
