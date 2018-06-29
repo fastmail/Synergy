@@ -6,6 +6,8 @@ use experimental qw(signatures);
 
 use namespace::autoclean;
 
+use Synergy::Logger '$Logger';
+
 has type => (is => 'ro', isa => 'Str', required => 1);
 has text => (is => 'ro', isa => 'Str', required => 1); # clearly per-type
 
@@ -84,6 +86,30 @@ sub source_identifier ($self) {
     $self->from_channel->name,
     $self->from_address,
     $self->conversation_address;
+}
+
+sub reply ($self, $text, $alts = {}) {
+  $Logger->log_debug("sending $text to someone");
+
+  my $prefix = $self->is_public
+             ? ($self->from_user->username . q{: })
+             : q{};
+
+  return $self->from_channel->send_message(
+    $self->conversation_address,
+    $prefix . $text,
+    $alts,
+  );
+}
+
+sub private_reply ($self, $text, $alts = {}) {
+  $Logger->log_debug("sending $text to someone");
+
+  return $self->from_channel->send_message(
+    $self->conversation_address,
+    $text,
+    $alts,
+  );
 }
 
 1;
