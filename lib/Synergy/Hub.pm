@@ -411,6 +411,7 @@ sub http_put {
 sub http_request ($self, $method, $url, %args) {
   my $content = delete $args{Content};
   my $content_type = delete $args{Content_Type};
+  my $async = delete $args{async};
 
   my @args = $url;
 
@@ -434,12 +435,15 @@ sub http_request ($self, $method, $url, %args) {
   # The returned future will run the loop for us until we return. This makes
   # it asynchronous as far as the rest of the code is concerned, but
   # sychronous as far as the caller is concerned.
-  return $self->http->$method(
+
+  my $future = $self->http->$method(
     @args
   )->on_fail( sub {
     my $failure = shift;
     $Logger->log("Failed to $method $url: $failure");
-  } )->get;
+  } );
+
+  return $async ? $future : $future->get;
 }
 
 has time_zone_names => (
