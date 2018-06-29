@@ -282,46 +282,64 @@ sub provide_lp_link ($self, $event) {
   my $user = $event->from_user;
   return unless $user && $user->lp_auth_header;
 
-  state $lp_id_re = qr/\bLP([1-9][0-9]{5,10})\b/;
+  state $lp_id_re       = qr/\bLP([1-9][0-9]{5,10})\b/;
+  state $lp_shortcut_re = qr/\bLP\*([-_a-z0-9]+)\b/i;
 
-  if (my ($item_id) = $event->text =~ $lp_id_re) {
-    my $item_res = $self->lp_client_for_user($user)->get_item($item_id);
+  my $lpc = $self->lp_client_for_user($user);
+  my $item_id;
 
-    unless ($item_res->is_success) {
-      return $event->reply("Sorry, something went wrong getting looking for LP$item_id");
-    }
-
-    return $event->reply("I can't find anything for LP$item_id.")
-      unless my $item = $item_res->payload;
-
-    my $name = $item->{name};
-
-    my $reply;
-
-    if ($item->{type} =~ /\A Task | Package | Project \z/x) {
-      my $icon = $item->{type} eq 'Task'    ? ($item->{is_done} ? "✓" : "•")
-               : $item->{type} eq 'Package' ? "📦"
-               : $item->{type} eq 'Project' ? "📁"
-               :                              "($item->{type})";
-
-      my $uri = $self->item_uri($item_id);
-
-      $event->reply(
-        "$icon LP$item_id: $item->{name} ($uri)",
-        {
-          slack => sprintf '%s %s: %s',
-            $icon, $self->_slack_item_link($item), $item->{name},
-        },
-      );
-    } else {
-      $event->reply("LP$item_id: is a $item->{type}");
-    }
-
-    if ($event->was_targeted && $event->text =~ /\A\s* $lp_id_re \s*\z/x) {
-      # do better than bort
-      $event->mark_handled;
-    }
+  if (
+    $event->was_targeted
+    && ($event->text =~ /\A\s* $lp_id_re \s*\z/x
+    ||  $event->text =~ /\A\s* $lp_shortcut_re \s*\z/x)
+  ) {
+    # do better than bort
+    $event->mark_handled;
   }
+
+  if ($event->text =~ $lp_id_re) {
+    $item_id = $1;
+  } elsif (my ($shortcut) = $event->text =~ $lp_shortcut_re) {
+    my $task = $self->task_by_shortcut(lc $shortcut);
+    return $event->reply(qq{I don't know a task with the shortcut "$shortcut".})
+      unless $task;
+
+    $item_id = $task->[0]{id};
+  } else {
+    return;
+  }
+
+  my $item_res = $lpc->get_item($item_id);
+
+  unless ($item_res->is_success) {
+    return $event->reply("Sorry, something went wrong getting looking for that task.");
+  }
+
+  return $event->reply("I can't find anything for LP$item_id.")
+    unless my $item = $item_res->payload;
+
+  my $name = $item->{name};
+
+  my $reply;
+
+  if ($item->{type} =~ /\A Task | Package | Project \z/x) {
+    my $icon = $item->{type} eq 'Task'    ? ($item->{is_done} ? "✓" : "•")
+             : $item->{type} eq 'Package' ? "📦"
+             : $item->{type} eq 'Project' ? "📁"
+             :                              "($item->{type})";
+
+    my $uri = $self->item_uri($item_id);
+
+    return $event->reply(
+      "$icon LP$item_id: $item->{name} ($uri)",
+      {
+        slack => sprintf '%s %s: %s',
+          $icon, $self->_slack_item_link($item), $item->{name},
+      },
+    );
+  }
+
+  $event->reply("LP$item_id: is a $item->{type}");
 }
 
 has _last_lp_timer_task_ids => (
@@ -1796,7 +1814,7 @@ sub _handle_start ($self, $event, $text) {
 
   if ($text =~ m{\A\s*\*(\w+)\s*\z}) {
     my $task = $self->task_by_shortcut(lc $1);
-    return $self->reply(qq{I don't know a task with the shortcut "$1".})
+    return $event->reply(qq{I don't know a task with the shortcut "$1".})
       unless $task;
 
     my $task_id = $task->[0]{id};
@@ -2035,7 +2053,7 @@ sub _handle_spent ($self, $event, $text) {
 
   if ($name =~ m{\A\s*\*(\w+)\s*\z}) {
     my $task = $self->task_by_shortcut(lc $1);
-    return $self->reply(qq{I don't know a task with the shortcut "$1".})
+    return $event->reply(qq{I don't know a task with the shortcut "$1".})
       unless $task;
 
     my $task_id = $task->[0]{id};
