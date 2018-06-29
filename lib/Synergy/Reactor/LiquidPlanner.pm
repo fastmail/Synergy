@@ -3,6 +3,7 @@ package Synergy::Reactor::LiquidPlanner;
 
 use Moose;
 with 'Synergy::Role::Reactor';
+with 'Synergy::Role::HasPreferences';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
@@ -205,6 +206,16 @@ sub dispatch_event ($self, $event) {
 
   $event->mark_handled;
   return $KNOWN{$what}->($self, $event, $rest)
+}
+
+sub known_preferences { qw(api_token) }
+
+sub set_preference ($self, $event, $name, $value) {
+  $event->reply(
+    "So you want to set your liquid planner '$name' to '$value'..." .
+    "you'll have to wait for someone to implement that."
+  );
+  $event->mark_handled;
 }
 
 sub provide_lp_link ($self, $event) {

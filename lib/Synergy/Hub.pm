@@ -160,6 +160,13 @@ for my $pair (
   });
 }
 
+# Get a channel or reactor named this
+sub component_named ($self, $name) {
+  return $self->reactor_named($name) if $self->_reactor_exists($name);
+  return $self->channel_named($name) if $self->_channel_exists($name);
+  confess("Could not find channel or reactor named '$name'");
+}
+
 sub handle_event ($self, $event) {
   $Logger->log([
     "%s event from %s/%s: %s",
