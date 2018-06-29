@@ -816,7 +816,7 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
 }
 
 sub _check_plan_rest ($self, $event, $plan, $error) {
-  my $via = $event->from_channel->describe_event($event);
+  my $via = $event->description;
   my $uri = $event->event_uri;
 
   my $rest = delete $plan->{rest};
@@ -1366,7 +1366,7 @@ sub expand_tasks ($self, $event, $expand_target, $prefix='') {
     unless @tasks;
 
   my $parent = $CONFIG->{liquidplanner}{package}{recurring};
-  my $desc = $event->from_channel->describe_event($event);
+  my $desc = $event->description;
 
   my (@ok, @fail);
   for my $task (@tasks) {

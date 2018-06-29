@@ -70,6 +70,10 @@ sub event_uri ($self) {
   return $self->from_channel->_uri_from_event($self);
 }
 
+sub description ($self) {
+  $self->from_channel->describe_event($self);
+}
+
 sub BUILD ($self, @) {
   confess "only 'message' events exist for now"
     unless $self->type eq 'message';
