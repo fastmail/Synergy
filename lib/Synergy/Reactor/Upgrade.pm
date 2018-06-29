@@ -120,7 +120,7 @@ sub handle_upgrade ($self, $event) {
 }
 
 sub handle_version ($self, $event) {
-  $event->reply("My version is: " . $self->get_version);
+  $event->reply("My version is: " . $self->get_version_desc);
 
   $event->mark_handled;
 
@@ -144,6 +144,19 @@ sub get_version ($self) {
 
   $self->git_do(
     "log -n 1 --pretty=%h",
+    \$output,
+  );
+
+  chomp($output);
+
+  $output;
+}
+
+sub get_version_desc ($self) {
+  my $output;
+
+  $self->git_do(
+    "log -n 1 --pretty=oneline --abbrev-commit",
     \$output,
   );
 
