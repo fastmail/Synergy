@@ -257,10 +257,13 @@ has _last_lp_timer_task_ids => (
   is => 'ro',
   isa => 'HashRef',
   default => sub {  {}  },
+  writer => '_set_last_lp_timer_task_ids',
 );
 
 sub set_last_lp_timer_task_id_for_user ($self, $user, $task_id) {
   $self->_last_lp_timer_task_ids->{ $user->username } = $task_id;
+
+  $self->save_state;
 }
 
 sub last_lp_timer_task_id_for_user ($self, $user) {
@@ -283,12 +286,14 @@ has user_timers => (
 
 sub state ($self) {
   my $timers = $self->user_timers;
+  my $last_timer_ids = $self->_last_lp_timer_task_ids;
 
   return {
     user_timers => {
       map {; $_ => $timers->{$_}->as_hash }
         keys $self->user_timers->%*
     },
+    last_timer_ids => $last_timer_ids,
   };
 }
 
@@ -435,6 +440,10 @@ after register_with_hub => sub ($self, @) {
           $timer->chilltill( $this_timer->{chill}{until} );
         }
       }
+    }
+
+    if (my $last_timer_ids = $state->{last_timer_ids}) {
+      $self->_set_last_lp_timer_task_ids($last_timer_ids);
     }
 
     $self->save_state;
