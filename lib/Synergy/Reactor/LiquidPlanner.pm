@@ -90,35 +90,67 @@ $CONFIG = {
 };
 
 my %KNOWN = (
-  last      => \&_handle_last,
-  timer     => \&_handle_timer,
-  task      => \&_handle_task,
-  tasks     => \&_handle_tasks,
-  inbox     => \&_handle_inbox,
-  urgent    => \&_handle_urgent,
-  recurring => \&_handle_recurring,
-  '++'      => \&_handle_plus_plus,
-  '>>'      => \&_handle_angle_angle,
-  good      => \&_handle_good,
-  gruß      => \&_handle_good,
-  expand    => \&_handle_expand,
-  chill     => \&_handle_chill,
-  zzz       => \&_handle_triple_zed,
-  shows     => \&_handle_shows,
-  "show's"  => \&_handle_shows,
-  showtime  => \&_handle_showtime,
-  commit    => \&_handle_commit,
-  abort     => \&_handle_abort,
-  start     => \&_handle_start,
-  stop      => \&_handle_stop,
-  resume    => \&_handle_resume,
-  restart   => \&_handle_resume,
-  reset     => \&_handle_reset,
-  done      => \&_handle_done,
-  spent     => \&_handle_spent,
-  projects  => \&_handle_projects,
-  todo      => \&_handle_todo,
-  todos     => \&_handle_todos,
+  '++'      =>  [ \&_handle_plus_plus,
+                  "++ TASK-SPEC: add a task for yourself" ],
+  '>>'      =>  [ \&_handle_angle_angle,
+                  ">> USER TASK-SPEC: add a task for someone else "],
+  abort     =>  [ \&_handle_abort,
+                  "abort timer: throw your LiquidPlanner timer away" ],
+  chill     =>  [ \&_handle_chill,
+                  "chill: do not nag about a timer until you say something new",
+                  "chill until WHEN: do not nag until the designated time",
+                  ],
+  commit    =>  [ \&_handle_commit,
+                  "commit [COMMENT]: commit your LiquidPlanner timer, with optional comment",
+                ],
+  done      =>  [ \&_handle_done,
+                  "done: commit your LiquidPlanner task and mark the task done",
+                ],
+  expand    =>  [ \&_handle_expand ],
+  good      =>  [ \&_handle_good   ],
+  gruß      =>  [ \&_handle_good   ],
+  inbox     =>  [ \&_handle_inbox,
+                  "inbox [PAGE-NUMBER]: list the tasks in your inbox",
+                ],
+  last      =>  [ \&_handle_last   ],
+  projects  =>  [ \&_handle_projects,
+                  "projects: list all known project shortcuts",
+                ],
+  recurring =>  [ \&_handle_recurring,
+                  "recurring [PAGE-NUMBER]: list your tasks in Recurring Tasks",
+                ],
+  reset     =>  [ \&_handle_reset,
+                  "reset timer: set your timer back to zero, but leave it running",
+                ],
+  restart   =>  [ \&_handle_resume ],
+  resume    =>  [ \&_handle_resume,
+                  "resume timer: start the last time you had running up again",
+                ],
+  shows     =>  [ \&_handle_shows,       ],
+  "show's"  =>  [ \&_handle_shows,       ],
+  showtime  =>  [ \&_handle_showtime,    ],
+  spent     =>  [ \&_handle_spent,
+                  "spent TIME on THING: log time against a task (either TASK-SPEC or TASK-ID)",
+                ],
+  start     =>  [ \&_handle_start,
+                  "start TASK-ID: start your timer on the given task",
+                ],
+  stop      =>  [ \&_handle_stop,
+                  "stop timer: stop your timer, but keep the time on it",
+                ],
+  task      =>  [ \&_handle_task,        ],
+  tasks     =>  [ \&_handle_tasks,
+                  "tasks [PAGE-NUMBER]: list your scheduled work",
+                ],
+  timer     =>  [ \&_handle_timer,
+                  "timer: show your current LiquidPlanner timer (if any)",
+                ],
+  todo      =>  [ \&_handle_todo,        ],
+  todos     =>  [ \&_handle_todos,       ],
+  urgent    =>  [ \&_handle_urgent,
+                  "urgent [PAGE-NUMBER]: list your urgent tasks",
+                ],
+  zzz       =>  [ \&_handle_triple_zed,  ],
 );
 
 sub listener_specs {
@@ -129,7 +161,7 @@ sub listener_specs {
       predicate => sub { 1 },
     },
     {
-      name      => "liquid planner",
+      name      => "lookup-events",
       method    => "dispatch_event",
       exclusive => 1,
       predicate => sub ($self, $event) {
@@ -140,6 +172,28 @@ sub listener_specs {
         $what &&= lc $what;
 
         return 1 if $KNOWN{$what};
+        return;
+      },
+      help_entries => [
+        map {;
+          my $key = $_;
+          my @things = $KNOWN{$key}->@*;
+          shift @things;
+          map {; { title => $key, text => $_ } } @things;
+        } keys %KNOWN
+      ]
+    },
+    {
+      name      => "special-events",
+      method    => "dispatch_event",
+      exclusive => 1,
+      predicate => sub ($self, $event) {
+        return unless $event->type eq 'message';
+        return unless $event->was_targeted;
+
+        my ($what) = $event->text =~ /^([^\s]+)\s?/;
+        $what &&= lc $what;
+
         return 1 if $what =~ /^g'day/;    # stupid, but effective
         return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
         return 1 if $what =~ /^done,/;    # ugh
@@ -162,6 +216,12 @@ sub listener_specs {
         $e->was_targeted &&
         $e->text =~ /^\s*(damage\s+)?report(\s+for\s+([a-z]+))?\s*$/in;
       },
+      help_entries => [
+        {
+          title => "report",
+          text => "report [for USER]: show the user's current LiquidPlanner workload",
+        }
+      ],
     },
     {
       name      => "lp-mention-in-passing",
@@ -205,7 +265,7 @@ sub dispatch_event ($self, $event) {
   }
 
   $event->mark_handled;
-  return $KNOWN{$what}->($self, $event, $rest)
+  return $KNOWN{$what}[0]->($self, $event, $rest)
 }
 
 sub known_preferences { qw(api_token) }
