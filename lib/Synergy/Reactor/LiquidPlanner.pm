@@ -1714,34 +1714,29 @@ sub _handle_start ($self, $event, $rch, $text) {
 
   my $lpc = $self->lp_client_for_user($user);
 
+  if ($text =~ m{\A\s*\*(\w+)\s*\z}) {
+    my $task = $self->task_by_shortcut(lc $1);
+    return $self->reply(qq{I don't know a task with the shortcut "$1".})
+      unless $task;
+
+    my $task_id = $task->[0]{id};
+    return $self->_handle_start_existing($event, $rch, $task_id);
+  }
+
   if ($text =~ /\A[0-9]+\z/) {
     my $task_id = $text;
+    my $task_res = $lpc->get_item($task_id);
 
-    # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
-    # TODO: print the description of the task instead of its number -- rjbs,
-    # 2016-01-25
-    my $start_res = $lpc->start_timer_for_task_id($task_id);
+    return $rch->reply("Sorry, something went wrong trying to find that task.")
+      if $task_res->is_success;
 
-    if ($start_res->is_success) {
-      $self->set_last_lp_timer_task_id_for_user($user, $task_id);
+    return $rch->reply("Sorry, I couldn't find that task.")
+      if $task_res->is_nil;
 
-      my $task_res = $lpc->get_item($task_id);
-      my $task = ($task_res->is_success && $task_res->payload)
-              || { id => $task_id, name => '??' };
+    return $self->_handle_start_existing($event, $rch, $task_res->payload);
+  }
 
-      my $uri   = $self->item_uri($task_id);
-      my $text  = "Started task: $task->{name} ($uri)";
-      my $slack = sprintf "Started task %s: %s",
-        $self->_slack_item_link($task), $task->{name};
-
-      return $rch->reply(
-        $text,
-        { slack => $slack },
-      );
-    } else {
-      return $rch->reply("I couldn't start the timer for $text.");
-    }
-  } elsif ($text eq 'next') {
+  if ($text eq 'next') {
     my $lp_tasks = $self->lp_tasks_for_user($user, 1);
 
     unless ($lp_tasks && $lp_tasks->[0]) {
@@ -1769,6 +1764,31 @@ sub _handle_start ($self, $event, $rch, $text) {
   }
 
   return $rch->reply(q{You can either say "start LP-TASK-ID" or "start next".});
+}
+
+sub _handle_start_existing ($self, $event, $rch, $task) {
+  # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
+  # TODO: print the description of the task instead of its number -- rjbs,
+  # 2016-01-25
+  my $user = $event->from_user;
+  my $lpc  = $self->lp_client_for_user($user);
+  my $start_res = $lpc->start_timer_for_task_id($task->{id});
+
+  if ($start_res->is_success) {
+    $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
+
+    my $uri   = $self->item_uri($task->{id});
+    my $text  = "Started task: $task->{name} ($uri)";
+    my $slack = sprintf "Started task %s: %s",
+      $self->_slack_item_link($task), $task->{name};
+
+    return $rch->reply(
+      $text,
+      { slack => $slack },
+    );
+  } else {
+    return $rch->reply("Sorry, something went wrong and I couldn't start the timer.");
+  }
 }
 
 sub _handle_resume ($self, $event, $rch, $text) {
