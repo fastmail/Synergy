@@ -108,7 +108,7 @@ role {
     my $username = blessed $user ? $user->username : $user;
     my $user_prefs = $all_user_prefs{$username};
 
-    die 'no pref for user' unless $user_prefs && $user_prefs->{$pref_name};
+    return unless $user_prefs && exists $user_prefs->{$pref_name};
 
     return $user_prefs->{$pref_name};
   };
