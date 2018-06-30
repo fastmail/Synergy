@@ -1936,7 +1936,15 @@ sub _handle_resume ($self, $event, $text) {
     return $event->reply("I failed to resume the timer for $task->{name}, sorry!");
   }
 
-  return $event->reply("Timer resumed. Task is: $task->{name}");
+  return $event->reply(
+    "Timer resumed. Task is: $task->{name}",
+    {
+      slack => sprintf("Timer resumed on: %s %s %s",
+        $self->_slack_item_link($task),
+        ($task->{is_done} ? "✓" : "•"),
+        $task->{name}),
+    },
+  );
 }
 
 sub _handle_stop ($self, $event, $text) {
@@ -2118,8 +2126,9 @@ sub _spent_on_existing ($self, $event, $task_id, $duration) {
   my $uri = $self->item_uri($task->{id});
 
   my $plain_base = qq{I logged that time on "$task->{name}"};
-  my $slack_base = sprintf qq{I logged that time on %s ("%s")},
+  my $slack_base = sprintf qq{I logged that time on: %s %s %s")},
     $self->_slack_item_link($task),
+    ($task->{is_done} ? "✓" : "•"),
     $task->{name};
 
   # if ($flags->{start} && $self->_start_timer($user, $task)) {
@@ -2133,7 +2142,7 @@ sub _spent_on_existing ($self, $event, $task_id, $duration) {
   return $event->reply(
     "$plain_base.\n$uri",
     {
-      slack => "$slack_base.",
+      slack => $slack_base,
     }
   );
 }
@@ -2143,12 +2152,20 @@ sub _handle_projects ($self, $event, $text) {
 
   $event->reply("Responses to <projects> are sent privately.")
     if $event->is_public;
-  $event->private_reply('Known projects:');
+
+  my $reply = "Known projects:\n";
+  my $slack = "Known projects:\n";
 
   for my $project (@sorted) {
     my $id = $self->project_by_shortcut($project)->[0]->{id};   # cool, LP
-    $event->private_reply("$project (" . $self->item_uri($id) . ")");
+
+    $reply .= sprintf "\n%s (%s)", $project, $self->item_uri($id);
+    $slack .= sprintf "\n%s _aka_ %s",
+      $self->_slack_item_link({ id => $id }),
+      $project;
   }
+
+  $event->private_reply($reply, { slack => $slack });
 }
 
 sub _handle_task_shortcuts ($self, $event, $text) {
@@ -2156,12 +2173,20 @@ sub _handle_task_shortcuts ($self, $event, $text) {
 
   $event->reply("Responses to <task shortcuts> are sent privately.")
     if $event->is_public;
-  $event->private_reply('Known tasks:');
+
+  my $reply = "Known projects:\n";
+  my $slack = "Known projects:\n";
 
   for my $task (@sorted) {
     my $id = $self->task_by_shortcut($task)->[0]->{id};   # cool, LP
-    $event->private_reply("$task (" . $self->item_uri($id) . ")");
+
+    $reply .= sprintf "\n%s (%s)", $task, $self->item_uri($id);
+    $slack .= sprintf "\n%s _aka_ %s",
+      $self->_slack_item_link({ id => $id }),
+      $task;
   }
+
+  $event->private_reply($reply, { slack => $slack });
 }
 
 sub _handle_todo ($self, $event, $text) {
