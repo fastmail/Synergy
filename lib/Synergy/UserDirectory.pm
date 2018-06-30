@@ -140,8 +140,10 @@ sub load_preferences_from_user ($self, $username) {
   # Silly, but we want to make sure our realname preference takes precedence
   # over whatever's in the user file. the after_set will take care of that,
   # but only if we actually set it!
-  my $realname = $self->get_user_preference($user, 'realname') // $user->realname;
-  $self->set_user_preference($user, 'realname', $realname);
+  my $pref_realname = $self->get_user_preference($user, 'realname') // $user->realname;
+  if ($pref_realname && $pref_realname ne $username) {
+    $self->set_user_preference($user, 'realname', $pref_realname);
+  }
 }
 
 1;
