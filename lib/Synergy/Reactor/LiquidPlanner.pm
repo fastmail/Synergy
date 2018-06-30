@@ -16,7 +16,7 @@ use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
 use Synergy::LPC; # LiquidPlanner Client, of course
 use Synergy::Timer;
-use Synergy::Util qw(parse_time_hunk pick_one);
+use Synergy::Util qw(parse_time_hunk pick_one bool_from_text);
 use DateTime;
 use utf8;
 
@@ -268,16 +268,6 @@ sub dispatch_event ($self, $event) {
   return $KNOWN{$what}[0]->($self, $event, $rest)
 }
 
-sub known_preferences { qw(api_token) }
-
-sub set_preference ($self, $event, $name, $value) {
-  $event->reply(
-    "So you want to set your liquid planner '$name' to '$value'..." .
-    "you'll have to wait for someone to implement that."
-  );
-  $event->mark_handled;
-}
-
 sub provide_lp_link ($self, $event) {
   my $user = $event->from_user;
   return unless $user && $user->lp_auth_header;
@@ -376,6 +366,7 @@ has user_timers => (
 sub state ($self) {
   my $timers = $self->user_timers;
   my $last_timer_ids = $self->_last_lp_timer_task_ids;
+  my $prefs = $self->user_preferences;
 
   return {
     user_timers => {
@@ -383,6 +374,7 @@ sub state ($self) {
         keys $self->user_timers->%*
     },
     last_timer_ids => $last_timer_ids,
+    preferences    => $prefs,
   };
 }
 
@@ -533,6 +525,10 @@ after register_with_hub => sub ($self, @) {
 
     if (my $last_timer_ids = $state->{last_timer_ids}) {
       $self->_set_last_lp_timer_task_ids($last_timer_ids);
+    }
+
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
     }
 
     $self->save_state;
@@ -2486,5 +2482,16 @@ sub summarize_container ($item, $summary, $member_id) {
 
   return;
 }
+
+__PACKAGE__->add_preference(
+  name      => 'api_token',
+  validator => sub ($value) { return $value },
+);
+
+__PACKAGE__->add_preference(
+  name      => 'should_nag',
+  validator => sub ($value) { return bool_from_text($value) },
+);
+
 
 1;

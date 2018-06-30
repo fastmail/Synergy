@@ -12,6 +12,7 @@ use Sub::Exporter -setup => [ qw(
   parse_time_hunk
   parse_date_for_user
   pick_one
+  bool_from_text
 ) ];
 
 sub parse_time_hunk ($hunk, $user) {
@@ -35,7 +36,6 @@ sub parse_time_hunk ($hunk, $user) {
   return;
 }
 
-# XXX This should go into Synergy::Util or something
 sub parse_date_for_user ($str, $user) {
   my $tz = $user ? $user->time_zone : 'America/New_York';
 
@@ -56,6 +56,14 @@ sub parse_date_for_user ($str, $user) {
 
 sub pick_one ($opts) {
   return $opts->[ rand @$opts ];
+}
+
+# Handles yes/no, y/n, 1/0, true/false, t/f, on/off
+sub bool_from_text ($text) {
+  return 1 if $text =~ /^(yes|y|true|t|1|on)$/in;
+  return 0 if $text =~ /^(no|n|false|f|0|off)/in;
+
+  return (undef, "you can use yes/no, y/n, 1/0, true/false, t/f, or on/off");
 }
 
 1;
