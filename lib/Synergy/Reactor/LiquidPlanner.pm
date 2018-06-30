@@ -1288,7 +1288,7 @@ sub _handle_tasks ($self, $event, $text) {
 
 sub _parse_search ($self, $text) {
   my @words;
-  my %flag = (done => 0);
+  my %flag = ();
 
   state $ident_re = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
 
@@ -1309,12 +1309,12 @@ sub _parse_search ($self, $text) {
     }
 
     if ($text =~ s/^\#($ident_re)(?: \s | \z)//x) {
-      $flag{ project } = $1;
+      $flag{ project }{$1}++;
       next TOKEN;
     }
 
     if ($text =~ s/^($ident_re):([0-9]+|$ident_re)(?: \s | \z)//x) {
-      $flag{ $1 } = $2;
+      $flag{$1}{$2}++;
       next TOKEN;
     }
 
@@ -1331,8 +1331,82 @@ sub _parse_search ($self, $text) {
 sub _handle_search ($self, $event, $text) {
   my $search = $self->_parse_search($text);
 
-  my $json = JSON->new->canonical->encode($search);
-  $event->reply("Search isn't implemented yet, but: $json");
+  my %flag  = $search->{flag}->%*;
+  my @words = $search->{words}->@*;
+
+  if ($search->{flags}{parse_error}) {
+    return $event->reply("Your search blew my mind, and now I am dead.");
+  }
+
+  my %error;
+
+  my %qflag = (flat => 1, depth => -1);
+  my @filters;
+
+  if (my $done = delete $flag{done}) {
+    my @values = keys %$done;
+    if (@values > 1) {
+      $error{done} = qq{You gave more than one "done" value.};
+    } else {
+      push @filters, [ 'is_done', 'is', ($values[0] ? 'true' : 'false') ];
+    }
+  } else {
+    push @filters, [ 'is_done', 'is', 'false' ];
+  }
+
+  if (my $proj = delete $flag{project}) {
+    my @values = keys %$proj;
+    if (@values > 1) {
+      $error{project} = "You can only limit by one project at a time.";
+    } else {
+      my ($project, $error) = $self->project_by_shortcut($values[0]);
+
+      if ($project) { $qflag{in} = $project->{id}; }
+      else          { $error->{project} = $error; }
+    }
+  }
+
+  if (my $owners = delete $flag{user}) {
+    my %member;
+    my %unknown;
+    for my $who (keys %$owners) {
+      my $target = $self->resolve_name($who, $event->from_user);
+      my $lp_id  = $target && $target->lp_id;
+
+      if ($lp_id) { $member{$lp_id}++ }
+      else        { $unknown{$who}++ }
+    }
+
+    if (%unknown) {
+      $error{user} = "I don't know who these users are: "
+                   . join q{, }, sort keys %unknown;
+    } else {
+      push @filters, map {; [ 'owner_id', '=', $_ ] } keys %member;
+    }
+  }
+
+  if (keys %flag) {
+    $error{unknown} = "You used some flags I don't understand: "
+                    . join q{, }, sort keys %flag;
+  }
+
+  if (%error) {
+    return $event->reply(join q{  }, sort values %error);
+  }
+
+  my $check_res = $self->lp_client_for_user($event->from_user)->query_items({
+    %qflag,
+    filters => \@filters,
+  });
+
+  return $self->reply("Something went wrong when running that search.")
+    unless $check_res->is_success;
+
+  my @tasks = $check_res->payload_list;
+  my @task_page = splice @tasks, 0, 10;
+  $self->_send_task_list($event, \@task_page);
+
+  $event->reply("Responses to <search> are sent privately.") if $event->is_public;
 }
 
 sub _handle_task_like ($self, $event, $cmd, $count) {
