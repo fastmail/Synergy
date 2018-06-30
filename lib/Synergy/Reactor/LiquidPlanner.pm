@@ -1343,6 +1343,9 @@ sub _handle_search ($self, $event, $text) {
   my %qflag = (flat => 1, depth => -1);
   my @filters;
 
+  # TODO: Allow this to be overridden. -- rjbs, 2018-06-30
+  push @filters, [ 'item_type', 'is', 'Task' ];
+
   if (my $done = delete $flag{done}) {
     my @values = keys %$done;
     if (@values > 1) {
@@ -1388,6 +1391,10 @@ sub _handle_search ($self, $event, $text) {
   if (keys %flag) {
     $error{unknown} = "You used some flags I don't understand: "
                     . join q{, }, sort keys %flag;
+  }
+
+  if (@words) {
+    push @filters, map {; [ 'name', 'contains', $_ ] } @words;
   }
 
   $event->reply(sprintf "Here we go...\n%s\n%s",
