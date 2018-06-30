@@ -1365,7 +1365,7 @@ sub _handle_search ($self, $event, $text) {
     } else {
       my ($project, $error) = $self->project_for_shortcut($values[0]);
 
-      if ($project) { $qflag{in} = $project->{id}; }
+      if ($project) { push @filters, [ 'project_id', '=', $project->{id} ]; }
       else          { $error->{project} = $error; }
     }
   }
