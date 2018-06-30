@@ -501,6 +501,8 @@ sub start ($self) {
   $self->hub->loop->add($timer);
 
   $timer->start;
+
+  $self->_load_prefs_from_users;
 }
 
 after register_with_hub => sub ($self, @) {
@@ -535,13 +537,21 @@ after register_with_hub => sub ($self, @) {
   }
 };
 
+# Temporary, presumably
+sub _load_prefs_from_users ($self) {
+  for my $user ($self->hub->user_directory->users) {
+    $self->set_user_preference($user, 'should-nag', $user->should_nag);
+    $self->set_user_preference($user, 'api-token', $user->lp_token);
+  }
+}
+
 sub nag ($self, $timer, @) {
   $Logger->log("considering nagging");
 
   USER: for my $user ($self->hub->user_directory->users) {
     next USER unless my $sy_timer = $self->timer_for_user($user);
 
-    next USER unless $user->should_nag;
+    next USER unless $self->get_user_preference($user, 'should-nag');
 
     my $username = $user->username;
 
@@ -2484,12 +2494,13 @@ sub summarize_container ($item, $summary, $member_id) {
 }
 
 __PACKAGE__->add_preference(
-  name      => 'api_token',
+  name      => 'api-token',
   validator => sub ($value) { return $value },
+  describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
 );
 
 __PACKAGE__->add_preference(
-  name      => 'should_nag',
+  name      => 'should-nag',
   validator => sub ($value) { return bool_from_text($value) },
 );
 

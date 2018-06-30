@@ -4,6 +4,7 @@ package Synergy::Role::HasPreferences;
 use MooseX::Role::Parameterized;
 
 use Scalar::Util qw(blessed);
+use Try::Tiny;
 
 use experimental qw(signatures);
 use namespace::clean;
@@ -24,6 +25,14 @@ role {
   method preference_names    => sub             { sort keys %pref_specs     };
   method is_known_preference => sub ($, $name)  { exists $pref_specs{$name} };
 
+  method describe_user_preference => sub ($self, $user, $pref_name) {
+    my $val = try { $self->get_user_preference($user, $pref_name) };
+
+    my $full_name = $self->name . ".$pref_name";
+    my $desc = $pref_specs{$pref_name}->{describer}->( $val );
+    return "$full_name: $desc";
+  };
+
   around set_preference => sub ($orig, $self, $event, $name, $value) {
     unless ($self->is_known_preference($name)) {
       my $component_name = $self->name;
@@ -38,6 +47,7 @@ role {
   # spec is (for now) {
   #   name      => 'pref_name',
   #   validator => sub ($val) {},
+  #   describer => sub ($val) {},
   # }
   #
   # The validator sub will receive the raw text value from the user, and is
@@ -48,6 +58,9 @@ role {
     confess("Missing required pref. attribute 'validator'") unless $spec{validator};
 
     my $name = delete $spec{name};
+
+    $spec{describer} //= sub ($value) { return $value // '<undef>' };
+
     $pref_specs{$name} = \%spec;
   };
 
