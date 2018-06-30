@@ -293,11 +293,10 @@ sub provide_lp_link ($self, $event) {
   if ($event->text =~ $lp_id_re) {
     $item_id = $1;
   } elsif (my ($shortcut) = $event->text =~ $lp_shortcut_re) {
-    my $task = $self->task_by_shortcut(lc $shortcut);
-    return $event->reply(qq{I don't know a task with the shortcut "$shortcut".})
-      unless $task;
+    my ($item, $error)  = $self->task_for_shortcut($shortcut);
+    return $event->reply($error) unless $item;
 
-    $item_id = $task->[0]{id};
+    $item_id = $item->{id};
   } else {
     return;
   }
@@ -471,8 +470,8 @@ has projects => (
   isa => 'HashRef',
   traits => [ 'Hash' ],
   handles => {
-    projects            => 'keys',
-    project_by_shortcut => 'get',
+    project_shortcuts     => 'keys',
+    _project_by_shortcut  => 'get',
   },
   lazy => 1,
   default => sub ($self) {
@@ -485,8 +484,8 @@ has tasks => (
   isa => 'HashRef',
   traits => [ 'Hash' ],
   handles => {
-    tasks             => 'keys',
-    task_by_shortcut  => 'get',
+    task_shortcuts     => 'keys',
+    _task_by_shortcut => 'get',
   },
   lazy => 1,
   default => sub ($self) {
@@ -494,6 +493,31 @@ has tasks => (
   },
   writer    => '_set_tasks',
 );
+
+sub _item_for_shortcut ($self, $thing, $shortcut) {
+  my $getter = "_$thing\_by_shortcut";
+  my $things = $self->$getter(fc $shortcut);
+
+  unless ($things && @$things) {
+    return (0, qq{Sorry, I don't know a $thing with the shortcut "$shortcut".});
+  }
+
+  if (@$things > 1) {
+    return (0, qq{More than one LiquidPlanner $thing has the shortcut }
+             . qq{"$shortcut".  Their ids are: }
+             . join(q{, }, map {; $_->{id} } @$things));
+  }
+
+  return ($things->[0], undef);
+}
+
+sub project_for_shortcut ($self, $shortcut) {
+  $self->_item_for_shortcut(project => $shortcut);
+}
+
+sub task_for_project_shortcut ($self, $shortcut) {
+  $self->_item_for_shortcut(task => $shortcut);
+}
 
 sub start ($self) {
   my $timer = IO::Async::Timer::Periodic->new(
@@ -661,11 +685,8 @@ sub _get_treeitem_shortcuts {
       next;
     }
 
-    push $dict{ lc $shortcut }->@*, {
-      id        => $item->{id},
-      shortcut  => $shortcut,
-      name      => $item->{name},
-    };
+    $item->{shortcut} = $shortcut; # needed?
+    push $dict{ lc $shortcut }->@*, $item;
   }
 
   return \%dict;
@@ -811,25 +832,14 @@ sub _check_plan_project ($self, $event, $plan, $error) {
   }
 
   my ($project_name) = keys %$project;
-  my $projects = $self->project_by_shortcut(lc $project_name);
+  my ($item, $err) = $self->project_for_shortcut($project_name);
 
-  unless ($projects && @$projects) {
-    $error->{project} = qq{I don't know any LiquidPlanner project with the}
-                      . qq{ shortcut "$project_name".};
-
-    return;
+  if ($item) {
+    $plan->{project_id} = $item->{id};
+  } else {
+    $error->{project} = $err;
   }
 
-  if (@$projects > 1) {
-    $error->{project}
-      = qq{More than one LiquidPlanner project has the shortcut "$project_name". }
-      . qq{Their ids are: }
-      . join(q{, }, map {; $_->{id} } @$projects);
-
-    return;
-  }
-
-  $plan->{project_id} = $projects->[0]{id};
   return;
 }
 
@@ -1554,28 +1564,13 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
   );
 
   if ($my_arg->{name} =~ s/#(.*)$//) {
-    my $project = lc $1;
+    my ($item, $err) = $self->project_for_shortcut($1);
 
-    my $projects = $self->project_by_shortcut($project);
-
-    unless ($projects && @$projects) {
-      $arg->{already_notified} = 1;
-
-      return $event->reply(
-          "I am not aware of a project named '$project'. (Try 'projects' "
-        . "to see what projects I know about.)",
-      );
+    if ($item) {
+      $container{parent_id} = $item->{id};
+    } else {
+      return $event->reply($err);
     }
-
-    if (@$projects > 1) {
-      return $event->reply(
-          "More than one LiquidPlanner project has the shortcut '$project'. "
-        . "Their ids are: "
-        . join(q{, }, map {; $_->{id} } @$projects),
-      );
-    }
-
-    $container{parent_id} = $projects->[0]{id};
   }
 
   $container{parent_id} = delete $container{package_id}
@@ -1864,12 +1859,10 @@ sub _handle_start ($self, $event, $text) {
   my $lpc = $self->lp_client_for_user($user);
 
   if ($text =~ m{\A\s*\*(\w+)\s*\z}) {
-    my $task = $self->task_by_shortcut(lc $1);
-    return $event->reply(qq{I don't know a task with the shortcut "$1".})
-      unless $task;
+    my ($task, $error) = $self->task_for_shortcut($1);
+    return $event->reply($error) unless $task;
 
-    my $task_id = $task->[0]{id};
-    return $self->_handle_start_existing($event, $task_id);
+    return $self->_handle_start_existing($event, $task->{id});
   }
 
   if ($text =~ /\A[0-9]+\z/) {
@@ -2111,12 +2104,10 @@ sub _handle_spent ($self, $event, $text) {
   }
 
   if ($name =~ m{\A\s*\*(\w+)\s*\z}) {
-    my $task = $self->task_by_shortcut(lc $1);
-    return $event->reply(qq{I don't know a task with the shortcut "$1".})
-      unless $task;
+    my ($task, $error) = $self->task_for_shortcut($1);
+    return $event->reply($error) unless $task;
 
-    my $task_id = $task->[0]{id};
-    return $self->_spent_on_existing($event, $task_id, $duration);
+    return $self->_spent_on_existing($event, $task->{id}, $duration);
   }
 
   my ($plan, $error) = $self->task_plan_from_spec(
@@ -2199,11 +2190,12 @@ sub _handle_projects ($self, $event, $text) {
   my $slack = "Known projects:\n";
 
   for my $project (@sorted) {
-    my $id = $self->project_by_shortcut($project)->[0]->{id};   # cool, LP
+    my ($item, $error) = $self->project_for_shortcut($project);
+    next unless $item; # !?!? -- rjbs, 2018-06-30
 
-    $reply .= sprintf "\n%s (%s)", $project, $self->item_uri($id);
+    $reply .= sprintf "\n%s (%s)", $project, $self->item_uri($item->{id});
     $slack .= sprintf "\n%s _aka_ %s",
-      $self->_slack_item_link({ id => $id }),
+      $self->_slack_item_link($item),
       $project;
   }
 
@@ -2211,7 +2203,7 @@ sub _handle_projects ($self, $event, $text) {
 }
 
 sub _handle_task_shortcuts ($self, $event, $text) {
-  my @sorted = sort $self->tasks;
+  my @sorted = sort $self->task_shortcuts;
 
   $event->reply("Responses to <task shortcuts> are sent privately.")
     if $event->is_public;
@@ -2220,11 +2212,12 @@ sub _handle_task_shortcuts ($self, $event, $text) {
   my $slack = "Known projects:\n";
 
   for my $task (@sorted) {
-    my $id = $self->task_by_shortcut($task)->[0]->{id};   # cool, LP
+    my ($item, $error) = $self->task_for_shortcut($task);
+    next unless $item; # !?!? -- rjbs, 2018-06-30
 
-    $reply .= sprintf "\n%s (%s)", $task, $self->item_uri($id);
+    $reply .= sprintf "\n%s (%s)", $task, $self->item_uri($item->{id});
     $slack .= sprintf "\n%s _aka_ %s",
-      $self->_slack_item_link({ id => $id }),
+      $self->_slack_item_link($item),
       $task;
   }
 
