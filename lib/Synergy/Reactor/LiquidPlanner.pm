@@ -1409,7 +1409,7 @@ sub _handle_search ($self, $event, $text) {
   $event->reply("Responses to <search> are sent privately.") if $event->is_public;
 }
 
-sub _handle_task_like ($self, $event, $cmd, $count) {
+sub _handle_task_list ($self, $event, $cmd, $count) {
   my $user = $event->from_user;
 
   my $arg = $cmd eq 'urgent' ? { no_prefix => 1 } : {};
@@ -1428,15 +1428,15 @@ sub _handle_task_like ($self, $event, $cmd, $count) {
 }
 
 sub _handle_inbox ($self, $event, $text) {
-  return $self->_handle_task_like($event, 'inbox', 200);
+  return $self->_handle_task_list($event, 'inbox', 200);
 }
 
 sub _handle_urgent ($self, $event, $text) {
-  return $self->_handle_task_like($event, 'urgent', 100);
+  return $self->_handle_task_list($event, 'urgent', 100);
 }
 
 sub _handle_recurring ($self, $event, $text) {
-  return $self->_handle_task_like($event, 'recurring', 100);
+  return $self->_handle_task_list($event, 'recurring', 100);
 }
 
 sub _handle_plus_plus ($self, $event, $text) {
