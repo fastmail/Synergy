@@ -110,7 +110,7 @@ sub private_reply ($self, $text, $alts = {}) {
   $Logger->log_debug("sending $text to someone");
 
   return $self->from_channel->send_message(
-    $self->conversation_address,
+    $self->from_address,
     $text,
     $alts,
   );

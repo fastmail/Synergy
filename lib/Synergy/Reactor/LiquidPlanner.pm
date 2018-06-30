@@ -1411,7 +1411,7 @@ sub _handle_search ($self, $event, $text) {
     unless $check_res->is_success;
 
   my %seen;
-  my @tasks = grep {; ! $seen{$_->{id}++ } $check_res->payload_list;
+  my @tasks = grep {; ! $seen{$_->{id}++} } $check_res->payload_list;
   my @task_page = splice @tasks, 0, 10;
   $self->_send_task_list($event, \@task_page, { public => 1 });
 }
