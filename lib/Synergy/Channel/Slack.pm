@@ -153,7 +153,7 @@ sub decode_slack_formatting ($self, $text) {
   $text =~ s/<\@(U[A-Z0-9]+)>/"@" . $self->slack->username($1)/ge;
 
   # Channels: <#C123ABC|bottest>
-  $text =~ s/<#C(?:[A-Z0-9]+)\|(.*?)>/#$1/g;
+  $text =~ s/<#[CD](?:[A-Z0-9]+)\|(.*?)>/#$1/g;
 
   # mailto: mailto:foo@bar.com|foo@bar.com (no surrounding brackets)
   $text =~ s/mailto:\S+?\|//g;
