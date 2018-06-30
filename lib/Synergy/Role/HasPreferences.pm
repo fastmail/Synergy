@@ -33,19 +33,9 @@ role {
     return "$full_name: $desc";
   };
 
-  around set_preference => sub ($orig, $self, $event, $name, $value) {
-    unless ($self->is_known_preference($name)) {
-      my $component_name = $self->name;
-      $event->reply("I don't know about the $component_name.<$name> preference");
-      $event->mark_handled;
-      return;
-    }
-
-    $self->$orig($event, $name, $value);
-  };
-
   # spec is (for now) {
   #   name      => 'pref_name',
+  #   default   => value,
   #   validator => sub ($val) {},
   #   describer => sub ($val) {},
   # }
@@ -66,6 +56,13 @@ role {
 
 
   method set_preference => sub ($self, $event, $pref_name, $value) {
+    unless ($self->is_known_preference($pref_name)) {
+      my $full_name = $self->preference_namespace . q{.} . $pref_name;
+      $event->reply("I don't know about the $full_name preference");
+      $event->mark_handled;
+      return;
+    }
+
     my $spec = $pref_specs{ $pref_name };
     my ($actual_value, $err) = $spec->{validator}->($value);
 
@@ -105,11 +102,12 @@ role {
     die 'unknown pref' unless $self->is_known_preference($pref_name);
 
     my $username = blessed $user ? $user->username : $user;
+    my $spec = $pref_specs{ $pref_name };
 
     $all_user_prefs{$username} //= {};
 
     my $uprefs = $all_user_prefs{$username};
-    $uprefs->{$pref_name} = $value;
+    $uprefs->{$pref_name} = $value // $spec->{default};
 
     $self->save_state;
 
