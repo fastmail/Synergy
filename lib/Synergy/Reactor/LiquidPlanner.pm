@@ -1244,7 +1244,10 @@ sub _send_task_list ($self, $event, $tasks) {
   for my $task (@$tasks) {
     my $uri = $self->item_uri($task->{id});
     $reply .= "$task->{name} ($uri)\n";
-    $slack .= $self->_slack_item_link($task) . " $task->{name}\n";
+    $slack .= sprintf "%s %s %s\n",
+      $self->_slack_item_link($task),
+      ($task->{is_done} ? "✓" : "•"),
+      $task->{name};
   }
 
   chomp $reply;
