@@ -9,7 +9,20 @@ use Try::Tiny;
 use experimental qw(signatures);
 use namespace::clean;
 
+parameter namespace => (
+  isa => 'Str',
+);
+
 role {
+  my $p = shift;
+
+  has preference_namespace => (
+    is => 'ro',
+    isa => 'Str',
+    lazy => 1,
+    default => sub { $p->namespace // $_[0]->name },
+  );
+
   my %pref_specs;
 
   # This could be better, but we'll access it through methods to keep the
@@ -28,7 +41,7 @@ role {
   method describe_user_preference => sub ($self, $user, $pref_name) {
     my $val = try { $self->get_user_preference($user, $pref_name) };
 
-    my $full_name = $self->name . ".$pref_name";
+    my $full_name = $self->preference_namespace . q{.} . $pref_name;
     my $desc = $pref_specs{$pref_name}->{describer}->( $val );
     return "$full_name: $desc";
   };
@@ -38,6 +51,7 @@ role {
   #   default   => value,
   #   validator => sub ($val) {},
   #   describer => sub ($val) {},
+  #   after_set => sub ($self, $username, $value) {},
   # }
   #
   # The validator sub will receive the raw text value from the user, and is
@@ -50,6 +64,7 @@ role {
     my $name = delete $spec{name};
 
     $spec{describer} //= sub ($value) { return $value // '<undef>' };
+    $spec{after_set} //= sub ($self, $username, $value) {};
 
     $pref_specs{$name} = \%spec;
   };
@@ -66,7 +81,7 @@ role {
     my $spec = $pref_specs{ $pref_name };
     my ($actual_value, $err) = $spec->{validator}->($value);
 
-    my $full_name = sprintf("%s.%s", $self->name, $pref_name);
+    my $full_name = $self->preference_namespace . q{.} . $pref_name;
 
     if ($err) {
       $event->reply("I don't understand the value you gave for $full_name: $err.");
@@ -108,6 +123,8 @@ role {
 
     my $uprefs = $all_user_prefs{$username};
     $uprefs->{$pref_name} = $value // $spec->{default};
+
+    $spec->{after_set}->($self, $username, $value);
 
     $self->save_state;
 

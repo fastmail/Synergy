@@ -2655,8 +2655,9 @@ __PACKAGE__->add_preference(
 
 # Temporary, presumably. We're assuming here that the values from git are
 # valid.
-sub load_preferences_from_user ($self, $user) {
-  $Logger->log([ "Loading LiquidPlanner preferences for %s", $user->username ]);
+sub load_preferences_from_user ($self, $username) {
+  $Logger->log([ "Loading LiquidPlanner preferences for %s", $username ]);
+  my $user = $self->hub->user_directory->user_named($username);
 
   $self->set_user_preference($user, 'should-nag', $user->should_nag)
     unless $self->user_has_preference($user, 'should-nag');

@@ -3,6 +3,7 @@ package Synergy::Reactor::Preferences;
 
 use Moose;
 use Try::Tiny;
+use Synergy::Logger '$Logger';
 
 with 'Synergy::Role::Reactor';
 
@@ -64,8 +65,9 @@ sub handle_dump ($self, $event) {
   my $for_user = $self->resolve_name($who, $event->from_user);
 
   my @pref_strings;
+  my $hub = $self->hub;
 
-  for my $component ($self->hub->channels, $self->hub->reactors) {
+  for my $component ($hub->user_directory, $hub->channels, $hub->reactors) {
     next unless $component->has_preferences;
 
     push @pref_strings, $component->describe_user_preference($for_user, $_)

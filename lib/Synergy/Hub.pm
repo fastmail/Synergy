@@ -20,6 +20,7 @@ use Plack::App::URLMap;
 use Synergy::HTTPServer;
 use Try::Tiny;
 use URI;
+use Scalar::Util qw(blessed);
 
 has name => (
   is  => 'ro',
@@ -162,19 +163,19 @@ for my $pair (
 
 # Get a channel or reactor named this
 sub component_named ($self, $name) {
+  return $self->user_directory if lc $name eq 'user';
   return $self->reactor_named($name) if $self->_reactor_exists($name);
   return $self->channel_named($name) if $self->_channel_exists($name);
   confess("Could not find channel or reactor named '$name'");
 }
 
 # Temporary, so that we can slowly convert git config to proper preferences.
-sub load_preferences_from_user ($self, $username) {
-  my $user = $self->user_directory->user_named($username);
-
-  for my $component ($self->channels, $self->reactors) {
+sub load_preferences_from_user ($self, $user) {
+  my $username = blessed $user ? $user->username : $user;
+  for my $component ($self->user_directory, $self->channels, $self->reactors) {
     next unless $component->has_preferences;
     next unless $component->can('load_preferences_from_user');
-    $component->load_preferences_from_user($user);
+    $component->load_preferences_from_user($username);
   }
 }
 
@@ -278,7 +279,7 @@ sub synergize {
   #   reactors: name => config
   #   http_server: (port => id)
   #   state_directory: ...
-  my $directory = Synergy::UserDirectory->new;
+  my $directory = Synergy::UserDirectory->new({ name => '_user_directory' });
 
   if ($config->{user_directory}) {
     $directory->load_users_from_file($config->{user_directory});
@@ -288,6 +289,8 @@ sub synergize {
     user_directory => $directory,
     ($config->{server_port} ? (server_port => $config->{server_port}) : ()),
   });
+
+  $directory->register_with_hub($hub);
 
   for my $thing (qw( channel reactor )) {
     my $plural    = "${thing}s";
@@ -309,7 +312,9 @@ sub synergize {
     }
   }
 
-  $hub->load_preferences_from_user($_) for $hub->user_directory->usernames;
+  # Everything's all registered...give them a chance to load up user prefs
+  # before calling ->start.
+  $hub->load_preferences_from_user($_) for $hub->user_directory->users;
 
   $hub->set_loop($loop);
 

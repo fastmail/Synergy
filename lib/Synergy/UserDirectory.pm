@@ -2,11 +2,17 @@ use v5.24.0;
 package Synergy::UserDirectory;
 use Moose;
 
+with 'Synergy::Role::HubComponent';
+with 'Synergy::Role::HasPreferences' => {
+  namespace => 'user',
+};
+
 use experimental qw(signatures);
 use namespace::autoclean;
 use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
+use Synergy::Logger '$Logger';
 use List::Util qw(first);
 
 has users => (
@@ -22,6 +28,19 @@ has users => (
   writer  => '_set_users',
   default => sub {  {}  },
 );
+
+
+after register_with_hub => sub ($self, @) {
+  if (my $state = $self->fetch_state) {
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+  }
+};
+
+sub state ($self) {
+  return { preferences => $self->user_preferences };
+}
 
 sub master_users ($self) {
   return grep {; $_->is_master } $self->users;
@@ -102,6 +121,27 @@ sub resolve_name ($self, $name, $resolving_user) {
   }
 
   return $user;
+}
+
+__PACKAGE__->add_preference(
+  name => 'realname',
+  validator => sub { "$_[0]" },
+  after_set => sub ($self, $username, $value) {
+    $self->reload_user($username, { realname => $value });
+  },
+);
+
+# Temporary, presumably. We're assuming here that the values from git are
+# valid.
+sub load_preferences_from_user ($self, $username) {
+  $Logger->log([ "Loading global preferences for %s", $username ]);
+  my $user = $self->user_named($username);
+
+  # Silly, but we want to make sure our realname preference takes precedence
+  # over whatever's in the user file. the after_set will take care of that,
+  # but only if we actually set it!
+  my $realname = $self->get_user_preference($user, 'realname') // $user->realname;
+  $self->set_user_preference($user, 'realname', $realname);
 }
 
 1;
