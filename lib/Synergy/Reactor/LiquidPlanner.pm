@@ -1331,7 +1331,7 @@ sub _parse_search ($self, $text) {
 sub _handle_search ($self, $event, $text) {
   my $search = $self->_parse_search($text);
 
-  my %flag  = $search->{flag}->%*;
+  my %flag  = $search->{flags}->%*;
   my @words = $search->{words}->@*;
 
   if ($search->{flags}{parse_error}) {
