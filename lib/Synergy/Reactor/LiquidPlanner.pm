@@ -1389,6 +1389,8 @@ sub _handle_search ($self, $event, $text) {
     }
   }
 
+  my $debug = $flag{debug} && grep { $_ } keys((delete $flag{debug})->%*);
+
   if (keys %flag) {
     $error{unknown} = "You used some flags I don't understand: "
                     . join q{, }, sort keys %flag;
@@ -1400,6 +1402,13 @@ sub _handle_search ($self, $event, $text) {
 
   if (%error) {
     return $event->reply(join q{  }, sort values %error);
+  }
+
+  if ($debug) {
+    $event->reply(
+      "I'm going to run this query:\n"
+      . JSON->new->canonical->encode({ %qflag, filters => \@filters }),
+    );
   }
 
   my $check_res = $self->lp_client_for_user($event->from_user)->query_items({
