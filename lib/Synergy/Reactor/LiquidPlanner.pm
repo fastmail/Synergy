@@ -515,7 +515,7 @@ sub project_for_shortcut ($self, $shortcut) {
   $self->_item_for_shortcut(project => $shortcut);
 }
 
-sub task_for_project_shortcut ($self, $shortcut) {
+sub task_for_shortcut ($self, $shortcut) {
   $self->_item_for_shortcut(task => $shortcut);
 }
 
@@ -2255,7 +2255,7 @@ sub _spent_on_existing ($self, $event, $task_id, $duration) {
 }
 
 sub _handle_projects ($self, $event, $text) {
-  my @sorted = sort $self->projects;
+  my @sorted = sort $self->project_shortcuts;
 
   $event->reply("Responses to <projects> are sent privately.")
     if $event->is_public;
