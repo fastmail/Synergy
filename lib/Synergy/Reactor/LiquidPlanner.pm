@@ -1411,7 +1411,7 @@ sub _handle_search ($self, $event, $text) {
     unless $check_res->is_success;
 
   my %seen;
-  my @tasks = grep {; ! $seen{$_->{id}++} } $check_res->payload_list;
+  my @tasks = grep {; ! $seen{$_->{id}}++ } $check_res->payload_list;
 
   return $event->reply("Nothing matched that search.") unless @tasks;
 
