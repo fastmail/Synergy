@@ -309,6 +309,8 @@ sub synergize {
     }
   }
 
+  $hub->load_preferences_from_user($_) for $hub->user_directory->usernames;
+
   $hub->set_loop($loop);
 
   return $hub;

@@ -84,6 +84,12 @@ role {
     $event->mark_handled;
   };
 
+  method user_has_preference => sub ($self, $user, $pref_name) {
+    my $username = blessed $user ? $user->username : $user;
+    my $user_prefs = $all_user_prefs{$username};
+    return exists $user_prefs->{$pref_name} && defined $user_prefs->{$pref_name};
+  };
+
   method get_user_preference => sub ($self, $user, $pref_name) {
     die 'unknown pref' unless $self->is_known_preference($pref_name);
 

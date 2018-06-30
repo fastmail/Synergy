@@ -2651,11 +2651,16 @@ __PACKAGE__->add_preference(
   validator => sub ($value) { return bool_from_text($value) },
 );
 
-# Temporary, presumably
+# Temporary, presumably. We're assuming here that the values from git are
+# valid.
 sub load_preferences_from_user ($self, $user) {
   $Logger->log([ "Loading LiquidPlanner preferences for %s", $user->username ]);
-  $self->set_user_preference($user, 'should-nag', $user->should_nag);
-  $self->set_user_preference($user, 'api-token', $user->lp_token);
+
+  $self->set_user_preference($user, 'should-nag', $user->should_nag)
+    unless $self->user_has_preference($user, 'should-nag');
+
+  $self->set_user_preference($user, 'api-token', $user->lp_token)
+    unless $self->user_has_preference($user, 'api-token');
 }
 
 
