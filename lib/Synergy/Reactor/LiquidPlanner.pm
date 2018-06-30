@@ -1407,11 +1407,14 @@ sub _handle_search ($self, $event, $text) {
     filters => \@filters,
   });
 
-  return $self->reply("Something went wrong when running that search.")
+  return $event->reply("Something went wrong when running that search.")
     unless $check_res->is_success;
 
   my %seen;
   my @tasks = grep {; ! $seen{$_->{id}++} } $check_res->payload_list;
+
+  return $event->reply("Nothing matched that search.") unless @tasks;
+
   my @task_page = splice @tasks, 0, 10;
   $self->_send_task_list($event, \@task_page, { public => 1 });
 }
