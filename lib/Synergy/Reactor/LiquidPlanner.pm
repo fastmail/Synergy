@@ -1363,7 +1363,7 @@ sub _handle_search ($self, $event, $text) {
     if (@values > 1) {
       $error{project} = "You can only limit by one project at a time.";
     } else {
-      my ($project, $error) = $self->project_by_shortcut($values[0]);
+      my ($project, $error) = $self->project_for_shortcut($values[0]);
 
       if ($project) { $qflag{in} = $project->{id}; }
       else          { $error->{project} = $error; }
