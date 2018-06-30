@@ -284,4 +284,16 @@ plan_ok(
   "blank lines in long description are preserved"
 );
 
+is_deeply(
+  $synergy->reactor_named('lp')->_parse_search("foo"),
+  { flags => { done => 0 }, words => [ 'foo' ] },
+  'one-word search',
+);
+
+is_deeply(
+  $synergy->reactor_named('lp')->_parse_search("foo done:1 bar"),
+  { flags => { done => 1 }, words => [ qw( foo bar ) ] },
+  'simple search',
+);
+
 done_testing;

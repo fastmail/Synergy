@@ -126,6 +126,9 @@ my %KNOWN = (
   resume    =>  [ \&_handle_resume,
                   "resume timer: start the last time you had running up again",
                 ],
+
+  search    =>  [ \&_handle_search,      ],
+
   shows     =>  [ \&_handle_shows,       ],
   "show's"  =>  [ \&_handle_shows,       ],
   showtime  =>  [ \&_handle_showtime,    ],
@@ -1271,6 +1274,55 @@ sub _handle_tasks ($self, $event, $text) {
   $self->_send_task_list($event, \@task_page);
 
   $event->reply("Responses to <tasks> are sent privately.") if $event->is_public;
+}
+
+sub _parse_search ($self, $text) {
+  my @words;
+  my %flag = (done => 0);
+
+  state $ident_re = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
+
+  my $last = q{};
+  TOKEN: while (length $text) {
+    $text =~ s/^\s+//;
+
+    # Abort!  Shouldn't happen. -- rjbs, 2018-06-30
+    if ($last eq $text) {
+      $flag{parse_error} = 1;
+      last TOKEN;
+    }
+    $last = $text;
+
+    if ($text =~ s/^"( (?: \\" | [^"] )+ )"\s*//x) {
+      push @words, $1;
+      next TOKEN;
+    }
+
+    if ($text =~ s/^\#($ident_re)(?: \s | \z)//x) {
+      $flag{ project } = $1;
+      next TOKEN;
+    }
+
+    if ($text =~ s/^($ident_re):([0-9]+|$ident_re)(?: \s | \z)//x) {
+      $flag{ $1 } = $2;
+      next TOKEN;
+    }
+
+    ((my $token), $text) = split /\s+/, $text, 2;
+    push @words, $token;
+  }
+
+  return {
+    words => \@words,
+    flags => \%flag,
+  }
+}
+
+sub _handle_search ($self, $event, $text) {
+  my $search = $self->_parse_search($text);
+
+  my $json = JSON->new->canonical->encode($search);
+  $event->reply("Search isn't implemented yet, but: $json");
 }
 
 sub _handle_task_like ($self, $event, $cmd, $count) {
