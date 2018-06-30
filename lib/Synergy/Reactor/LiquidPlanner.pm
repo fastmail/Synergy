@@ -1390,6 +1390,11 @@ sub _handle_search ($self, $event, $text) {
                     . join q{, }, sort keys %flag;
   }
 
+  $event->reply(sprintf "Here we go...\n%s\n%s",
+    JSON->new->canonical->encode({ %qflag, filters => \@filters }),
+    JSON->new->canonical->encode(\%error),
+  );
+
   if (%error) {
     return $event->reply(join q{  }, sort values %error);
   }
