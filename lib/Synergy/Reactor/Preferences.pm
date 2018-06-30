@@ -66,7 +66,7 @@ sub handle_dump ($self, $event) {
   my @pref_strings;
 
   for my $component ($self->hub->channels, $self->hub->reactors) {
-    next unless $component->does('Synergy::Role::HasPreferences');
+    next unless $component->has_preferences;
 
     push @pref_strings, $component->describe_user_preference($for_user, $_)
       for $component->preference_names;

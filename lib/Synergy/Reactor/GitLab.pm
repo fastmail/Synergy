@@ -173,6 +173,7 @@ sub _update_user_config ($self, $username) {
   return (undef, "error with YAML in config") unless $uconfig;
 
   $self->hub->user_directory->reload_user($username, $uconfig);
+  $self->hub->load_preferences_from_user($username);
   $self->set_user($username => $uconfig);
   $self->save_state;
   return (1, undef);

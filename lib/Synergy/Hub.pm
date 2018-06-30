@@ -167,6 +167,17 @@ sub component_named ($self, $name) {
   confess("Could not find channel or reactor named '$name'");
 }
 
+# Temporary, so that we can slowly convert git config to proper preferences.
+sub load_preferences_from_user ($self, $username) {
+  my $user = $self->user_directory->user_named($username);
+
+  for my $component ($self->channels, $self->reactors) {
+    next unless $component->has_preferences;
+    next unless $component->can('load_preferences_from_user');
+    $component->load_preferences_from_user($user);
+  }
+}
+
 sub handle_event ($self, $event) {
   $Logger->log([
     "%s event from %s/%s: %s",

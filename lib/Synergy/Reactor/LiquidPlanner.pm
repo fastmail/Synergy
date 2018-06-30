@@ -501,8 +501,6 @@ sub start ($self) {
   $self->hub->loop->add($timer);
 
   $timer->start;
-
-  $self->_load_prefs_from_users;
 }
 
 after register_with_hub => sub ($self, @) {
@@ -536,14 +534,6 @@ after register_with_hub => sub ($self, @) {
     $self->save_state;
   }
 };
-
-# Temporary, presumably
-sub _load_prefs_from_users ($self) {
-  for my $user ($self->hub->user_directory->users) {
-    $self->set_user_preference($user, 'should-nag', $user->should_nag);
-    $self->set_user_preference($user, 'api-token', $user->lp_token);
-  }
-}
 
 sub nag ($self, $timer, @) {
   $Logger->log("considering nagging");
@@ -2531,6 +2521,13 @@ __PACKAGE__->add_preference(
   name      => 'should-nag',
   validator => sub ($value) { return bool_from_text($value) },
 );
+
+# Temporary, presumably
+sub load_preferences_from_user ($self, $user) {
+  $Logger->log([ "Loading LiquidPlanner preferences for %s", $user->username ]);
+  $self->set_user_preference($user, 'should-nag', $user->should_nag);
+  $self->set_user_preference($user, 'api-token', $user->lp_token);
+}
 
 
 1;

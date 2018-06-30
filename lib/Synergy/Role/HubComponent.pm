@@ -49,5 +49,10 @@ sub fetch_state ($self) {
   $self->hub->fetch_state($self);
 }
 
+sub has_preferences ($self) {
+  return 0 unless $self->does('Synergy::Role::HasPreferences');
+  return !! ($self->preference_names)[0];
+}
+
 no Moose::Role;
 1;
