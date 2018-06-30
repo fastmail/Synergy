@@ -1240,7 +1240,7 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
   return \@tasks;
 }
 
-sub _send_task_list ($self, $event, $tasks) {
+sub _send_task_list ($self, $event, $tasks, $arg = {}) {
   my $reply = q{};
   my $slack = q{};
 
@@ -1256,7 +1256,8 @@ sub _send_task_list ($self, $event, $tasks) {
   chomp $reply;
   chomp $slack;
 
-  $event->private_reply($reply, { slack => $slack });
+  my $method = $arg->{public} ? 'reply' : 'private_reply';
+  $event->$method($reply, { slack => $slack });
 }
 
 sub _handle_tasks ($self, $event, $text) {
@@ -1397,11 +1398,6 @@ sub _handle_search ($self, $event, $text) {
     push @filters, map {; [ 'name', 'contains', $_ ] } @words;
   }
 
-  $event->reply(sprintf "Here we go...\n%s\n%s",
-    JSON->new->canonical->encode({ %qflag, filters => \@filters }),
-    JSON->new->canonical->encode(\%error),
-  );
-
   if (%error) {
     return $event->reply(join q{  }, sort values %error);
   }
@@ -1416,9 +1412,7 @@ sub _handle_search ($self, $event, $text) {
 
   my @tasks = $check_res->payload_list;
   my @task_page = splice @tasks, 0, 10;
-  $self->_send_task_list($event, \@task_page);
-
-  $event->reply("Responses to <search> are sent privately.") if $event->is_public;
+  $self->_send_task_list($event, \@task_page, { public => 1 });
 }
 
 sub _handle_task_list ($self, $event, $cmd, $count) {
