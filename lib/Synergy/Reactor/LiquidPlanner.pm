@@ -1320,7 +1320,7 @@ sub _parse_search ($self, $text) {
     $last = $text;
 
     if ($text =~ s/^"( (?: \\" | [^"] )+ )"\s*//x) {
-      push @words, $1;
+      push @words, "$1" =~ s/\\"/"/gr;
       next TOKEN;
     }
 
@@ -1430,8 +1430,14 @@ sub _handle_search ($self, $event, $text) {
                     . join q{, }, sort keys %flag;
   }
 
+  if (grep { /'/ } grep { /"/ } @words) {
+    $error{words} = "You can't search for a phrase with both single and double quotes in it.  Sorry!";
+  }
+
   if (@words) {
-    push @filters, map {; [ 'name', 'contains', $_ ] } @words;
+    push @filters, map {;
+      [ 'name', 'contains', ($_ =~ /'/ ? qq{"$_"} : qq{'$_'}) ]
+    } @words;
   }
 
   if (%error) {
