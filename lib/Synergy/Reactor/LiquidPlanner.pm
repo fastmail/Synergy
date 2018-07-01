@@ -1430,13 +1430,9 @@ sub _handle_search ($self, $event, $text) {
                     . join q{, }, sort keys %flag;
   }
 
-  if (grep { /'/ } grep { /"/ } @words) {
-    $error{words} = "You can't search for a phrase with both single and double quotes in it.  Sorry!";
-  }
-
   if (@words) {
     push @filters, map {;
-      [ 'name', 'contains', ($_ =~ /'/ ? qq{"$_"} : qq{'$_'}) ]
+      [ 'name', 'contains', q{'} . ($_ =~ s/'/\\'/r) . q{'} ]
     } @words;
   }
 
