@@ -1378,12 +1378,31 @@ sub _handle_search ($self, $event, $text) {
     if (@values > 1) {
       $error{project} = "You can only limit by one project at a time.";
     } else {
-      my ($project, $error) = $self->project_for_shortcut($values[0]);
+      my ($project, $err) = $self->project_for_shortcut($values[0]);
 
       if ($project) { push @filters, [ 'project_id', '=', $project->{id} ]; }
-      else          { $error->{project} = $error; }
+      else          { $error{project} = $err; }
     }
   }
+
+  my ($limit, $offset) = (11, 0);
+  if (my $page = delete $flag{page}) {
+    my @values = keys %$page;
+    if (@values > 1) {
+      $error{page} = "You asked for more than one distinct page number.";
+    } else {
+      my $value = $values[0];
+      if ($value !~ /\A[1-9][0-9]*\z/) {
+        $error{page} = "You have to pick a positive integer page number.";
+      } elsif ($value > 10) {
+        $error{page} = "Sorry, you can't get a page past the tenth.";
+      } else {
+        $offset = ($value - 1) * 10;
+        $limit += $offset;
+      }
+    }
+  }
+  $qflag{limit} = $limit;
 
   if (my $owners = delete $flag{user}) {
     my %member;
@@ -1439,8 +1458,9 @@ sub _handle_search ($self, $event, $text) {
 
   return $event->reply("Nothing matched that search.") unless @tasks;
 
-  my @task_page = splice @tasks, 0, 10;
+  my @task_page = splice @tasks, $offset, 10;
   $self->_send_task_list($event, \@task_page, { public => 1 });
+  $event->reply("…and more") if @task_page;
 }
 
 sub _handle_task_list ($self, $event, $cmd, $count) {
