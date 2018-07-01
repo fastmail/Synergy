@@ -73,7 +73,7 @@ sub _slack_item_link_with_name ($self, $item) {
   my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
 
   my $title = $item->{name};
-  $title .= " _($shortcut_prefix->{$type}$shortcut)_" if $shortcut;
+  $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
 
   sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
     $self->item_uri($item->{id}),
@@ -330,7 +330,7 @@ sub provide_lp_link ($self, $event) {
   my $reply;
 
   if ($item->{type} =~ /\A Task | Package | Project \z/x) {
-    my $icon = $item->{type} eq 'Task'    ? ($item->{is_done} ? "✓" : "•")
+    my $icon = $item->{type} eq 'Task'    ? "" # Sometimes 🌀
              : $item->{type} eq 'Package' ? "📦"
              : $item->{type} eq 'Project' ? "📁"
              :                              "($item->{type})";
