@@ -1461,7 +1461,7 @@ sub _handle_search ($self, $event, $text) {
   WORD: for my $word (@words) {
     if ($word->{op} eq 'does_not_contain') {
       $error{word_dnc} = qq{Annoyingly, there's no "does not contain" }
-                       . qq{query in LiquidPlanner, so you can't use "!"}
+                       . qq{query in LiquidPlanner, so you can't use "!" }
                        . qq{as a prefix.};
       next WORD;
     }
