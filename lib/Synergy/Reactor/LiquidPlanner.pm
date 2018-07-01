@@ -67,6 +67,21 @@ sub _slack_item_link ($self, $item) {
     $item->{id};
 }
 
+sub _slack_item_link_with_name ($self, $item) {
+  state $shortcut_prefix = { Task => '*', Project => '#' };
+  my $type = $item->{type};
+  my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
+
+  my $title = $item->{name};
+  $title .= " _($shortcut_prefix->{$type}$shortcut)_" if $shortcut;
+
+  sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
+    $self->item_uri($item->{id}),
+    $item->{id},
+    ($item->{is_done} ? "✓" : "•"),
+    $title;
+}
+
 my $CONFIG;  # XXX use real config
 
 $CONFIG = {
@@ -325,8 +340,8 @@ sub provide_lp_link ($self, $event) {
     return $event->reply(
       "$icon LP$item_id: $item->{name} ($uri)",
       {
-        slack => sprintf '%s %s: %s',
-          $icon, $self->_slack_item_link($item), $item->{name},
+        slack => sprintf '%s %s',
+          $icon, $self->_slack_item_link_with_name($item),
       },
     );
   }
@@ -776,8 +791,8 @@ sub _handle_timer ($self, $event, $text) {
   my $url = $self->item_uri($task->{id});
 
   my $base  = "Your timer has been running for $time, work on";
-  my $slack = sprintf '%s: %s %s',
-    $base, $self->_slack_item_link($task), $task->{name};
+  my $slack = sprintf '%s: %s',
+    $base, $self->_slack_item_link_with_name($task);
 
   return $event->reply(
     "$base: $task->{name} ($url)",
@@ -1247,10 +1262,7 @@ sub _send_task_list ($self, $event, $tasks, $arg = {}) {
   for my $task (@$tasks) {
     my $uri = $self->item_uri($task->{id});
     $reply .= "$task->{name} ($uri)\n";
-    $slack .= sprintf "%s %s %s\n",
-      $self->_slack_item_link($task),
-      ($task->{is_done} ? "✓" : "•"),
-      $task->{name};
+    $slack .= $self->_slack_item_link_with_name($task);
   }
 
   chomp $reply;
@@ -1907,8 +1919,8 @@ sub _handle_commit ($self, $event, $comment) {
   my $uri   = $self->item_uri($lp_timer->{item_id});
   my $base  = "Okay, I've committed $time of work$also.  The task was:";
   my $text  = "$base $task->{name} ($uri)";
-  my $slack = sprintf '%s  %s %s',
-    $base, $self->_slack_item_link($task), $task->{name};
+  my $slack = sprintf '%s  %s',
+    $base, $self->_slack_item_link_with_name($task);
 
   $event->reply(
     $text,
@@ -1986,8 +1998,8 @@ sub _handle_start ($self, $event, $text) {
 
       my $uri   = $self->item_uri($task->{id});
       my $text  = "Started task: $task->{name} ($uri)";
-      my $slack = sprintf "Started task %s: %s",
-        $self->_slack_item_link($task), $task->{name};
+      my $slack = sprintf "Started task %s.",
+        $self->_slack_item_link_with_name($task);
 
       return $event->reply(
         $text,
@@ -2014,8 +2026,8 @@ sub _handle_start_existing ($self, $event, $task) {
 
     my $uri   = $self->item_uri($task->{id});
     my $text  = "Started task: $task->{name} ($uri)";
-    my $slack = sprintf "Started task %s: %s",
-      $self->_slack_item_link($task), $task->{name};
+    my $slack = sprintf "Started task %s",
+      $self->_slack_item_link_with_name($task);
 
     return $event->reply(
       $text,
@@ -2067,10 +2079,8 @@ sub _handle_resume ($self, $event, $text) {
   return $event->reply(
     "Timer resumed. Task is: $task->{name}",
     {
-      slack => sprintf("Timer resumed on: %s %s %s",
-        $self->_slack_item_link($task),
-        ($task->{is_done} ? "✓" : "•"),
-        $task->{name}),
+      slack => sprintf("Timer resumed on %s",
+        $self->_slack_item_link_with_name($task)),
     },
   );
 }
@@ -2252,10 +2262,8 @@ sub _spent_on_existing ($self, $event, $task_id, $duration) {
   my $uri = $self->item_uri($task->{id});
 
   my $plain_base = qq{I logged that time on "$task->{name}"};
-  my $slack_base = sprintf qq{I logged that time on: %s %s %s")},
-    $self->_slack_item_link($task),
-    ($task->{is_done} ? "✓" : "•"),
-    $task->{name};
+  my $slack_base = sprintf qq{I logged that time on %s},
+    $self->_slack_item_link_with_name($task);
 
   # if ($flags->{start} && $self->_start_timer($user, $task)) {
   #   $plain_base .= " and started your timer";
@@ -2287,9 +2295,7 @@ sub _handle_projects ($self, $event, $text) {
     next unless $item; # !?!? -- rjbs, 2018-06-30
 
     $reply .= sprintf "\n%s (%s)", $project, $self->item_uri($item->{id});
-    $slack .= sprintf "\n%s _aka_ %s",
-      $self->_slack_item_link($item),
-      $project;
+    $slack .= sprintf "\n%s", $self->_slack_item_link_with_name($item);
   }
 
   $event->private_reply($reply, { slack => $slack });
@@ -2309,9 +2315,7 @@ sub _handle_task_shortcuts ($self, $event, $text) {
     next unless $item; # !?!? -- rjbs, 2018-06-30
 
     $reply .= sprintf "\n%s (%s)", $task, $self->item_uri($item->{id});
-    $slack .= sprintf "\n%s _aka_ %s",
-      $self->_slack_item_link($item),
-      $task;
+    $slack .= sprintf "\n%s", $self->_slack_item_link_with_name($item);
   }
 
   $event->private_reply($reply, { slack => $slack });
@@ -2505,41 +2509,36 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my @tasks    = grep {; $_->{name} !~ /\A✨/ } $summary->{tasks}->@*;
 
   for my $c (@sparkles) {
-    $text .= sprintf "%s %s %s %s\n",
+    $text .= sprintf "%s %s\n",
       "✨",
-      $self->_slack_item_link($c),
-      ($c->{is_done} ? "✓" : "•"),
-      $c->{name};
+      $self->_slack_item_link_with_name($c);
   }
 
   for my $c ($summary->{containers}->@*) {
-    $text .= sprintf "%s %s %s %s%s (%u/%u)\n",
+    $text .= sprintf "%s %s%s (%u/%u)\n",
       ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
-      $self->_slack_item_link($c),
-      ($c->{is_done} ? "✓" : "•"),
-      $c->{name},
+
+      $self->_slack_item_link_with_name($c),
       (($c->{owner_id} != $lp_member_id)
         ? (" _(for @{[ $by_lp{$c->{owner_id}} // 'someone else']})_")
         : q{}),
+
       $c->{done_tasks},
       $c->{total_tasks},
       ;
   }
 
   for my $c (@tasks) {
-    $text .= sprintf "%s %s %s %s\n",
+    $text .= sprintf "%s %s\n",
       "🌀",
-      $self->_slack_item_link($c),
-      ($c->{is_done} ? "✓" : "•"),
-      $c->{name};
+      $self->_slack_item_link_with_name($c);
   }
 
   for my $c ($summary->{others}->@*) {
-    $text .= sprintf "%s %s %s %s\n",
+    $text .= sprintf "%s %s (%s)\n",
       "⁉️",
-      $self->_slack_item_link($c),
-      ($c->{is_done} ? "✓" : "•"),
-      $c->{name} . " ($c->{type})";
+      $self->_slack_item_link_with_name($c),
+      $c->{type};
   }
 
   chomp $text;
