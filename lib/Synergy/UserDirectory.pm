@@ -86,6 +86,7 @@ sub load_users_from_file ($self, $file) {
     $users{$username} = Synergy::User->new({
       $user_config->{$username}->%*,
       username => $username,
+      directory => $self,
     });
   }
 
@@ -132,17 +133,26 @@ __PACKAGE__->add_preference(
 );
 
 # Temporary, presumably. We're assuming here that the values from git are
-# valid.
+# valid. This routine loads up our preferences from the user object, unless we
+# already have a better preference saved for them.
 sub load_preferences_from_user ($self, $username) {
   $Logger->log([ "Loading global preferences for %s", $username ]);
   my $user = $self->user_named($username);
 
-  # Silly, but we want to make sure our realname preference takes precedence
-  # over whatever's in the user file. the after_set will take care of that,
-  # but only if we actually set it!
-  my $pref_realname = $self->get_user_preference($user, 'realname') // $user->realname;
-  if ($pref_realname && $pref_realname ne $username) {
-    $self->set_user_preference($user, 'realname', $pref_realname);
+  my $existing_real = $user->has_realname ? $user->realname : undef;
+  my $existing_pref = $self->get_user_preference($user, 'realname');
+
+  # If the user doesn't have an existing preference, always update.
+  if ($existing_real && ! $existing_pref) {
+    warn "setting preference";
+    $self->set_user_preference($user, 'realname', $existing_real);
+  }
+
+  # If the user *does* have an existing preference, and it's just their
+  # username, overwrite it.
+  if ($existing_pref && $existing_pref eq $username && $existing_real) {
+    warn "setting preference";
+    $self->set_user_preference($user, 'realname', $existing_real);
   }
 }
 

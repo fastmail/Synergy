@@ -9,6 +9,16 @@ use experimental qw(signatures);
 
 use namespace::autoclean;
 
+has directory => (
+  is => 'ro',
+  weak_ref => 1,
+  required => 1,
+);
+
+sub preference ($self, $pref_name) {
+  $self->directory->get_user_preference($self, $pref_name);
+}
+
 has is_master => (is => 'ro', isa => 'Bool');
 
 has is_virtual => (
@@ -23,12 +33,18 @@ has username => (
   required => 1,
 );
 
-has realname => (
+has _realname => (
   is    => 'ro',
   isa   => 'Str',
   lazy  => 1,
   default => sub { $_[0]->username },
+  predicate => 'has_realname',
+  init_arg  => 'realname',
 );
+
+sub realname ($self) {
+  return $self->preference('realname') // $self->_realname;
+}
 
 has wtf_replies => (
   isa => 'ArrayRef',
