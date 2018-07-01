@@ -1381,6 +1381,7 @@ sub _handle_search ($self, $event, $text) {
 
   my %qflag = (flat => 1, depth => -1);
   my @filters;
+  my $has_strong_check = 0;
 
   # TODO: Allow this to be overridden. -- rjbs, 2018-06-30
   push @filters, [ 'item_type', 'is', 'Task' ];
@@ -1403,8 +1404,12 @@ sub _handle_search ($self, $event, $text) {
     } else {
       my ($project, $err) = $self->project_for_shortcut($values[0]);
 
-      if ($project) { push @filters, [ 'project_id', '=', $project->{id} ]; }
-      else          { $error{project} = $err; }
+      if ($project) {
+        $has_strong_check++;
+        push @filters, [ 'project_id', '=', $project->{id} ];
+      } else {
+        $error{project} = $err;
+      }
     }
   }
 
@@ -1466,7 +1471,15 @@ sub _handle_search ($self, $event, $text) {
       next WORD;
     }
 
+    # You need to have some kind of actual search.
+    $has_strong_check++ unless $word->{op} eq 'does_not_start_with';
+
     push @filters, [ 'name', $word->{op}, $word->{word} ];
+  }
+
+  unless ($has_strong_check) {
+    $error{strong} = "Your search has to be limited to one project or "
+                   . "have at least one non-negated search term.";
   }
 
   if (%error) {
