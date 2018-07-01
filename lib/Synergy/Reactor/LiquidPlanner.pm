@@ -1306,7 +1306,8 @@ sub _parse_search ($self, $text) {
   my @words;
   my %flag = ();
 
-  state $ident_re = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
+  state $prefix_re  = qr{!?\^?};
+  state $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
 
   my $last = q{};
   TOKEN: while (length $text) {
@@ -1319,8 +1320,18 @@ sub _parse_search ($self, $text) {
     }
     $last = $text;
 
-    if ($text =~ s/^"( (?: \\" | [^"] )+ )"\s*//x) {
-      push @words, "$1" =~ s/\\"/"/gr;
+    if ($text =~ s/^($prefix_re)"( (?: \\" | [^"] )+ )"\s*//x) {
+      my ($prefix, $word) = ($1, $2);
+
+      push @words, {
+        word => ($word =~ s/\\"/"/gr),
+        op   => ( $prefix eq ""   ? "contains"
+                : $prefix eq "^"  ? "starts_with"
+                : $prefix eq "!^" ? "does_not_start_with"
+                : $prefix eq "!"  ? "does_not_contain" # fake operator
+                :                   undef),
+      };
+
       next TOKEN;
     }
 
@@ -1334,8 +1345,20 @@ sub _parse_search ($self, $text) {
       next TOKEN;
     }
 
-    ((my $token), $text) = split /\s+/, $text, 2;
-    push @words, $token;
+    {
+      # Just a word.
+      ((my $token), $text) = split /\s+/, $text, 2;
+      $token =~ s/\A($prefix_re)//;
+      my $prefix = $1;
+      push @words, {
+        word => $token,
+        op   => ( $prefix eq ""   ? "contains"
+                : $prefix eq "^"  ? "starts_with"
+                : $prefix eq "!^" ? "does_not_start_with"
+                : $prefix eq "!"  ? "does_not_contain" # fake operator
+                :                   undef),
+      };
+    }
   }
 
   return {
@@ -1430,10 +1453,20 @@ sub _handle_search ($self, $event, $text) {
                     . join q{, }, sort keys %flag;
   }
 
-  if (@words) {
-    push @filters, map {;
-      [ 'name', 'contains', q{'} . ($_ =~ s/'/\\'/r) . q{'} ]
-    } @words;
+  WORD: for my $word (@words) {
+    if ($word->{op} eq 'does_not_contain') {
+      $error{word_dnc} = qq{Annoyingly, there's no "does not contain" }
+                       . qq{query in LiquidPlanner, so you can't use "!"}
+                       . qq{as a prefix.};
+      next WORD;
+    }
+
+    if (! defined $word->{op}) {
+      $error{word_dnc} = qq{Something weird happened with your search.};
+      next WORD;
+    }
+
+    push @filters, [ 'name', $word->{op}, $word->{word} ];
   }
 
   if (%error) {

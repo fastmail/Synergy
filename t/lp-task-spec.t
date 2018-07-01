@@ -286,13 +286,24 @@ plan_ok(
 
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo"),
-  { flags => {}, words => [ 'foo' ] },
+  {
+    flags => {},
+    words => [
+      { op => 'contains', word => 'foo' },
+    ],
+  },
   'one-word search',
 );
 
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo done:1 bar"),
-  { flags => { done => { 1 => 1 } }, words => [ qw( foo bar ) ] },
+  {
+    flags => { done => { 1 => 1 } },
+    words => [
+      { op => 'contains', word => 'foo' },
+      { op => 'contains', word => 'bar' },
+    ],
+  },
   'simple search',
 );
 
