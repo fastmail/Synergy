@@ -291,7 +291,7 @@ sub provide_lp_link ($self, $event) {
   return unless $user && $user->lp_auth_header;
 
   state $lp_id_re       = qr/\bLP([1-9][0-9]{5,10})\b/i;
-  state $lp_shortcut_re = qr/\bLP\*([-_a-z0-9]+)\b/i;
+  state $lp_shortcut_re = qr/\bLP([*#][-_a-z0-9]+)\b/i;
 
   my $lpc = $self->lp_client_for_user($user);
   my $item_id;
@@ -308,7 +308,10 @@ sub provide_lp_link ($self, $event) {
   if ($event->text =~ $lp_id_re) {
     $item_id = $1;
   } elsif (my ($shortcut) = $event->text =~ $lp_shortcut_re) {
-    my ($item, $error)  = $self->task_for_shortcut($shortcut);
+    my $method = ((substr $shortcut, 0, 1, q{}) eq '*' ? 'task' : 'project')
+               . '_for_shortcut';
+
+    my ($item, $error)  = $self->$method($shortcut);
     return $event->reply($error) unless $item;
 
     $item_id = $item->{id};
