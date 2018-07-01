@@ -276,7 +276,7 @@ sub dispatch_event ($self, $event) {
   # we can be polite even to non-lp-enabled users
   return $self->_handle_good($event, $rest) if $what eq 'good';
 
-  unless ($event->from_user->lp_auth_header) {
+  unless ($self->lp_auth_header_for($event->from_user)) {
     $event->mark_handled;
     $event->reply($ERR_NO_LP);
     return 1;
@@ -288,7 +288,7 @@ sub dispatch_event ($self, $event) {
 
 sub provide_lp_link ($self, $event) {
   my $user = $event->from_user;
-  return unless $user && $user->lp_auth_header;
+  return unless $user && $self->lp_auth_header_for($user);
 
   state $lp_id_re       = qr/\bLP([1-9][0-9]{5,10})\b/i;
   state $lp_shortcut_re = qr/\bLP([*#][-_a-z0-9]+)\b/i;
@@ -366,7 +366,7 @@ sub set_last_lp_timer_task_id_for_user ($self, $user, $task_id) {
 }
 
 sub last_lp_timer_task_id_for_user ($self, $user) {
-  return unless $user->lp_auth_header;
+  return unless $self->lp_auth_header_for($user);
   return $self->_last_lp_timer_task_ids->{ $user->username };
 }
 
@@ -399,7 +399,7 @@ sub state ($self) {
 }
 
 sub timer_for_user ($self, $user) {
-  return unless $user->has_lp_token;
+  return unless $self->lp_auth_header_for($user);
 
   my $timer = $self->_timer_for_user($user->username);
 
@@ -713,9 +713,37 @@ sub _get_treeitem_shortcuts {
 sub get_project_shortcuts ($self) { $self->_get_treeitem_shortcuts('Project') }
 sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 
+sub lp_id_for ($self, $user) {
+  my $existing = $self->get_user_preference($user, 'lp-id');
+  return $existing if $existing;
+
+  return unless my $token = $self->lp_auth_header_for($user);
+
+  my $res = $self->hub->http_get(
+    'https://app.liquidplanner.com/api/account',
+    Authorization => $token,
+  );
+
+  return unless $res->is_success;
+
+  my $id = $JSON->decode($res->decoded_content)->{id};
+  $self->set_user_preference($user, 'lp-id', $id);
+  return $id;
+}
+
+sub lp_auth_header_for ($self, $user) {
+  return unless my $token = $self->get_user_preference($user, 'api-token');
+
+  if ($token =~ /-/) {
+    return "Bearer $token";
+  } else {
+    return $token;
+  }
+}
+
 sub lp_client_for_user ($self, $user) {
   Synergy::LPC->new({
-    auth_token    => $user->lp_auth_header,
+    auth_token    => $self->lp_auth_header_for($user),
     workspace_id  => $self->workspace_id,
     logger_callback   => sub { $Logger },
     http_get_callback => sub ($, $uri, @arg) {
@@ -739,7 +767,7 @@ sub _handle_last ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->lp_auth_header_for($user);
 
   return if length $text;
 
@@ -758,7 +786,7 @@ sub _handle_timer ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->lp_auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
@@ -873,7 +901,7 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
 
     next if $target && $seen{ $target->username }++;
 
-    my $owner_id = $target ? $target->lp_id : undef;
+    my $owner_id = $target ? $self->lp_id_for($target) : undef;
 
     if ($owner_id) {
       push @owners, $target;
@@ -1162,7 +1190,7 @@ sub _execute_task_plan ($self, $event, $plan, $error) {
       task => $task,
       work => $log_hrs,
       done => $plan->{done},
-      member_id => $event->from_user->lp_id,
+      member_id => $self->lp_id_for($event->from_user),
     });
 
     if ($track_ok) {
@@ -1177,7 +1205,7 @@ sub _execute_task_plan ($self, $event, $plan, $error) {
       task => $task,
       work => 0,
       done => $plan->{done},
-      member_id => $event->from_user->lp_id,
+      member_id => $self->lp_id_for($event->from_user),
     });
 
     if ($track_ok) {
@@ -1218,7 +1246,7 @@ sub _start_timer ($self, $user, $task) {
 sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
   my $lpc = $self->lp_client_for_user($user);
 
-  my $res = $lpc->upcoming_tasks_for_member_id($user->lp_id);
+  my $res = $lpc->upcoming_tasks_for_member_id($self->lp_id_for($user));
 
   return unless $res->is_success;
 
@@ -1409,7 +1437,7 @@ sub _handle_search ($self, $event, $text) {
     my %unknown;
     for my $who (keys %$owners) {
       my $target = $self->resolve_name($who, $event->from_user);
-      my $lp_id  = $target && $target->lp_id;
+      my $lp_id  = $target && $self->lp_id_for($target);
 
       if ($lp_id) { $member{$lp_id}++ }
       else        { $unknown{$who}++ }
@@ -1503,7 +1531,7 @@ sub _handle_plus_plus ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->lp_auth_header_for($user);
 
   unless (length $text) {
     return $event->reply("Thanks, but I'm only as awesome as my creators.");
@@ -1593,7 +1621,7 @@ sub _handle_good ($self, $event, $text) {
     $reply =~ s/%n/$user->username/ge;
   }
 
-  if ($reply and not $user->lp_auth_header) {
+  if ($reply and not $self->lp_auth_header_for($user)) {
     $event->mark_handled;
     return $event->reply($reply);
   }
@@ -1658,7 +1686,7 @@ sub expand_tasks ($self, $event, $expand_target, $prefix='') {
       task => {
         name        => $task,
         parent_id   => $parent,
-        assignments => [ { person_id => $user->lp_id } ],
+        assignments => [ { person_id => $self->lp_id_for($user) } ],
         description => $desc,
       }
     };
@@ -1717,7 +1745,7 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
             : ();
 
     return {
-      person_id => $who->lp_id,
+      person_id => $self->lp_id_for($who),
       %est,
     }
   }
@@ -1743,7 +1771,7 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
 }
 
 sub lp_timer_for_user ($self, $user) {
-  return unless $user->lp_auth_header;
+  return unless $self->lp_auth_header_for($user);
 
   my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
@@ -1796,7 +1824,7 @@ sub _handle_chill ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->lp_auth_header_for($user);
 
   {
     my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
@@ -1840,7 +1868,7 @@ sub _handle_triple_zed ($self, $event, $text) {
 
 sub _handle_commit ($self, $event, $comment) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->lp_auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -1906,7 +1934,7 @@ sub _handle_commit ($self, $event, $comment) {
     work  => $lp_timer->{running_time},
     done  => $meta{DONE},
     comment => $comment,
-    member_id => $user->lp_id,
+    member_id => $self->lp_id_for($user),
   });
 
   unless ($commit_res->is_success) {
@@ -1964,7 +1992,7 @@ sub _handle_abort ($self, $event, $text) {
     unless $text =~ /^timer\b/i;
 
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->lp_auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
@@ -1988,7 +2016,7 @@ sub _handle_abort ($self, $event, $text) {
 
 sub _handle_start ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->lp_auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2069,7 +2097,7 @@ sub _handle_start_existing ($self, $event, $task) {
 
 sub _handle_resume ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->lp_auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2116,7 +2144,7 @@ sub _handle_resume ($self, $event, $text) {
 
 sub _handle_stop ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->lp_auth_header_for($user);
 
   return $event->reply("Quit it!  I'm telling mom!")
     if $text =~ /\Ahitting yourself[.!]*\z/;
@@ -2143,7 +2171,7 @@ sub _handle_stop ($self, $event, $text) {
 
 sub _handle_done ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->lp_auth_header_for($user);
 
   my $next;
   my $chill;
@@ -2168,7 +2196,7 @@ sub _handle_done ($self, $event, $text) {
 
 sub _handle_reset ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->lp_auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2205,7 +2233,7 @@ sub _handle_spent ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->lp_auth_header_for($user);
 
   my ($dur_str, $name) = $text =~ /\A(\V+?)(?:\s*:|\s*\son)\s+(\S.+)\z/s;
   unless ($dur_str && $name) {
@@ -2281,7 +2309,7 @@ sub _spent_on_existing ($self, $event, $task_id, $duration) {
   my $track_ok = $lpc->track_time({
     task => $task,
     work => $duration / 3600,
-    member_id => $user->lp_id,
+    member_id => $self->lp_id_for($user),
   });
 
   unless ($track_ok) {
@@ -2410,9 +2438,9 @@ sub damage_report ($self, $event) {
   $event->mark_handled;
 
   return $event->reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
-    unless $target && $target->lp_auth_header;
+    unless $target && $self->lp_auth_header_for($target);
 
-  my $lp_id = $target->lp_id;
+  my $lp_id = $self->lp_id_for($target);
 
   my @to_check = (
     [ inbox  => "📫" => $CONFIG->{liquidplanner}{package}{inbox}  ],
@@ -2485,7 +2513,7 @@ sub damage_report ($self, $event) {
   my $pkg_summary   = $self->_build_package_summary(-1, $target);
   my $slack_summary = join qq{\n},
                       @summaries,
-                      $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
+                      $self->_slack_pkg_summary($pkg_summary, $self->lp_id_for($target));
 
   my $reply = join qq{\n}, @summaries;
 
@@ -2525,14 +2553,17 @@ sub _build_package_summary ($self, $package_id, $user) {
     return;
   }
 
-  my $summary = summarize_iteration($items_res->payload, $user->lp_id);
+  my $summary = summarize_iteration($items_res->payload, $self->lp_id_for($user));
 }
 
 sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my $text = "*—[ $summary->{name} ]—*\n";
 
-  my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
-              $self->hub->user_directory->users;
+  my %by_lp = map  {;
+                $self->lp_id_for($_)
+                  ? ($self->lp_id_for($_), $_->username)
+                  : ()
+              } $self->hub->user_directory->users;
 
   my @sparkles = grep {; $_->{name} =~ /\A✨/ } $summary->{tasks}->@*;
   my @tasks    = grep {; $_->{name} !~ /\A✨/ } $summary->{tasks}->@*;
@@ -2681,6 +2712,12 @@ __PACKAGE__->add_preference(
   name      => 'api-token',
   validator => sub ($value) { return $value },
   describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
+  default   => undef,
+);
+
+__PACKAGE__->add_preference(
+  name      => 'lp-id',
+  validator => sub ($value) { return $value },
   default   => undef,
 );
 

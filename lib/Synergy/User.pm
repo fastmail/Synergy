@@ -113,19 +113,8 @@ has business_hours => (
 
 has default_project_shortcut => (is => 'ro', isa => 'Str');
 
-has lp_id    => (is => 'ro', isa => 'Int', predicate => 'has_lp_id');
+# We should be able to remove this eventually, but I'm leaving it for now so
+# ew can auto-fill these from config if need be.
 has lp_token => (is => 'ro', isa => 'Str', predicate => 'has_lp_token');
-
-sub lp_auth_header {
-  my $self = shift;
-
-  return unless $self->has_lp_token;
-
-  if ($self->lp_token =~ /-/) {
-    return "Bearer " . $self->lp_token;
-  } else {
-    return $self->lp_token;
-  }
-}
 
 1;
