@@ -1458,9 +1458,13 @@ sub _handle_search ($self, $event, $text) {
 
   return $event->reply("Nothing matched that search.") unless @tasks;
 
-  my @task_page = splice @tasks, $offset, 10;
-  $self->_send_task_list($event, \@task_page, { public => 1 });
-  $event->reply("…and more") if @task_page;
+  # fix and more to live in send-task-list
+  my $total = @tasks;
+  @tasks = splice @tasks, $offset, 10;
+
+  return $event->reply("That's past the last page of results.") unless @tasks;
+
+  $self->_send_task_list($event, \@tasks, { public => 1 });
 }
 
 sub _handle_task_list ($self, $event, $cmd, $count) {
