@@ -190,6 +190,10 @@ sub listener_specs {
         $what &&= lc $what;
 
         return 1 if $KNOWN{$what};
+        return 1 if $what =~ /^g'day/;    # stupid, but effective
+        return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
+        return 1 if $what =~ /^done,/;    # ugh
+        return 1 if $what =~ /^show’s/;   # ugh, curly quote
         return;
       },
       help_entries => [
@@ -200,24 +204,6 @@ sub listener_specs {
           map {; { title => $key, text => $_ } } @things;
         } keys %KNOWN
       ]
-    },
-    {
-      name      => "special-events",
-      method    => "dispatch_event",
-      exclusive => 1,
-      predicate => sub ($self, $event) {
-        return unless $event->type eq 'message';
-        return unless $event->was_targeted;
-
-        my ($what) = $event->text =~ /^([^\s]+)\s?/;
-        $what &&= lc $what;
-
-        return 1 if $what =~ /^g'day/;    # stupid, but effective
-        return 1 if $what =~ /^goo+d/;    # Adrian Cronauer
-        return 1 if $what =~ /^done,/;    # ugh
-        return 1 if $what =~ /^show’s/;   # ugh, curly quote
-        return;
-      }
     },
     {
       name      => "reload-shortcuts",
@@ -1651,7 +1637,7 @@ sub _handle_good ($self, $event, $text) {
 
   if ($stop) {
     my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
-    if ($timer_res->is_failure) {
+    unless ($timer_res->is_success) {
       $event->mark_handled;
       return $event->reply("I couldn't figure out whether you had a running timer, so I gave up.")
     }
@@ -1731,6 +1717,7 @@ sub expand_tasks ($self, $event, $expand_target, $prefix='') {
   }
 
   $event->reply($prefix . $reply);
+  $event->mark_handled;
 }
 
 sub _create_lp_task ($self, $event, $my_arg, $arg) {
