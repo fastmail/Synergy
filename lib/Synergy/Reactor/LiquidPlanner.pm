@@ -1683,7 +1683,7 @@ sub _handle_expand ($self, $event, $text) {
 sub expand_tasks ($self, $event, $expand_target, $prefix='') {
   my $user = $event->from_user;
 
-  my $lpc = $self->lp_client_for($user);
+  my $lpc = $self->lp_client_for_user($user);
 
   unless ($expand_target && $expand_target =~ /\S/) {
     my @names = sort $user->defined_expandoes;
