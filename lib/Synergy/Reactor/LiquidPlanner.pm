@@ -671,10 +671,14 @@ sub _get_treeitem_shortcuts {
   return {} unless $res->is_success;
 
   my %dict;
+  my %seen;
 
   for my $item ($res->payload_list) {
     # Impossible, right?
     next unless my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
+
+    # Because of is_packaged_version field leading to dupes. -- rjbs 2018-07-05
+    next if $seen{ $item->{id} }++;
 
     # We'll deal with conflicts later. -- rjbs, 2018-01-22
     $dict{ lc $shortcut } //= [];
