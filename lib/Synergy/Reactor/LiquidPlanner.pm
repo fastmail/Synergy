@@ -2036,7 +2036,7 @@ sub _handle_start ($self, $event, $text) {
     my ($task, $error) = $self->task_for_shortcut($1);
     return $event->reply($error) unless $task;
 
-    return $self->_handle_start_existing($event, $task->{id});
+    return $self->_handle_start_existing($event, $task);
   }
 
   if ($text =~ /\A[0-9]+\z/) {
