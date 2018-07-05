@@ -682,9 +682,12 @@ sub _get_treeitem_shortcuts {
     # But don't add the same project twice. -- michael, 2018-04-24
     my @existing = grep {; $_->{id} eq $item->{id} } $dict{ lc $shortcut }->@*;
     if (@existing) {
-      $Logger->log([ "Duplicate \l$type found; got %s, conflicts with %s",
-        $item,
-        \@existing
+      $Logger->log([
+        qq{Duplicate %s %s found; got %s, conflicts with %s},
+        "\l$type",
+        $shortcut,
+        $item->{id},
+        [ map {; $_->{id} } @existing ],
       ]);
       next;
     }
