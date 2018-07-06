@@ -2539,7 +2539,8 @@ sub damage_report ($self, $event) {
     { slack_reaction => { event => $event, reaction => '-hourglass_flowing_sand' } },
   );
 
-  return $event->private_reply(
+  my $method = $event->is_public ? 'private_reply' : 'reply';
+  return $event->$method(
     $reply,
     {
       slack => $slack_summary,
