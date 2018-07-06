@@ -279,6 +279,9 @@ sub provide_lp_link ($self, $event) {
   state $lp_id_re       = qr/\bLP([1-9][0-9]{5,10})\b/i;
   state $lp_shortcut_re = qr/\bLP([*#][-_a-z0-9]+)\b/i;
 
+  my $workspace_id  = $self->workspace_id;
+  my $lp_url_re     = qr{\b(?:\Qhttps://app.liquidplanner.com/space/$workspace_id\E/.*/)([0-9]+)P?/?\b};
+
   my $lpc = $self->lp_client_for_user($user);
   my $item_id;
 
@@ -291,7 +294,9 @@ sub provide_lp_link ($self, $event) {
     $event->mark_handled;
   }
 
-  if ($event->text =~ $lp_id_re) {
+  if ($event->text =~ $lp_url_re) {
+    $item_id = $1;
+  } elsif ($event->text =~ $lp_id_re) {
     $item_id = $1;
   } elsif (my ($shortcut) = $event->text =~ $lp_shortcut_re) {
     my $method = ((substr $shortcut, 0, 1, q{}) eq '*' ? 'task' : 'project')
