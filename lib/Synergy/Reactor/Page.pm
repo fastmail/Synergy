@@ -41,7 +41,7 @@ sub handle_page ($self, $event) {
     return;
   }
 
-  my $user = $self->hub->user_directory->user_by_name($who);
+  my $user = $self->resolve_name($who, $event->from_user);
 
   unless ($user) {
     $event->reply("I don't know who '$who' is. Sorry :confused:");
