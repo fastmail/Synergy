@@ -294,53 +294,58 @@ sub provide_lp_link ($self, $event) {
     $event->mark_handled;
   }
 
-  if ($event->text =~ $lp_url_re) {
-    $item_id = $1;
-  } elsif ($event->text =~ $lp_id_re) {
-    $item_id = $1;
-  } elsif (my ($shortcut) = $event->text =~ $lp_shortcut_re) {
+  my @ids = $event->text =~ /$lp_id_re/g;
+  push @ids, $event->text =~ /$lp_url_re/g;
+
+  while (my $shortcut = $event->text =~ /$lp_shortcut_re/g) {
     my $method = ((substr $shortcut, 0, 1, q{}) eq '*' ? 'task' : 'project')
                . '_for_shortcut';
 
     my ($item, $error)  = $self->$method($shortcut);
     return $event->reply($error) unless $item;
 
-    $item_id = $item->{id};
-  } else {
-    return;
+    push @ids, $item->{id};
   }
 
-  my $item_res = $lpc->get_item($item_id);
+  return unless @ids;
 
-  unless ($item_res->is_success) {
-    return $event->reply("Sorry, something went wrong looking for that task.");
+  ITEM: for my $item_id (@ids) {
+    my $item_res = $lpc->get_item($item_id);
+
+    unless ($item_res->is_success) {
+      $event->reply("Sorry, something went wrong looking for LP$item_id.");
+      next ITEM;
+    }
+
+    my $item;
+    unless ($item = $item_res->payload) {
+      $event->reply("I can't find anything for LP$item_id.");
+      next ITEM;
+    }
+
+    my $name = $item->{name};
+
+    my $reply;
+
+    if ($item->{type} =~ /\A Task | Package | Project \z/x) {
+      my $icon = $item->{type} eq 'Task'    ? "" # Sometimes 🌀
+               : $item->{type} eq 'Package' ? "📦"
+               : $item->{type} eq 'Project' ? "📁"
+               :                              "($item->{type})";
+
+      my $uri = $self->item_uri($item_id);
+
+      $event->reply(
+        "$icon LP$item_id: $item->{name} ($uri)",
+        {
+          slack => sprintf '%s %s',
+            $icon, $self->_slack_item_link_with_name($item),
+        },
+      );
+    } else {
+      $event->reply("LP$item_id: is a $item->{type}");
+    }
   }
-
-  return $event->reply("I can't find anything for LP$item_id.")
-    unless my $item = $item_res->payload;
-
-  my $name = $item->{name};
-
-  my $reply;
-
-  if ($item->{type} =~ /\A Task | Package | Project \z/x) {
-    my $icon = $item->{type} eq 'Task'    ? "" # Sometimes 🌀
-             : $item->{type} eq 'Package' ? "📦"
-             : $item->{type} eq 'Project' ? "📁"
-             :                              "($item->{type})";
-
-    my $uri = $self->item_uri($item_id);
-
-    return $event->reply(
-      "$icon LP$item_id: $item->{name} ($uri)",
-      {
-        slack => sprintf '%s %s',
-          $icon, $self->_slack_item_link_with_name($item),
-      },
-    );
-  }
-
-  $event->reply("LP$item_id: is a $item->{type}");
 }
 
 has _last_lp_timer_task_ids => (
