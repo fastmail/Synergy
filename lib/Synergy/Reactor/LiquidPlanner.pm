@@ -2376,8 +2376,8 @@ sub _handle_task_shortcuts ($self, $event, $text) {
   $event->reply("Responses to <task shortcuts> are sent privately.")
     if $event->is_public;
 
-  my $reply = "Known projects:\n";
-  my $slack = "Known projects:\n";
+  my $reply = "Known task shortcuts\n";
+  my $slack = "Known task shortcuts\n";
 
   for my $task (@sorted) {
     my ($item, $error) = $self->task_for_shortcut($task);
