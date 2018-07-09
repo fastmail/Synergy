@@ -25,10 +25,11 @@ sub start ($self) {
   if (my $state = $self->fetch_state) {
     my $to_channel = $state->{restart_channel_name};
     my $to_address = $state->{restart_to_address};
+    my $version_desc = $state->{restart_version_desc} // $self->get_version_desc;
 
     if ($to_channel && $to_address) {
       $self->hub->channel_named($to_channel)
-           ->send_message($to_address, "Restarted!");
+           ->send_message($to_address, "Restarted! Now at version $version_desc");
     }
 
     # Notified. Maybe. Don't notify again
@@ -107,6 +108,7 @@ sub handle_upgrade ($self, $event) {
   $self->save_state({
     restart_channel_name => $event->from_channel->name,
     restart_to_address   => $event->conversation_address,
+    restart_version_desc => $self->get_version_desc,
   });
 
   my $timer = IO::Async::Timer::Countdown->new(
