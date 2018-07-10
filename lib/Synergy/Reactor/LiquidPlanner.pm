@@ -10,7 +10,7 @@ with 'Synergy::Role::Reactor',
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
 use Lingua::EN::Inflect qw(PL_N);
-use List::Util qw(first uniq);
+use List::Util qw(first sum0 uniq);
 use Net::Async::HTTP;
 use JSON 2 ();
 use Time::Duration;
@@ -20,6 +20,7 @@ use Synergy::LPC; # LiquidPlanner Client, of course
 use Synergy::Timer;
 use Synergy::Util qw(parse_time_hunk pick_one bool_from_text);
 use DateTime;
+use DateTime::Format::ISO8601;
 use utf8;
 
 my $JSON = JSON->new->utf8;
@@ -2508,6 +2509,10 @@ sub damage_report ($self, $event) {
     my $unest = 0;
     my $total = 0;
 
+    my @ages;
+
+    my $now = time;
+
     for my $item ($check_res->payload_list) {
       next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
       my ($assign) = grep {; $_->{person_id} == $lp_id }
@@ -2517,15 +2522,21 @@ sub damage_report ($self, $event) {
 
       $total++;
       $unest++ if $self->_lp_assignment_is_unestimated($assign);
+
+      push @ages, $now
+        - DateTime::Format::ISO8601->parse_datetime($item->{updated_at})->epoch;
     }
 
     next CHK unless $total;
 
-    my $summary = sprintf "%s %s: %u %s",
+    my $avg_age = sum0(@ages) / @ages;
+
+    my $summary = sprintf "%s %s: %u %s (avg. untouched time: %s)",
       $icon,
       ucfirst $label,
       $total,
-      PL_N('task', $total);
+      PL_N('task', $total),
+      concise(duration($avg_age));
 
     $summary .= sprintf ", %u unestimated", $unest if $unest;
 
