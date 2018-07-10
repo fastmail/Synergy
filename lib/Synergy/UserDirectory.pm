@@ -15,6 +15,7 @@ use Path::Tiny;
 use Synergy::User;
 use Synergy::Logger '$Logger';
 use List::Util qw(first);
+use DateTime;
 
 has users => (
   isa  => 'HashRef',
@@ -134,6 +135,18 @@ __PACKAGE__->add_preference(
 );
 
 __PACKAGE__->add_preference(
+  name => 'time-zone',
+  validator => sub ($value) {
+    my $err = qq{"$value" doesn't look like a valid time zone name};
+
+    eval { DateTime->now(time_zone => $value) };
+    return (undef, $err) if $@ =~ /invalid name/;
+
+    return $value;
+  },
+);
+
+__PACKAGE__->add_preference(
   name => 'business-hours',
   describer => sub ($value) {
     my sub describe_day ($day) {
@@ -229,6 +242,9 @@ __PACKAGE__->add_preference(
 sub load_preferences_from_user ($self, $username) {
   $Logger->log([ "Loading global preferences for %s", $username ]);
   my $user = $self->user_named($username);
+
+  $self->set_user_preference($user, 'time-zone', $user->_time_zone)
+    unless $self->user_has_preference($user, 'time-zone');
 
   my $existing_real = $user->has_realname ? $user->realname : undef;
   my $existing_pref = $self->get_user_preference($user, 'realname');

@@ -53,10 +53,16 @@ has wtf_replies => (
   default => sub {  []  },
 );
 
-has time_zone => (
+has _time_zone => (
   is => 'ro',
+  init_arg => 'time_zone',
+  lazy => 1,
   default => 'America/New_York',
 );
+
+sub time_zone ($self) {
+  return $self->preference('time-zone') // $self->_time_zone;
+}
 
 sub format_datetime ($self, $dt, $format = '%F %R %Z') {
   $dt = $dt->clone;
