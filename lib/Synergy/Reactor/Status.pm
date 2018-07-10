@@ -22,8 +22,8 @@ sub listener_specs ($reactor) {
       },
     },
     {
-      name      => "listen-for-activity",
-      method    => "handle_activity",
+      name      => "listen-for-chatter",
+      method    => "handle_chatter",
       predicate => sub ($self, $e) {
         return unless $e->is_public;
         return 1;
@@ -38,30 +38,48 @@ has monitored_channel_name => (
   predicate => 'has_monitored_channel',
 );
 
-has _last_activity => (
+has _last_chatter => (
+  is      => 'ro',
   isa     => 'HashRef',
   default => sub {  {}  },
   traits  => [ 'Hash' ],
   handles => {
-    record_last_activity_for => 'set',
-    last_activity_for        => 'get',
+    record_last_chatter_for => 'set',
+    last_chatter_for        => 'get',
   },
 );
 
-sub handle_activity ($self, $event) {
+sub handle_chatter ($self, $event) {
   return unless $self->has_monitored_channel;
   return unless $self->monitored_channel_name eq $event->from_channel->name;
 
   my $username = $event->from_user->username;
-  $self->record_last_activity_for($username, {
+  $self->record_last_chatter_for($username, {
     when => $event->time,
     uri  => scalar $event->event_uri,
   });
+
+  $self->save_state;
+
   return;
 }
 
+sub state ($self) {
+  return {
+    chatter => $self->_last_chatter,
+  };
+}
+
+after register_with_hub => sub ($self, @) {
+  if (my $state = $self->fetch_state) {
+    if (my $chatter = $state->{chatter}) {
+      $self->_last_chatter->%* = %$chatter;
+    }
+  }
+};
+
 sub user_status_for ($self, $event, $user) {
-  if (my $last = $self->last_activity_for($user->username)) {
+  if (my $last = $self->last_chatter_for($user->username)) {
     return sprintf "I last saw chatter from %s at %s%s.",
       $user->username,
       $event->from_user->format_datetime(
@@ -70,9 +88,7 @@ sub user_status_for ($self, $event, $user) {
       ($last->{uri} ? ": $last->{uri}" : q{});
   }
 
-  return $event->reply(
-    sprintf "I've never seen any chatter from %s.", $user->username,
-  );
+  return sprintf "I've never seen any chatter from %s.", $user->username;
 }
 
 sub handle_status ($self, $event) {
