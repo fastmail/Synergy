@@ -7,8 +7,9 @@ with 'Synergy::Role::HasPreferences' => {
   namespace => 'user',
 };
 
-use experimental qw(signatures);
+use experimental qw(signatures lexical_subs);
 use namespace::autoclean;
+use JSON::MaybeXS ();
 use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
@@ -75,7 +76,7 @@ sub load_users_from_file ($self, $file) {
   if ($file =~ /\.ya?ml\z/) {
     $user_config = YAML::XS::LoadFile($file);
   } elsif ($file =~ /\.json\z/) {
-    $user_config = JSON->new->decode( Path::Tiny::path($file)->slurp );
+    $user_config = JSON::MaybeXS->new->decode( Path::Tiny::path($file)->slurp );
   } else {
     Carp::confess("unknown filetype: $file");
   }
@@ -132,6 +133,96 @@ __PACKAGE__->add_preference(
   },
 );
 
+__PACKAGE__->add_preference(
+  name => 'business-hours',
+  describer => sub ($value) {
+    my sub describe_day ($day) {
+      return undef unless keys $value->{$day}->%*;
+      return sprintf("%s: %s-%s",
+        ucfirst $day,
+        $value->{$day}{start},
+        $value->{$day}{end},
+      );
+    }
+
+    my @day_descs = grep {; defined }
+                    map {; describe_day($_) } qw(mon tue wed thu fri sat sun);
+    return join(', ', @day_descs);
+  },
+  validator => sub ($value) {
+    my $err = q{you can use "weekdays, 09:00-17:00" or "Mon: 09:00-17:00, Tue: 10:00-12:00, (etc.)"};
+
+    my sub validate_start_end ($start, $end) {
+      my ($start_h, $start_m) = split /:/, $start, 2;
+      my ($end_h, $end_m) = split /:/, $end, 2;
+
+      return undef if $end_h <= $start_h || $start_m >= 60 || $end_m >= 60;
+
+      return {
+        start => sprintf("%02d:%02d", $start_h, $start_m),
+        end   => sprintf("%02d:%02d", $end_h, $end_m),
+      };
+    }
+
+    if ($value =~ /^weekdays/i) {
+      my ($start, $end) =
+        $value =~ m{
+          \Aweekdays,?
+          \s+
+          ([0-9]{1,2}:[0-9]{2})
+          \s*
+          (?:to|-)
+          \s*
+          ([0-9]{1,2}:[0-9]{2})
+        }ix;
+
+      return (undef, $err) unless $start && $end;
+
+      my $struct = validate_start_end($start, $end);
+      return (undef, $err) unless $struct;
+
+      return {
+        mon => $struct,
+        tue => $struct,
+        wed => $struct,
+        thu => $struct,
+        fri => $struct,
+        sat => {},
+        sun => {},
+      };
+    }
+
+    my @hunks = split /,\s+/, $value;
+    return (undef, $err) unless @hunks;
+
+    my %week_struct = map {; $_ => {} } qw(mon tue wed thu fri sat sun);
+
+    for my $hunk (@hunks) {
+      my ($day, $start, $end) =
+        $hunk =~ m{
+          \A
+          ([a-z]{3}):
+          \s*
+          ([0-9]{1,2}:[0-9]{2})
+          \s*
+          (?:to|-)
+          \s*
+          ([0-9]{1,2}:[0-9]{2})
+        }ix;
+
+      return (undef, $err) unless $day && $start && $end;
+      return (undef, $err) unless $week_struct{ lc $day };
+
+      my $day_struct = validate_start_end($start, $end);
+      return (undef, $err) unless $day_struct;
+
+      $week_struct{ lc $day } = $day_struct;
+    }
+
+    return \%week_struct;
+  },
+);
+
 # Temporary, presumably. We're assuming here that the values from git are
 # valid. This routine loads up our preferences from the user object, unless we
 # already have a better preference saved for them.
@@ -144,14 +235,12 @@ sub load_preferences_from_user ($self, $username) {
 
   # If the user doesn't have an existing preference, always update.
   if ($existing_real && ! $existing_pref) {
-    warn "setting preference";
     $self->set_user_preference($user, 'realname', $existing_real);
   }
 
   # If the user *does* have an existing preference, and it's just their
   # username, overwrite it.
   if ($existing_pref && $existing_pref eq $username && $existing_real) {
-    warn "setting preference";
     $self->set_user_preference($user, 'realname', $existing_real);
   }
 }

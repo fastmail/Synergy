@@ -91,8 +91,9 @@ role {
 
     my $user = $event->from_user;
     my $got = $self->set_user_preference($user, $pref_name, $actual_value);
+    my $desc = $self->describe_user_preference($user, $pref_name);
 
-    $event->reply("Your $full_name setting is now '$got'.");
+    $event->reply("Your $full_name setting is now $desc.");
     $event->mark_handled;
   };
 
