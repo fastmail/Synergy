@@ -192,6 +192,7 @@ sub track_time ($self, $arg) {
       activity_id => $task->{activity_id},
       member_id => $arg->{member_id},
       work      => $arg->{work},
+      reduce_estimate => \1,
 
       ($arg->{comment} ? (comment => $arg->{comment}) : ()),
     }),
