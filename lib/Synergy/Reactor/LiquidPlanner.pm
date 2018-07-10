@@ -2,8 +2,10 @@ use v5.24.0;
 package Synergy::Reactor::LiquidPlanner;
 
 use Moose;
-with 'Synergy::Role::Reactor';
-with 'Synergy::Role::HasPreferences';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::HasPreferences',
+     'Synergy::Role::ProvidesUserStatus',
+     ;
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
@@ -2754,5 +2756,50 @@ sub load_preferences_from_user ($self, $username) {
     unless $self->user_has_preference($user, 'api-token');
 }
 
+sub user_status_for ($self, $event, $user) {
+  return unless $user->lp_auth_header;
+
+  my $reply = qw{};
+
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
+  if ($timer_res->is_success && $timer_res->payload) {
+    my $lp_timer = $timer_res->payload;
+    my $item_res = $lpc->get_item($lp_timer->{item_id});
+    if ($item_res->is_success) {
+      $reply .= sprintf "LiquidPlanner timer running for %s on LP %s: %s",
+        concise(duration($lp_timer->{running_time} * 3600)),
+        $lp_timer->{item_id},
+        $item_res->payload->{name};
+    }
+  }
+
+  my $event_res = $lpc->query_items({
+    flags   => { flat => 1 },
+    filters => [
+      [ item_type => '=' => 'Event' ],
+      [ is_done   => is  => 'false' ],
+    ],
+  });
+
+  my $now = DateTime->now(time_zone => 'UTC')->iso8601;
+  if ($event_res->is_success) {
+    my @events;
+    for my $item ($event_res->payload_list) {
+      my ($assign) = grep {; $_->{person_id} == $user->lp_id }
+                     $item->{assignments}->@*;
+
+      next unless $assign;
+      next unless $assign->{expected_start}  le $now;
+      next unless $assign->{expected_finish} ge $now;
+      $reply .= qq{\n} if $reply;
+      $reply .= "LiquidPlanner event: $item->{name}";
+    }
+  }
+
+  return undef unless length $reply;
+
+  return $reply;
+}
 
 1;
