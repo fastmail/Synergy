@@ -14,7 +14,8 @@ use Data::Dumper::Concise;
 
 my $JSON = JSON->new->canonical;
 
-with 'Synergy::Role::Channel';
+with 'Synergy::Role::Channel',
+     'Synergy::Role::ProvidesUserStatus';
 
 has api_key => (
   is => 'ro',
@@ -216,6 +217,23 @@ sub describe_event ($self, $event) {
   } else {
     return "an unknown slack communication from $who $via";
   }
+}
+
+sub user_status_for ($self, $event, $user) {
+  $self->slack->load_users->get;
+
+  my $ident = $user->identities->{ $self->name };
+  return unless $ident;
+
+  return unless my $slack_user = $self->slack->users->{$ident};
+
+  my $profile = $slack_user->{profile};
+  return unless $profile->{status_emoji};
+
+  my $reply = "Slack status: $profile->{status_emoji}";
+  $reply .= " $profile->{status_text}" if length $profile->{status_text};
+
+  return $reply;
 }
 
 1;
