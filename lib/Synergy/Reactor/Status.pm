@@ -3,7 +3,7 @@ package Synergy::Reactor::Status;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor', 'Synergy::Role::ProvidesUserStatus';
 
 use experimental qw(signatures);
 use namespace::clean;
@@ -60,6 +60,21 @@ sub handle_activity ($self, $event) {
   return;
 }
 
+sub user_status_for ($self, $event, $user) {
+  if (my $last = $self->last_activity_for($user->username)) {
+    return sprintf "I last saw activity from %s at %s%s.",
+      $user->username,
+      $event->from_user->format_datetime(
+        DateTime->from_epoch(epoch => $last->{when})
+        ),
+      ($last->{uri} ? ": $last->{uri}" : q{});
+  }
+
+  return $event->reply(
+    sprintf "I've never seen any activity for %s.", $user->username,
+  );
+}
+
 sub handle_status ($self, $event) {
   (undef, my $who_name) = split /\s/, $event->text;
 
@@ -71,20 +86,18 @@ sub handle_status ($self, $event) {
     return $event->reply(qq{Sorry, I don't know who "$who_name" is.});
   }
 
-  if (my $last = $self->last_activity_for($who->username)) {
-    return $event->reply(
-      sprintf "I last saw activity from %s at %s%s.",
-        $who->username,
-        $event->from_user->format_datetime(
-          DateTime->from_epoch(epoch => $last->{when})
-        ),
-        ($last->{uri} ? ": $last->{uri}" : q{}),
-    );
+  my $reply = q{};
+  for my $comp ($self->hub->channels, $self->hub->reactors) {
+    next unless $comp->does('Synergy::Role::ProvidesUserStatus');
+    $reply .= $comp->user_status_for($event, $who) . "\n";
   }
 
-  return $event->reply(
-    sprintf "I've never seen any activity for %s.", $who->username,
-  );
+  chomp $reply;
+
+  $reply ||= sprintf "I don't have any information about %s at all!",
+    $who->username;
+
+  $event->reply($reply);
 }
 
 1;
