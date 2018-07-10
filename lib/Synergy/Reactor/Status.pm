@@ -62,7 +62,7 @@ sub handle_activity ($self, $event) {
 
 sub user_status_for ($self, $event, $user) {
   if (my $last = $self->last_activity_for($user->username)) {
-    return sprintf "I last saw activity from %s at %s%s.",
+    return sprintf "I last saw chatter from %s at %s%s.",
       $user->username,
       $event->from_user->format_datetime(
         DateTime->from_epoch(epoch => $last->{when})
@@ -71,7 +71,7 @@ sub user_status_for ($self, $event, $user) {
   }
 
   return $event->reply(
-    sprintf "I've never seen any activity for %s.", $user->username,
+    sprintf "I've never seen any chatter from %s.", $user->username,
   );
 }
 
