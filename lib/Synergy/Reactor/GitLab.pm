@@ -39,7 +39,8 @@ has user_config => (
   default => sub { {} },
   writer => '_set_user_config',
   handles => {
-    set_user  => 'set',
+    set_user   => 'set',
+    user_pairs => 'kv',
   },
 );
 
@@ -48,6 +49,11 @@ around register_with_hub => sub ($orig, $self, @args) {
 
   if (my $state = $self->fetch_state) {
     $self->_set_user_config($state);
+
+    for my $pair ($self->user_pairs) {
+      my ($username, $uconfig) = @$pair;
+      $self->hub->user_directory->reload_user($username, $uconfig);
+    }
   }
 };
 
