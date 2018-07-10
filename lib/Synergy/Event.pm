@@ -11,6 +11,8 @@ use Synergy::Logger '$Logger';
 has type => (is => 'ro', isa => 'Str', required => 1);
 has text => (is => 'ro', isa => 'Str', required => 1); # clearly per-type
 
+has time => (is => 'ro', default => sub { time });
+
 has from_channel => (
   is => 'ro',
   does => 'Synergy::Role::Channel',
