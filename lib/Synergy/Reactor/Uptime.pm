@@ -1,5 +1,5 @@
 use v5.24.0;
-package Synergy::Reactor::Status;
+package Synergy::Reactor::Uptime;
 
 use Moose;
 use DateTime;
@@ -13,14 +13,14 @@ use Time::Duration;
 
 sub listener_specs {
   return {
-    name      => 'status',
-    method    => 'handle_status',
+    name      => 'uptime',
+    method    => 'handle_uptime',
     exclusive => 1,
-    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^status(\s|$)/i },
+    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^uptime(\s|$)/i },
   };
 }
 
-sub handle_status ($self, $event) {
+sub handle_uptime ($self, $event) {
   my $uptime = duration(time - $^T);
   $event->reply("Online for $uptime.");
   $event->mark_handled;
