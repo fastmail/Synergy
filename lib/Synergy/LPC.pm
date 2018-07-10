@@ -1,5 +1,5 @@
 use v5.24.0;
-package Synergy::LPC;;
+package Synergy::LPC;
 
 use Moose;
 
