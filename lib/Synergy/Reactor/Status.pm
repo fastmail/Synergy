@@ -18,7 +18,7 @@ sub listener_specs ($reactor) {
       method    => 'handle_status',
       exclusive => 1,
       predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /^status\s+(\w+)\s*$/i
+        $e->was_targeted && $e->text =~ /^status\s+(for\s+)?(\w+)\s*$/i
       },
     },
     {
@@ -92,7 +92,8 @@ sub user_status_for ($self, $event, $user) {
 }
 
 sub handle_status ($self, $event) {
-  (undef, my $who_name) = split /\s/, $event->text;
+  $event->text =~ /^status\s+(?:for\s+)?(\w+)\s*$/i;
+  my $who_name = $1;
 
   my $who = $self->resolve_name($who_name, $event->from_user);
 
