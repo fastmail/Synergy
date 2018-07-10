@@ -80,12 +80,12 @@ after register_with_hub => sub ($self, @) {
 
 sub user_status_for ($self, $event, $user) {
   if (my $last = $self->last_chatter_for($user->username)) {
-    return sprintf "I last saw chatter from %s at %s%s.",
+    return sprintf "I last saw chatter from %s at %s%s",
       $user->username,
       $event->from_user->format_datetime(
         DateTime->from_epoch(epoch => $last->{when})
         ),
-      ($last->{uri} ? ": $last->{uri}" : q{});
+      ($last->{uri} ? ": $last->{uri}" : q{.});
   }
 
   return sprintf "I've never seen any chatter from %s.", $user->username;
