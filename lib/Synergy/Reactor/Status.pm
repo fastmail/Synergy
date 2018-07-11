@@ -102,11 +102,10 @@ sub user_status_for ($self, $event, $user) {
 sub _doing_status ($self, $event, $user) {
   return unless my $doing = $self->doing_for_user($user);
 
-  my $reply =  sprintf "Since %s, doing: %s",
-    $event->from_user->format_datetime(
-      DateTime->from_epoch(epoch => $doing->{since})
-    ),
-    $doing;
+  my $ago = time - $doing->{since};
+  $ago -= $ago % 60;
+
+  my $reply =  sprintf "Since %s, doing: %s", ago($ago), $doing->{desc};
 
   return $event->reply($reply);
 }
@@ -226,6 +225,8 @@ sub doing_for_user ($self, $user) {
 
 # doing STATUS /opts
 sub handle_doing ($self, $event) {
+  $event->mark_handled;
+
   my $text = $event->text;
   $text =~ s/\Adoing\s+//i;
 
