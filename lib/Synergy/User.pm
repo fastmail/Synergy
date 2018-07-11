@@ -65,6 +65,10 @@ sub time_zone ($self) {
 }
 
 sub format_datetime ($self, $dt, $format = '%F %R %Z') {
+  if (! blessed $dt) {
+    $dt = DateTime->from_epoch(epoch => $dt);
+  }
+
   $dt = $dt->clone;
   $dt->set_time_zone($self->time_zone);
   return $dt->strftime($format);
