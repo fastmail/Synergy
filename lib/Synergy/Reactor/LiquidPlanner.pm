@@ -147,7 +147,8 @@ my %KNOWN = (
 
   search    =>  [ \&_handle_search,
                   join("\n",
-                    "search: find tasks in LiquidPlanner. Additional search flags include:",
+                    "search SEARCH_TERM: find tasks in LiquidPlanner matching term",
+                    "Additional search flags include:",
                     "• `done:1`, search for completed tasks",
                     "• `project:PROJECT`, search in this project shortcut",
                     "• `page:N`, get the Nth page of 10 results",
