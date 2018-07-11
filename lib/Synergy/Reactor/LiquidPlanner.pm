@@ -152,6 +152,7 @@ my %KNOWN = (
                     "• `done:1`, search for completed tasks",
                     "• `project:PROJECT`, search in this project shortcut",
                     "• `page:N`, get the Nth page of 10 results",
+                    "• `type:TYPE`, pick what type of thing to find (package, project, task)",
                     "• `user:NAME`, tasks owned by the user named NAME",
                   ),
                 ],
@@ -1406,9 +1407,6 @@ sub _handle_search ($self, $event, $text) {
   my @filters;
   my $has_strong_check = 0;
 
-  # TODO: Allow this to be overridden. -- rjbs, 2018-06-30
-  push @filters, [ 'item_type', 'is', 'Task' ];
-
   if (my $done = delete $flag{done}) {
     my @values = keys %$done;
     if (@values > 1) {
@@ -1473,6 +1471,24 @@ sub _handle_search ($self, $event, $text) {
       push @filters, map {; [ 'owner_id', '=', $_ ] } keys %member;
     }
   }
+
+  my $item_type;
+  if (my $type = delete $flag{type}) {
+    my (@types) = keys %$type;
+
+    if (@types > 1) {
+      $error{type} = "You can only filter on one type at a time.";
+    } else {
+      my $got_type = fc $types[0];
+      if ($got_type =~ /\A project | task | package \z/x) {
+        $item_type = ucfirst $got_type;
+      } else {
+        $error{type} = qq{I don't know what a "$got_type" type item is.};
+      }
+    }
+  }
+  $item_type //= 'Task';
+  push @filters, [ 'item_type', 'is', $item_type ];
 
   my $debug = $flag{debug} && grep { $_ } keys((delete $flag{debug})->%*);
 
