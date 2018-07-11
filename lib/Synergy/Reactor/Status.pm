@@ -79,6 +79,42 @@ after register_with_hub => sub ($self, @) {
 };
 
 sub user_status_for ($self, $event, $user) {
+  return (
+    $self->_chatter_status($event, $user),
+    $self->_business_hours_status($event, $user),
+  );
+}
+
+sub _business_hours_status ($self, $event, $user) {
+  my $hours = $self->user_directory->get_user_preference(
+    $user,
+    'business-hours',
+  );
+
+  return unless $hours;
+
+  my $target_tz = $user->time_zone;
+  my $now       = DateTime->now(time_zone => $target_tz);
+  my $dow = [ qw(sun mon tue wed thu fri sat) ]->[ $now->day_of_week % 7 ];
+  my $today_hrs = $hours->{$dow};
+
+  unless ($today_hrs) {
+    return sprintf "It's outside of %s's normal business hours.",
+      $user->username;
+  }
+
+  my $time = $now->format_cldr('HH:mm');
+
+  if ($time lt $today_hrs->{start} or $time gt $today_hrs->{end}) {
+    return sprintf "It's outside of %s's normal business hours.",
+      $user->username;
+  }
+
+  return sprintf "It's currently %s's normal business hours.",
+    $user->username;
+}
+
+sub _chatter_status ($self, $event, $user) {
   if (my $last = $self->last_chatter_for($user->username)) {
     my $uri  = $last->{uri};
     my $when = $event->from_user->format_datetime(
