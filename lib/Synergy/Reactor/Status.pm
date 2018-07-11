@@ -232,6 +232,11 @@ sub handle_doing ($self, $event) {
 
   my ($desc, $switches) = split m{/}, $text, 2;
 
+  if ($desc eq 'nothing' && ! $switches) {
+    delete $self->_user_doings->{ $event->from_user->username };
+    return $event->reply("Okay, back to business as usual.");
+  }
+
   my $doing = { since => time, desc => $desc };
 
   SWITCH: for my $switch (split m{\s+/}, $switches) {
