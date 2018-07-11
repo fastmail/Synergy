@@ -239,10 +239,17 @@ sub handle_doing ($self, $event) {
     return $event->reply("Okay, back to business as usual.");
   }
 
-  my $doing = { since => time, desc => $desc };
+  my %doing = (since => time, desc => $desc);
 
   SWITCH: for my $switch (split m{\s+/}, $switches) {
     my ($name, $value) = split /\s+/, $switch, 2;
+
+    if ($name eq 'dnd' or $name eq 'chill') {
+      return $event->reply("/$name doesn't take an argument")
+        if length $value;
+
+      $doing{dnd} = 1;
+    }
 
     if ($name eq 'u' or $name eq 'until') {
       my $until = parse_time_hunk("until $value", $event->from_user);
@@ -253,7 +260,7 @@ sub handle_doing ($self, $event) {
       return $event->reply("Your /until switch seems to be in the past.")
         unless $until > time;
 
-      $doing->{until} = $until;
+      $doing{until} = $until;
       next SWITCH;
     }
 
@@ -266,14 +273,14 @@ sub handle_doing ($self, $event) {
       return $event->reply("Your /for switch seems to go into the past.")
         unless $until > time;
 
-      $doing->{until} = $until;
+      $doing{until} = $until;
       next SWITCH;
     }
 
     return $event->reply(qq{I don't understand the "/$name" switch.});
   }
 
-  $self->_user_doings->{ $event->from_user->username } = $doing;
+  $self->_user_doings->{ $event->from_user->username } = \%doing;
 
   return $event->reply("Thanks for letting me know what you're doing!");
 }
