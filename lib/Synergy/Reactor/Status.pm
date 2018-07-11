@@ -155,7 +155,7 @@ sub handle_status ($self, $event) {
 
     my (@statuses) = $comp->user_status_for($event, $who);
 
-    for my $status (@statuses) {
+    for my $status (grep { defined } @statuses) {
       if (ref $status) {
         $plain .= "$status->{plain}\n";
         $slack .= "$status->{slack}\n";
