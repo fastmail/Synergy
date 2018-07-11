@@ -16,6 +16,7 @@ use Synergy::User;
 use Synergy::Logger '$Logger';
 use List::Util qw(first);
 use DateTime;
+use utf8;
 
 has users => (
   isa  => 'HashRef',

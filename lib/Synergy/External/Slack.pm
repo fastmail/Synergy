@@ -4,6 +4,7 @@ package Synergy::External::Slack;
 use Moose;
 use experimental qw(lexical_subs signatures);
 use namespace::autoclean;
+use utf8;
 
 use Cpanel::JSON::XS qw(decode_json encode_json);
 use IO::Async::Timer::Periodic;

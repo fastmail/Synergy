@@ -3,6 +3,7 @@ package Synergy::Channel::Slack;
 
 use Moose;
 use experimental qw(signatures);
+use utf8;
 use JSON::MaybeXS;
 
 use Synergy::External::Slack;

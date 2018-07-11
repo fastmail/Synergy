@@ -38,7 +38,7 @@ sub _build_title_index ($self, @) {
   my $file = $self->rfc_index_file;
   open my $fh, '<', $file or confess("can't open $file for reading: $!");
   my $contents = do { local $/; <$fh> };
-  my $index = JSON->new->decode($contents);
+  my $index = JSON->new->utf8->decode($contents);
 
   return $index;
 }

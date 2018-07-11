@@ -3,6 +3,7 @@ package Synergy::Event;
 use Moose;
 
 use experimental qw(signatures);
+use utf8;
 
 use namespace::autoclean;
 

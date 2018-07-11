@@ -68,7 +68,7 @@ has _state_dbh => (
 );
 
 sub save_state ($self, $reactor, $state) {
-  my $json = eval { JSON::MaybeXS->new->encode($state) };
+  my $json = eval { JSON::MaybeXS->new->utf8->encode($state) };
 
   unless ($json) {
     $Logger->log([ "error serializing state for %s: %s", $reactor->name, $@ ]);
@@ -95,7 +95,7 @@ sub fetch_state ($self, $reactor) {
   );
 
   return unless $json;
-  return JSON::MaybeXS->new->decode($json);
+  return JSON::MaybeXS->new->utf8->decode($json);
 }
 
 has server_port => (

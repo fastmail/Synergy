@@ -4,6 +4,7 @@ package Synergy::Reactor::Preferences;
 use Moose;
 use Try::Tiny;
 use Synergy::Logger '$Logger';
+use utf8;
 
 with 'Synergy::Role::Reactor';
 

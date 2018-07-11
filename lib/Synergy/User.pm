@@ -6,6 +6,7 @@ use Moose;
 # from gitlab.  -- michael, 2018-04-13
 # use MooseX::StrictConstructor;
 use experimental qw(signatures);
+use utf8;
 
 use namespace::autoclean;
 

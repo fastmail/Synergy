@@ -5,6 +5,7 @@ use MooseX::Role::Parameterized;
 
 use Scalar::Util qw(blessed);
 use Try::Tiny;
+use utf8;
 
 use experimental qw(signatures);
 use namespace::clean;
