@@ -152,7 +152,6 @@ my %KNOWN = (
                     "• `done:1`, search for completed tasks",
                     "• `project:PROJECT`, search in this project shortcut",
                     "• `page:N`, get the Nth page of 10 results",
-                    "• `limit:N`, fetch at most N results",
                     "• `user:NAME`, tasks owned by the user named NAME",
                   ),
                 ],
