@@ -588,6 +588,14 @@ after register_with_hub => sub ($self, @) {
   }
 };
 
+sub _user_doing_dnd ($self, $user) {
+  my (@statuses) = map  {; $_->doing_for_user($user) }
+                   grep {; $_->does('Synergy::Reactor::Status') }
+                   $self->hub->reactors;
+
+  return !! grep { $_->{dnd} } @statuses;
+}
+
 sub nag ($self, $timer, @) {
   $Logger->log("considering nagging");
 
@@ -635,7 +643,7 @@ sub nag ($self, $timer, @) {
       }
     }
 
-    if ($sy_timer->is_showtime) {
+    if ($sy_timer->is_showtime && ! $self->_user_doing_dnd($user)) {
       if ($lp_timer) {
         $Logger->log("$username: We're good: there's a timer.");
 
