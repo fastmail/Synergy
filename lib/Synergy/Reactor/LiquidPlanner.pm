@@ -145,7 +145,16 @@ my %KNOWN = (
                   "resume timer: start the last time you had running up again",
                 ],
 
-  search    =>  [ \&_handle_search,      ],
+  search    =>  [ \&_handle_search,
+                  join("\n",
+                    "search: find tasks in LiquidPlanner. Additional search flags include:",
+                    "• `done:1`, search for completed tasks",
+                    "• `project:PROJECT`, search in this project shortcut",
+                    "• `page:N`, get the Nth page of 10 results",
+                    "• `limit:N`, fetch at most N results",
+                    "• `user:NAME`, tasks owned by the user named NAME",
+                  ),
+                ],
 
   shows     =>  [ \&_handle_shows,       ],
   "show's"  =>  [ \&_handle_shows,       ],
