@@ -158,7 +158,7 @@ sub get_version_desc ($self) {
   my $output;
 
   $self->git_do(
-    "log -n 1 --pretty=oneline --abbrev-commit",
+    "log -n 1 --pretty=tformat:'[%h] %s' --abbrev-commit",
     \$output,
   );
 
