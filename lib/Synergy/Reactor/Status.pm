@@ -249,6 +249,7 @@ sub handle_doing ($self, $event) {
         if length $value;
 
       $doing{dnd} = 1;
+      next SWITCH;
     }
 
     if ($name eq 'u' or $name eq 'until') {
