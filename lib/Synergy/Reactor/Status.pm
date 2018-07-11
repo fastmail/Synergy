@@ -8,6 +8,7 @@ with 'Synergy::Role::Reactor', 'Synergy::Role::ProvidesUserStatus';
 use experimental qw(signatures);
 use namespace::clean;
 use List::Util qw(first);
+use Synergy::Util qw(parse_time_hunk);
 use Time::Duration::Parse;
 use Time::Duration;
 
@@ -243,11 +244,28 @@ sub handle_doing ($self, $event) {
     my ($name, $value) = split /\s+/, $switch, 2;
 
     if ($name eq 'u' or $name eq 'until') {
-      my $dt = eval { parse_date_for_user($value, $event->from_user) };
-      unless ($dt) {
-        return $event->reply("I didn't understand your /until switch.");
-      }
-      $doing->{until} = $dt->epoch;
+      my $until = parse_time_hunk("until $value", $event->from_user);
+
+      return $event->reply("I didn't understand your /until switch.")
+        unless $until;
+
+      return $event->reply("Your /until switch seems to be in the past.")
+        unless $until > time;
+
+      $doing->{until} = $until;
+      next SWITCH;
+    }
+
+    if ($name eq 'f' or $name eq 'for') {
+      my $until = parse_time_hunk("for $value", $event->from_user);
+
+      return $event->reply("I didn't understand your /for switch.")
+        unless $until;
+
+      return $event->reply("Your /for switch seems to go into the past.")
+        unless $until > time;
+
+      $doing->{until} = $until;
       next SWITCH;
     }
 
