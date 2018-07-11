@@ -149,18 +149,33 @@ __PACKAGE__->add_preference(
 __PACKAGE__->add_preference(
   name => 'business-hours',
   describer => sub ($value) {
-    my sub describe_day ($day) {
-      return undef unless keys $value->{$day}->%*;
-      return sprintf("%s: %s-%s",
-        ucfirst $day,
-        $value->{$day}{start},
-        $value->{$day}{end},
-      );
+    my @wdays = qw(mon tue wed thu fri);
+    my @wends = qw(sat sun);
+
+    my %desc = map {; keys($value->{$_}->%*)
+                      ? ($_ => "$value->{$_}{start}-$value->{$_}{end}")
+                      : () } (@wdays, @wends);
+
+    return "None" unless %desc;
+
+    if ($desc{mon} && 7 == grep {; $desc{$_} eq $desc{mon} } (@wdays, @wends)) {
+      $desc{everyday} = $desc{mon};
+      delete @desc{ @wdays };
+      delete @desc{ @wends };
     }
 
-    my @day_descs = grep {; defined }
-                    map {; describe_day($_) } qw(mon tue wed thu fri sat sun);
-    return join(', ', @day_descs);
+    if ($desc{mon} && 5 == grep {; $desc{$_} eq $desc{mon} } @wdays) {
+      $desc{weekdays} = $desc{mon};
+      delete @desc{ @wdays };
+    }
+
+    if ($desc{sat} && 2 == grep {; $desc{$_} eq $desc{sat} } @wends) {
+      $desc{weekends} = $desc{sat};
+      delete @desc{ @wends };
+    }
+
+    return join q{, }, map {; $desc{$_} ? "\u$_: $desc{$_}" : () }
+      (qw(weekdays sun), @wdays, qw(sat weekends));
   },
   validator => sub ($value) {
     my $err = q{you can use "weekdays, 09:00-17:00" or "Mon: 09:00-17:00, Tue: 10:00-12:00, (etc.)"};
