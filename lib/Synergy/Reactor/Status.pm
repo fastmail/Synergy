@@ -14,6 +14,14 @@ use Time::Duration;
 sub listener_specs ($reactor) {
   return (
     {
+      name      => 'doing',
+      method    => 'handle_doing',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        $e->was_targeted && $e->text =~ /^doing\s+/i
+      },
+    },
+    {
       name      => 'status',
       method    => 'handle_status',
       exclusive => 1,
@@ -67,22 +75,40 @@ sub handle_chatter ($self, $event) {
 sub state ($self) {
   return {
     chatter => $self->_last_chatter,
+    doings  => $self->_user_doings,
   };
 }
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
-    if (my $chatter = $state->{chatter}) {
-      $self->_last_chatter->%* = %$chatter;
+    if ($state->{chatter}) {
+      $self->_last_chatter->%* = $state->{chatter}->%*;
+    }
+
+    if ($state->{doings}) {
+      $self->_user_doings->%* = $state->{doings}->%*;
     }
   }
 };
 
 sub user_status_for ($self, $event, $user) {
   return (
-    $self->_chatter_status($event, $user),
+    $self->_doing_status($event, $user),
     $self->_business_hours_status($event, $user),
+    $self->_chatter_status($event, $user),
   );
+}
+
+sub _doing_status ($self, $event, $user) {
+  return unless my $doing = $self->doing_for_user($user);
+
+  my $reply =  sprintf "Since %s, doing: %s",
+    $event->from_user->format_datetime(
+      DateTime->from_epoch(epoch => $doing->{since})
+    ),
+    $doing;
+
+  return $event->reply($reply);
 }
 
 sub _business_hours_status ($self, $event, $user) {
@@ -184,6 +210,47 @@ sub handle_status ($self, $event) {
       }
     }
   );
+}
+
+has _user_doings => (
+  is  => 'ro',
+  isa => 'HashRef',
+  default => sub {  {}  },
+);
+
+sub doing_for_user ($self, $user) {
+  return unless my $doing = $self->_user_doings->{ $user->username };
+  return if $doing->{until} && $doing->{until} < time;
+  return $doing;
+}
+
+# doing STATUS /opts
+sub handle_doing ($self, $event) {
+  my $text = $event->text;
+  $text =~ s/\Adoing\s+//i;
+
+  my ($desc, $switches) = split m{/}, $text, 2;
+
+  my $doing = { since => time, desc => $desc };
+
+  SWITCH: for my $switch (split m{\s+/}, $switches) {
+    my ($name, $value) = split /\s+/, $switch, 2;
+
+    if ($name eq 'u' or $name eq 'until') {
+      my $dt = eval { parse_date_for_user($value, $event->from_user) };
+      unless ($dt) {
+        return $event->reply("I didn't understand your /until switch.");
+      }
+      $doing->{until} = $dt->epoch;
+      next SWITCH;
+    }
+
+    return $event->reply(qq{I don't understand the "/$name" switch.});
+  }
+
+  $self->_user_doings->{ $event->from_user->username } = $doing;
+
+  return $event->reply("Thanks for letting me know what you're doing!");
 }
 
 1;
