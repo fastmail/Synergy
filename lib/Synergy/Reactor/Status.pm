@@ -86,7 +86,7 @@ sub user_status_for ($self, $event, $user) {
 }
 
 sub _business_hours_status ($self, $event, $user) {
-  my $hours = $self->user_directory->get_user_preference(
+  my $hours = $self->hub->user_directory->get_user_preference(
     $user,
     'business-hours',
   );
