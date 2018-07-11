@@ -64,6 +64,11 @@ sub time_zone ($self) {
   return $self->preference('time-zone') // $self->_time_zone;
 }
 
+sub format_timestamp ($self, $ts, $format = '%F %R %Z') {
+  my $dt = DateTime->from_epoch(epoch => $ts);
+  return $self->format_datetime($ts, $format);
+}
+
 sub format_datetime ($self, $dt, $format = '%F %R %Z') {
   if (! blessed $dt) {
     $dt = DateTime->from_epoch(epoch => $dt);

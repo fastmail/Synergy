@@ -109,7 +109,7 @@ sub _doing_status ($self, $event, $user) {
   return sprintf "Since %s, %sdoing: %s",
     ago($ago),
     ($doing->{until}
-      ? ("until " . $event->from_user->format_datetime($doing->{until}))
+      ? ("until " . $event->from_user->format_timestamp($doing->{until}))
       : q{}),
     $doing->{desc};
 }
@@ -146,9 +146,7 @@ sub _business_hours_status ($self, $event, $user) {
 sub _chatter_status ($self, $event, $user) {
   if (my $last = $self->last_chatter_for($user->username)) {
     my $uri  = $last->{uri};
-    my $when = $event->from_user->format_datetime(
-      DateTime->from_epoch(epoch => $last->{when})
-    );
+    my $when = $event->from_user->format_timestamp($last->{when});
 
     my $link_str = "chatter from " . $user->username;
 
