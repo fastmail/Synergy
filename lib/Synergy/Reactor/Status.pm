@@ -117,14 +117,16 @@ sub handle_status ($self, $event) {
   for my $comp ($self->hub->channels, $self->hub->reactors) {
     next unless $comp->does('Synergy::Role::ProvidesUserStatus');
 
-    my $status = $comp->user_status_for($event, $who);
+    my (@statuses) = $comp->user_status_for($event, $who);
 
-    if (ref $status) {
-      $plain .= "$status->{plain}\n";
-      $slack .= "$status->{slack}\n";
-    } else {
-      $plain .= "$status\n";
-      $slack .= "$status\n";
+    for my $status (@statuses) {
+      if (ref $status) {
+        $plain .= "$status->{plain}\n";
+        $slack .= "$status->{slack}\n";
+      } else {
+        $plain .= "$status\n";
+        $slack .= "$status\n";
+      }
     }
   }
 
