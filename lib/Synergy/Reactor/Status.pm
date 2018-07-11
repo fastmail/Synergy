@@ -109,7 +109,7 @@ sub _doing_status ($self, $event, $user) {
   return sprintf "Since %s, %sdoing: %s",
     ago($ago),
     ($doing->{until}
-      ? ("until " . $event->from_user->format_timestamp($doing->{until}))
+      ? ("until " . $event->from_user->format_timestamp($doing->{until}) . ", ")
       : q{}),
     $doing->{desc};
 }
