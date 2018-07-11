@@ -168,7 +168,7 @@ sub send_message ($self, $channel, $text, $alts = {}) {
     }
   }
 
-  return $self->_send_rich_text($channel, $text, $alts->{slack})
+  return $self->_send_rich_text($channel, $alts->{slack})
     if $alts->{slack};
 
   return $self->_send_plain_text($channel, $text);
@@ -182,11 +182,11 @@ sub _send_plain_text ($self, $channel, $text) {
   });
 }
 
-sub _send_rich_text ($self, $channel, $plain, $rich) {
+sub _send_rich_text ($self, $channel, $rich) {
   $self->api_call('chat.postMessage', {
+    (ref $rich ? (%$rich) : text => $rich),
     channel => $channel,
     as_user => 1,
-    text    => $rich,
   });
 }
 
