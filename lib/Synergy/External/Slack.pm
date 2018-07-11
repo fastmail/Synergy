@@ -184,7 +184,7 @@ sub _send_plain_text ($self, $channel, $text) {
 
 sub _send_rich_text ($self, $channel, $rich) {
   $self->api_call('chat.postMessage', {
-    (ref $rich ? (%$rich) : text => $rich),
+    (ref $rich ? (%$rich) : (text => $rich)),
     channel => $channel,
     as_user => 1,
   });

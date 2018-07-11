@@ -136,7 +136,16 @@ sub handle_status ($self, $event) {
       $who->username;
   }
 
-  $event->reply($plain, { slack => $slack });
+  $event->reply(
+    $plain,
+    {
+      slack => {
+        text         => $slack,
+        unfurl_links => \0,
+        unfurl_media => \0,
+      }
+    }
+  );
 }
 
 1;
