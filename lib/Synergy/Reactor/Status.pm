@@ -80,12 +80,20 @@ after register_with_hub => sub ($self, @) {
 
 sub user_status_for ($self, $event, $user) {
   if (my $last = $self->last_chatter_for($user->username)) {
-    return sprintf "I last saw chatter from %s at %s%s",
-      $user->username,
-      $event->from_user->format_datetime(
-        DateTime->from_epoch(epoch => $last->{when})
-        ),
-      ($last->{uri} ? ": $last->{uri}" : q{.});
+    my $uri  = $last->{uri};
+    my $when = $event->from_user->format_datetime(
+      DateTime->from_epoch(epoch => $last->{when})
+    );
+
+    my $link_str = "chatter from " . $user->username;
+
+    return {
+      plain => sprintf("I last saw %s at %s%s",
+        $link_str, $when, ($uri ? ": $uri" : q{.})),
+
+      slack => sprintf("I last saw %s at %s.",
+        ($uri ? "<$uri|$link_str>" : $link_str), $when),
+    }
   }
 
   return sprintf "I've never seen any chatter from %s.", $user->username;
@@ -103,18 +111,32 @@ sub handle_status ($self, $event) {
     return $event->reply(qq{Sorry, I don't know who "$who_name" is.});
   }
 
-  my $reply = q{};
+  my $plain = q{};
+  my $slack = q{};
+
   for my $comp ($self->hub->channels, $self->hub->reactors) {
     next unless $comp->does('Synergy::Role::ProvidesUserStatus');
-    $reply .= $comp->user_status_for($event, $who) . "\n";
+
+    my $status = $comp->user_status_for($event, $who);
+
+    if (ref $status) {
+      $plain .= "$status->{plain}\n";
+      $slack .= "$status->{slack}\n";
+    } else {
+      $plain .= "$status\n";
+      $slack .= "$status\n";
+    }
   }
 
-  chomp $reply;
+  chomp $plain;
+  chomp $slack;
 
-  $reply ||= sprintf "I don't have any information about %s at all!",
-    $who->username;
+  for ($plain, $slack) {
+    $_ ||= sprintf "I don't have any information about %s at all!",
+      $who->username;
+  }
 
-  $event->reply($reply);
+  $event->reply($plain, { slack => $slack });
 }
 
 1;
