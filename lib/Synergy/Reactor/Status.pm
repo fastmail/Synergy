@@ -106,9 +106,12 @@ sub _doing_status ($self, $event, $user) {
   my $ago = time - $doing->{since};
   $ago -= $ago % 60;
 
-  my $reply =  sprintf "Since %s, doing: %s", ago($ago), $doing->{desc};
-
-  return $event->reply($reply);
+  return sprintf "Since %s, %sdoing: %s",
+    ago($ago),
+    ($doing->{until}
+      ? ("until " . $event->from_user->format_datetime($doing->{until}))
+      : q{}),
+    $doing->{desc};
 }
 
 sub _business_hours_status ($self, $event, $user) {
