@@ -243,7 +243,8 @@ sub load_preferences_from_user ($self, $username) {
   $Logger->log([ "Loading global preferences for %s", $username ]);
   my $user = $self->user_named($username);
 
-  $self->set_user_preference($user, 'time-zone', $user->_time_zone);
+  $self->set_user_preference($user, 'time-zone', $user->_time_zone)
+    unless $self->user_has_preference($user, 'time-zone');
 
   my $existing_real = $user->has_realname ? $user->realname : undef;
   my $existing_pref = $self->get_user_preference($user, 'realname');
