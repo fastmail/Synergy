@@ -202,15 +202,16 @@ sub clear_timer_for_task_id ($self, $task_id) {
 }
 
 sub track_time ($self, $arg) {
-  Carp::confess("no task")      unless my $task = $arg->{task};
-  Carp::confess("no work")      unless defined $arg->{work};
-  Carp::confess("no member_id") unless $arg->{member_id};
+  Carp::confess("no task_id")     unless $arg->{task_id};
+  Carp::confess("no activity_id") unless $arg->{activity_id};
+  Carp::confess("no work")        unless defined $arg->{work};
+  Carp::confess("no member_id")   unless $arg->{member_id};
 
   my $res = $self->http_post(
-    "/tasks/$task->{id}/track_time",
+    "/tasks/$arg->{task_id}/track_time",
     Content_Type => 'application/json',
     Content => $JSON->encode({
-      activity_id => $task->{activity_id},
+      activity_id => $arg->{activity_id},
       member_id => $arg->{member_id},
       work      => $arg->{work},
       reduce_estimate => \1,
@@ -221,7 +222,7 @@ sub track_time ($self, $arg) {
 
   return $res unless $res->is_success;
 
-  $task = $res->payload;
+  my $task = $res->payload;
 
   $self->log([ "response from track_time: %s", $res->payload ]);
 
@@ -230,16 +231,24 @@ sub track_time ($self, $arg) {
 
   die "WHERE IS MY ASSIGNMENT" unless $assignment;
 
-  my $assignment_res = $self->http_post(
-    "/tasks/$task->{id}/update_assignment",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({
-      assignment_id => $assignment->{id},
-      is_done       => ($arg->{done} ? \1 : \0),
-    }),
-  );
+  if ($arg->{done} xor $assignment->{is_done}) {
+    my $assignment_res = $self->http_post(
+      "/tasks/$arg->{task_id}/update_assignment",
+      Content_Type => 'application/json',
+      Content => $JSON->encode({
+        assignment_id => $assignment->{id},
+        is_done       => ($arg->{done} ? \1 : \0),
+      }),
+    );
 
-  return $assignment_res;
+    return $assignment_res unless $assignment_res->is_success;
+  }
+
+  return _success({
+    item_id => $arg->{task_id},
+    work    => $arg->{work},
+    assignment_id => $assignment->{id},
+  });
 }
 
 sub create_task ($self, $task) {

@@ -1964,18 +1964,15 @@ sub _handle_commit ($self, $event, $comment) {
   my $sy_timer = $self->timer_for_user($user);
   return $event->reply("You don't timer-capable.") unless $sy_timer;
 
-  my $task_res = $lpc->get_item($lp_timer->{item_id});
+  my $task_id = $lp_timer->{item_id};
 
-  unless ($task_res->is_success) {
-    return $event->reply("I couldn't log the work because I couldn't find the current task's activity id.");
-  }
+  my $activity_res = $lpc->get_activity_id($task_id, $user->lp_id);
 
-  my $task = $task_res->payload;
-  my $activity_id = $task->{activity_id};
-
-  unless ($activity_id) {
+  unless ($activity_res->is_success) {
     return $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
   }
+
+  my $activity_id = $activity_res->payload;
 
   if ($meta{STOP} and ! $sy_timer->chilling) {
     if ($meta{CHILL}) {
@@ -1987,20 +1984,15 @@ sub _handle_commit ($self, $event, $comment) {
     }
   }
 
-  # get timer
-  # get task
-  # track_time
-  # clear timer
-  # maybe: stop timer
-
-  my $task_base = "/tasks/$lp_timer->{item_id}";
+  my $task_base = "/tasks/$task_id";
 
   my $commit_res = $lpc->track_time({
-    task  => $task,
-    work  => $lp_timer->{running_time},
-    done  => $meta{DONE},
+    task_id => $task_id,
+    work    => $lp_timer->{running_time},
+    done    => $meta{DONE},
     comment => $comment,
-    member_id => $user->lp_id,
+    member_id   => $user->lp_id,
+    activity_id => $activity_id,
   });
 
   unless ($commit_res->is_success) {
@@ -2012,12 +2004,12 @@ sub _handle_commit ($self, $event, $comment) {
   $self->save_state;
 
   {
-    my $clear_res = $lpc->clear_timer_for_task_id($task->{id});
+    my $clear_res = $lpc->clear_timer_for_task_id($task_id);
     $meta{CLEARFAIL} = ! $clear_res->is_success;
   }
 
   unless ($meta{STOP}) {
-    my $start_res = $lpc->start_timer_for_task_id($task->{id});
+    my $start_res = $lpc->start_timer_for_task_id($task_id);
     $meta{STARTFAIL} = ! $start_res->is_success;
   }
 
@@ -2039,7 +2031,19 @@ sub _handle_commit ($self, $event, $comment) {
 
   my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
 
-  my $uri   = $self->item_uri($lp_timer->{item_id});
+  my $uri= $self->item_uri($lp_timer->{item_id});
+
+  my $task_res = $self->get_item($task_id);
+  unless ($task_res->is_success) {
+    return $event->reply(
+      "I logged that time, but something went wrong trying to describe it!"
+      . (@errors ? ("  I had other trouble, too: " . join q{ and }, @errors)
+                 : q{}),
+    );
+  }
+
+  my $task = $task_res->payload;
+
   my $base  = "Okay, I've committed $time of work$also.  The task was:";
   my $text  = "$base $task->{name} ($uri)";
   my $slack = sprintf '%s  %s',
@@ -2359,30 +2363,35 @@ sub _spent_on_existing ($self, $event, $task_id, $duration) {
 
   my $lpc = $self->lp_client_for_user($user);
 
-  my $task_res = $lpc->get_item($task_id);
+  my $activity_res = $lpc->get_activity_id($task_id, $user->lp_id);
 
-  unless ($task_res->is_success) {
-    return $event->reply("I couldn't log the work because I couldn't find the task.");
+  unless ($activity_res->is_success) {
+    return $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
   }
 
-  my $task = $task_res->payload;
-  my $activity_id = $task->{activity_id};
-
-  unless ($activity_id) {
-    return $event->reply("I couldn't log the work because the task doesn't have a defined activity!");
-  }
+  my $activity_id = $activity_res->payload;
 
   my $track_ok = $lpc->track_time({
-    task => $task,
-    work => $duration / 3600,
-    member_id => $user->lp_id,
+    task_id => $task_id,
+    work    => $duration / 3600,
+    member_id   => $user->lp_id,
+    activity_id => $activity_id,
   });
 
   unless ($track_ok) {
     return $event->reply("I couldn't log your time, sorry.");
   }
 
-  my $uri = $self->item_uri($task->{id});
+  my $task_res = $self->get_item($task_id);
+
+  unless ($task_res->is_success) {
+    return $event->reply(
+      "I logged that time, but something went wrong trying to describe it!"
+    );
+  }
+
+  my $uri  = $self->item_uri($task_id);
+  my $task = $task_res->payload;
 
   my $plain_base = qq{I logged that time on "$task->{name}"};
   my $slack_base = sprintf qq{I logged that time on %s},
