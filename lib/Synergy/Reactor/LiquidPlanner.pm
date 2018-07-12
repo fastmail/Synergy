@@ -2035,7 +2035,7 @@ sub _handle_commit ($self, $event, $comment) {
 
   my $uri= $self->item_uri($lp_timer->{item_id});
 
-  my $task_res = $self->get_item($task_id);
+  my $task_res = $lpc->get_item($task_id);
   unless ($task_res->is_success) {
     return $event->reply(
       "I logged that time, but something went wrong trying to describe it!"
@@ -2384,7 +2384,7 @@ sub _spent_on_existing ($self, $event, $task_id, $duration) {
     return $event->reply("I couldn't log your time, sorry.");
   }
 
-  my $task_res = $self->get_item($task_id);
+  my $task_res = $lpc->get_item($task_id);
 
   unless ($task_res->is_success) {
     return $event->reply(
