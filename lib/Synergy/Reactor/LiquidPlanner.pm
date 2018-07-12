@@ -1191,10 +1191,11 @@ sub _execute_task_plan ($self, $event, $plan, $error) {
 
   if (my $log_hrs = $plan->{log_hours}) {
     my $track_ok = $lpc->track_time({
-      task => $task,
+      task_id => $task->{id},
       work => $log_hrs,
       done => $plan->{done},
-      member_id => $event->from_user->lp_id,
+      member_id   => $event->from_user->lp_id,
+      activity_id => $task->{activity_id},
     });
 
     if ($track_ok) {
@@ -1206,10 +1207,11 @@ sub _execute_task_plan ($self, $event, $plan, $error) {
     }
   } elsif ($plan->{done}) {
     my $track_ok = $lpc->track_time({
-      task => $task,
+      task_id => $task->{id},
       work => 0,
       done => $plan->{done},
-      member_id => $event->from_user->lp_id,
+      member_id   => $event->from_user->lp_id,
+      activity_id => $task->{activity_id},
     });
 
     if ($track_ok) {
