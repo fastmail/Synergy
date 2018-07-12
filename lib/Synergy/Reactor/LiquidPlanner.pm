@@ -49,6 +49,11 @@ has workspace_id => (
   required => 1,
 );
 
+has activity_id => (
+  is  => 'ro',
+  isa => 'Int',
+);
+
 my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
 
 sub _lp_base_uri ($self) {
@@ -742,6 +747,9 @@ sub lp_client_for_user ($self, $user) {
     auth_token    => $user->lp_auth_header,
     workspace_id  => $self->workspace_id,
     logger_callback   => sub { $Logger },
+
+    ($self->activity_id ? (single_activity_id => $self->activity_id) : ()),
+
     http_get_callback => sub ($, $uri, @arg) {
       $self->hub->http_get($uri, @arg);
     },
