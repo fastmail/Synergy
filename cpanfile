@@ -5,6 +5,7 @@ requires 'Cpanel::JSON::XS';
 requires 'DBD::SQLite';
 requires 'Data::Dumper::Concise';
 requires 'DateTime';
+requires 'DateTime::Format::ISO8601';
 requires 'DateTime::Format::Natural';
 requires 'Getopt::Long::Descriptive';
 requires 'IO::Async::Loop';
