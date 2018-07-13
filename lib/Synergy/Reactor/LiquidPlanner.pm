@@ -110,6 +110,11 @@ my %KNOWN = (
   commit    =>  [ \&_handle_commit,
                   "commit [COMMENT]: commit your LiquidPlanner timer, with optional comment",
                 ],
+
+  contents  =>  [ \&_handle_contents,
+                  "contents CONTAINER: show what's in a package or project",
+                ],
+
   done      =>  [ \&_handle_done,
                   "done: commit your LiquidPlanner task and mark the task done",
                 ],
@@ -2865,6 +2870,44 @@ sub user_status_for ($self, $event, $user) {
   return undef unless length $reply;
 
   return $reply;
+}
+
+sub _handle_contents ($self, $event, $rest) {
+  # TODO: handle $rest being #project -- rjbs, 2018-07-12
+  my $lpc = $self->lp_client_for_user($event->from_user);
+
+  my $res = $lpc->query_items({
+    in      => $rest,
+    depth   => -1,
+    filters => [
+      [ is_done   => is   => 'false'  ],
+    ],
+  });
+
+  $event->mark_handled;
+
+  return $event->reply("Sorry, I couldn't get the contents.")
+    unless $res->is_success;
+
+  my @items = $res->payload_list;
+  $#items = 9 if @items > 10; # TODO: add pagination -- rjbs, 2018-07-12
+
+  my $pkg_summary = {
+    containers => [ grep {; $_->{type} =~ /\A Project | Package \z/x } @items ],
+    tasks      => [ grep {; $_->{type} eq 'Task' } @items ],
+    events     => [ grep {; $_->{type} eq 'Event' } @items ],
+    others     => [ grep {; $_->{type} !~ /\A Project | Package | Task | Event \z/x } @items ],
+  };
+
+  my $slack_summary = $self->_slack_pkg_summary($pkg_summary, -1);
+
+  my $method = $event->is_public ? 'private_reply' : 'reply';
+  return $event->$method(
+    "(this is only useful on Slack for now)",
+    {
+      slack => $slack_summary,
+    },
+  );
 }
 
 1;
