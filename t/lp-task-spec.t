@@ -24,6 +24,11 @@ my $synergy = Synergy::Hub->synergize(
       lp => {
         class => 'Synergy::Reactor::LiquidPlanner',
         workspace_id => 1,
+
+        urgent_package_id => 1,
+        inbox_package_id => 1,
+        recurring_package_id => 1,
+
         primary_nag_channel_name => "test-channel",
       },
     }
