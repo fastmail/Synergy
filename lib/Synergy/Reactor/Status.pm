@@ -21,6 +21,13 @@ sub listener_specs ($reactor) {
       predicate => sub ($self, $e) {
         $e->was_targeted && $e->text =~ /^doing\s+/i
       },
+      help_entries => [
+        { title => 'doing',
+          text  => "doing SOMETHING: set what you're doing; something can end with some options, like…
+• /for DURATION - only keep this status for a while
+• /until TIME - like /for, but takes a time, not a duration
+• /dnd - while this status is in effect, suppress nagging", }
+      ],
     },
     {
       name      => 'status',
@@ -29,6 +36,10 @@ sub listener_specs ($reactor) {
       predicate => sub ($self, $e) {
         $e->was_targeted && $e->text =~ /^status\s+(for\s+)?(\w+)\s*$/i
       },
+      help_entries => [
+        { title => 'status',
+          text  => "status for USER: see what the user has been up to", }
+      ],
     },
     {
       name      => "listen-for-chatter",
