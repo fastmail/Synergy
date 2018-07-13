@@ -90,27 +90,11 @@ sub _slack_item_link_with_name ($self, $item) {
     $title;
 }
 
-my $CONFIG;  # XXX use real config
-
-$CONFIG = {
-  liquidplanner => {
-    workspace => '14822',
-    package => {
-      inbox => '6268529',
-      urgent => '11388082',
-      recurring => '27659967',
-    },
-    project => {
-      comms =>  '39452359',
-      cyrus =>  '38805977',
-      fastmail =>  '36611517',
-      listbox =>  '274080',
-      plumbing =>  '39452373',
-      pobox =>  '274077',
-      topicbox =>  '27495364',
-    },
-  },
-};
+has [ qw( inbox_package_id urgent_package_id recurring_package_id ) ] => (
+  is  => 'ro',
+  isa => 'Int',
+  required => 1,
+);
 
 my %KNOWN = (
   '++'      =>  [ \&_handle_plus_plus,
@@ -1260,12 +1244,13 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
 
   if ($which eq 'tasks') {
     @tasks = grep {;
-      (! grep { $CONFIG->{liquidplanner}{package}{inbox} == $_ } $_->{parent_ids}->@*)
+      (! grep { $self->inbox_package_id == $_ } $_->{parent_ids}->@*)
       &&
-      (! grep { $CONFIG->{liquidplanner}{package}{inbox} == $_ } $_->{package_ids}->@*)
+      (! grep { $self->inbox_package_id == $_ } $_->{package_ids}->@*)
     } @tasks;
   } else {
-    my $package_id = $CONFIG->{liquidplanner}{package}{ $which };
+    my $method = "$which\_package_id";
+    my $package_id = $self->$method;
     unless ($package_id) {
       $Logger->log("can't find package_id for '$which'");
       return;
@@ -1281,7 +1266,7 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
   splice @tasks, $count;
 
   unless ($arg->{no_prefix}) {
-    my $urgent = $CONFIG->{liquidplanner}{package}{urgent};
+    my $urgent = $self->urgent_package_id;
     for (@tasks) {
       $_->{name} = "[URGENT] $_->{name}"
         if (grep { $urgent == $_ } $_->{parent_ids}->@*)
@@ -1744,7 +1729,7 @@ sub expand_tasks ($self, $event, $expand_target, $prefix='') {
   return $event->reply($prefix . "You don't have an expando for <$expand_target>")
     unless @tasks;
 
-  my $parent = $CONFIG->{liquidplanner}{package}{recurring};
+  my $parent = $self->recurring_package_id;
   my $desc = $event->description;
 
   my (@ok, @fail);
@@ -1786,8 +1771,8 @@ sub expand_tasks ($self, $event, $expand_target, $prefix='') {
 sub _create_lp_task ($self, $event, $my_arg, $arg) {
   my %container = (
     package_id  => $my_arg->{urgent}
-                ? $CONFIG->{liquidplanner}{package}{urgent}
-                : $CONFIG->{liquidplanner}{package}{inbox},
+                ? $self->urgent_package_id
+                : $self->inbox_package_id,
     parent_id   => $my_arg->{project_id}
                 ?  $my_arg->{project_id}
                 :  undef,
@@ -2520,8 +2505,8 @@ sub damage_report ($self, $event) {
   my $lp_id = $target->lp_id;
 
   my @to_check = (
-    [ inbox  => "📫" => $CONFIG->{liquidplanner}{package}{inbox}  ],
-    [ urgent => "🔥" => $CONFIG->{liquidplanner}{package}{urgent} ],
+    [ inbox  => "📫" => $self->inbox_package_id   ],
+    [ urgent => "🔥" => $self->urgent_package_id  ],
   );
 
   if ($event->is_public) {
