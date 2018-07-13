@@ -2664,6 +2664,12 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
       $self->_slack_item_link_with_name($c);
   }
 
+  for my $c ($summary->{events}->@*) {
+    $text .= sprintf "%s %s\n",
+      "📅",
+      $self->_slack_item_link_with_name($c),
+  }
+
   for my $c ($summary->{others}->@*) {
     $text .= sprintf "%s %s (%s)\n",
       "⁉️",
@@ -2677,6 +2683,7 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
 
 sub summarize_iteration ($item, $member_id) {
   my @containers;
+  my @events;
   my @tasks;
   my @others;
 
@@ -2727,12 +2734,21 @@ sub summarize_iteration ($item, $member_id) {
 
       next CHILD unless $assign;
 
-      push @others, {
-        id        => $c->{id},
-        type      => $c->{type},
-        name      => $c->{name},
-        is_done   => $c->{is_done},
-      };
+      if ($c->{type} eq 'Event') {
+        push @events, {
+          id        => $c->{id},
+          type      => $c->{type},
+          name      => $c->{name},
+          is_done   => $c->{is_done},
+        };
+      } else {
+        push @others, {
+          id        => $c->{id},
+          type      => $c->{type},
+          name      => $c->{name},
+          is_done   => $c->{is_done},
+        };
+      }
     }
   }
 
@@ -2755,6 +2771,7 @@ sub summarize_iteration ($item, $member_id) {
     name        => $item->{name},
     containers  => \@containers,
     tasks       => \@tasks,
+    (@events ? (events => \@events) : ()),
     (@others ? (others => \@others) : ()),
   };
 }
