@@ -26,7 +26,11 @@ sub listener_specs ($reactor) {
           text  => "doing SOMETHING: set what you're doing; something can end with some options, like…
 • /for DURATION - only keep this status for a while
 • /until TIME - like /for, but takes a time, not a duration
-• /dnd - while this status is in effect, suppress nagging", }
+• /dnd - while this status is in effect, suppress nagging",
+        },
+        { title => 'doing',
+          text  => "doing nothing: clear any doings you had in place",
+        }
       ],
     },
     {
@@ -98,7 +102,23 @@ after register_with_hub => sub ($self, @) {
     }
 
     if ($state->{doings}) {
-      $self->_user_doings->%* = $state->{doings}->%*;
+      my $doings = $self->_user_doings;
+
+      %$doings = $state->{doings}->%*;
+
+      {
+        # XXX Temporary upgrade code, should only need to run once.
+        # -- rjbs, 2018-07-13
+        my $upgraded;
+        for my $username (keys %$doings) {
+          if ($doings->{$username} && ref $doings->{$username} eq 'HASH') {
+            $doings->{$username} = [ $doings->{$username} ];
+            $upgraded = 1;
+          }
+        }
+
+        $self->save_state if $upgraded;
+      }
     }
   }
 };
@@ -112,17 +132,30 @@ sub user_status_for ($self, $event, $user) {
 }
 
 sub _doing_status ($self, $event, $user) {
-  return unless my $doing = $self->doing_for_user($user);
+  return unless my @doings = $self->doings_for_user($user);
 
-  my $ago = time - $doing->{since};
-  $ago -= $ago % 60;
+  @doings = (
+    (grep {; ! $_->{until} } @doings),
+    (sort {; $a->{until} <=> $b->{until} } grep {; $_->{until} } @doings),
+  );
 
-  return sprintf "Since %s, %sdoing: %s",
-    ago($ago),
-    ($doing->{until}
-      ? ("until " . $event->from_user->format_timestamp($doing->{until}) . ", ")
-      : q{}),
-    $doing->{desc};
+  my $from_user = $event->from_user;
+  my $reply = q{};
+
+  for my $doing (@doings) {
+    my $ago = time - $doing->{since};
+    $ago -= $ago % 60;
+
+    $reply .= sprintf "Since %s, %sdoing: %s\n",
+      ago($ago),
+      ($doing->{until}
+        ? ("until " . $from_user->format_timestamp($doing->{until}) . ", ")
+        : q{}),
+      $doing->{desc};
+  }
+
+  chomp $reply;
+  return $reply;
 }
 
 sub _business_hours_status ($self, $event, $user) {
@@ -230,10 +263,16 @@ has _user_doings => (
   default => sub {  {}  },
 );
 
-sub doing_for_user ($self, $user) {
-  return unless my $doing = $self->_user_doings->{ $user->username };
-  return if $doing->{until} && $doing->{until} < time;
-  return $doing;
+sub doings_for_user ($self, $user) {
+  return unless my $doings = $self->_user_doings->{ $user->username };
+
+  my $now = time;
+
+  # That's right, we'll modify the guts in place while reading them.  I don't
+  # even regret this a little.  Yet.  -- rjbs, 2018-07-13
+  @$doings = grep {; ! $_->{until} || $_->{until} > $now } @$doings;
+
+  return @$doings;
 }
 
 # doing STATUS /opts
@@ -252,47 +291,55 @@ sub handle_doing ($self, $event) {
 
   my %doing = (since => time, desc => $desc);
 
-  SWITCH: for my $switch (split m{\s+/}, $switches) {
-    my ($name, $value) = split /\s+/, $switch, 2;
+  if ($switches) {
+    SWITCH: for my $switch (split m{\s+/}, $switches) {
+      my ($name, $value) = split /\s+/, $switch, 2;
 
-    if ($name eq 'dnd' or $name eq 'chill') {
-      return $event->reply("/$name doesn't take an argument")
-        if length $value;
+      if ($name eq 'dnd' or $name eq 'chill') {
+        return $event->reply("/$name doesn't take an argument")
+          if length $value;
 
-      $doing{dnd} = 1;
-      next SWITCH;
+        $doing{dnd} = 1;
+        next SWITCH;
+      }
+
+      if ($name eq 'u' or $name eq 'until') {
+        my $until = parse_time_hunk("until $value", $event->from_user);
+
+        return $event->reply("I didn't understand your /until switch.")
+          unless $until;
+
+        return $event->reply("Your /until switch seems to be in the past.")
+          unless $until > time;
+
+        $doing{until} = $until;
+        next SWITCH;
+      }
+
+      if ($name eq 'f' or $name eq 'for') {
+        my $until = parse_time_hunk("for $value", $event->from_user);
+
+        return $event->reply("I didn't understand your /for switch.")
+          unless $until;
+
+        return $event->reply("Your /for switch seems to go into the past.")
+          unless $until > time;
+
+        $doing{until} = $until;
+        next SWITCH;
+      }
+
+      return $event->reply(qq{I don't understand the "/$name" switch.});
     }
-
-    if ($name eq 'u' or $name eq 'until') {
-      my $until = parse_time_hunk("until $value", $event->from_user);
-
-      return $event->reply("I didn't understand your /until switch.")
-        unless $until;
-
-      return $event->reply("Your /until switch seems to be in the past.")
-        unless $until > time;
-
-      $doing{until} = $until;
-      next SWITCH;
-    }
-
-    if ($name eq 'f' or $name eq 'for') {
-      my $until = parse_time_hunk("for $value", $event->from_user);
-
-      return $event->reply("I didn't understand your /for switch.")
-        unless $until;
-
-      return $event->reply("Your /for switch seems to go into the past.")
-        unless $until > time;
-
-      $doing{until} = $until;
-      next SWITCH;
-    }
-
-    return $event->reply(qq{I don't understand the "/$name" switch.});
   }
 
-  $self->_user_doings->{ $event->from_user->username } = \%doing;
+  my $doings = $self->_user_doings->{ $event->from_user->username } //= [];
+
+  if ($doing{until}) {
+    push @$doings, \%doing;
+  } else {
+    @$doings = \%doing;
+  }
 
   return $event->reply("Thanks for letting me know what you're doing!");
 }
