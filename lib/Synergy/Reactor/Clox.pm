@@ -21,12 +21,6 @@ sub listener_specs {
   };
 }
 
-has time_zone_names => (
-  is  => 'ro',
-  isa => 'HashRef',
-  default => sub {  {}  },
-);
-
 sub handle_clox ($self, $event) {
   $event->mark_handled;
 
@@ -48,7 +42,7 @@ sub handle_clox ($self, $event) {
 
   @tzs = ('America/New_York') unless @tzs;
 
-  my $tz_nick = $self->time_zone_names;
+  my $tz_nick = $self->hub->time_zone_names;
   my $user_tz = ($event->from_user && $event->from_user->time_zone)
              // '';
 
@@ -64,12 +58,16 @@ sub handle_clox ($self, $event) {
     my $tz_time = $time->clone;
     $tz_time->set_time_zone($tz);
 
-    use utf8;
-    my $str = $tz_time->day_name . ", "
-            . ($tz_nick->{$tz_name} ? $tz_time->format_cldr("HH:mm")
-                                    : $tz_time->format_cldr("HH:mm vvv"));
+    my $str = $self->hub->format_friendly_date(
+      $tz_time,
+      {
+        include_time_zone => 0,
+        target_time_zone  => $event->from_user->time_zone,
+      }
+    );
 
-    $str = "$tz_nick->{$tz_name} $str" if $tz_nick->{$tz_name};
+    my $nick = $tz_nick->{$tz_name} // $tz->name;
+    $str = "$nick $str";
 
     $str .= " \N{LEFTWARDS ARROW} you are here"
       if $tz_name eq $user_tz;

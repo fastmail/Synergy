@@ -286,7 +286,8 @@ sub synergize {
   }
 
   my $hub = $class->new({
-    user_directory => $directory,
+    user_directory  => $directory,
+    time_zone_names => $config->{time_zone_names},
     ($config->{server_port} ? (server_port => $config->{server_port}) : ()),
   });
 
@@ -415,6 +416,66 @@ sub http_request ($self, $method, $url, %args) {
     my $failure = shift;
     $Logger->log("Failed to $method $url: $failure");
   } )->get;
+}
+
+has time_zone_names => (
+  is  => 'ro',
+  isa => 'HashRef',
+  default => sub {  {}  },
+);
+
+sub format_friendly_date ($self, $dt, $arg = {}) {
+  # arg:
+  #   now               - a DateTime to use for now, instead of actually now
+  #   allow_relative    - can we use relative stuff? default true
+  #   include_time_zone - default true
+  #   maybe_omit_day    - default false; if true, skip "today at" on today
+  #   target_time_zone  - format into this time zone; default, $dt's TZ
+
+  $dt->set_time_zone($arg->{target_time_zone}) if $arg->{target_time_zone};
+
+  my $now = $arg->{now}
+          ? $arg->{now}->clone->set_time_zone($dt->time_zone)
+          : DateTime->now(time_zone => $dt->time_zone);
+
+  my $dur   = $now->subtract_datetime($dt);
+
+  my $tz_str = $self->time_zone_names->{ $dt->time_zone }
+            // $dt->format_cldr('vvv');
+
+  my $at_time = "at "
+              . $dt->format_cldr('HH:mm')
+              . (($arg->{include_time_zone}//1) ? " $tz_str" : "");
+
+  if (abs($dur->delta_months) > 11) {
+    return $dt->format_cldr('MMMM d, YYYY') . " $at_time";
+  }
+
+  if ($dur->delta_months) {
+    return $dt->format_cldr('MMMM d') . " $at_time";
+  }
+
+  my $days = $dur->delta_days;
+
+  if (abs $days >= 7 or ! ($arg->{allow_relative}//1)) {
+    return $dt->format_cldr('MMMM d') . " $at_time";
+  }
+
+  my %by_day = (
+    -2 => "the day before yesterday $at_time",
+    -1 => "yesterday $at_time",
+    +0 => "today $at_time",
+    +1 => "tomorrow $at_time",
+    +2 => "the day after tomorrow $at_time",
+  );
+
+  for my $offset (sort { $a <=> $b } keys %by_day) {
+    return $by_day{$offset}
+      if $dt->ymd eq $now->clone->add(days => $offset)->ymd;
+  }
+
+  my $which = $dur->is_positive ? "this past" : "this coming";
+  return join q{ }, $which, $dt->format_cldr('EEEE'), $at_time;
 }
 
 1;
