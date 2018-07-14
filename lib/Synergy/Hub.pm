@@ -443,9 +443,8 @@ sub format_friendly_date ($self, $dt, $arg = {}) {
           ? $arg->{now}->clone->set_time_zone($dt->time_zone)
           : DateTime->now(time_zone => $dt->time_zone);
 
-  my $dur   = $now->subtract_datetime($dt);
-
-  my $tz_str = $self->time_zone_names->{ $dt->time_zone }
+  my $dur = $now->subtract_datetime($dt);
+  my $tz_str = $self->time_zone_names->{ $dt->time_zone->name }
             // $dt->format_cldr('vvv');
 
   my $at_time = "at "
