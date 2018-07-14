@@ -87,9 +87,9 @@ sub handle_clox ($self, $event) {
   my $sit = $time->clone;
   $sit->set_time_zone('+0100');
 
-  my $beats
-    = $sit->ymd('-') . '@'
-    . int(($sit->second + $sit->minute * 60 + $sit->hour * 3600) / 86.4);
+  my $beats = sprintf '%s@%03u',
+    $sit->ymd('-'),
+    int(($sit->second + $sit->minute * 60 + $sit->hour * 3600) / 86.4);
 
   my $its = $spec ? "$spec is" : "it's";
 
