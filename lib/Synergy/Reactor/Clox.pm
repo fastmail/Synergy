@@ -21,6 +21,9 @@ sub listener_specs {
   };
 }
 
+# For testing. -- rjbs, 2018-07-14
+our $NOW_FACTORY = sub { DateTime->now };
+
 sub handle_clox ($self, $event) {
   $event->mark_handled;
 
@@ -31,7 +34,7 @@ sub handle_clox ($self, $event) {
     return $event->reply(qq{Sorry, I couldn't understand the time "$time".})
       unless $time = parse_date_for_user($spec, $event->from_user);
   } else {
-    $time = DateTime->now;
+    $time = $NOW_FACTORY->();
   }
 
   my @tzs = sort {; $a cmp $b }
@@ -43,36 +46,42 @@ sub handle_clox ($self, $event) {
   @tzs = ('America/New_York') unless @tzs;
 
   my $tz_nick = $self->hub->time_zone_names;
-  my $user_tz = ($event->from_user && $event->from_user->time_zone)
-             // '';
+  my $user_tz = $event->from_user->time_zone;
 
-  my @times;
+  my %tz_objs = map {; $_ => DateTime::TimeZone->new(name => $_) } @tzs;
 
-  my @tz_objs = map {; DateTime::TimeZone->new(name => $_) } @tzs;
+  my $home_offset = $tz_objs{$user_tz}->offset_for_datetime($time);
+
+  my @strs;
 
   for my $tz (
     sort {; $a->offset_for_datetime($time) <=> $b->offset_for_datetime($time) }
-    @tz_objs
+    values %tz_objs
   ) {
     my $tz_name = $tz->name;
-    my $tz_time = $time->clone;
-    $tz_time->set_time_zone($tz);
+
+    my $tz_time = DateTime->from_epoch(
+      time_zone => $user_tz,
+      epoch     => $time->epoch
+                -  $home_offset
+                +  $tz->offset_for_datetime($time),
+    );
 
     my $str = $self->hub->format_friendly_date(
       $tz_time,
       {
         include_time_zone => 0,
-        target_time_zone  => $event->from_user->time_zone,
+        target_time_zone  => $tz_name,
       }
     );
 
-    my $nick = $tz_nick->{$tz_name} // $tz->name;
+    my $nick = $tz_nick->{$tz_name} // ($tz->name . ": ");
     $str = "$nick $str";
 
     $str .= " \N{LEFTWARDS ARROW} you are here"
       if $tz_name eq $user_tz;
 
-    push @times, $str;
+    push @strs, $str;
   }
 
   my $sit = $time->clone;
@@ -85,7 +94,7 @@ sub handle_clox ($self, $event) {
   my $its = $spec ? "$spec is" : "it's";
 
   my $reply = "In Internet Time\N{TRADE MARK SIGN} $its $beats.  That's...\n";
-  $reply .= join q{}, map {; "> $_\n" } @times;
+  $reply .= join q{}, map {; "> $_\n" } @strs;
 
   $event->reply($reply);
 }

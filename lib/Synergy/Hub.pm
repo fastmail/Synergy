@@ -287,8 +287,8 @@ sub synergize {
 
   my $hub = $class->new({
     user_directory  => $directory,
-    time_zone_names => $config->{time_zone_names},
-    ($config->{server_port} ? (server_port => $config->{server_port}) : ()),
+    ($config->{time_zone_names} ? (time_zone_names  => $config->{time_zone_names})  : ()),
+    ($config->{server_port}     ? (server_port      => $config->{server_port})      : ()),
   });
 
   $directory->register_with_hub($hub);
@@ -432,7 +432,12 @@ sub format_friendly_date ($self, $dt, $arg = {}) {
   #   maybe_omit_day    - default false; if true, skip "today at" on today
   #   target_time_zone  - format into this time zone; default, $dt's TZ
 
-  $dt->set_time_zone($arg->{target_time_zone}) if $arg->{target_time_zone};
+  if ($arg->{target_time_zone} && $arg->{target_time_zone} ne $dt->time_zone) {
+    $dt = DateTime->new(
+      time_zone => $arg->{target_time_zone},
+      map {; $_ => $dt->$_ } qw(year month day hour minute second)
+    );
+  }
 
   my $now = $arg->{now}
           ? $arg->{now}->clone->set_time_zone($dt->time_zone)
