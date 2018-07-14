@@ -1,5 +1,10 @@
 {
   "user_directory": "users.yaml",
+  "time_zone_names": {
+    "America/New_York": "🇺🇸",
+    "Australia/Sydney": "🇦🇺",
+    "Europe/Rome":      "🇻🇦"
+  },
   "channels": {
     "term-rw": { "class": "Synergy::Channel::Console" },
     "term-wo": { "class": "Synergy::Channel::Console", "send_only": true },
