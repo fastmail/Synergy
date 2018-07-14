@@ -2068,9 +2068,18 @@ sub _handle_abort ($self, $event, $text) {
   my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
   my $clr_res  = $lpc->clear_timer_for_task_id($timer->{item_id});
 
+  my $task_was = '';
+
+  my $task_res = $lpc->get_item($timer->{item_id});
+
+  if ($task_res->is_success) {
+    my $uri = $self->item_uri($timer->{item_id});
+    $task_was = " The task was: " . $task_res->payload->{name} . " ($uri)";
+  }
+
   if ($stop_res->is_success and $clr_res->is_success) {
     $self->timer_for_user($user)->clear_last_nag;
-    $event->reply("Okay, I stopped and cleared your timer.");
+    $event->reply("Okay, I stopped and cleared your timer.$task_was");
   } else {
     $event->reply("Something went wrong aborting your timer.");
   }
@@ -2227,8 +2236,18 @@ sub _handle_stop ($self, $event, $text) {
   return $event->reply("I couldn't stop your timer.")
     unless $stop_res->is_success;
 
+  my $task_was = '';
+
+  my $task_res = $lpc->get_item($timer->{item_id});
+
+  if ($task_res->is_success) {
+    my $uri = $self->item_uri($timer->{item_id});
+    $task_was = " The task was: " . $task_res->payload->{name} . " ($uri)";
+
+  }
+
   $self->timer_for_user($user)->clear_last_nag;
-  return $event->reply("Okay, I stopped your timer.");
+  return $event->reply("Okay, I stopped your timer.$task_was");
 }
 
 sub _handle_done ($self, $event, $text) {
