@@ -2874,7 +2874,10 @@ sub user_status_for ($self, $event, $user) {
   my $now = DateTime->now(time_zone => 'UTC')->iso8601;
   if ($event_res->is_success) {
     my @events;
+    my %seen;
     for my $item ($event_res->payload_list) {
+      next if $seen{ $item->{id} }++;
+
       my ($assign) = grep {; $_->{person_id} == $user->lp_id }
                      $item->{assignments}->@*;
 
