@@ -65,19 +65,24 @@ sub time_zone ($self) {
   return $self->preference('time-zone') // $self->_time_zone;
 }
 
-sub format_timestamp ($self, $ts, $format = '%F %R %Z') {
+sub format_timestamp ($self, $ts, $format = undef) {
   my $dt = DateTime->from_epoch(epoch => $ts);
   return $self->format_datetime($ts, $format);
 }
 
-sub format_datetime ($self, $dt, $format = '%F %R %Z') {
+sub format_datetime ($self, $dt, $format = undef) {
   if (! blessed $dt) {
     $dt = DateTime->from_epoch(epoch => $dt);
   }
 
   $dt = $dt->clone;
   $dt->set_time_zone($self->time_zone);
-  return $dt->strftime($format);
+
+  if ($format) {
+    return $dt->strftime($format);
+  }
+
+  return $self->directory->hub->format_friendly_date($dt);
 }
 
 has expandoes => (
