@@ -71,7 +71,7 @@ sub handle_clox ($self, $event) {
       $tz_time,
       {
         include_time_zone => 0,
-        target_time_zone  => $tz_name,
+        target_time_zone  => $user_tz,
       }
     );
 
