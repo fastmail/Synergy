@@ -110,7 +110,7 @@ sub handle_upgrade ($self, $event) {
 
     if (my $reset_err = $self->git_do("reset --hard $old_version")) {
       $event->reply("Failed to reset back to old version $old_version. Manual intervention probably required. Error: $reset_err");
-      intentional error
+      $salkjd
     }
 
     return;
