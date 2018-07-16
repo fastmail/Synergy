@@ -7,6 +7,8 @@ with 'Synergy::Role::Reactor';
 use experimental qw(signatures);
 use namespace::clean;
 use File::pushd;
+use File::Find;
+use Path::Tiny;
 
 has git_dir => (
   is => 'ro',
@@ -103,6 +105,16 @@ sub handle_upgrade ($self, $event) {
     return;
   }
 
+  if (my $err = $self->check_next) {
+    $event->reply("Ugrade failed. Version $new_version has problems: $err");
+
+    if (my $reset_err = $self->git_do("reset --hard $old_version")) {
+      $event->reply("Failed to reset back to old version $old_version. Manual intervention probably required ($reset_err)");
+    }
+
+    return;
+  }
+
   $event->reply("Upgraded from $old_version to $new_version; Restarting...");
 
   $self->save_state({
@@ -165,6 +177,35 @@ sub get_version_desc ($self) {
   chomp($output);
 
   $output;
+}
+
+sub check_next {
+  my $data = "use lib qw(lib);\n";
+
+  find(sub { wanted(\$data) }, 'lib/');
+
+  my $f = Path::Tiny->tempfile;
+  $f->spew($data);
+
+  my $out = `$^X -cw $f 2>&1`;
+  return $out // "failed" if $?;
+
+  return;
+}
+
+sub wanted {
+  my $data = shift;
+
+  return unless -f $_;
+  return unless /\.pm$/;
+
+  my $name = "$File::Find::name";
+
+  $name =~ s/^lib\///;
+  $name =~ s/\//::/g;
+  $name =~ s/\.pm//;
+
+  $$data .= "use $name;\n";
 }
 
 1;
