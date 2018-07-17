@@ -65,8 +65,9 @@ for my $rfc ($rfcs->get_nodelist) {
     abstract => $abstract,
     authors  => \@authors,
     date     => "$month $year",
-    title    => $title,
+    number   => 0+$number,
     status   => $status,
+    title    => $title,
     obsoletes     => [ sort {; $a <=> $b } @obs ],
     obsoleted_by  => [ sort {; $a <=> $b } @obs_by ],
   );
