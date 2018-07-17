@@ -69,7 +69,7 @@ sub handle_rfc ($self, $event) {
 
   my $entry = $self->rfc_entry_for($num);
   unless ($entry) {
-    $event->reply("I'm unable to find an RFC by that number, sorry");
+    $event->reply("I'm unable to find an RFC by that number, sorry.");
     return;
   }
 
