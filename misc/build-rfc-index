@@ -1,34 +1,83 @@
 #!perl
-use strict;
+use v5.20.0;
 use warnings;
 
 # usage: build-rfc-index rfc-index.xml
 # ...probably retrieved from https://www.rfc-editor.org/in-notes/rfc-index.xml
 
+use DBD::SQLite;
 use JSON;
 use XML::LibXML;
 
-open my $fh, '<', "$ARGV[0]"
-  or die "error making handle to XML results: $!";
+die "filename not given or does not exist" unless $ARGV[0] && -r $ARGV[0];
 
-my $doc = XML::LibXML->load_xml(IO => $fh);
+my $doc = XML::LibXML->new->parse_file($ARGV[0]);
 
-my %title;
+my $dbh = DBI->connect('dbi:SQLite:rfc-index.sqlite', undef, undef);
+$dbh->do(
+  "CREATE TABLE rfcs (
+    rfc_number integer not null primary key,
+    metadata   text not null
+  )"
+) or die "can't create table";
 
-my @rfcs = $doc->getElementsByTagName('rfc-entry');
-for my $rfc (@rfcs) {
-  my ($doc_id_elem) = $rfc->getElementsByTagName('doc-id');
-  next unless $doc_id_elem;
-  my $doc_id = $doc_id_elem->textContent;
+my $JSON = JSON->new->canonical;
 
-  my ($title_elem)  = $rfc->getElementsByTagName('title');
-  next unless $title_elem;
-  my $title = $title_elem->textContent;
+sub element_text {
+  my ($start_elem, $name) = @_;
 
-  my ($number) = $doc_id =~ /^RFC([0-9]+)\z/;
-  next unless $number;
-
-  $title{ 0+$number } = $title;
+  my ($want_elem)  = $start_elem->getElementsByTagName($name);
+  return unless $want_elem;
+  return $want_elem->textContent;
 }
 
-print JSON->new->canonical->pretty->encode(\%title);
+my $xc = XML::LibXML::XPathContext->new;
+$xc->registerNs('rfc', 'http://www.rfc-editor.org/rfc-index');
+
+my $rfcs = $xc->findnodes('//rfc:rfc-entry', $doc);
+for my $rfc ($rfcs->get_nodelist) {
+  my ($doc_id) = $xc->findvalue('rfc:doc-id/text()', $rfc);
+  my ($title)  = $xc->findvalue('rfc:title/text()', $rfc);
+  my @authors  = map {; "$_" }
+                 $xc->findnodes('rfc:author/rfc:name/text()', $rfc);
+  my ($abstract) = $xc->findvalue('rfc:abstract/*/text()', $rfc);
+
+  my $year  = $xc->findvalue('rfc:date/rfc:year/text()', $rfc);
+  my $month = $xc->findvalue('rfc:date/rfc:month/text()', $rfc);
+
+  my @obs = map  {; 0+$_ }
+            grep {; s/^RFC// }
+            map  {; "$_" }
+            $xc->findnodes('rfc:obsoletes/rfc:doc-id/text()', $rfc);
+
+  my @obs_by = map  {; 0+$_ }
+               grep {; s/^RFC// }
+               map  {; "$_" }
+               $xc->findnodes('rfc:obsoleted-by/rfc:doc-id/text()', $rfc);
+
+  my $status = $xc->findvalue('rfc:current-status/text()', $rfc);
+
+  # updated-by/doc-id
+  # current-status
+
+  my $number   = 0 + ($doc_id =~ s/^RFC//r);
+  my %metadata = (
+    abstract => $abstract,
+    authors  => \@authors,
+    date     => "$month $year",
+    title    => $title,
+    status   => $status,
+    obsoletes     => [ sort {; $a <=> $b } @obs ],
+    obsoleted_by  => [ sort {; $a <=> $b } @obs_by ],
+  );
+
+  warn "$number...\n";
+  $dbh->do(
+    "INSERT INTO rfcs (rfc_number, metadata) VALUES (?, ?)",
+    undef,
+    0+$number,
+    $JSON->encode(\%metadata)
+  );
+}
+
+$dbh->disconnect;
