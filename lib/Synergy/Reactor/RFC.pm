@@ -72,6 +72,7 @@ sub handle_rfc ($self, $event) {
   my $slack = "<$link|RFC $num>" . ($title ? ": $title" : q{});
 
   if ($solo_cmd) {
+    $slack .= "\n";
     $slack .= "*Published:* $entry->{date}\n";
     $slack .= "*Status:* $entry->{status}\n";
     if ($entry->{authors}->@*) {
