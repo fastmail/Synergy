@@ -62,19 +62,49 @@ sub handle_rfc ($self, $event) {
     return;
   }
 
+  my $solo_cmd = $event->was_targeted
+              && $event->text =~ /\A\s* RFC \s* [0-9]+ \s*/ix;
+
+  $event->mark_handled if $solo_cmd;
+
   my $entry = $self->rfc_entry_for($num);
   my $title = $entry->{title};
+  my $slack = "<$link|RFC $num>" . ($title ? ": $title" : q{});
+
+  if ($solo_cmd) {
+    $slack .= "*Published:* $entry->{date}\n";
+    $slack .= "*Status:* $entry->{status}\n";
+    if ($entry->{authors}->@*) {
+      $slack .= "*Authors:* "
+             .  (join q{, }, $entry->{authors}->@*)
+             .  "\n";
+    }
+
+    if ($entry->{obsoletes}->@*) {
+      $slack .= "*Obsoletes:* "
+             .  (join q{, }, map {; sprintf 'RFC%04u', $_ }
+                  $entry->{obsoletes}->@*)
+             .  "\n";
+    }
+
+    if ($entry->{obsoleted_by}->@*) {
+      $slack .= "*Obsoleted by:* "
+             .  (join q{, }, map {; sprintf 'RFC%04u', $_ }
+                  $entry->{obsoleted_by}->@*)
+             .  "\n";
+    }
+
+    $slack .= "\n$entry->{abstract}" if $entry->{abstract};
+  }
+
+  chomp $slack;
 
   $event->reply(
     ($title ? "RFC $num: $title\n$link" : "RFC $num - $link"),
     {
-      slack => "<$link|RFC $num>" . ($title ? ": $title" : q{})
+      slack => $slack,
     }
   );
-
-  if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+ \s*/ix) {
-    $event->mark_handled;
-  }
 }
 
 my $sec_dig = qr/[0-9]+(?:[.-])?(?:[0-9]+)?/;
