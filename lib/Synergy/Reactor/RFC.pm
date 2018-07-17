@@ -7,6 +7,7 @@ with 'Synergy::Role::Reactor';
 use experimental qw(signatures);
 use namespace::clean;
 
+use DBI;
 use JSON ();
 
 sub listener_specs {
@@ -25,26 +26,25 @@ has rfc_index_file => (
   predicate => 'has_rfc_index_file',
 );
 
-has title_index => (
-  reader  => '_title_index',
-  isa     => 'HashRef',
+has _dbh => (
+  is      => 'ro',
   lazy    => 1,
-  builder => '_build_title_index',
+  default => sub {
+    my $self = shift;
+    my $fn   = $self->rfc_index_file;
+    DBI->connect("dbi:SQLite:$fn", undef, undef);
+  },
 );
 
-sub _build_title_index ($self, @) {
-  return {} unless $self->has_rfc_index_file;
+sub rfc_entry_for ($self, $number) {
+  my ($json) = $self->_dbh->selectrow_array(
+    "SELECT metadata FROM rfcs WHERE rfc_number = ?",
+    undef,
+    $number,
+  );
 
-  my $file = $self->rfc_index_file;
-  open my $fh, '<', $file or confess("can't open $file for reading: $!");
-  my $contents = do { local $/; <$fh> };
-  my $index = JSON->new->utf8->decode($contents);
-
-  return $index;
-}
-
-sub rfc_title_for ($self, $number) {
-  $self->_title_index->{$number};
+  return unless $json;
+  return JSON->new->decode($json);
 }
 
 sub handle_rfc ($self, $event) {
@@ -62,7 +62,8 @@ sub handle_rfc ($self, $event) {
     return;
   }
 
-  my $title = $self->rfc_title_for($num);
+  my $entry = $self->rfc_entry_for($num);
+  my $title = $entry->{title};
 
   $event->reply(
     ($title ? "RFC $num: $title\n$link" : "RFC $num - $link"),
