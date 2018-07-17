@@ -68,6 +68,11 @@ sub handle_rfc ($self, $event) {
   $event->mark_handled if $solo_cmd;
 
   my $entry = $self->rfc_entry_for($num);
+  unless ($entry) {
+    $event->reply("I'm unable to find an RFC by that number, sorry");
+    return;
+  }
+
   my $title = $entry->{title};
 
   my $slink = sub {
