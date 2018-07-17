@@ -23,6 +23,10 @@
       "class": "Synergy::Reactor::Reminder",
       "page_channel_name": "twilio"
     },
+    "rfc": {
+      "class": "Synergy::Reactor::RFC",
+      "rfc_index_file": "rfc-index.sqlite"
+    },
     "status": {
       "class": "Synergy::Reactor::Status",
       "monitored_channel_name": "term-rw"
