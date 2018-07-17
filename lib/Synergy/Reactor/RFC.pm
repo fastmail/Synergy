@@ -69,7 +69,12 @@ sub handle_rfc ($self, $event) {
 
   my $entry = $self->rfc_entry_for($num);
   my $title = $entry->{title};
-  my $slack = "<$link|RFC $num>" . ($title ? ": $title" : q{});
+
+  my $slink = sub {
+    sprintf '<%s%u|RFC %u>', 'https://tools.ietf.org/html/rfc', (0 + $_[0]) x 2
+  };
+
+  my $slack = $slink->($num) . ($title ? ": $title" : q{});
 
   if ($solo_cmd) {
     $slack .= "\n";
@@ -83,15 +88,13 @@ sub handle_rfc ($self, $event) {
 
     if ($entry->{obsoletes}->@*) {
       $slack .= "*Obsoletes:* "
-             .  (join q{, }, map {; sprintf 'RFC%04u', $_ }
-                  $entry->{obsoletes}->@*)
+             .  (join q{, }, map {; $slink->($_) } $entry->{obsoletes}->@*)
              .  "\n";
     }
 
     if ($entry->{obsoleted_by}->@*) {
       $slack .= "*Obsoleted by:* "
-             .  (join q{, }, map {; sprintf 'RFC%04u', $_ }
-                  $entry->{obsoleted_by}->@*)
+             .  (join q{, }, map {; $slink->($_) } $entry->{obsoleted_by}->@*)
              .  "\n";
     }
 
