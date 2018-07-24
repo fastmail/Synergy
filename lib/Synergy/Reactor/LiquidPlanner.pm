@@ -2630,7 +2630,7 @@ sub damage_report ($self, $event) {
 sub reload_shortcuts ($self, $event) {
   $self->_set_projects($self->get_project_shortcuts);
   $self->_set_tasks($self->get_task_shortcuts);
-  $event->reply("Shortcuts reloaded");
+  $event->reply("Shortcuts reloaded.");
   $event->mark_handled;
 }
 
