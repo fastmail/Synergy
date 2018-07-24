@@ -34,7 +34,7 @@ sub start ($self) {
 sub handle_page ($self, $event) {
   $event->mark_handled;
 
-  my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):\s+(.*)/is;
+  my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):?\s+(.*)/is;
 
   unless (length $who and length $what) {
     $event->reply("usage: page USER: MESSAGE");
