@@ -116,7 +116,7 @@ my %KNOWN = (
                 ],
 
   done      =>  [ \&_handle_done,
-                  "done: commit your LiquidPlanner task and mark the task done",
+                  "done: commit your LiquidPlanner task and mark your work done",
                 ],
   expand    =>  [ \&_handle_expand ],
   good      =>  [ \&_handle_good   ],
@@ -2006,7 +2006,7 @@ sub _handle_commit ($self, $event, $comment) {
   }
 
   my $also
-    = $meta{DONE}  ? " and marked the task done"
+    = $meta{DONE}  ? " and marked your work done"
     : $meta{CHILL} ? " stopped the timer, and will chill until you're back"
     : $meta{STOP}  ? " and stopped the timer"
     :                "";
