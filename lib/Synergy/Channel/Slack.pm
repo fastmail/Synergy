@@ -162,7 +162,10 @@ sub decode_slack_formatting ($self, $text) {
 
   # "helpful" url formatting:  <https://example.com|example.com>; keep what
   # user actually typed
-  $text =~ s/< [^|]+ \| ( [^>]+ ) >/$1/gx;
+  $text =~ s
+    / < ([^>]+) >                             # Everything between <> pairs
+    / my $tmp = $1; $tmp =~ s{^.*\|}{}g; $tmp # Kill all before |
+    /xeg;
 
   # Anything with < and > around it is probably a URL at this point so remove
   # those
