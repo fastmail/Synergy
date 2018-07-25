@@ -10,6 +10,7 @@ use Synergy::Logger '$Logger';
 use Synergy::LPC; # LiquidPlanner Client, of course
 use DateTime;
 use utf8;
+use URI::Find;
 
 my $JSON = JSON->new->utf8;
 
@@ -207,6 +208,17 @@ sub track_time ($self, $arg) {
   Carp::confess("no work")        unless defined $arg->{work};
   Carp::confess("no member_id")   unless $arg->{member_id};
 
+  my $comment = $arg->{comment};
+
+  if (defined $comment) {
+    # Linkify URL-looking things
+    my $finder = URI::Find->new(sub ($uri, $orig_text) {
+      return qq{<a href="$orig_text">$orig_text</a>};
+    });
+
+    $finder->find(\$comment);
+  }
+
   my $res = $self->http_post(
     "/tasks/$arg->{task_id}/track_time",
     Content_Type => 'application/json',
@@ -216,7 +228,7 @@ sub track_time ($self, $arg) {
       work      => $arg->{work},
       reduce_estimate => \1,
 
-      ($arg->{comment} ? (comment => $arg->{comment}) : ()),
+      (defined $comment ? (comment => $comment) : ()),
     }),
   );
 
