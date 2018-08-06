@@ -65,6 +65,16 @@ sub _link_base_uri ($self) {
     $self->workspace_id;
 }
 
+sub auth_header_for ($self, $user) {
+  return unless my $token = $self->get_user_preference($user, 'api-token');
+
+  if ($token =~ /-/) {
+    return "Bearer $token";
+  } else {
+    return $token;
+  }
+}
+
 sub item_uri ($self, $task_id) {
   return $self->_link_base_uri . $task_id;
 }
@@ -269,7 +279,7 @@ sub dispatch_event ($self, $event) {
   # we can be polite even to non-lp-enabled users
   return $self->_handle_good($event, $rest) if $what eq 'good';
 
-  unless ($event->from_user->lp_auth_header) {
+  unless ($self->auth_header_for($event->from_user)) {
     $event->mark_handled;
     $event->reply($ERR_NO_LP);
     return 1;
@@ -281,7 +291,7 @@ sub dispatch_event ($self, $event) {
 
 sub provide_lp_link ($self, $event) {
   my $user = $event->from_user;
-  return unless $user && $user->lp_auth_header;
+  return unless $user && $self->auth_header_for($user);
 
   state $lp_id_re       = qr/\bLP([1-9][0-9]{5,10})\b/i;
   state $lp_shortcut_re = qr/\bLP([*#][-_a-z0-9]+)\b/i;
@@ -369,7 +379,7 @@ sub set_last_lp_timer_task_id_for_user ($self, $user, $task_id) {
 }
 
 sub last_lp_timer_task_id_for_user ($self, $user) {
-  return unless $user->lp_auth_header;
+  return unless $self->auth_header_for($user);
   return $self->_last_lp_timer_task_ids->{ $user->username };
 }
 
@@ -402,7 +412,7 @@ sub state ($self) {
 }
 
 sub timer_for_user ($self, $user) {
-  return unless $user->has_lp_token;
+  return unless $self->user_has_preference($user, 'api-token');
 
   my $timer = $self->_timer_for_user($user->username);
 
@@ -733,7 +743,7 @@ sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 
 sub lp_client_for_user ($self, $user) {
   Synergy::LPC->new({
-    auth_token    => $user->lp_auth_header,
+    auth_token    => $self->auth_header_for($user),
     workspace_id  => $self->workspace_id,
     logger_callback   => sub { $Logger },
 
@@ -760,7 +770,7 @@ sub _handle_last ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->auth_header_for($user);
 
   return if length $text;
 
@@ -779,7 +789,7 @@ sub _handle_timer ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
@@ -1588,7 +1598,7 @@ sub _handle_plus_plus ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->auth_header_for($user);
 
   unless (length $text) {
     return $event->reply("Thanks, but I'm only as awesome as my creators.");
@@ -1678,7 +1688,7 @@ sub _handle_good ($self, $event, $text) {
     $reply =~ s/%n/$user->username/ge;
   }
 
-  if ($reply and not $user->lp_auth_header) {
+  if ($reply and not $self->auth_header_for($user)) {
     $event->mark_handled;
     return $event->reply($reply);
   }
@@ -1829,7 +1839,7 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
 }
 
 sub lp_timer_for_user ($self, $user) {
-  return unless $user->lp_auth_header;
+  return unless $self->auth_header_for($user);
 
   my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
@@ -1882,7 +1892,7 @@ sub _handle_chill ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->auth_header_for($user);
 
   {
     my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
@@ -1926,7 +1936,7 @@ sub _handle_triple_zed ($self, $event, $text) {
 
 sub _handle_commit ($self, $event, $comment) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2054,7 +2064,7 @@ sub _handle_abort ($self, $event, $text) {
     unless $text =~ /^timer\b/i;
 
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
@@ -2087,7 +2097,7 @@ sub _handle_abort ($self, $event, $text) {
 
 sub _handle_start ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2168,7 +2178,7 @@ sub _handle_start_existing ($self, $event, $task) {
 
 sub _handle_resume ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2215,7 +2225,7 @@ sub _handle_resume ($self, $event, $text) {
 
 sub _handle_stop ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   return $event->reply("Quit it!  I'm telling mom!")
     if $text =~ /\Ahitting yourself[.!]*\z/;
@@ -2252,7 +2262,7 @@ sub _handle_stop ($self, $event, $text) {
 
 sub _handle_done ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $next;
   my $chill;
@@ -2277,7 +2287,7 @@ sub _handle_done ($self, $event, $text) {
 
 sub _handle_reset ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $user->lp_auth_header;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2314,7 +2324,7 @@ sub _handle_spent ($self, $event, $text) {
   my $user = $event->from_user;
 
   return $event->reply($ERR_NO_LP)
-    unless $user && $user->lp_auth_header;
+    unless $user && $self->auth_header_for($user);
 
   my ($dur_str, $name) = $text =~ /\A(\V+?)(?:\s*:|\s*\son)\s+(\S.+)\z/s;
   unless ($dur_str && $name) {
@@ -2524,7 +2534,7 @@ sub damage_report ($self, $event) {
   $event->mark_handled;
 
   return $event->reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
-    unless $target && $target->lp_auth_header;
+    unless $target && $self->auth_header_for($target);
 
   my $lp_id = $target->lp_id;
 
@@ -2840,13 +2850,10 @@ sub load_preferences_from_user ($self, $username) {
 
   $self->set_user_preference($user, 'should-nag', $user->should_nag)
     unless $self->user_has_preference($user, 'should-nag');
-
-  $self->set_user_preference($user, 'api-token', $user->lp_token)
-    unless $self->user_has_preference($user, 'api-token');
 }
 
 sub user_status_for ($self, $event, $user) {
-  return unless $user->lp_auth_header;
+  return unless $self->auth_header_for($user);
 
   my $reply = qw{};
 
