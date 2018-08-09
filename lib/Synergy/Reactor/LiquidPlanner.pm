@@ -2914,17 +2914,21 @@ sub _handle_contents ($self, $event, $rest) {
   my $lpc = $self->lp_client_for_user($event->from_user);
 
   my $res = $lpc->query_items({
-    in      => $rest,
-    depth   => -1,
-    # filters => [
-    #   [ is_done => is => 'false'  ],
-    # ],
+    in    => $rest,
+    flags => {
+      depth => -1,
+    },
+    filters => [
+      [ is_done => 'is', 'false' ],
+    ],
   });
 
   $event->mark_handled;
 
   return $event->reply("Sorry, I couldn't get the contents.")
     unless $res->is_success;
+
+  $Logger->log([ "contents retrieved: %s", $res->payload ]);
 
   my @items = $res->payload->{children}->@*;
   $#items = 9 if @items > 10; # TODO: add pagination -- rjbs, 2018-07-12
