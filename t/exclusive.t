@@ -22,14 +22,15 @@ my $synergy = Synergy::Hub->synergize(
       'test-channel' => {
         class     => 'Synergy::Channel::Test',
         todo      => [
-          [ send    => { text => "synergy: Hi." }  ],
-          [ wait    => { seconds => 0.25 } ],
+          [ send    => { text => "synergy: help" }  ],
+          [ wait    => { seconds => 0.25  }  ],
         ],
       }
     },
     reactors => {
-      echo1 => { class => 'Synergy::Reactor::Echo' },
-      echo2 => { class => 'Synergy::Reactor::Echo' },
+      help1 => { class => 'Synergy::Reactor::Help' },
+      help2 => { class => 'Synergy::Reactor::Help' },
+      echo => { class => 'Synergy::Reactor::Echo' },
     }
   }
 );
@@ -50,7 +51,7 @@ is(
   $replies[0]{text},
   join(qq{\n},
     "Sorry, I find that message ambiguous.",
-    "The following reactions matched: **echo1/echo**, **echo2/echo**"),
+    "The following reactions matched: **help1/help**, **help2/help**, echo/echo"),
   "ambiguous commands are rejected",
 );
 
