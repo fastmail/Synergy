@@ -9,9 +9,21 @@ with 'Synergy::Role::HubComponent';
 
 requires qw(
   describe_event
+  describe_conversation
 
   send_message
   send_message_to_user
 );
 
 1;
+
+=pod
+
+=over 4
+
+=item describe_conversation
+
+A short (single-word) description for the conversation. For channels that don't
+support multiple channels, just the name of the channel is probably fine.
+
+=back

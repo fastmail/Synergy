@@ -165,4 +165,8 @@ sub describe_event ($self, $event) {
   return "(a console event)";
 }
 
+sub describe_conversation ($self, $event) {
+  return "[console]";
+}
+
 1;
