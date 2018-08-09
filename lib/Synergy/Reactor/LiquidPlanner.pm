@@ -2926,7 +2926,7 @@ sub _handle_contents ($self, $event, $rest) {
   return $event->reply("Sorry, I couldn't get the contents.")
     unless $res->is_success;
 
-  my @items = $res->payload_list;
+  my @items = $res->payload->{children}->@*;
   $#items = 9 if @items > 10; # TODO: add pagination -- rjbs, 2018-07-12
 
   my $pkg_summary = {
