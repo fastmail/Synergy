@@ -2916,9 +2916,9 @@ sub _handle_contents ($self, $event, $rest) {
   my $res = $lpc->query_items({
     in      => $rest,
     depth   => -1,
-    filters => [
-      [ is_done   => is   => 'false'  ],
-    ],
+    # filters => [
+    #   [ is_done => is => 'false'  ],
+    # ],
   });
 
   $event->mark_handled;
