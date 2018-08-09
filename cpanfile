@@ -30,6 +30,7 @@ requires 'Net::Async::WebSocket::Client';
 requires 'Path::Tiny';
 requires 'Plack::App::URLMap';
 requires 'Plack::Request';
+requires 'Prometheus::Tiny', '0.002';
 requires 'Sub::Exporter';
 requires 'TOML';
 requires 'Test::More';
