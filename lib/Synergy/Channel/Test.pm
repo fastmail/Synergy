@@ -38,6 +38,10 @@ sub send_message ($self, $address, $text, $alts = {}) {
 
 sub describe_event { "(some test event)" }
 
+sub describe_conversation ($self, $event) {
+  return "test";
+}
+
 has sent_messages => (
   isa => 'ArrayRef',
   default  => sub {  []  },

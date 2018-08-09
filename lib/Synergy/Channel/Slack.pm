@@ -223,6 +223,24 @@ sub describe_event ($self, $event) {
   }
 }
 
+sub describe_conversation ($self, $event) {
+  my $slack_event = $event->transport_data;
+
+  my $channel_id = $event->transport_data->{channel};
+
+
+  if ($slack_event->{is_shared}) {
+    my $channel_id = $event->transport_data->{channel};
+    return "#$channel_id";
+  }
+  elsif ($slack_event->{is_mpim}) {
+    return 'group';
+  }
+  else {
+    return 'private';
+  }
+}
+
 sub user_status_for ($self, $event, $user) {
   $self->slack->load_users->get;
 
