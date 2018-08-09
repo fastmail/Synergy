@@ -2913,10 +2913,15 @@ sub _handle_contents ($self, $event, $rest) {
   # TODO: handle $rest being #project -- rjbs, 2018-07-12
   my $lpc = $self->lp_client_for_user($event->from_user);
 
+  my $item_res = $lpc->get_item($rest);
+
+  return $self->reply("I can't find an item with that id!")
+    unless my $item = $item_res->payload;
+
   my $res = $lpc->query_items({
     in    => $rest,
     flags => {
-      depth => -1,
+      depth => 1,
     },
     filters => [
       [ is_done => 'is', 'false' ],
@@ -2930,10 +2935,11 @@ sub _handle_contents ($self, $event, $rest) {
 
   $Logger->log([ "contents retrieved: %s", $res->payload ]);
 
-  my @items = $res->payload->{children}->@*;
+  my @items = grep {; $_->{id} != $rest } $res->payload_list;
   $#items = 9 if @items > 10; # TODO: add pagination -- rjbs, 2018-07-12
 
   my $pkg_summary = {
+    name       => $item->{name},
     containers => [ grep {; $_->{type} =~ /\A Project | Package \z/x } @items ],
     tasks      => [ grep {; $_->{type} eq 'Task' } @items ],
     events     => [ grep {; $_->{type} eq 'Event' } @items ],
