@@ -482,6 +482,9 @@ sub see_if_back ($self, $event) {
 
   my $timer = $self->timer_for_user($event->from_user) || return;
 
+  my $lpc = $self->lp_client_for_user($event->from_user);
+  my $timer_res = $lpc->my_running_timer;
+
   if ($timer->chill_until_active
     and $event->text !~ /\bzzz\b/i
   ) {
@@ -493,7 +496,7 @@ sub see_if_back ($self, $event) {
     $timer->clear_chilltill;
     $self->save_state;
     $event->reply("You're back!  No longer chilling.")
-      if $timer->is_business_hours;
+      if $timer->is_business_hours and $timer_res->is_nil;
   }
 }
 
