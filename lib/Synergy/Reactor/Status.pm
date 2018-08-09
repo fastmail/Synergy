@@ -151,7 +151,7 @@ sub _doing_status ($self, $event, $user) {
       ($doing->{until}
         ? ("until " . $from_user->format_timestamp($doing->{until}) . ", ")
         : q{}),
-      $doing->{desc};
+      $doing->{desc} . ($doing->{dnd} ? ' (dnd)' : '');
   }
 
   chomp $reply;
