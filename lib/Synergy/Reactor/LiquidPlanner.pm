@@ -2916,7 +2916,7 @@ sub _handle_contents ($self, $event, $rest) {
   my $res = $lpc->query_items({
     in    => $rest,
     flags => {
-      depth => -1,
+      depth => 1,
     },
     filters => [
       [ is_done => 'is', 'false' ],
@@ -2930,10 +2930,12 @@ sub _handle_contents ($self, $event, $rest) {
 
   $Logger->log([ "contents retrieved: %s", $res->payload ]);
 
-  my @items = $res->payload->{children}->@*;
+  my $this  = grep {; $_->{id} == $rest } $res->payload_list;
+  my @items = grep {; $_->{id} != $rest } $res->payload_list;
   $#items = 9 if @items > 10; # TODO: add pagination -- rjbs, 2018-07-12
 
   my $pkg_summary = {
+    name       => $this->{name},
     containers => [ grep {; $_->{type} =~ /\A Project | Package \z/x } @items ],
     tasks      => [ grep {; $_->{type} eq 'Task' } @items ],
     events     => [ grep {; $_->{type} eq 'Event' } @items ],
