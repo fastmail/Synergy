@@ -43,7 +43,7 @@ wait_for {
 
 my @replies = $synergy->channel_named('test-channel')->sent_messages;
 
-is(@replies, 1, "five replies recorded");
+is(@replies, 1, "one reply recorded");
 
 is($replies[0]{address}, 'public', "1st: expected address");
 is(
