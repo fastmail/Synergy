@@ -196,9 +196,9 @@ sub handle_event ($self, $event) {
     }
   }
 
-  my @exclsivehits = grep {; $_->[1]->is_exclusive } @hits;
-  if (1 < @exclsivehits) {
-    my @names = map {; $_->[0]->name } @exclsivehits;
+  my @exclusivehits = grep {; $_->[1]->is_exclusive } @hits;
+  if (1 < @exclusivehits) {
+    my @names = map {; $_->[0]->name } @exclusivehits;
     $event->reply("Sorry, I find that message ambiguous.\n" .
                   "The following exclusive reactions matched: " . join(", ", @names));
     return;
