@@ -41,12 +41,13 @@ sub start ($self) {
 }
 
 sub count_event ($self, $event) {
-  my $from =
-    $event->from_user ? $event->from_user->username : $event->from_address;
+  my $from = $event->from_user
+           ? $event->from_user->username
+           : $event->from_address;
 
   $self->_prom_client->inc(synergy_events_received_total => {
     channel => $event->from_channel->name,
-    user    => $event->from_address,
+    user    => $from,
     in      => $event->from_channel->describe_conversation($event),
   });
 }
