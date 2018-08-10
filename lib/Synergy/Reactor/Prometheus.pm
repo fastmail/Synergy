@@ -33,7 +33,7 @@ sub start ($self) {
 
   $prom->declare('synergy_events_received_total',
     help => 'Number of events received by reactors',
-    type => 'counter', 
+    type => 'counter',
   );
 
   my $app = $self->_prom_client->psgi;
@@ -41,7 +41,7 @@ sub start ($self) {
 }
 
 sub count_event ($self, $event) {
-  my $from = 
+  my $from =
     $event->from_user ? $event->from_user->username : $event->from_address;
 
   $self->_prom_client->inc(synergy_events_received_total => {
