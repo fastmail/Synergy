@@ -228,16 +228,13 @@ sub describe_conversation ($self, $event) {
 
   my $channel_id = $event->transport_data->{channel};
 
-
-  if ($slack_event->{is_shared}) {
-    my $channel_id = $event->transport_data->{channel};
-    return "#$channel_id";
-  }
-  elsif ($slack_event->{is_mpim}) {
-    return 'group';
-  }
-  else {
+  if ($channel_id =~ /^C/) {
+    my $channel = $self->slack->channels->{$channel_id}{name};
+    return "#$channel";
+  } elsif ($channel_id =~ /^D/) {
     return 'private';
+  } else {
+    return 'group';
   }
 }
 
