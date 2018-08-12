@@ -51,7 +51,7 @@ has http_server => (
             "could not find app for %s, ignoring",
             $req->path_info,
           ]);
-          return;
+          return $req->new_response(404)->finalize;
         }
 
         return $self->app_for_path($req->path_info)->($req);
