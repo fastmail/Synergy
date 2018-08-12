@@ -43,5 +43,10 @@ my $port = $synergy->server_port;
   ok($res->is_success, 'http server is responding');
 }
 
+{
+  my ($res) = $http->do_request(uri => "http://localhost:$port/nonexistent")->get;
+  is($res->code, 404, 'nonexistent http path returns 404');
+}
+
 done_testing;
 
