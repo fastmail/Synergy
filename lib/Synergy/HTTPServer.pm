@@ -8,6 +8,7 @@ use experimental qw(signatures);
 use namespace::clean;
 
 use Net::Async::HTTP::Server::PSGI;
+use IO::Async::SSL;
 use Plack::App::URLMap;
 use Plack::Request;
 use Carp;
@@ -33,6 +34,16 @@ has server_port => (
   is => 'ro',
   isa => 'Int',
   required => 1,
+);
+
+has tls_cert_file => (
+  is => 'ro',
+  isa => 'Str',
+);
+
+has tls_key_file => (
+  is => 'ro',
+  isa => 'Str',
 );
 
 has http_server => (
@@ -76,7 +87,8 @@ sub start ($self) {
   $self->loop->add($self->http_server);
 
   $Logger->log([ "listening on port %s", $self->server_port ]);
-  $self->http_server->listen(
+
+  my %opts = (
     addr => {
       family => "inet",
       socktype => "stream",
@@ -85,6 +97,17 @@ sub start ($self) {
     on_listen_error => sub { die "Cannot listen - $_[-1]\n" },
   );
 
+  if ($self->tls_cert_file && $self->tls_key_file) {
+    $self->loop->SSL_listen(listener => $self->http_server,
+      %opts,
+      SSL_cert_file => $self->tls_cert_file,
+      SSL_key_file  => $self->tls_key_file,
+      on_ssl_error    => sub { die "SSL error - $_[-1]\n" },
+    );
+  }
+  else {
+    $self->http_server->listen(%opts);
+  }
 }
 
 1;

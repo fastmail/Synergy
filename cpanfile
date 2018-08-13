@@ -8,6 +8,7 @@ requires 'DateTime';
 requires 'DateTime::Format::ISO8601';
 requires 'DateTime::Format::Natural';
 requires 'DateTimeX::Format::Ago';
+requires 'Defined::KV';
 requires 'Getopt::Long::Descriptive';
 requires 'IO::Async::Loop';
 requires 'IO::Async::SSL';
