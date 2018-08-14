@@ -304,7 +304,15 @@ sub handle_merge_request ($self, $event) {
     my $reply = "$mr [$data->{state}, created by $data->{author}->{username}]: ";
     $reply   .= "$data->{title} ($data->{web_url})";
 
-    $event->reply($reply);
+    my $slack = sprintf("<%s|%s>: %s [%s, \N{PENCIL}\N{THIN SPACE}%s]",
+      $data->{web_url},
+      $mr,
+      $data->{title},
+      $data->{state},
+      $data->{author}{username},
+    );
+
+    $event->reply($reply, { slack => $slack });
     $event->mark_handled;
   }
 }
@@ -341,7 +349,15 @@ sub handle_commit ($self, $event) {
       $data->{short_id},
     );
 
-    $event->reply("$commit [$data->{author_name}]: $data->{title} ($commit_url)");
+    my $reply = "$commit [$data->{author_name}]: $data->{title} ($commit_url)";
+    my $slack = sprintf("<%s|%s>: %s [%s]",
+      $commit_url,
+      $commit,
+      $data->{title},
+      $data->{author_name},
+    );
+
+    $event->reply($reply, { slack => $slack });
     $event->mark_handled;
   }
 }
