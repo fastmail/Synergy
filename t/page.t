@@ -31,12 +31,17 @@ my $synergy = Synergy::Hub->synergize(
       'test-2' => {
         class     => 'Synergy::Channel::Test',
         prefix    => q{synergy},
+      },
+      'test-3' => {
+        class     => 'Synergy::Channel::Test',
+        prefix    => q{synergy},
       }
     },
     reactors => {
       page => {
         class => 'Synergy::Reactor::Page',
         page_channel_name => 'test-2',
+        pushover_channel_name => 'test-3',
       },
     }
   }
