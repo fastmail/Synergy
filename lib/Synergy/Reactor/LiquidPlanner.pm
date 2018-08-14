@@ -1804,16 +1804,6 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
                 :  undef,
   );
 
-  if ($my_arg->{name} =~ s/#(.*)$//) {
-    my ($item, $err) = $self->project_for_shortcut($1);
-
-    if ($item) {
-      $container{parent_id} = $item->{id};
-    } else {
-      return $event->reply($err);
-    }
-  }
-
   $container{parent_id} = delete $container{package_id}
     unless $container{parent_id};
 

@@ -122,6 +122,14 @@ plan_ok(
 );
 
 plan_ok(
+  "Eat more pie #pies are",
+  {
+    name        => "Eat more pie #pies are",
+  },
+  "text and a project"
+);
+
+plan_ok(
   "Buy raisins ⏳ #GORP (!!!)",
   {
     name        => "Buy raisins",
