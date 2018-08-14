@@ -566,6 +566,13 @@ sub start ($self) {
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
+
+    # Must load these first, otherwise timer_for_user will return
+    # undef since user won't have an api-token...
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+
     if (my $timer_state = $state->{user_timers}) {
       for my $username (keys %$timer_state) {
         next unless my $user = $self->hub->user_directory
@@ -588,9 +595,6 @@ after register_with_hub => sub ($self, @) {
       $self->_set_last_lp_timer_task_ids($last_timer_ids);
     }
 
-    if (my $prefs = $state->{preferences}) {
-      $self->_load_preferences($prefs);
-    }
 
     $self->save_state;
   }
