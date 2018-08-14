@@ -653,10 +653,11 @@ sub nag ($self, $timer, @) {
 
     my $showtime = $sy_timer->is_showtime;
     my $user_dnd = $self->_user_doing_dnd($user);
+    my $til = $sy_timer->chilltill;
     $Logger->log([
       "nag status for %s: %s",
       $username,
-      { showtime => $showtime, dnd => $user_dnd }
+      { showtime => $showtime, dnd => $user_dnd, chilltill => $til }
     ]);
 
     if ($showtime && ! $user_dnd) {
