@@ -68,4 +68,10 @@ sub describe_event ($self, $event) {
   return "a pushover from $who";
 }
 
+sub describe_conversation ($self, $event) {
+  my $who = $event->from_user ? $event->from_user->username
+                              : $event->from_address;
+  return $who;
+}
+
 1;
