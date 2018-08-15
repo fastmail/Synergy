@@ -349,11 +349,12 @@ sub provide_lp_link ($self, $event) {
 
     my $reply;
 
-    if ($item->{type} =~ /\A Task | Package | Project \z/x) {
+    if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
       my $icon = $item->{type} eq 'Task'    ? "" # Sometimes 🌀
                : $item->{type} eq 'Package' ? "📦"
                : $item->{type} eq 'Project' ? "📁"
-               :                              "($item->{type})";
+               : $item->{type} eq 'Folder'  ? "🗂"
+               :                              confess("unreachable");
 
       my $uri = $self->item_uri($item_id);
 
