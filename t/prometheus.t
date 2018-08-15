@@ -51,7 +51,7 @@ my ($res) = $http->do_request(uri => "http://localhost:$port/metrics")->get;
 is($res->content, <<EOF, 'metrics report three events receieved');
 # HELP synergy_events_received_total Number of events received by reactors
 # TYPE synergy_events_received_total counter
-synergy_events_received_total{channel="test-channel",in="test",user="tester"} 3
+synergy_events_received_total{channel="test-channel",in="test",targeted="0",user="tester"} 3
 EOF
 
 done_testing;

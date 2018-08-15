@@ -46,9 +46,10 @@ sub count_event ($self, $event) {
            : $event->from_address;
 
   $self->_prom_client->inc(synergy_events_received_total => {
-    channel => $event->from_channel->name,
-    user    => $from,
-    in      => $event->from_channel->describe_conversation($event),
+    channel   => $event->from_channel->name,
+    user      => $from,
+    in        => $event->from_channel->describe_conversation($event),
+    targeted  => $event->was_targeted ? 1 : 0,
   });
 }
 
