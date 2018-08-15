@@ -93,10 +93,15 @@ sub _slack_item_link_with_name ($self, $item) {
   my $title = $item->{name};
   $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
 
+  my $urgent = $self->urgent_package_id;
+
   sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
     $self->item_uri($item->{id}),
     $item->{id},
-    ($item->{is_done} ? "✓" : "•"),
+    ( $item->{is_done} ? "✓"
+    : (grep {; $_ == $urgent } $item->{package_ids}->@*) ? "\N{FIRE}"
+    : "•"
+    ),
     $title;
 }
 
