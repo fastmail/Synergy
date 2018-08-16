@@ -118,7 +118,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         $e->was_targeted &&
-        $e->text =~ /^reload\s+\w+/in;
+        $e->text =~ /^reload\s+(?!shortcuts)/in;
       },
     },
     {
