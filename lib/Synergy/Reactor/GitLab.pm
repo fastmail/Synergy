@@ -6,6 +6,7 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures);
 use namespace::clean;
+use Digest::MD5 qw(md5_hex);
 use JSON 2 ();
 use MIME::Base64;
 use YAML::XS;
@@ -304,13 +305,15 @@ sub handle_merge_request ($self, $event) {
     my $reply = "$mr [$data->{state}, created by $data->{author}->{username}]: ";
     $reply   .= "$data->{title} ($data->{web_url})";
 
-    my $slack = sprintf("<%s|%s>: %s [%s, \N{PENCIL}\N{THIN SPACE}%s]",
-      $data->{web_url},
-      $mr,
-      $data->{title},
-      $data->{state},
-      $data->{author}{username},
-    );
+    my $slack = {
+      text        => "",
+      attachments => $JSON->encode([{
+        fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
+        author_name => $data->{author}->{username},
+        author_icon => $data->{author}->{avatar_url},
+        text        => "<$data->{web_url}|$mr> $data->{title} [$data->{state}]",
+      }]),
+    };
 
     $event->reply($reply, { slack => $slack });
     $event->mark_handled;
@@ -356,6 +359,20 @@ sub handle_commit ($self, $event) {
       $data->{title},
       $data->{author_name},
     );
+
+    my $author_icon = sprintf("https://www.gravatar.com/avatar/%s?s=16",
+      md5_hex($data->{author_email}),
+    );
+
+    $slack = {
+      text        => '',
+      attachments => $JSON->encode([{
+        fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
+        author_name => $data->{author_name},
+        author_icon => $author_icon,
+        text        => "<$commit_url|$data->{short_id}> $data->{title}",
+      }]),
+    };
 
     $event->reply($reply, { slack => $slack });
     $event->mark_handled;
