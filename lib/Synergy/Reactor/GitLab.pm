@@ -399,9 +399,10 @@ sub handle_mr_report ($self, $event) {
   my %result;
 
   for my $pair (
-    [ filed => sprintf("%s/v4/merge_requests/?user_id=%s&state=opened",
+    # TODO: Cope with pagination for real. -- rjbs, 2018-08-17
+    [ filed => sprintf("%s/v4/merge_requests/?user_id=%s&state=opened&per_page=100",
         $self->api_uri, $user_id) ],
-    [ assigned => sprintf("%s/v4/merge_requests/?assignee_id=%s&state=opened",
+    [ assigned => sprintf("%s/v4/merge_requests/?assignee_id=%s&state=opened&per_page=100",
         $self->api_uri, $user_id) ],
   ) {
     my ($type, $uri) = @$pair;
