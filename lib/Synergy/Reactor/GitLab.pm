@@ -428,12 +428,12 @@ Open merge request assigned to you: %s
 Open merge requests in both groups: %s
 EOT
 
-  $event->reply([
+  $event->reply(sprintf
     $template,
     0 + $result{filed}->@*,
     0 + $result{assigned}->@*,
     0 + grep { ($_->{assignee_id} // 0) == $user_id } $result{filed}->@*
-  ]);
+  );
 }
 
 __PACKAGE__->add_preference(
