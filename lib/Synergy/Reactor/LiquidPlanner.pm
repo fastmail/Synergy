@@ -230,6 +230,7 @@ sub listener_specs {
     {
       name      => "reload-shortcuts",
       method    => "reload_shortcuts",
+      exclusive => 1,
       predicate => sub ($, $e) {
         $e->was_targeted &&
         $e->text =~ /^reload\s+shortcuts\s*$/i;

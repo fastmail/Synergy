@@ -2,7 +2,8 @@ use v5.24.0;
 package Synergy::Reactor::GitLab;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::HasPreferences';
 
 use experimental qw(signatures);
 use namespace::clean;
@@ -63,14 +64,16 @@ has project_shortcuts => (
   }
 );
 
-around register_with_hub => sub ($orig, $self, @args) {
-  $self->$orig(@args);
-
+after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
     # Backcompat: the user config used to be the only thing in state, and it's
     # not any more. This can go away eventually -- michael, 2018-08-13
     my $user_config = exists $state->{users} ? $state->{users} : $state;
     $self->_set_user_config($user_config);
+
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
 
     for my $pair ($self->user_pairs) {
       my ($username, $uconfig) = @$pair;
@@ -107,6 +110,7 @@ sub state ($self) {
   return {
     users => $self->user_config,
     repos => $self->project_shortcuts,
+    preferences => $self->user_preferences,
   };
 }
 
@@ -118,13 +122,20 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         $e->was_targeted &&
-        $e->text =~ /^reload\s+\w+/in;
+        $e->text =~ /^reload\s+(?!shortcuts)/in;
       },
     },
     {
       name => 'mention-mr',
       method => 'handle_merge_request',
       predicate => sub ($self, $e) { $e->text =~ /(^|\s)[a-z]+!\d+(\W|$)/n }
+    },
+    {
+      name => 'mr-reoprt',
+      method => 'handle_mr_report',
+      predicate => sub ($self, $e) {
+        $e->was_targeted && $e->text =~ /^\s*mr report\s*\z/i;
+      }
     },
     {
       name => 'mention-commit',
@@ -378,5 +389,65 @@ sub handle_commit ($self, $event) {
     $event->mark_handled;
   }
 }
+
+sub handle_mr_report ($self, $event) {
+  $event->mark_handled;
+
+  my $user_id = $self->get_user_preference($event->from_user, 'user-id');
+
+  unless (defined $user_id) {
+    return $event->reply("I can't check your MR status, you don't have an user-id preference set!");
+  }
+
+  my %result;
+
+  for my $pair (
+    # TODO: Cope with pagination for real. -- rjbs, 2018-08-17
+    [ filed => sprintf("%s/v4/merge_requests/?scope=all&author_id=%s&state=opened&per_page=100",
+        $self->api_uri, $user_id) ],
+    [ assigned => sprintf("%s/v4/merge_requests/?scope=all&assignee_id=%s&state=opened&per_page=100",
+        $self->api_uri, $user_id) ],
+  ) {
+    my ($type, $uri) = @$pair;
+
+    my $res = $self->hub->http_get(
+      $uri,
+      'PRIVATE-TOKEN' => $self->api_token,
+    );
+
+    unless ($res->is_success) {
+      $Logger->log([ "Error: %s", $res->as_string ]);
+      return $event->reply(
+        "Something when wrong when trying to get your $type merge requests.",
+      );
+    }
+
+    my $data = $JSON->decode($res->decoded_content);
+    $result{$type} = $data;
+  }
+
+  my $template = <<'EOT';
+Open merge requests you filed: %s
+Open merge request assigned to you: %s
+Open merge requests in both groups: %s
+EOT
+
+  $event->reply(sprintf
+    $template,
+    0 + $result{filed}->@*,
+    0 + $result{assigned}->@*,
+    0 + grep { $_->{assignee} && $_->{assignee}{id} == $user_id }
+          $result{filed}->@*
+  );
+}
+
+__PACKAGE__->add_preference(
+  name      => 'user-id',
+  validator => sub ($value) {
+    return $value if $value =~ /\A[0-9]+\z/;
+    return (undef, "Your user-id must be a positive integer.")
+  },
+  default   => undef,
+);
 
 1;
