@@ -428,7 +428,7 @@ Open merge request assigned to you: %s
 Open merge requests in both groups: %s
 EOT
 
-  $self->reply([
+  $event->reply([
     $template,
     0 + $result{filed}->@*,
     0 + $result{assigned}->@*,
