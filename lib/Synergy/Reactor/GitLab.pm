@@ -64,14 +64,16 @@ has project_shortcuts => (
   }
 );
 
-around register_with_hub => sub ($orig, $self, @args) {
-  $self->$orig(@args);
-
+after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
     # Backcompat: the user config used to be the only thing in state, and it's
     # not any more. This can go away eventually -- michael, 2018-08-13
     my $user_config = exists $state->{users} ? $state->{users} : $state;
     $self->_set_user_config($user_config);
+
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
 
     for my $pair ($self->user_pairs) {
       my ($username, $uconfig) = @$pair;
@@ -108,6 +110,7 @@ sub state ($self) {
   return {
     users => $self->user_config,
     repos => $self->project_shortcuts,
+    preferences => $self->user_preferences,
   };
 }
 
