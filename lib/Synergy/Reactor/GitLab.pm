@@ -433,7 +433,7 @@ EOT
     $template,
     0 + $result{filed}->@*,
     0 + $result{assigned}->@*,
-    0 + grep { ($_->{assignee_id} // 0) == $user_id } $result{filed}->@*
+    0 + grep { ($_->{assignee_id}{id} // 0) == $user_id } $result{filed}->@*
   );
 }
 
