@@ -422,11 +422,11 @@ sub handle_mr_report ($self, $event) {
     $result{$type} = $data;
   }
 
-  my $template = <<~'EOT';
-  Open merge requests you filed: %s
-  Open merge request assigned to you: %s
-  Open merge requests in both groups: %s
-  EOT
+  my $template = <<'EOT';
+Open merge requests you filed: %s
+Open merge request assigned to you: %s
+Open merge requests in both groups: %s
+EOT
 
   $self->reply([
     $template,
