@@ -7,6 +7,7 @@ with 'Synergy::Role::Reactor',
 
 use experimental qw(signatures);
 use namespace::clean;
+use DateTime::Format::ISO8601;
 use Digest::MD5 qw(md5_hex);
 use JSON 2 ();
 use MIME::Base64;
@@ -313,16 +314,52 @@ sub handle_merge_request ($self, $event) {
 
     my $data = $JSON->decode($res->decoded_content);
 
-    my $reply = "$mr [$data->{state}, created by $data->{author}->{username}]: ";
+    my $state = $data->{state};
+
+    my $reply = "$mr [$state, created by $data->{author}->{username}]: ";
     $reply   .= "$data->{title} ($data->{web_url})";
+
+    my $color = $state eq 'opened' ? '#1aaa4b'
+              : $state eq 'merged' ? '#1f78d1'
+              : $state eq 'closed' ? '#db3b21'
+              : undef;
+
+    my @fields;
+    if ($state eq 'opened') {
+      my $assignee = $data->{assignee}{name} // 'nobody';
+      push @fields, {
+        title => "Assigned",
+        value => $assignee,
+        short => \1
+      };
+
+      my $created = DateTime::Format::ISO8601->parse_datetime($data->{created_at});
+
+      push @fields, {
+        title => "Opened",
+        value => "$created",
+        short => \1,
+      };
+    } else {
+      my $date = $data->{merged_at} // $data->{closed_at};
+      my $dt = DateTime::Format::ISO8601->parse_datetime($date);
+      push @fields, {
+        title => ucfirst $state,
+        value => "$dt",
+        short => \1,
+      };
+    }
+
 
     my $slack = {
       text        => "",
       attachments => $JSON->encode([{
         fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
-        author_name => $data->{author}->{username},
+        author_name => $data->{author}->{name},
         author_icon => $data->{author}->{avatar_url},
-        text        => "<$data->{web_url}|$mr> $data->{title} [$data->{state}]",
+        text        => "<$data->{web_url}|$mr> $data->{title}",
+        color       => $color,
+        fields      => \@fields,
       }]),
     };
 
