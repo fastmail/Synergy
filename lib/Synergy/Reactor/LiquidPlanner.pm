@@ -1440,6 +1440,14 @@ sub _handle_search ($self, $event, $text) {
   my @filters;
   my $has_strong_check = 0;
 
+  # TODO: make this less of a hack, maybe drop done:X for is:done
+  # -- rjbs, 2018-08-18
+  if (delete $flag{is}{done}) {
+    $flag{done}{1}++;
+  }
+
+  delete $flag{is} if $flag{is} and ! keys $flag{is}->%*;
+
   if (my $done = delete $flag{done}) {
     my @values = keys %$done;
     if (@values > 1) {
