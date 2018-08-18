@@ -350,14 +350,14 @@ sub handle_merge_request ($self, $event) {
       };
     }
 
-
     my $slack = {
       text        => "",
       attachments => $JSON->encode([{
         fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
         author_name => $data->{author}->{name},
         author_icon => $data->{author}->{avatar_url},
-        text        => "<$data->{web_url}|$mr> $data->{title}",
+        title       => "$mr: $data->{title}",
+        title_link  => "$data->{web_url}",
         color       => $color,
         fields      => \@fields,
       }]),
