@@ -7,6 +7,7 @@ requires 'Data::Dumper::Concise';
 requires 'DateTime';
 requires 'DateTime::Format::ISO8601';
 requires 'DateTime::Format::Natural';
+requires 'DateTimeX::Format::Ago';
 requires 'Getopt::Long::Descriptive';
 requires 'IO::Async::Loop';
 requires 'IO::Async::SSL';

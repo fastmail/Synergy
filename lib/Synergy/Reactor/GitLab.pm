@@ -8,6 +8,7 @@ with 'Synergy::Role::Reactor',
 use experimental qw(signatures);
 use namespace::clean;
 use DateTime::Format::ISO8601;
+use DateTimeX::Format::Ago;
 use Digest::MD5 qw(md5_hex);
 use JSON 2 ();
 use MIME::Base64;
@@ -132,7 +133,7 @@ sub listener_specs {
       predicate => sub ($self, $e) { $e->text =~ /(^|\s)[a-z]+!\d+(\W|$)/n }
     },
     {
-      name => 'mr-reoprt',
+      name => 'mr-report',
       method => 'handle_mr_report',
       predicate => sub ($self, $e) {
         $e->was_targeted && $e->text =~ /^\s*mr report\s*\z/i;
@@ -290,6 +291,7 @@ sub name_for_project ($self, $shortcut) {
 
 sub handle_merge_request ($self, $event) {
   my @mrs = $event->text =~ /(?:^|\s)([a-z]+!\d+)(?=\W|$)/g;
+  state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
 
   for my $mr (@mrs) {
     my ($proj, $num) = split /!/, $mr, 2;
@@ -337,7 +339,7 @@ sub handle_merge_request ($self, $event) {
 
       push @fields, {
         title => "Opened",
-        value => "$created",
+        value => $dt_formatter->format_datetime($created),
         short => \1,
       };
     } else {
@@ -345,7 +347,7 @@ sub handle_merge_request ($self, $event) {
       my $dt = DateTime::Format::ISO8601->parse_datetime($date);
       push @fields, {
         title => ucfirst $state,
-        value => "$dt",
+        value => $dt_formatter->format_datetime($dt),
         short => \1,
       };
     }
