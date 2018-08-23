@@ -498,21 +498,31 @@ sub handle_mr_report ($self, $event) {
     }
 
     my $data = $JSON->decode($res->decoded_content);
+    for my $mr (@$data) {
+      $mr->{_isBacklogged} = 1
+        if grep {; lc $_ eq 'backlogged' } $mr->{labels}->@*;
+
+      $mr->{_isSelfAssigned} = 1
+        if $mr->{assignee} && $mr->{assignee}{id} == $user_id;
+    }
     $result{$type} = $data;
   }
 
   my $template = <<'EOT';
-Open merge requests you filed: %s
-Open merge request assigned to you: %s
-Open merge requests in both groups: %s
+Open merge requests you filed: %s (%s backlogged)
+Open merge request assigned to you: %s (%s backlogged)
+Open merge requests in both groups: %s (%s backlogged)
 EOT
 
   $event->reply(sprintf
     $template,
     0 + $result{filed}->@*,
+    0 + (grep { $_->{_isBacklogged} } $result{filed}->@*),
     0 + $result{assigned}->@*,
-    0 + grep { $_->{assignee} && $_->{assignee}{id} == $user_id }
-          $result{filed}->@*
+    0 + (grep { $_->{_isBacklogged} } $result{assigned}->@*),
+    0 + (grep { $_->{_isSelfAssigned} } $result{filed}->@*),
+    0 + (grep { $_->{_isSelfAssigned} && $_->{_isBacklogged} }
+          $result{filed}->@*),
   );
 }
 
