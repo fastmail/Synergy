@@ -18,6 +18,7 @@ has listeners => (
     my @listeners;
     for my $spec ($self->listener_specs) {
       push @listeners, Synergy::Listener->new({
+        reactor => $self,
         $spec->%{ qw( exclusive name predicate method ) },
         (exists $spec->{help_entries} ? (help_entries => $spec->{help_entries})
                                       : ()),

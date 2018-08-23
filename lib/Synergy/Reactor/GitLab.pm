@@ -11,6 +11,7 @@ use DateTime::Format::ISO8601;
 use DateTimeX::Format::Ago;
 use Digest::MD5 qw(md5_hex);
 use JSON 2 ();
+use List::Util qw(uniq);
 use MIME::Base64;
 use YAML::XS;
 use Synergy::Logger '$Logger';
@@ -63,7 +64,26 @@ has project_shortcuts => (
   handles => {
     is_known_project => 'exists',
     project_named    => 'get',
+    all_shortcuts    => 'keys',
   }
+);
+
+has _shortcut_lookup => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits => ['Hash'],
+  lazy => 1,
+  default => sub ($self) {
+    my %lookup;
+    for my $shortcut ($self->all_shortcuts) {
+      my $proj = $self->project_named($shortcut);
+      $lookup{ $proj->{name} } = $shortcut;
+    }
+    return \%lookup;
+  },
+  handles => {
+    shortcut_for => 'get',
+  },
 );
 
 after register_with_hub => sub ($self, @) {
@@ -130,7 +150,12 @@ sub listener_specs {
     {
       name => 'mention-mr',
       method => 'handle_merge_request',
-      predicate => sub ($self, $e) { $e->text =~ /(^|\s)[a-z]+!\d+(\W|$)/n }
+      predicate => sub ($self, $e) {
+        return 1 if $e->text =~ /(^|\s)[a-z]+!\d+(\W|$)/in;
+
+        my $base = $self->reactor->url_base;
+        return 1 if $e->text =~ /\Q$base\E.*?merge_requests/;
+      }
     },
     {
       name => 'mr-report',
@@ -292,6 +317,17 @@ sub name_for_project ($self, $shortcut) {
 sub handle_merge_request ($self, $event) {
   my @mrs = $event->text =~ /(?:^|\s)([a-z]+!\d+)(?=\W|$)/g;
   state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
+
+  state $base = $self->url_base;
+  my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)/merge_requests/([0-9]+)};
+
+  for my $key (keys %found) {
+    my $shortcut = $self->shortcut_for($key);
+    next unless $shortcut;
+    push @mrs, $shortcut . q{!} . $found{$key};
+  }
+
+  @mrs = uniq @mrs;
 
   for my $mr (@mrs) {
     my ($proj, $num) = split /!/, $mr, 2;

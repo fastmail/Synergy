@@ -38,5 +38,10 @@ has method => (
   required => 1,
 );
 
+has reactor => (
+  is => 'ro',
+  weak_ref => 1,
+);
+
 no Moose;
 1;
