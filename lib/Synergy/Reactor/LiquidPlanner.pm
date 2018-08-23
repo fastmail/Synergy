@@ -2375,11 +2375,22 @@ sub _handle_spent ($self, $event, $text) {
     return $self->_spent_on_existing($event, $task_id, $duration);
   }
 
-  if ($name =~ m{\A\s*\*(\w+)\s*\z}) {
-    my ($task, $error) = $self->task_for_shortcut($1);
+  if ($name =~ m{\A\s*\*(\w+)(?:\s+(.+))?\z}) {
+    my ($shortcut, $rest) = ($1, $2);
+
+    my ($task, $error) = $self->task_for_shortcut($shortcut);
     return $event->reply($error) unless $task;
 
-    return $self->_spent_on_existing($event, $task->{id}, $duration);
+    my ($remainder, %plan) = $self->_extract_flags_from_task_text($rest);
+    return $event->reply("I didn't understand all the flags you used.")
+      if $remainder =~ /\S/;
+
+    my $start = delete $plan{start};
+
+    return $event->reply("The only special thing you can do when spending time on an existing task is start its timer.")
+      if keys %plan;
+
+    return $self->_spent_on_existing($event, $task->{id}, $duration, $start);
   }
 
   my ($plan, $error) = $self->task_plan_from_spec(
@@ -2400,7 +2411,7 @@ sub _handle_spent ($self, $event, $text) {
   $self->_execute_task_plan($event, $plan, $error);
 }
 
-sub _spent_on_existing ($self, $event, $task_id, $duration) {
+sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
   my $user = $event->from_user;
 
   my $lpc = $self->lp_client_for_user($user);
@@ -2436,16 +2447,20 @@ sub _spent_on_existing ($self, $event, $task_id, $duration) {
   my $task = $task_res->payload;
 
   my $plain_base = qq{I logged that time on "$task->{name}"};
-  my $slack_base = sprintf qq{I logged that time on %s},
-    $self->_slack_item_link_with_name($task);
+  my $slack_base = qq{I logged that time};
 
-  # if ($flags->{start} && $self->_start_timer($user, $task)) {
-  #   $plain_base .= " and started your timer";
-  #   $slack_base .= " and started your timer";
-  # } else {
-  #   $plain_base .= ", but I couldn't start your timer";
-  #   $slack_base .= ", but I couldn't start your timer";
-  # }
+  if ($start) {
+    if ($lpc->start_timer_for_task_id($task->{id})->is_success) {
+      $plain_base .= " and started your timer";
+      $slack_base .= " and started your timer";
+    } else {
+      $plain_base .= ", but I couldn't start your timer";
+      $slack_base .= ", but I couldn't start your timer";
+    }
+  }
+
+  $slack_base .= sprintf qq{.  The task is: %s},
+    $self->_slack_item_link_with_name($task);
 
   return $event->reply(
     "$plain_base.\n$uri",
