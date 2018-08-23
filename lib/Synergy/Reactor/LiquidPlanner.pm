@@ -1828,14 +1828,9 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
     unless $container{parent_id};
 
   my sub assignment ($who) {
-    my %est = $my_arg->{estimate}
-            ? (low_effort_remaining  => $my_arg->{estimate}{low},
-               high_effort_remaining => $my_arg->{estimate}{high})
-            : ();
-
     return {
       person_id => $who->lp_id,
-      %est,
+      ($my_arg->{estimate} ? (estimate => $my_arg->{estimate}) : ()),
     }
   }
 
