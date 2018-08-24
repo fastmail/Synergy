@@ -15,7 +15,7 @@ sub listener_specs {
     name      => 'rfc-mention',
     method    => 'handle_rfc',
     predicate => sub ($self, $e) {
-      return unless $e->text =~ /RFC\s*[0-9]+/i; },
+      return unless $e->text =~ /RFC\s*[0-9]+/; },
   };
 }
 
@@ -52,7 +52,7 @@ sub handle_rfc ($self, $event) {
   my ($num, $link) = $self->extract_rfc($text);
 
   unless (defined $num && defined $link) {
-    if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+/ix) {
+    if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+/x) {
       $event->reply("Oddly, I could not figure out what RFC you meant");
 
       $event->mark_handled;
@@ -62,7 +62,7 @@ sub handle_rfc ($self, $event) {
   }
 
   my $solo_cmd = $event->was_targeted
-              && $event->text =~ /\A\s* RFC \s* [0-9]+ \s*/ix;
+              && $event->text =~ /\A\s* RFC \s* [0-9]+ \s*/x;
 
   $event->mark_handled if $solo_cmd;
 
@@ -118,7 +118,7 @@ sub handle_rfc ($self, $event) {
 my $sec_dig = qr/[0-9]+(?:[.-])?(?:[0-9]+)?/;
 
 sub extract_rfc ($self, $text) {
-  return unless $text =~ s/RFC\s*([0-9]+)//ig;
+  return unless $text =~ s/RFC\s*([0-9]+)//g;
 
   my $num = $1;
 
