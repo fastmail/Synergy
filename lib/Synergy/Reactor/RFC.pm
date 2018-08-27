@@ -117,7 +117,7 @@ sub handle_rfc ($self, $event) {
   );
 }
 
-my $sec_dig = qr/[0-9]+(?:[.-])?(?:[0-9]+)?/;
+my $sec_dig = qr/(?:[0-9]+[-.]?)+/;
 
 sub extract_rfc ($self, $text) {
   return unless $text =~ s/RFC\s*([0-9]+)//ig;
