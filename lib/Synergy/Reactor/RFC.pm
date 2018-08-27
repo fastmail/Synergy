@@ -1,4 +1,6 @@
 use v5.24.0;
+use warnings;
+
 package Synergy::Reactor::RFC;
 
 use Moose;
@@ -78,7 +80,7 @@ sub handle_rfc ($self, $event) {
     sprintf '<%s%u|RFC %u>', 'https://tools.ietf.org/html/rfc', (0 + $_[0]) x 2
   };
 
-  my $slack = $slink->($num) . ($title ? ": $title" : q{});
+  my $slack = sprintf('<%s|RFC %u>', $link, $num) . ($title ? ": $title" : q{});
 
   if ($solo_cmd) {
     $slack .= "\n";
