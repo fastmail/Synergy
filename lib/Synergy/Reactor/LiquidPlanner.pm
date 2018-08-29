@@ -1045,6 +1045,8 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     return if $error->{rest};
   }
 
+  $rest =~ s/\b(ptn)([0-9]+)\b/$1 $2/gi;  # make ticket nums easier to copy
+
   $plan->{description} = sprintf '%screated by %s in response to %s%s',
     ($rest ? "$rest\n\n" : ""),
     $self->hub->name,
@@ -1134,6 +1136,8 @@ sub task_plan_from_spec ($self, $event, $spec) {
   $plan{rest} = $rest;
   $plan{name} = $leader;
   $plan{user} = $event->from_user;
+
+  $plan{name} =~ s/\b(ptn)([0-9]+)\b/$1 $2/gi;  # make ticket nums easier to copy
 
   $self->_check_plan_rest($event, \%plan, \%error);
   $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
