@@ -12,6 +12,7 @@ use IO::Async::SSL;
 use Plack::App::URLMap;
 use Plack::Middleware::AccessLog;
 use Plack::Request;
+use Plack::Middleware::Auth::Basic;
 use Carp;
 use Try::Tiny;
 
@@ -47,6 +48,16 @@ has tls_key_file => (
   isa => 'Str',
 );
 
+has http_auth => (
+  isa     => 'HashRef',
+  traits  => [ 'Hash' ],
+  default => sub { {} },
+  handles => {
+    path_requires_auth        => 'exists',
+    auth_credentials_for_path => 'get',
+  },
+);
+
 has http_server => (
   is => 'ro',
   isa => 'Net::Async::HTTP::Server::PSGI',
@@ -71,7 +82,26 @@ has http_server => (
           return $req->new_response(404)->finalize;
         }
 
-        return $self->app_for_path($req->path_info)->($req);
+        my $app = $self->app_for_path($req->path_info);
+
+        if ($self->path_requires_auth($req->path_info)) {
+          my $creds = $self->auth_credentials_for_path($req->path_info);
+          my ($authuser, $authpass) = $creds->@*;
+
+          return Plack::Middleware::Auth::Basic->new(
+            authenticator => sub ($user, $pass, $env) {
+              return $user eq $authuser && $pass eq $authpass;
+            }
+          )->wrap(
+            # can't wrap $app as-is because it takes a req, not an env
+            sub ($env) {
+              my $req = Plack::Request->new($env);
+              return $app->($req);
+            }
+          )->($env);
+        }
+
+        return $app->($req);
       }),
     );
   },

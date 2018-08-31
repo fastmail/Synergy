@@ -117,6 +117,11 @@ has tls_key_file => (
   default => '',
 );
 
+has http_auth => (
+  is => 'ro',
+  isa => 'HashRef',
+);
+
 has server => (
   is => 'ro',
   isa => 'Synergy::HTTPServer',
@@ -127,6 +132,7 @@ has server => (
       server_port   => $self->server_port,
       tls_cert_file => $self->tls_cert_file,
       tls_key_file  => $self->tls_key_file,
+      defined_kv(http_auth => $self->http_auth),
     });
 
     $s->register_with_hub($self);
@@ -308,10 +314,8 @@ sub synergize {
 
   my $hub = $class->new({
     user_directory  => $directory,
-    defined_kv(time_zone_names => $config->{time_zone_names}),
-    defined_kv(server_port     => $config->{server_port}),
-    defined_kv(tls_cert_file   => $config->{tls_cert_file}),
-    defined_kv(tls_key_file    => $config->{tls_key_file}),
+    map { defined_kv($_ => $config->{$_}) }
+      qw(time_zone_names server_port tls_cert_file tls_key_file http_auth),
   });
 
   $directory->register_with_hub($hub);
