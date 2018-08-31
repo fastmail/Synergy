@@ -3,15 +3,14 @@ package Synergy::Reactor::Prometheus;
 
 use Moose;
 with 'Synergy::Role::Reactor';
+with 'Synergy::Role::HTTPEndpoint';
 
 use experimental qw(signatures);
 use namespace::clean;
 
 use Prometheus::Tiny 0.002;
 
-has http_path => (
-  is  => 'ro',
-  isa => 'Str',
+has '+http_path' => (
   default => '/metrics',
 );
 
@@ -35,9 +34,11 @@ sub start ($self) {
     help => 'Number of events received by reactors',
     type => 'counter',
   );
+}
 
-  my $app = $self->_prom_client->psgi;
-  $self->hub->server->register_path($self->http_path, sub { $app->(shift->env) });
+sub http_app ($self, $env) {
+  state $app = $self->_prom_client->psgi;
+  $app->($env);
 }
 
 sub count_event ($self, $event) {

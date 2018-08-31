@@ -13,6 +13,7 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Plack::Response;
 use Synergy::Hub;
 
 # Initialize Synergy.
@@ -28,7 +29,7 @@ my $synergy = Synergy::Hub->synergize(
 );
 
 $synergy->server->register_path('/ok', sub {
-  return shift->new_response(200)->finalize;;
+  return Plack::Response->new(200)->finalize;
 });
 
 # Tests begin here.

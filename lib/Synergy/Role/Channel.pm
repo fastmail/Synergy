@@ -15,6 +15,8 @@ requires qw(
   send_message_to_user
 );
 
+sub start ($self) { }
+
 1;
 
 =pod

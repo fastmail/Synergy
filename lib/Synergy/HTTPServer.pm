@@ -11,7 +11,6 @@ use Net::Async::HTTP::Server::PSGI;
 use IO::Async::SSL;
 use Plack::App::URLMap;
 use Plack::Middleware::AccessLog;
-use Plack::Request;
 use Carp;
 use Try::Tiny;
 
@@ -60,18 +59,17 @@ has http_server => (
           $Logger->log("HTTPServer: access: $msg");
         }
       )->wrap(sub ($env) {
-        $env->{PATH_INFO} = '/' unless $env->{PATH_INFO};
-        my $req = Plack::Request->new($env);
+        my $path_info = $env->{PATH_INFO} // '/';
 
-        unless ($self->path_is_registered($req->path_info)) {
+        unless ($self->path_is_registered($path_info)) {
           $Logger->log([
             "could not find app for %s, ignoring",
-            $req->path_info,
+            $path_info,
           ]);
-          return $req->new_response(404)->finalize;
+          return Plack::Response->new(404)->finalize;
         }
 
-        return $self->app_for_path($req->path_info)->($req);
+        return $self->app_for_path($path_info)->($env);
       }),
     );
   },
