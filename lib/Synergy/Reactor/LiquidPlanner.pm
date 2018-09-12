@@ -1532,7 +1532,7 @@ sub _handle_search ($self, $event, $text) {
       $error{type} = "You can only filter on one type at a time.";
     } else {
       my $got_type = fc $types[0];
-      if ($got_type =~ /\A project | task | package \z/x) {
+      if ($got_type =~ /\A project | task | package | \* \z/x) {
         $item_type = ucfirst $got_type;
       } else {
         $error{type} = qq{I don't know what a "$got_type" type item is.};
@@ -1540,7 +1540,7 @@ sub _handle_search ($self, $event, $text) {
     }
   }
   $item_type //= 'Task';
-  push @filters, [ 'item_type', 'is', $item_type ];
+  push @filters, [ 'item_type', 'is', $item_type ] unless $item_type eq '*';
 
   my $debug = $flag{debug} && grep { $_ } keys((delete $flag{debug})->%*);
 
