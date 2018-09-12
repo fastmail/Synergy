@@ -1408,7 +1408,7 @@ sub _parse_search ($self, $text) {
       next TOKEN;
     }
 
-    if ($text =~ s/^($ident_re):([0-9]+|$ident_re)(?: \s | \z)//x) {
+    if ($text =~ s/^($ident_re):([0-9]+|\*|$ident_re)(?: \s | \z)//x) {
       $flag{$1}{$2}++;
       next TOKEN;
     }
