@@ -57,6 +57,8 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 🐙 octopus
 🐛 bug
 🐜 ant
+🦗 cricket
+🕷 spider
 🐝 bee
 🐞 ladybug
 🐟 fish
