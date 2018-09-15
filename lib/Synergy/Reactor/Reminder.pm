@@ -114,7 +114,7 @@ sub handle_remind ($self, $event) {
   }
 
   if ($time <= time) {
-    $self->reply("That sounded like you want a reminder sent in the past.");
+    $event->reply("That sounded like you want a reminder sent in the past.");
     return;
   }
 
