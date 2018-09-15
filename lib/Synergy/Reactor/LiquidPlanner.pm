@@ -2944,16 +2944,33 @@ sub user_status_for ($self, $event, $user) {
 }
 
 sub _handle_contents ($self, $event, $rest) {
-  # TODO: handle $rest being #project -- rjbs, 2018-07-12
   my $lpc = $self->lp_client_for_user($event->from_user);
 
-  my $item_res = $lpc->get_item($rest);
+  $event->mark_handled;
 
-  return $self->reply("I can't find an item with that id!")
-    unless my $item = $item_res->payload;
+  my ($what, $more) = split /\s+/, $rest, 2;
+
+  if (length $more) {
+    return $event->reply(q{You can only say "contents ID" or "contents #shortcut".});
+  }
+
+  my $item;
+
+  if ($what =~ /\A#(.+)/) {
+    ($item, my $err) = $self->project_for_shortcut("$1");
+
+    return $event->reply($err) if $err;
+  } elsif ($what =~ /\A[0-9]+\z/) {
+    my $item_res = $lpc->get_item($what);
+
+    return $event->reply("I can't find an item with that id!")
+      unless $item = $item_res->payload;
+  } else {
+    return $event->reply(q{You can only say "contents ID" or "contents #shortcut".});
+  }
 
   my $res = $lpc->query_items({
-    in    => $rest,
+    in    => $item->{id},
     flags => {
       depth => 1,
     },
@@ -2962,14 +2979,12 @@ sub _handle_contents ($self, $event, $rest) {
     ],
   });
 
-  $event->mark_handled;
-
   return $event->reply("Sorry, I couldn't get the contents.")
     unless $res->is_success;
 
   $Logger->log([ "contents retrieved: %s", $res->payload ]);
 
-  my @items = grep {; $_->{id} != $rest } $res->payload_list;
+  my @items = grep {; $_->{id} != $item->{id} } $res->payload_list;
   $#items = 9 if @items > 10; # TODO: add pagination -- rjbs, 2018-07-12
 
   my $pkg_summary = {
