@@ -357,7 +357,7 @@ sub provide_lp_link ($self, $event) {
     my $reply;
 
     if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
-      my $icon = $item->{type} eq 'Task'    ? "" # Sometimes 🌀
+      my $icon = $item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
                : $item->{type} eq 'Package' ? "📦"
                : $item->{type} eq 'Project' ? "📁"
                : $item->{type} eq 'Folder'  ? "🗂"
