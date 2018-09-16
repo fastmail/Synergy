@@ -913,12 +913,12 @@ sub _extract_flags_from_task_text ($self, $text) {
       $flag{project}{$hunk} = 1;
       next;
     } elsif ($hunk =~ /[!>]/) {
-      $flag{urgent} ++ if $hunk =~ /!/;
-      $flag{start}  ++ if $hunk =~ />/;
+      $flag{start} ++           if $hunk =~ />/;
+      $flag{package}{urgent} ++ if $hunk =~ /!/;
       next;
     } else {
-      $flag{urgent} ++ if $hunk =~ $urgent_emoji;
-      $flag{start}  ++ if $hunk =~ $start_emoji;
+      $flag{start} ++           if $hunk =~ $start_emoji;
+      $flag{package}{urgent} ++ if $urgent_emoji;
       next;
     }
   }
@@ -945,6 +945,28 @@ sub _check_plan_project ($self, $event, $plan, $error) {
   } else {
     $error->{project} = $err;
   }
+
+  return;
+}
+
+sub _check_plan_package ($self, $event, $plan, $error) {
+  my $package = delete $plan->{package};
+
+  return unless keys %$package;
+
+  if (keys %$package > 1) {
+    $error->{package} = "More than one package specified!";
+    return;
+  }
+
+  my ($package_name) = keys %$package;
+
+  if (fc $package_name eq 'urgent') {
+    $plan->{package_id} = $self->urgent_package_id;
+    return;
+  }
+
+  $error->{package} = qq{I don't know what the package "$package_name" is.};
 
   return;
 }
@@ -993,7 +1015,7 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
     return;
   }
 
-  if ($plan->{urgent}) {
+  if ($plan->{package}{urgent}) {
     if (my @virtuals = grep {; $_->is_virtual } @owners) {
       my $names = join q{, }, sort map {; $_->username } @virtuals;
       $error->{usernames}
@@ -1102,7 +1124,7 @@ sub _handle_subcmds ($self, $cmd_lines, $plan) {
 
 sub _task_subcmd_urgent ($self, $rest, $plan) {
   return "The /urgent command takes no arguments." if $rest;
-  $plan->{urgent} = 1;
+  $plan->{package}{urgent} = 1;
   return;
 }
 
@@ -1223,6 +1245,7 @@ sub task_plan_from_spec ($self, $event, $spec) {
   $self->_check_plan_rest($event, \%plan, \%error);
   $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
   $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
+  $self->_check_plan_package($event, \%plan, \%error)   if $plan{package};
 
   $error{name} = "That task name is just too long!  Consider putting more of it in the long description."
     if length $plan{name} > 200;
@@ -1908,9 +1931,9 @@ sub expand_tasks ($self, $event, $expand_target, $prefix='') {
 
 sub _create_lp_task ($self, $event, $my_arg, $arg) {
   my %container = (
-    package_id  => $my_arg->{urgent}
-                ? $self->urgent_package_id
-                : $self->inbox_package_id,
+    package_id  => $my_arg->{package_id}
+                ?  $my_arg->{package_id}
+                :  $self->inbox_package_id,
     parent_id   => $my_arg->{project_id}
                 ?  $my_arg->{project_id}
                 :  undef,

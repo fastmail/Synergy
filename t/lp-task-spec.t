@@ -25,9 +25,9 @@ my $synergy = Synergy::Hub->synergize(
         class => 'Synergy::Reactor::LiquidPlanner',
         workspace_id => 1,
 
-        urgent_package_id => 1,
-        inbox_package_id => 1,
-        recurring_package_id => 1,
+        urgent_package_id => 2,
+        inbox_package_id => 3,
+        recurring_package_id => 4,
 
         primary_nag_channel_name => "test-channel",
       },
@@ -133,9 +133,9 @@ plan_ok(
   "Buy raisins ⏳ #GORP (!!!)",
   {
     name        => "Buy raisins",
+    package_id  => 2,
     project_id  => 1,
     start       => 1,
-    urgent      => 1,
   },
   "text, project, emoji, stuff"
 );
@@ -144,9 +144,9 @@ plan_ok(
   "Buy raisins ⏳ #GORP (!!!)\n\nIf you're in Australia, buy sultanas.",
   {
     name        => "Buy raisins",
+    package_id  => 2,
     project_id  => 1,
     start       => 1,
-    urgent      => 1,
     description => "If you're in Australia, buy sultanas."
                 .  "\n\ncreated by Synergy in response to (some test event)",
   },
@@ -157,8 +157,8 @@ plan_ok(
   "Eat more pie #pies\n/assign roxy\n/go /urgent\n/e 5m-2\nOnly pumpkin, please.",
   {
     name        => "Eat more pie",
-    urgent      => 1,
     start       => 1,
+    package_id  => 2,
     project_id  => 2,
     owners      => [ methods(username => 'roxy') ],
     estimate    => { low => 3/36, high => 2 },
@@ -244,7 +244,7 @@ plan_ok(
   "Eat more pie #pies --- /assign roxy --- /go /urgent --- /e 5m-2 --- Only pumpkin, please.",
   {
     name        => "Eat more pie",
-    urgent      => 1,
+    package_id  => 2,
     start       => 1,
     project_id  => 2,
     owners      => [ methods(username => 'roxy') ],
