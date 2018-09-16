@@ -325,7 +325,8 @@ sub provide_lp_link ($self, $event) {
   my @ids = $event->text =~ /$lp_id_re/g;
   push @ids, $event->text =~ /$lp_url_re/g;
 
-  while (my $shortcut = $event->text =~ /$lp_shortcut_re/g) {
+  my @shortcuts = $event->text =~ /$lp_shortcut_re/g;
+  for my $shortcut (@shortcuts) {
     my $method = ((substr $shortcut, 0, 1, q{}) eq '*' ? 'task' : 'project')
                . '_for_shortcut';
 
