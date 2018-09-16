@@ -309,13 +309,17 @@ sub provide_lp_link ($self, $event) {
   my $lpc = $self->lp_client_for_user($user);
   my $item_id;
 
+  my $as_cmd;
+
   if (
     $event->was_targeted
     && ($event->text =~ /\A\s* $lp_id_re \s*\z/x
-    ||  $event->text =~ /\A\s* $lp_shortcut_re \s*\z/x)
+    ||  $event->text =~ /\A\s* $lp_shortcut_re \s*\z/x
+    ||  $event->text =~ /\A\s* $lp_url_re \s*\z/x)
   ) {
     # do better than bort
     $event->mark_handled;
+    $as_cmd = 1;
   }
 
   my @ids = $event->text =~ /$lp_id_re/g;
@@ -360,11 +364,35 @@ sub provide_lp_link ($self, $event) {
 
       my $uri = $self->item_uri($item_id);
 
+      my $plain = "$icon LP$item_id: $item->{name} ($uri)";
+      my $slack = sprintf '%s %s',
+        $icon,
+        $self->_slack_item_link_with_name($item);
+
+      if ($as_cmd) {
+        my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+                    $self->hub->user_directory->users;
+
+        # The user asked for this directly, so let's give them more detail.
+        $slack .= "\n";
+        $slack .= "Parent: "
+               .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
+               .  "\n";
+
+        my @assignees = sort uniq
+                        map  {; $by_lp{ $_->{person_id} } // '?' }
+                        grep {; ! $_->{is_done} }
+                        $item->{assignments}->@*;
+
+        if (@assignees) {
+          $slack .= "Assignees: " . join(q{, }, @assignees) . "\n";
+        }
+      }
+
       $event->reply(
-        "$icon LP$item_id: $item->{name} ($uri)",
+        $plain,
         {
-          slack => sprintf '%s %s',
-            $icon, $self->_slack_item_link_with_name($item),
+          slack => $slack,
         },
       );
     } else {
