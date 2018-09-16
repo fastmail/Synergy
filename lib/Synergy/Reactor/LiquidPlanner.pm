@@ -187,6 +187,7 @@ my %KNOWN = (
                 ],
   todo      =>  [ \&_handle_todo,        ],
   todos     =>  [ \&_handle_todos,       ],
+  update    =>  [ \&_handle_update,      ],
   urgent    =>  [ \&_handle_urgent,
                   "urgent [PAGE-NUMBER]: list your urgent tasks",
                 ],
@@ -998,60 +999,72 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     push @cmd_lines, shift @lines while @lines && $lines[0] =~ m{\A/};
     $rest = join qq{\n}, @lines;
 
-    # TODO: make this less slapdash -- rjbs, 2018-06-08
-    my @errors;
-    my @bad_cmds;
+    my ($ok, $subcmd_error) = $self->_handle_subcmds(\@cmd_lines, $plan);
 
-    my %alias = (
-      a   => 'assign',
-      d   => 'done',
-      e   => 'estimate',
-      go  => 'start',
-      l   => 'log',
-      p   => 'project',
-      s   => 'start',
-      u   => 'urgent',
-    );
-
-    for my $cmd_line (@cmd_lines) {
-      my @cmd_strs = split m{(?:^|\s+)/}m, $cmd_line;
-      shift @cmd_strs; # the leading / means the first entry is always q{}
-
-      CMDSTR: for my $cmd_str (@cmd_strs) {
-        my ($cmd, $rest) = split /\s+/, $cmd_str, 2;
-
-        $cmd = $alias{$cmd} if $alias{$cmd};
-
-        my $method = $self->can("_task_subcmd_$cmd");
-        unless ($method) {
-          push @bad_cmds, $cmd_str;
-          next CMDSTR;
-        }
-
-        if (my $error = $self->$method($rest, $plan)) {
-          push @errors, $error;
-        }
-      }
+    unless ($ok) {
+      $error->{rest} = $subcmd_error // "Error with subcommands.";
+      return;
     }
-
-    if (@errors or @bad_cmds) {
-      $error->{rest} = @errors ? (join q{  }, @errors) : q{};
-      if (@bad_cmds) {
-        $error->{rest} .= "  " if $error->{rest};
-        $error->{rest} .= "Bogus commands: " . join q{ -- }, sort @bad_cmds;
-      }
-    }
-
-    return if $error->{rest};
   }
 
-  $rest =~ s/\b(ptn)([0-9]+)\b/$1 $2/gi;  # make ticket nums easier to copy
+  # make ticket nums easier to copy
+  $rest =~ s/\b(ptn)([0-9]+)\b/$1 $2/gi if $rest;
 
   $plan->{description} = sprintf '%screated by %s in response to %s%s',
     ($rest ? "$rest\n\n" : ""),
     $self->hub->name,
     $via,
     $uri ? "\n\n$uri" : "";
+}
+
+sub _handle_subcmds ($self, $cmd_lines, $plan) {
+  # TODO: make this less slapdash -- rjbs, 2018-06-08
+  my @errors;
+  my @bad_cmds;
+
+  my %alias = (
+    a   => 'assign',
+    d   => 'done',
+    e   => 'estimate',
+    go  => 'start',
+    l   => 'log',
+    p   => 'project',
+    s   => 'start',
+    u   => 'urgent',
+  );
+
+  for my $cmd_line (@$cmd_lines) {
+    my @cmd_strs = split m{(?:^|\s+)/}m, $cmd_line;
+    shift @cmd_strs; # the leading / means the first entry is always q{}
+
+    CMDSTR: for my $cmd_str (@cmd_strs) {
+      my ($cmd, $rest) = split /\s+/, $cmd_str, 2;
+
+      $cmd = $alias{$cmd} if $alias{$cmd};
+
+      my $method = $self->can("_task_subcmd_$cmd");
+      unless ($method) {
+        push @bad_cmds, $cmd_str;
+        next CMDSTR;
+      }
+
+      if (my $error = $self->$method($rest, $plan)) {
+        push @errors, $error;
+      }
+    }
+  }
+
+  if (@errors or @bad_cmds) {
+    my $error = @errors ? (join q{  }, @errors) : q{};
+    if (@bad_cmds) {
+      $error .= "  " if $error;
+      $error .= "Bogus commands: " . join q{ -- }, sort @bad_cmds;
+    }
+
+    return (0, $error);
+  }
+
+  return (1, undef);
 }
 
 sub _task_subcmd_urgent ($self, $rest, $plan) {
@@ -1116,6 +1129,22 @@ sub _task_subcmd_log ($self, $rest, $plan) {
 
   $plan->{log_hours} = $secs / 3600;
   return;
+}
+
+sub _handle_update ($self, $event, $text) {
+  my $plan  = {};
+
+  my ($which, $cmds) = split /\s+/, $text, 2;
+
+  my ($ok, $error) = $self->_handle_subcmds([$cmds], $plan);
+
+  $event->mark_handled;
+
+  return $event->reply($error) unless $ok;
+
+  return $event->reply( "Update plan: ```"
+                      . JSON->new->canonical->encode($plan)
+                      . "```");
 }
 
 # One option:
