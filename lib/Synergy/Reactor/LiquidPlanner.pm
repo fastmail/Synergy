@@ -1132,17 +1132,36 @@ sub _task_subcmd_log ($self, $rest, $plan) {
 }
 
 sub _handle_update ($self, $event, $text) {
+  $event->mark_handled;
+
   my $plan  = {};
 
-  my ($which, $cmds) = split /\s+/, $text, 2;
+  my ($what, $cmds) = split /\s+/, $text, 2;
+
+  my $lpc = $self->lp_client_for_user($event->from_user);
+  my $item;
+
+  if ($what =~ /\A\*(.+)/) {
+    ($item, my $err) = $self->task_for_shortcut("$1");
+
+    return $event->reply($err) if $err;
+  } elsif ($what =~ /\A[0-9]+\z/) {
+    my $item_res = $lpc->get_item($what);
+
+    return $event->reply("I can't find an item with that id!")
+      unless $item = $item_res->payload;
+
+    return $event->reply("You can only update tasks.")
+      unless $item->{type} eq 'Task';
+  } else {
+    return $event->reply(q{You can only say "update ID ..." or "update *shortcut ...".});
+  }
 
   my ($ok, $error) = $self->_handle_subcmds([$cmds], $plan);
 
-  $event->mark_handled;
-
   return $event->reply($error) unless $ok;
 
-  return $event->reply( "Update plan: ```"
+  return $event->reply( "Update plan for LP$item->{id}: ```"
                       . JSON->new->canonical->encode($plan)
                       . "```");
 }
