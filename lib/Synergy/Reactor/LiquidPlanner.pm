@@ -98,9 +98,11 @@ sub _slack_item_link_with_name ($self, $item) {
   sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
     $self->item_uri($item->{id}),
     $item->{id},
-    ( $item->{is_done} ? "✓"
-    : (grep {; $_ == $urgent } $item->{package_ids}->@*) ? "\N{FIRE}"
-    : "•"
+    ( $item->{is_done}
+      ? "✓"
+      : (grep {; $_ == $urgent }
+          ($item->{parent_ids}->@*, $item->{package_ids}->@*))  ? "\N{FIRE}"
+                                                                : "•"
     ),
     $title;
 }
