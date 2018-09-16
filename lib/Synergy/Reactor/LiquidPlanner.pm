@@ -376,8 +376,12 @@ sub provide_lp_link ($self, $event) {
 
         # The user asked for this directly, so let's give them more detail.
         $slack .= "\n";
-        $slack .= "Parent: "
+        $slack .= "*Parent*: "
                .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
+               .  "\n";
+
+        $slack .= "*Package*: "
+               .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
                .  "\n";
 
         my @assignees = sort uniq
@@ -386,7 +390,7 @@ sub provide_lp_link ($self, $event) {
                         $item->{assignments}->@*;
 
         if (@assignees) {
-          $slack .= "Assignees: " . join(q{, }, @assignees) . "\n";
+          $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
         }
       }
 
