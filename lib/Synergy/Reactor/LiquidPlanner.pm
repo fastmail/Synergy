@@ -1647,6 +1647,7 @@ sub _handle_search ($self, $event, $text) {
   }
   $item_type //= 'Task';
   push @filters, [ 'item_type', 'is', $item_type ] unless $item_type eq '*';
+  $has_strong_check++ unless $item_type eq '*' or $item_type eq 'Task';
 
   my $debug = $flag{debug} && grep { $_ } keys((delete $flag{debug})->%*);
 
@@ -1675,8 +1676,9 @@ sub _handle_search ($self, $event, $text) {
   }
 
   unless ($has_strong_check) {
-    $error{strong} = "Your search has to be limited to one project or "
-                   . "have at least one non-negated search term.";
+    $error{strong} = "Your search has to be either be limited to one project, "
+                   . "an item type other than task, or must have at least one "
+                   . "non-negated search term.";
   }
 
   if (%error) {
