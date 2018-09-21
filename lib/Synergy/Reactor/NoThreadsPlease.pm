@@ -43,7 +43,7 @@ sub handle_thread ($self, $event) {
 
   $event->private_reply(
     "This string is unreachable.",
-    { slack => "Please don't use threads.  They're just the worst." },
+    { slack => "On this Slack, the use of conversation threads is strongly discouraged." },
   );
 
   return;
