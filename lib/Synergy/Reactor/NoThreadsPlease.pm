@@ -2,19 +2,16 @@ use v5.24.0;
 package Synergy::Reactor::NoThreadsPlease;
 
 use Moose;
-use DateTime;
 with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures);
 use namespace::clean;
-use List::Util qw(first uniq);
-use Synergy::Util qw(parse_date_for_user);
 
 sub listener_specs {
   return {
     name      => 'no_threads_please',
     method    => 'handle_thread',
-    exclusive => 1,
+    exclusive => 0,
     predicate => sub ($self, $e) {
       return unless $e->from_channel->isa('Synergy::Channel::Slack');
       my $td = $e->transport_data;
@@ -44,7 +41,11 @@ sub handle_thread ($self, $event) {
     thread => $event->transport_data->{thread_ts},
   };
 
-  $event->private_reply("Please don't use threads.  They're just the worst.");
+  $event->private_reply(
+    "This string is unreachable.",
+    { slack => "Please don't use threads.  They're just the worst." },
+  );
+
   return;
 }
 
