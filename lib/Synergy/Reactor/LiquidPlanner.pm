@@ -394,6 +394,24 @@ sub provide_lp_link ($self, $event) {
         if (@assignees) {
           $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
         }
+
+        for my $pair (
+          [ 'Created',      'created_at' ],
+          [ 'Last Updated', 'updated_at' ],
+        ) {
+          my $dt = DateTime::Format::ISO8601->parse_datetime(
+            $item->{ $pair->[1] }
+          );
+
+          my $str = $self->hub->format_friendly_date(
+            $dt,
+            {
+              target_time_zone  => $event->from_user->time_zone,
+            }
+          );
+
+          $slack .= "*$pair->[0]*: $str\n";
+        }
       }
 
       $event->reply(
