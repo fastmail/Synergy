@@ -28,7 +28,7 @@ has recent_threads => (
 
 sub handle_thread ($self, $event) {
   my $time_ago = time - 1800;
-  $self->recent_threads->@* = grep {; $_->{at} < $time_ago }
+  $self->recent_threads->@* = grep {; $_->{at} >= $time_ago }
                               $self->recent_threads->@*;
 
   return if grep {; $_->{thread} eq $event->transport_data->{thread_ts} }
