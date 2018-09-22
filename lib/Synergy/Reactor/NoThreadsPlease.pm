@@ -31,19 +31,22 @@ sub handle_thread ($self, $event) {
   $self->recent_threads->@* = grep {; $_->{at} < $time_ago }
                               $self->recent_threads->@*;
 
-  return if grep {; $_->{who} eq $event->from_address
-                 && $_->{thread} eq $event->transport_data->{thread_ts}
-                 } $self->recent_threads->@*;
+  return if grep {; $_->{thread} eq $event->transport_data->{thread_ts} }
+            $self->recent_threads->@*;
 
   push $self->recent_threads->@*, {
-    at  => time,
-    who => $event->from_address,
+    at     => time,
     thread => $event->transport_data->{thread_ts},
   };
 
-  $event->private_reply(
+  $event->reply(
     "This string is unreachable.",
-    { slack => "On this Slack, the use of conversation threads is strongly discouraged." },
+    {
+      slack => {
+        text      => "On this Slack, the use of threads is discouraged.",
+        thread_ts => $event->transport_data->{thread_ts},
+      },
+    },
   );
 
   return;
