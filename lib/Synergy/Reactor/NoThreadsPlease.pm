@@ -21,9 +21,15 @@ sub listener_specs {
   };
 }
 
+has message_text => (
+  is      => 'ro',
+  default => "On this Slack, the use of threads is discouraged.",
+);
+
 has recent_threads => (
   is  => 'ro',
-  default => sub {  []  },
+  default   => sub {  []  },
+  init_args => undef,
 );
 
 sub handle_thread ($self, $event) {
@@ -43,7 +49,7 @@ sub handle_thread ($self, $event) {
     "This string is unreachable.",
     {
       slack => {
-        text      => "On this Slack, the use of threads is discouraged.",
+        text      => $self->message_text,
         thread_ts => $event->transport_data->{thread_ts},
       },
     },
