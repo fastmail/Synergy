@@ -2104,12 +2104,12 @@ sub _handle_commit ($self, $event, $comment) {
   }
 
   my %meta;
-  while ($comment =~ s/(?:\A|\s+)(DONE|STOP|CHILL)\z//) {
+  while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL)\z//) {
     $meta{$1}++;
   }
 
   $meta{DONE} = 1 if $comment =~ /\Adone\z/i;
-  $meta{STOP} = 1 if $meta{DONE} or $meta{CHILL};
+  $meta{STOP} = 1 if $meta{DONE} or $meta{CHILL} or $meta{SOTP};
 
   my $lp_timer = $self->lp_timer_for_user($user);
 
