@@ -15,7 +15,7 @@ sub listener_specs {
     exclusive => 1,
     predicate => sub ($self, $e) {
       return unless $e->was_targeted;
-      return unless $e->text =~ /\Aemit(?:\s+.+)?/; },
+      return unless $e->text =~ /\Aemit(?:\s+.+)?/i; },
   };
 }
 

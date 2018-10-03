@@ -15,7 +15,7 @@ sub listener_specs {
     name      => 'warp-core',
     method    => 'handle_eject',
     exclusive => 1,
-    predicate => sub ($self, $e) { $e->was_targeted && $e->text eq 'eject warp core' },
+    predicate => sub ($self, $e) { $e->was_targeted && lc $e->text eq 'eject warp core' },
   };
 }
 

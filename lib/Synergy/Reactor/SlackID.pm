@@ -20,7 +20,7 @@ sub listener_specs {
 
         return unless $event->was_targeted;
 
-        return unless $event->text =~ /\A\s*slackid [@#]?(\w+)\s*\z/;
+        return unless $event->text =~ /\A\s*slackid [@#]?(\w+)\s*\z/i;
 
         return 1;
       },
