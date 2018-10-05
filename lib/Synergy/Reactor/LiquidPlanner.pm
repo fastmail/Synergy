@@ -693,14 +693,14 @@ sub nag ($self, $timer, @) {
     }
 
     { # Timer running too long!
-      if ($lp_timer && $lp_timer->{running_time} > 3) {
+      if ($lp_timer && $lp_timer->running_time > 3) {
         if ($last_nag && time - $last_nag->{time} < 900) {
           $Logger->log("$username: Won't nag, nagged within the last 15min.");
           next USER;
         }
 
         my $msg = "Your timer has been running for "
-                . concise(duration($lp_timer->{running_time} * 3600))
+                . $lp_timer->running_time_duration
                 . ".  Maybe you should commit your work.";
 
         my $friendly = $self->hub->channel_named($self->primary_nag_channel_name);
@@ -875,7 +875,6 @@ sub _handle_timer ($self, $event, $text) {
     unless $timer_res->is_success;
 
   my $timer = $timer_res->payload;
-
   my $sy_timer = $self->timer_for_user($user);
 
   unless ($timer) {
@@ -892,12 +891,12 @@ sub _handle_timer ($self, $event, $text) {
     return $event->reply($msg);
   }
 
-  my $time = concise( duration( $timer->{running_time} * 3600 ) );
+  my $time = $timer->real_total_time_duration;
 
-  my $task_res = $lpc->get_item($timer->{item_id});
+  my $task_res = $lpc->get_item($timer->item_id);
 
   my $task = ($task_res->is_success && $task_res->payload)
-          || { id => $timer->{item_id}, name => '??' };
+          || { id => $timer->item_id, name => '??' };
 
   my $url = $self->item_uri($task->{id});
 
@@ -2001,7 +2000,7 @@ sub lp_timer_for_user ($self, $user) {
   my $timer = $timer_res->payload;
 
   if ($timer) {
-    $self->set_last_lp_timer_task_id_for_user($user, $timer->{item_id});
+    $self->set_last_lp_timer_task_id_for_user($user, $timer->item_id);
   }
 
   return $timer;
@@ -2119,7 +2118,7 @@ sub _handle_commit ($self, $event, $comment) {
   my $sy_timer = $self->timer_for_user($user);
   return $event->reply("You don't timer-capable.") unless $sy_timer;
 
-  my $task_id = $lp_timer->{item_id};
+  my $task_id = $lp_timer->item_id;
 
   my $activity_res = $lpc->get_activity_id($task_id, $user->lp_id);
 
@@ -2143,7 +2142,7 @@ sub _handle_commit ($self, $event, $comment) {
 
   my $commit_res = $lpc->track_time({
     task_id => $task_id,
-    work    => $lp_timer->{running_time},
+    work    => $lp_timer->real_total_time,
     done    => $meta{DONE},
     comment => $comment,
     member_id   => $user->lp_id,
@@ -2184,9 +2183,9 @@ sub _handle_commit ($self, $event, $comment) {
           .  join q{ and }, @errors;
   }
 
-  my $time = concise( duration( $lp_timer->{running_time} * 3600 ) );
+  my $time = $lp_timer->real_total_time_duration;
 
-  my $uri= $self->item_uri($lp_timer->{item_id});
+  my $uri = $self->item_uri($lp_timer->item_id);
 
   my $task_res = $lpc->get_item($task_id);
   unless ($task_res->is_success) {
@@ -2228,15 +2227,15 @@ sub _handle_abort ($self, $event, $text) {
   return $event->reply("You don't have a running timer to abort.")
     unless my $timer = $timer_res->payload;
 
-  my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
-  my $clr_res  = $lpc->clear_timer_for_task_id($timer->{item_id});
+  my $stop_res = $lpc->stop_timer_for_task_id($timer->item_id);
+  my $clr_res  = $lpc->clear_timer_for_task_id($timer->item_id);
 
   my $task_was = '';
 
-  my $task_res = $lpc->get_item($timer->{item_id});
+  my $task_res = $lpc->get_item($timer->item_id);
 
   if ($task_res->is_success) {
-    my $uri = $self->item_uri($timer->{item_id});
+    my $uri = $self->item_uri($timer->item_id);
     $task_was = " The task was: " . $task_res->payload->{name} . " ($uri)";
   }
 
@@ -2338,7 +2337,7 @@ sub _handle_resume ($self, $event, $text) {
   my $lp_timer = $self->lp_timer_for_user($user);
 
   if ($lp_timer && ref $lp_timer) {
-    my $task_res = $lpc->get_item($lp_timer->{item_id});
+    my $task_res = $lpc->get_item($lp_timer->item_id);
 
     unless ($task_res->is_success) {
       return $event->reply("You already have a running timer (but I couldn't figure out its task…)");
@@ -2395,16 +2394,16 @@ sub _handle_stop ($self, $event, $text) {
   return $event->reply("You don't have a running timer to stop.")
     unless my $timer = $timer_res->payload;
 
-  my $stop_res = $lpc->stop_timer_for_task_id($timer->{item_id});
+  my $stop_res = $lpc->stop_timer_for_task_id($timer->item_id);
   return $event->reply("I couldn't stop your timer.")
     unless $stop_res->is_success;
 
   my $task_was = '';
 
-  my $task_res = $lpc->get_item($timer->{item_id});
+  my $task_res = $lpc->get_item($timer->item_id);
 
   if ($task_res->is_success) {
-    my $uri = $self->item_uri($timer->{item_id});
+    my $uri = $self->item_uri($timer->item_id);
     $task_was = " The task was: " . $task_res->payload->{name} . " ($uri)";
 
   }
@@ -2455,7 +2454,7 @@ sub _handle_reset ($self, $event, $text) {
   return $event->reply("You don't have a running timer to reset.")
     unless my $timer = $timer_res->payload;
 
-  my $task_id = $timer->{item_id};
+  my $task_id = $timer->item_id;
   my $clr_res = $lpc->clear_timer_for_task_id($task_id);
 
   return $event->reply("Something went wrong resetting your timer.")
@@ -3029,11 +3028,12 @@ sub user_status_for ($self, $event, $user) {
   my $timer_res = $lpc->my_running_timer;
   if ($timer_res->is_success && $timer_res->payload) {
     my $lp_timer = $timer_res->payload;
-    my $item_res = $lpc->get_item($lp_timer->{item_id});
+    my $item_res = $lpc->get_item($lp_timer->item_id);
     if ($item_res->is_success) {
-      $reply .= sprintf "LiquidPlanner timer running for %s on LP %s: %s",
-        concise(duration($lp_timer->{running_time} * 3600)),
-        $lp_timer->{item_id},
+      $reply .= sprintf "LiquidPlanner timer running for %s (total %s) on LP %s: %s",
+        $lp_timer->running_time_duration,
+        $lp_timer->real_total_time_duration,
+        $lp_timer->item_id,
         $item_res->payload->{name};
     }
   }
