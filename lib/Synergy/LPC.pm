@@ -163,6 +163,9 @@ sub my_running_timer ($self) {
   return $timer_res unless $timer_res->is_success;
 
   my ($timer) = grep {; $_->{running} } $timer_res->payload_list;
+  if ($timer) {
+    $timer = LPC::Timer->new($timer);
+  }
   return _success($timer);
 }
 
@@ -283,6 +286,46 @@ sub create_todo_item ($self, $todo) {
     Content_Type => 'application/json',
     Content => $JSON->encode({ todo_item => $todo }),
   );
+}
+
+package LPC::Timer {
+  use Moose;
+  use namespace::autoclean;
+  use experimental qw(signatures lexical_subs);
+  use Time::Duration;
+
+  for my $prop (qw(
+    total_time
+    person_id
+    running
+    id
+    item_id
+    type
+    running_time
+  )) {
+    has $prop => (is => 'ro');
+  }
+
+  # Total time is a *lie*. It's undef if the timer has never
+  # been stopped/resumed. If it has been resumed, it's only
+  # the previous time, not including current running time...
+  sub real_total_time ($self) {
+    return ($self->total_time // 0) + $self->running_time;
+  }
+
+  for my $prop (qw(
+    real_total_time
+    total_time
+    running_time
+  )) {
+    no strict 'refs';
+
+    my $sub = $prop . "_duration";
+
+    *$sub = sub ($self) {
+      return concise( duration( $self->$prop * 3600 ) );
+    };
+  }
 }
 
 package LPC::Result::Success {
