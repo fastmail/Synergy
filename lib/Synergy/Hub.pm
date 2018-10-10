@@ -21,6 +21,7 @@ use Synergy::HTTPServer;
 use Try::Tiny;
 use URI;
 use Scalar::Util qw(blessed);
+use Defined::KV;
 
 has name => (
   is  => 'ro',
@@ -104,14 +105,28 @@ has server_port => (
   default => 8118,
 );
 
+has tls_cert_file => (
+  is => 'ro',
+  isa => 'Str',
+  default => '',
+);
+
+has tls_key_file => (
+  is => 'ro',
+  isa => 'Str',
+  default => '',
+);
+
 has server => (
   is => 'ro',
   isa => 'Synergy::HTTPServer',
   lazy => 1,
   default => sub ($self) {
     my $s = Synergy::HTTPServer->new({
-      name        => '_http_server',
-      server_port => $self->server_port,
+      name          => '_http_server',
+      server_port   => $self->server_port,
+      tls_cert_file => $self->tls_cert_file,
+      tls_key_file  => $self->tls_key_file,
     });
 
     $s->register_with_hub($self);
@@ -293,8 +308,10 @@ sub synergize {
 
   my $hub = $class->new({
     user_directory  => $directory,
-    ($config->{time_zone_names} ? (time_zone_names  => $config->{time_zone_names})  : ()),
-    ($config->{server_port}     ? (server_port      => $config->{server_port})      : ()),
+    defined_kv(time_zone_names => $config->{time_zone_names}),
+    defined_kv(server_port     => $config->{server_port}),
+    defined_kv(tls_cert_file   => $config->{tls_cert_file}),
+    defined_kv(tls_key_file    => $config->{tls_key_file}),
   });
 
   $directory->register_with_hub($hub);
