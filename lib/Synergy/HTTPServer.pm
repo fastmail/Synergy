@@ -102,7 +102,10 @@ sub start ($self) {
       %opts,
       SSL_cert_file => $self->tls_cert_file,
       SSL_key_file  => $self->tls_key_file,
-      on_ssl_error    => sub { die "SSL error - $_[-1]\n" },
+      on_ssl_error    => sub {
+        # do we even care about this?
+        $Logger->log("HTTPServer: SSL error - $_[-1]");
+      },
     );
   }
   else {
