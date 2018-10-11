@@ -31,6 +31,7 @@ requires 'Net::Async::HTTP::Server::PSGI';
 requires 'Net::Async::WebSocket::Client';
 requires 'Path::Tiny';
 requires 'Plack::App::URLMap';
+requires 'Plack::Middleware::AccessLog';
 requires 'Plack::Request';
 requires 'Prometheus::Tiny', '0.002';
 requires 'Sub::Exporter';
