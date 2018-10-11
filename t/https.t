@@ -38,9 +38,19 @@ $synergy->loop->add($http);
 my $port = $synergy->server_port;
 
 {
-  my ($res) = $http->do_request(uri => "https://localhost:$port/ok")->get;
-  ok($res->is_success, 'http server is responding');
+  # Doing this test first, before the successful HTTPS test.
+  # Net::Async::HTTP caches connections by host:port, ignoring scheme
+  # So successful HTTPS connection is reused for the HTTP test, which then succeeds
+  # I consider this to be a Net::Async::HTTP bug
+  my $f = $http->do_request(uri => "http://localhost:$port/ok");
+  ok($f->failure, 'http request to https server failed');
 }
+
+{
+  my ($res) = $http->do_request(uri => "https://localhost:$port/ok")->get;
+  ok($res->is_success, 'https server is responding');
+}
+
 
 done_testing;
 
