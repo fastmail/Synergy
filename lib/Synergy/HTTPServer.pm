@@ -10,6 +10,7 @@ use namespace::clean;
 use Net::Async::HTTP::Server::PSGI;
 use IO::Async::SSL;
 use Plack::App::URLMap;
+use Plack::Middleware::AccessLog;
 use Plack::Request;
 use Carp;
 use Try::Tiny;
@@ -53,7 +54,12 @@ has http_server => (
   lazy => 1,
   default => sub ($self) {
     my $server = Net::Async::HTTP::Server::PSGI->new(
-      app => sub ($env) {
+      app => Plack::Middleware::AccessLog->new(
+        logger => sub ($msg) {
+          chomp($msg);
+          $Logger->log("HTTPServer: access: $msg");
+        }
+      )->wrap(sub ($env) {
         $env->{PATH_INFO} = '/' unless $env->{PATH_INFO};
         my $req = Plack::Request->new($env);
 
@@ -66,7 +72,7 @@ has http_server => (
         }
 
         return $self->app_for_path($req->path_info)->($req);
-      },
+      }),
     );
   },
 );
