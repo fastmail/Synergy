@@ -86,7 +86,7 @@ has http_server => (
 
         if ($self->path_requires_auth($req->path_info)) {
           my $creds = $self->auth_credentials_for_path($req->path_info);
-          my ($authuser, $authpass) = $creds->@*;
+          my ($authuser, $authpass) = $creds->@{qw{username password}};
 
           return Plack::Middleware::Auth::Basic->new(
             authenticator => sub ($user, $pass, $env) {

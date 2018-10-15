@@ -26,7 +26,10 @@ my $synergy = Synergy::Hub->synergize(
       }
     },
     http_auth => {
-      '/auth' => [ 'admin', 'secret' ],
+      '/auth' => {
+        username => 'admin',
+        password => 'secret'
+      },
     }
   }
 );
