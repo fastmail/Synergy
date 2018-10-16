@@ -302,8 +302,8 @@ sub provide_lp_link ($self, $event) {
   my $user = $event->from_user;
   return unless $user && $self->auth_header_for($user);
 
-  state $lp_id_re       = qr/\bLP([1-9][0-9]{5,10})\b/i;
-  state $lp_shortcut_re = qr/\bLP([*#][-_a-z0-9]+)\b/i;
+  state $lp_id_re       = qr/\bLP\s*([1-9][0-9]{5,10})\b/i;
+  state $lp_shortcut_re = qr/\bLP\s*([*#][-_a-z0-9]+)\b/i;
 
   my $workspace_id  = $self->workspace_id;
   my $lp_url_re     = qr{\b(?:\Qhttps://app.liquidplanner.com/space/$workspace_id\E/.*/)([0-9]+)P?/?\b};
