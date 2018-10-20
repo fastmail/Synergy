@@ -12,6 +12,7 @@ use Synergy::Event;
 use namespace::autoclean;
 
 with 'Synergy::Role::Channel';
+with 'Synergy::Role::HTTPEndpoint';
 
 has [ qw( sid auth from ) ] => (
   is => 'ro',
@@ -25,86 +26,84 @@ has numbers => (
   required => 1,
 );
 
-has http_path => (
-  is  => 'ro',
-  isa => 'Str',
+has '+http_path' => (
   default => '/sms',
 );
 
-sub start ($self) {
-  $self->hub->server->register_path($self->http_path, sub ($req) {
-    my $param = $req->parameters;
-    my $from  = $param->{From} // '';
+sub http_app ($self, $env) {
+  my $req = Plack::Request->new($env);
 
-    unless (($param->{AccountSid}//'') eq $self->sid) {
-      $Logger->log([
-        "Bad request (wrong sid) for %s from phone %s from IP %s",
-        $req->uri->path_query,
-        $from,
-        $req->address,
-      ]);
+  my $param = $req->parameters;
+  my $from  = $param->{From} // '';
 
-      return [
-        400,
-        [ 'Content-Type', 'application/json' ],
-        [ "{}\n" ],
-      ];
-    }
-
-    my $who = $self->hub->user_directory->user_by_channel_and_address(
-      $self,
+  unless (($param->{AccountSid}//'') eq $self->sid) {
+    $Logger->log([
+      "Bad request (wrong sid) for %s from phone %s from IP %s",
+      $req->uri->path_query,
       $from,
-    );
+      $req->address,
+    ]);
 
-    unless ($who) {
-      my (@match) = grep {; $_->has_phone && $_->phone eq $from }
-                    $self->hub->user_directory->users;
+    return [
+      400,
+      [ 'Content-Type', 'application/json' ],
+      [ "{}\n" ],
+    ];
+  }
 
-      if (@match == 1) {
-        $who = $match[0];
-        $Logger->log([
-          "resolved %s to %s via phone number",
-          $from,
-          $who->username,
-        ]);
-      } elsif (@match > 1) {
-        $Logger->log([ "phone number %s is ambiguous", $from ]);
-      }
-    }
+  my $who = $self->hub->user_directory->user_by_channel_and_address(
+    $self,
+    $from,
+  );
 
-    unless ($who) {
+  unless ($who) {
+    my (@match) = grep {; $_->has_phone && $_->phone eq $from }
+                  $self->hub->user_directory->users;
+
+    if (@match == 1) {
+      $who = $match[0];
       $Logger->log([
-        "Bad request (unknown user) for %s from phone %s from IP %s",
-        $req->uri->path_query,
+        "resolved %s to %s via phone number",
         $from,
-        $req->address,
+        $who->username,
       ]);
-
-      return [
-        400,
-        [ 'Content-Type', 'application/json' ],
-        [ "{}\n" ],
-      ];
+    } elsif (@match > 1) {
+      $Logger->log([ "phone number %s is ambiguous", $from ]);
     }
+  }
 
-    my $text = $param->{Body};
+  unless ($who) {
+    $Logger->log([
+      "Bad request (unknown user) for %s from phone %s from IP %s",
+      $req->uri->path_query,
+      $from,
+      $req->address,
+    ]);
 
-    my $evt = Synergy::Event->new({
-      type => 'message',
-      text => $text,
-      was_targeted => 1,
-      is_public    => 0,
-      from_channel => $self,
-      from_address => $from,
-      from_user    => $who, # we already gave up if no user -- rjbs, 2018-03-15
-      transport_data => $param,
-      conversation_address => $from,
-    });
+    return [
+      400,
+      [ 'Content-Type', 'application/json' ],
+      [ "{}\n" ],
+    ];
+  }
 
-    $self->hub->handle_event($evt);
+  my $text = $param->{Body};
 
-    return [ 200, [ 'Content-Type', 'text/plain' ], [ "" ] ];
+  my $evt = Synergy::Event->new({
+    type => 'message',
+    text => $text,
+    was_targeted => 1,
+    is_public    => 0,
+    from_channel => $self,
+    from_address => $from,
+    from_user    => $who, # we already gave up if no user -- rjbs, 2018-03-15
+    transport_data => $param,
+    conversation_address => $from,
   });
+
+  $self->hub->handle_event($evt);
+
+  return [ 200, [ 'Content-Type', 'text/plain' ], [ "" ] ];
 }
 
 sub http_post {
