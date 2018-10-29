@@ -36,6 +36,12 @@ has channels => (
   writer => '_set_channels',
 );
 
+has group_conversations => (
+  is => 'ro',
+  isa => 'HashRef',
+  writer => '_set_group_conversations',
+);
+
 has _channels_by_name => (
   is              => 'ro',
   isa             => 'HashRef',
@@ -258,6 +264,7 @@ sub setup ($self) {
   $Logger->log("Connected to Slack!");
   $self->load_users;
   $self->load_channels;
+  $self->load_group_conversations;
   $self->load_dm_channels;
 }
 
@@ -310,6 +317,7 @@ sub dm_channel_for_address ($self, $slack_id) {
 has loaded_users => (is => 'rw', isa => 'Bool');
 has loaded_channels => (is => 'rw', isa => 'Bool');
 has loaded_dm_channels => (is => 'rw', isa => 'Bool');
+has loaded_group_conversations => (is => 'rw', isa => 'Bool');
 
 has _is_ready => (is => 'rw', isa => 'Bool');
 
@@ -321,6 +329,7 @@ sub is_ready ($self) {
        $self->loaded_users
     && $self->loaded_channels
     && $self->loaded_dm_channels
+    && $self->loaded_group_conversations
   ) {
     $self->_is_ready(1);
   }
@@ -359,9 +368,43 @@ sub load_channels ($self) {
   });
 }
 
+
+sub load_group_conversations ($self) {
+  $self->api_call('conversations.list', {
+    types => 'mpim',
+  })->on_done(sub ($http_res) {
+    my $res = decode_json($http_res->decoded_content);
+
+    $self->_set_group_conversations({
+      map { $_->{id},  $_ } $res->{channels}->@*
+    });
+
+    $Logger->log("Slack group conversations loaded");
+
+    $self->loaded_group_conversations(1);
+  });
+}
+
+sub group_conversation_name ($self, $id) {
+  my $conversation;
+
+  unless ($conversation = $self->group_conversations->{$id}) {
+    # A new group chat materialized perhaps?
+    $self->load_group_conversations->get();
+
+    $conversation = $self->group_conversations->{$id};
+  }
+
+  return 'group' unless $conversation;
+
+  return $conversation->{name} || 'group';
+}
+
+
 sub load_dm_channels ($self) {
   $self->api_call('im.list', {})->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
+
     $self->_set_dm_channels({
       map { $_->{user}, $_->{id} } $res->{ims}->@*
     });

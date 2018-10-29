@@ -224,6 +224,9 @@ sub describe_event ($self, $event) {
 }
 
 sub describe_conversation ($self, $event) {
+  my $who = $event->from_user ? $event->from_user->username
+                              : $self->slack->users->{$event->from_address}{name};
+
   my $slack_event = $event->transport_data;
 
   my $channel_id = $event->transport_data->{channel};
@@ -232,9 +235,9 @@ sub describe_conversation ($self, $event) {
     my $channel = $self->slack->channels->{$channel_id}{name};
     return "#$channel";
   } elsif ($channel_id =~ /^D/) {
-    return 'private';
+    return '@' . $who;
   } else {
-    return 'group';
+    return $self->slack->group_conversation_name($channel_id);
   }
 }
 
