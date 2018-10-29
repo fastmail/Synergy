@@ -11,6 +11,7 @@ use Net::Async::HTTP::Server::PSGI;
 use IO::Async::SSL;
 use Plack::App::URLMap;
 use Plack::Middleware::AccessLog;
+use Plack::Response;
 use Carp;
 use Try::Tiny;
 
