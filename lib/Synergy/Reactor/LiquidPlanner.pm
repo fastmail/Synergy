@@ -2815,7 +2815,7 @@ sub _build_package_summary ($self, $package_id, $user) {
   # This is hard-coded because all the iteration-handling code is buried in
   # LP-Tools, and merging that with Synergy without making a big pain right now
   # is... it's not happening this Friday afternoon. -- rjbs, 2018-06-15
-  $package_id = 47893320;
+  $package_id = 48172770;
 
   my $items_res = $self->lp_client_for_master->query_items({
     in    => $package_id,
