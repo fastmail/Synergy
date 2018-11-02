@@ -120,6 +120,10 @@ my %KNOWN = (
                   ">> USER TASK-SPEC: add a task for someone else "],
   abort     =>  [ \&_handle_abort,
                   "abort timer: throw your LiquidPlanner timer away" ],
+
+  assign    =>  [ \&_handle_assign,
+                  "assign TASK-ID WHO: add an assignment to a task" ],
+
   chill     =>  [ \&_handle_chill,
                   "chill: do not nag about a timer until you say something new",
                   "chill until WHEN: do not nag until the designated time",
@@ -145,6 +149,10 @@ my %KNOWN = (
   projects  =>  [ \&_handle_projects,
                   "projects: list all known project shortcuts",
                 ],
+
+  reassign  =>  [ \&_handle_reassign,
+                  "reassign TASK-ID WHO: replace your assignment on a task with someone else" ],
+
   recurring =>  [ \&_handle_recurring,
                   "recurring [PAGE-NUMBER]: list your tasks in Recurring Tasks",
                 ],
@@ -3130,6 +3138,84 @@ sub _handle_contents ($self, $event, $rest) {
       slack => $slack_summary,
     },
   );
+}
+
+sub _handle_assign ($self, $event, $text) {
+  my $user = $event->from_user;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+
+  my ($task_id, $who) = $text =~ /\A\s*(?:LP\s*)?([0-9]+)\s*(?:to)?\s+@?(.+?)\s*\z/;
+  unless ($task_id and $who) {
+    return $event->reply("Does not compute.  Usage:  assign TASK-ID WHO");
+  }
+
+  my $target = $self->resolve_name($who, $event->from_user);
+  unless ($target && $target->lp_id) {
+    return $event->reply("Sorry, I don't know who that is.");
+  }
+
+  my $lpc = $self->lp_client_for_user($user);
+
+  my $task_res = $lpc->get_item($task_id);
+  return $event->reply("Sorry, something went wrong trying to find that task.")
+    unless $task_res->is_success;
+
+  return $event->reply("Sorry, I couldn't find that task.")
+    if $task_res->is_nil;
+
+  my $assignment_res = $lpc->update_assignment($task_id, {
+    person_id => $target->lp_id,
+  });
+  return $event->reply("Sorry, something went wrong adding an assignment to the task.")
+    unless $assignment_res->is_success;
+
+  $event->reply("Assignment created.");
+}
+
+sub _handle_reassign ($self, $event, $text) {
+  my $user = $event->from_user;
+  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+
+  my ($task_id, $who) = $text =~ /\A\s*(?:LP\s*)?([0-9]+)\s*(?:to)?\s+@?(.+?)\s*\z/;
+  unless ($task_id and $who) {
+    return $event->reply("Does not compute.  Usage:  reassign TASK-ID WHO");
+  }
+
+  my $target = $self->resolve_name($who, $event->from_user);
+  unless ($target && $target->lp_id) {
+    return $event->reply("Sorry, I don't know who that is.");
+  }
+
+  my $lpc = $self->lp_client_for_user($user);
+
+  my $task_res = $lpc->get_item($task_id);
+  return $event->reply("Sorry, something went wrong trying to find that task.")
+    unless $task_res->is_success;
+
+  return $event->reply("Sorry, I couldn't find that task.")
+    if $task_res->is_nil;
+
+  my $task = $task_res->payload;
+
+  my @assignments = $task->{assignments}->@*;
+  my $assignment;
+  if (@assignments == 1) {
+    ($assignment) = @assignments;
+  }
+  else {
+    ($assignment) = grep {; $_->{person_id} == $user->lp_id } @assignments;
+    return $event->reply("I can't reassign that task because you don't have an assignment on it, and its assigned to more than one person.")
+      unless $assignment;
+  }
+
+  my $assignment_res = $lpc->update_assignment($task_id, {
+    assignment_id => $assignment->{id},
+    person_id     => $target->lp_id,
+  });
+  return $event->reply("Sorry, something went wrong adding an reassigning that task.")
+    unless $assignment_res->is_success;
+
+  $event->reply("Task reassigned.");
 }
 
 1;

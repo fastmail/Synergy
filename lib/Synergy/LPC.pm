@@ -247,15 +247,12 @@ sub track_time ($self, $arg) {
   die "WHERE IS MY ASSIGNMENT" unless $assignment;
 
   if ($arg->{done} xor $assignment->{is_done}) {
-    my $assignment_res = $self->http_post(
-      "/tasks/$arg->{task_id}/update_assignment",
-      Content_Type => 'application/json',
-      Content => $JSON->encode({
+    my $assignment_res = $self->update_assignment(
+      $arg->{task_id}, {
         assignment_id => $assignment->{id},
         is_done       => ($arg->{done} ? \1 : \0),
-      }),
+      }
     );
-
     return $assignment_res unless $assignment_res->is_success;
   }
 
@@ -264,6 +261,14 @@ sub track_time ($self, $arg) {
     work    => $arg->{work},
     assignment_id => $assignment->{id},
   });
+}
+
+sub update_assignment ($self, $task_id, $assignment) {
+  return $self->http_post(
+    "/tasks/$task_id/update_assignment",
+    Content_Type => 'application/json',
+    Content => $JSON->encode($assignment),
+  );
 }
 
 sub create_task ($self, $task) {
