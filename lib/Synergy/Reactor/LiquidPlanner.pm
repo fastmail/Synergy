@@ -386,13 +386,15 @@ sub provide_lp_link ($self, $event) {
                .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
                .  "\n";
 
-        my @assignees = sort uniq
-                        map  {; $by_lp{ $_->{person_id} } // '?' }
-                        grep {; ! $_->{is_done} }
-                        $item->{assignments}->@*;
+        if ($item->{assignments}) {
+          my @assignees = sort uniq
+                          map  {; $by_lp{ $_->{person_id} } // '?' }
+                          grep {; ! $_->{is_done} }
+                          $item->{assignments}->@*;
 
-        if (@assignees) {
-          $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
+          if (@assignees) {
+            $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
+          }
         }
 
         for my $pair (
