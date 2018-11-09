@@ -29,7 +29,7 @@ has message_text => (
 has recent_threads => (
   is  => 'ro',
   default   => sub {  []  },
-  init_args => undef,
+  init_arg => undef,
 );
 
 sub handle_thread ($self, $event) {
