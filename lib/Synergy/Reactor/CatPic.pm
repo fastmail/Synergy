@@ -112,6 +112,24 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 🦗 cricket
 🦕 dinosaur       sauropod
 🦖 dinosaur       t-rex
+
+🕊 dove
+
+🦝  raccoon
+🦙  llama
+🦛  hippo          hippopotamus
+🦛  hippopotamus
+🦘  kangaroo
+🦘  roo            kangaroo
+🦡  badger
+🦢  swan
+🦚  peacock
+🦜  parrot
+🦞  lobster
+🦟  mosquito
+🦟  skeeter        mosquito
+🧸  teddy
+🦠  microbe
 END_EMOJI
 
 has _reactions => (
