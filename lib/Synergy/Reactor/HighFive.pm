@@ -32,6 +32,39 @@ has highfive_channel => (
   required => 1,
 );
 
+has highfive_dbfile => (
+  is => 'ro',
+  isa => 'Str',
+  default => "synergy.sqlite",
+);
+
+has _highfive_dbh => (
+  is  => 'ro',
+  init_arg => undef,
+  default  => sub ($self, @) {
+    my $dbf = $self->highfive_dbfile;
+
+    my $dbh = DBI->connect(
+      "dbi:SQLite:dbname=$dbf",
+      undef,
+      undef,
+      { RaiseError => 1 },
+    );
+    die $DBI::errstr unless $dbh;
+
+    $dbh->do(q{
+      CREATE TABLE IF NOT EXISTS synergy_highfives (
+        from_user TEXT,
+        to_user TEXT,
+        reason TEXT,
+        highfived_at TEXT
+      );
+    });
+
+    return $dbh;
+  },
+);
+
 sub http_app ($self, $env) {
   unless ($self->highfive_token) {
     $Logger->log("No highfive_token configured. Ignoring highfive");
@@ -188,6 +221,18 @@ sub do_highfive ($self, %arg) {
       $failure->($self, "Failed to contact highfive_webhook for $channel");
     }
   }
+
+  $self->_highfive_dbh->do(
+    "INSERT INTO synergy_highfives
+    (from_user, to_user, reason, highfived_at)
+    VALUES
+    (?, ?, ?, ?)",
+    undef,
+    $from,
+    $target,
+    $reason // "",
+    time,
+  );
 
   return unless $ok;
 
