@@ -2854,7 +2854,10 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
 
   for my $c ($summary->{containers}->@*) {
     $text .= sprintf "%s %s%s (%u/%u)\n",
-      ($c->{type} eq 'Package' ? "\N{PACKAGE}" : "\N{FILE FOLDER}"),
+      ( $c->{type} eq 'Package' ? "\N{PACKAGE}"
+      : $c->{type} eq 'Project' ? "\N{FILE FOLDER}"
+      : $c->{type} eq 'Folder'  ? "\N{CARD INDEX DIVIDERS}"
+      :                           "❓"),
 
       $self->_slack_item_link_with_name($c),
       (($c->{owner_id} != $lp_member_id)
