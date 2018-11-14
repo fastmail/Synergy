@@ -3122,10 +3122,10 @@ sub _handle_contents ($self, $event, $rest) {
 
   my $pkg_summary = {
     name       => $item->{name},
-    containers => [ grep {; $_->{type} =~ /\A Project | Package \z/x } @items ],
+    containers => [ grep {; $_->{type} =~ /\A Project | Package | Folder \z/x } @items ],
     tasks      => [ grep {; $_->{type} eq 'Task' } @items ],
     events     => [ grep {; $_->{type} eq 'Event' } @items ],
-    others     => [ grep {; $_->{type} !~ /\A Project | Package | Task | Event \z/x } @items ],
+    others     => [ grep {; $_->{type} !~ /\A Project | Package | Folder | Task | Event \z/x } @items ],
   };
 
   my $slack_summary = $self->_slack_pkg_summary($pkg_summary, -1);
