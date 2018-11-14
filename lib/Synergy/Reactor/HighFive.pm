@@ -190,8 +190,9 @@ sub do_highfive ($self, %arg) {
   # "for eating pie" -> "eating pie"
   $reason =~ s/\Afor:?\s+//;
 
-  my $response_text = "highfive to $target"
-                    . (length($reason) ? " for: $reason (via $chan)" : ' (via $chan)');
+  my $response_text
+    = "highfive to $target"
+    . (length($reason) ? " for: $reason (via $chan)" : " (via $chan)");
 
   my $ok = 1;
 
