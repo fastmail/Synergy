@@ -95,7 +95,10 @@ sub http_app ($self, $env) {
   $self->do_highfive(
     from => $who,
     text => $text,
-    chan => $param->{channel_name},
+
+    # XXX: Surely not correct in direct or group chats. -- rjbs, 2018-11-14
+    chan => "#$param->{channel_name}",
+
     success => sub {
       my ($self, $msg) = @_;
       $msg ||= '';
