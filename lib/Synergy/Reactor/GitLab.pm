@@ -15,6 +15,7 @@ use List::Util qw(uniq);
 use MIME::Base64;
 use YAML::XS;
 use Synergy::Logger '$Logger';
+use URI::Escape;
 
 my $JSON = JSON->new->utf8->canonical;
 
@@ -323,8 +324,8 @@ sub handle_merge_request ($self, $event) {
 
   for my $key (keys %found) {
     my $shortcut = $self->shortcut_for($key);
-    next unless $shortcut;
-    push @mrs, $shortcut . q{!} . $found{$key};
+    my $num = $found{$key};
+    push @mrs, ($shortcut ? "$shortcut!$num" : "$key!$num");
   }
 
   @mrs = uniq @mrs;
@@ -332,11 +333,14 @@ sub handle_merge_request ($self, $event) {
   for my $mr (@mrs) {
     my ($proj, $num) = split /!/, $mr, 2;
 
-    next unless $self->is_known_project($proj);
+    # $proj might be a shortcut, or it might be an owner/repo string
+    my $project_id = $self->is_known_project($proj)
+                   ? $self->id_for_project($proj)
+                   : $proj;
 
-    my $url = sprintf("%s/v4/projects/%d/merge_requests/%d",
+    my $url = sprintf("%s/v4/projects/%s/merge_requests/%d",
       $self->api_uri,
-      $self->id_for_project($proj),
+      uri_escape($project_id),
       $num,
     );
 

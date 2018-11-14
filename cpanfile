@@ -42,6 +42,7 @@ requires 'Test::More';
 requires 'Time::Duration';
 requires 'Time::Duration::Parse';
 requires 'Try::Tiny';
+requires 'URI::Escape';
 requires 'URI::Find';
 requires 'YAML::XS';
 requires 'namespace::autoclean';
