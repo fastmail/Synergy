@@ -74,14 +74,7 @@ has _shortcut_lookup => (
   isa => 'HashRef',
   traits => ['Hash'],
   lazy => 1,
-  default => sub ($self) {
-    my %lookup;
-    for my $shortcut ($self->all_shortcuts) {
-      my $proj = $self->project_named($shortcut);
-      $lookup{ $proj->{name} } = $shortcut;
-    }
-    return \%lookup;
-  },
+  default => sub ($self) { return { reverse $self->project_shortcuts->%* } },
   handles => {
     shortcut_for => 'get',
   },
@@ -169,7 +162,10 @@ sub listener_specs {
       name => 'mention-commit',
       method => 'handle_commit',
       predicate => sub ($self, $e) {
-        return $e->text =~ /(^|\s)[a-z]+\@[0-9a-f]{7,40}(\W|$)/in;
+        return 1 if $e->text =~ /(^|\s)[a-z]+\@[0-9a-f]{7,40}(\W|$)/in;
+
+        state $base = $self->reactor->url_base;
+        return 1 if $e->text =~ /\Q$base\E.*?commit/;
       }
     },
   );
@@ -305,16 +301,6 @@ sub _reload_repos ($self) {
   $self->save_state;
 }
 
-sub id_for_project ($self, $shortcut) {
-  return unless $self->is_known_project($shortcut);
-  return $self->project_named($shortcut)->{id};
-}
-
-sub name_for_project ($self, $shortcut) {
-  return unless $self->is_known_project($shortcut);
-  return $self->project_named($shortcut)->{name};
-}
-
 sub handle_merge_request ($self, $event) {
   my @mrs = $event->text =~ /(?:^|\s)([a-z]+!\d+)(?=\W|$)/g;
   state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
@@ -335,7 +321,7 @@ sub handle_merge_request ($self, $event) {
 
     # $proj might be a shortcut, or it might be an owner/repo string
     my $project_id = $self->is_known_project($proj)
-                   ? $self->id_for_project($proj)
+                   ? $self->project_named($proj)
                    : $proj;
 
     my $url = sprintf("%s/v4/projects/%s/merge_requests/%d",
@@ -413,14 +399,28 @@ sub handle_merge_request ($self, $event) {
 sub handle_commit ($self, $event) {
   my @commits = $event->text =~ /(?:^|\s)([a-z]+\@[0-9a-fA-F]{7,40})(?=\W|$)/g;
 
+  state $base = $self->url_base;
+  my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)/commit/([0-9a-f]{6,40})}i;
+
+  for my $key (keys %found) {
+    my $shortcut = $self->shortcut_for($key);
+    my $sha = $found{$key};
+    push @commits, ($shortcut ? "$shortcut\@$sha" : "$key\@$sha");
+  }
+
+  @commits = uniq @commits;
+
   for my $commit (@commits) {
     my ($proj, $sha) = split /\@/, $commit, 2;
 
-    next unless $self->is_known_project($proj);
+    # $proj might be a shortcut, or it might be an owner/repo string
+    my $project_id = $self->is_known_project($proj)
+                   ? $self->project_named($proj)
+                   : $proj;
 
-    my $url = sprintf("%s/v4/projects/%d/repository/commits/%s",
+    my $url = sprintf("%s/v4/projects/%s/repository/commits/%s",
       $self->api_uri,
-      $self->id_for_project($proj),
+      uri_escape($project_id),
       $sha,
     );
 
@@ -438,7 +438,7 @@ sub handle_commit ($self, $event) {
 
     my $commit_url = sprintf("%s/%s/commit/%s",
       $self->url_base,
-      $self->name_for_project($proj),
+      $proj,
       $data->{short_id},
     );
 
@@ -460,7 +460,7 @@ sub handle_commit ($self, $event) {
         fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
         author_name => $data->{author_name},
         author_icon => $author_icon,
-        text        => "<$commit_url|$data->{short_id}> $data->{title}",
+        text        => "<$commit_url|$proj\@$data->{short_id}> $data->{title}",
       }]),
     };
 
