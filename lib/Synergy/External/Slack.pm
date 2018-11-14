@@ -368,7 +368,6 @@ sub load_channels ($self) {
   });
 }
 
-
 sub load_group_conversations ($self) {
   $self->api_call('conversations.list', {
     types => 'mpim',
