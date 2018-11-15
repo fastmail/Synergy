@@ -53,11 +53,12 @@ has _highfive_dbh => (
     die $DBI::errstr unless $dbh;
 
     $dbh->do(q{
-      CREATE TABLE IF NOT EXISTS synergy_highfives (
-        from_user TEXT,
-        to_user TEXT,
-        reason TEXT,
-        highfived_at TEXT
+      CREATE TABLE IF NOT EXISTS highfives (
+        id integer primary key,
+        from_user TEXT not null,
+        to_user TEXT not null,
+        reason TEXT not null,
+        highfived_at integer not null
       );
     });
 
@@ -227,7 +228,7 @@ sub do_highfive ($self, %arg) {
   }
 
   $self->_highfive_dbh->do(
-    "INSERT INTO synergy_highfives
+    "INSERT INTO highfives
     (from_user, to_user, reason, highfived_at)
     VALUES
     (?, ?, ?, ?)",
