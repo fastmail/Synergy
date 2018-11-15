@@ -35,7 +35,7 @@ has highfive_channel => (
 has highfive_dbfile => (
   is => 'ro',
   isa => 'Str',
-  default => "synergy.sqlite",
+  default => "highfives.sqlite",
 );
 
 has _highfive_dbh => (
