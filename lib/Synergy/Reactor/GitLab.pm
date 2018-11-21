@@ -66,18 +66,15 @@ has project_shortcuts => (
     is_known_project => 'exists',
     project_named    => 'get',
     all_shortcuts    => 'keys',
+    add_shortcuts    => 'set',
   }
 );
 
-has _shortcut_lookup => (
+has relevant_owners => (
   is => 'ro',
-  isa => 'HashRef',
-  traits => ['Hash'],
+  isa => 'ArrayRef',
   lazy => 1,
-  default => sub ($self) { return { reverse $self->project_shortcuts->%* } },
-  handles => {
-    shortcut_for => 'get',
-  },
+  default => sub { [] },
 );
 
 after register_with_hub => sub ($self, @) {
@@ -120,6 +117,7 @@ sub start ($self) {
 
   $timer->start;
   $self->hub->loop->add($timer);
+
 }
 
 sub state ($self) {
@@ -145,7 +143,7 @@ sub listener_specs {
       name => 'mention-mr',
       method => 'handle_merge_request',
       predicate => sub ($self, $e) {
-        return 1 if $e->text =~ /(^|\s)[a-z]+!\d+(\W|$)/in;
+        return 1 if $e->text =~ /(^|\s)[-_a-z]+!\d+(\W|$)/in;
 
         my $base = $self->reactor->url_base;
         return 1 if $e->text =~ /\Q$base\E.*?merge_requests/;
@@ -162,7 +160,7 @@ sub listener_specs {
       name => 'mention-commit',
       method => 'handle_commit',
       predicate => sub ($self, $e) {
-        return 1 if $e->text =~ /(^|\s)[a-z]+\@[0-9a-f]{7,40}(\W|$)/in;
+        return 1 if $e->text =~ /(^|\s)[-_a-z]+\@[0-9a-f]{7,40}(\W|$)/in;
 
         state $base = $self->reactor->url_base;
         return 1 if $e->text =~ /\Q$base\E.*?commit/;
@@ -297,21 +295,70 @@ sub _reload_repos ($self) {
   my $repos = eval { YAML::XS::Load($content) };
   return (undef, "error with YAML in config") unless $repos;
 
-  $self->_set_shortcuts($repos);
+  $self->add_shortcuts(%$repos);
+  $self->_load_auto_shortcuts;
   $self->save_state;
 }
 
+# For every namespace we care about (i.e., $self->relevant_owners), we'll add
+# a shortcut that's just the project name, unless it conflicts.
+sub _load_auto_shortcuts ($self) {
+  my @conflicts;
+  my %names;
+
+  for my $owner ($self->relevant_owners->@*) {
+    my $url = sprintf("%s/v4/groups/$owner/projects?simple=1&per_page=100",
+      $self->api_uri,
+    );
+
+    my $res = $self->hub->http_get($url, 'PRIVATE-TOKEN' => $self->api_token);
+    unless ($res->is_success) {
+      $Logger->log([ "Error: %s", $res->as_string ]);
+      return;
+    }
+
+    my $data = $JSON->decode($res->decoded_content);
+
+    for my $proj (@$data) {
+      my $path = $proj->{path_with_namespace};
+
+      # Sometimes, for reasons I don't fully understand, this returns projects
+      # that are not actually owned by the owner.
+      my ($p_owner, $name) = split '/', $path;
+      next unless $p_owner eq $owner;
+
+      next if $self->is_known_project($name);
+
+      if ($names{$name}) {
+        $Logger->log([ "GitLab: ignoring auto-shorcut %s: %s conflicts with %s",
+          $name,
+          $path,
+          $names{$name},
+        ]);
+
+        push @conflicts, $name;
+        next;
+      }
+
+      $names{$name} = $path;
+    }
+  }
+
+  delete $names{$_} for @conflicts;
+  return unless keys %names;
+  $self->add_shortcuts(%names);
+}
+
 sub handle_merge_request ($self, $event) {
-  my @mrs = $event->text =~ /(?:^|\s)([a-z]+!\d+)(?=\W|$)/g;
+  my @mrs = $event->text =~ /(?:^|\s)([-_a-z]+!\d+)(?=\W|$)/gi;
   state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
 
   state $base = $self->url_base;
   my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)/merge_requests/([0-9]+)};
 
   for my $key (keys %found) {
-    my $shortcut = $self->shortcut_for($key);
     my $num = $found{$key};
-    push @mrs, ($shortcut ? "$shortcut!$num" : "$key!$num");
+    push @mrs, "$key!$num";
   }
 
   @mrs = uniq @mrs;
@@ -370,12 +417,16 @@ sub handle_merge_request ($self, $event) {
       };
     } else {
       my $date = $data->{merged_at} // $data->{closed_at};
-      my $dt = DateTime::Format::ISO8601->parse_datetime($date);
-      push @fields, {
-        title => ucfirst $state,
-        value => $dt_formatter->format_datetime($dt),
-        short => \1,
-      };
+      if ($date) {
+        # Huh! Turns out, sometimes MRs are marked merged or closed, but do
+        # not have an associated timestamp. -- michael, 2018-11-21
+        my $dt = DateTime::Format::ISO8601->parse_datetime($date);
+        push @fields, {
+          title => ucfirst $state,
+          value => $dt_formatter->format_datetime($dt),
+          short => \1,
+        };
+      }
     }
 
     my $slack = {
@@ -397,15 +448,14 @@ sub handle_merge_request ($self, $event) {
 }
 
 sub handle_commit ($self, $event) {
-  my @commits = $event->text =~ /(?:^|\s)([a-z]+\@[0-9a-fA-F]{7,40})(?=\W|$)/g;
+  my @commits = $event->text =~ /(?:^|\s)([-_a-z]+\@[0-9a-fA-F]{7,40})(?=\W|$)/gi;
 
   state $base = $self->url_base;
   my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)/commit/([0-9a-f]{6,40})}i;
 
   for my $key (keys %found) {
-    my $shortcut = $self->shortcut_for($key);
     my $sha = $found{$key};
-    push @commits, ($shortcut ? "$shortcut\@$sha" : "$key\@$sha");
+    push @commits, "$key\@$sha";
   }
 
   @commits = uniq @commits;
