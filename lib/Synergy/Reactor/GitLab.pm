@@ -438,7 +438,7 @@ sub handle_commit ($self, $event) {
 
     my $commit_url = sprintf("%s/%s/commit/%s",
       $self->url_base,
-      $proj,
+      $project_id,
       $data->{short_id},
     );
 
