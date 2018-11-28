@@ -64,6 +64,8 @@ role {
 
     my $name = delete $spec{name};
 
+    die "preference $name already exists in $class" if $pref_specs{$name};
+
     $spec{describer} //= sub ($value) { return $value // '<undef>' };
     $spec{after_set} //= sub ($self, $username, $value) {};
 
