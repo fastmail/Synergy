@@ -47,6 +47,22 @@ sub realname ($self) {
   return $self->preference('realname') // $self->_realname;
 }
 
+my %PRONOUN = (
+  he    => [ qw( he   him   his     himself  ) ],
+  she   => [ qw( she  her   hers    herself  ) ],
+  they  => [ qw( they them  theirs  themself ) ],
+);
+
+sub _pronoun {
+  my $which = $_[0]->preference('pronoun') // 'they';
+  return $PRONOUN{ $which } // $PRONOUN{he};
+}
+
+sub they      { $_[0]->_pronoun->[0] }
+sub them      { $_[0]->_pronoun->[1] }
+sub theirs    { $_[0]->_pronoun->[2] }
+sub themself  { $_[0]->_pronoun->[3] }
+
 has wtf_replies => (
   isa => 'ArrayRef',
   traits  => [ qw(Array) ],
