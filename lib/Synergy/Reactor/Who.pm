@@ -36,11 +36,15 @@ sub handle_who ($self, $event) {
 
   my $whois = sprintf "%s (%s)", $who->username, $who->realname;
 
-  if ($what eq $who->username) {
-    return $event->reply(qq{"$what" is $whois.});
+  my $text = $what eq $who->username
+           ? qq{"$what" is $whois.}
+           : qq["$what" is an alias for $whois.];
+
+  if ($who->preference('pronoun')) {
+    $text .= sprintf ' (%s/%s)', $who->they, $who->them;
   }
 
-  $event->reply(qq["$what" is an alias for $whois.]);
+  $event->reply($text);
 }
 
 1;
