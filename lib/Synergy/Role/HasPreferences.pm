@@ -85,7 +85,7 @@ role {
     my $full_name = $self->preference_namespace . q{.} . $pref_name;
 
     if ($err) {
-      $event->reply("I don't understand the value you gave for $full_name: $err.");
+      $event->reply("I don't understand the value you gave for $full_name: $err");
       $event->mark_handled;
       return;
     }

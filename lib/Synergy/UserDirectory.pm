@@ -14,7 +14,7 @@ use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
 use Synergy::Logger '$Logger';
-use List::Util qw(first);
+use List::Util qw(first shuffle);
 use DateTime;
 use utf8;
 
@@ -132,6 +132,24 @@ __PACKAGE__->add_preference(
   validator => sub { "$_[0]" },
   after_set => sub ($self, $username, $value) {
     $self->reload_user($username, { realname => $value });
+  },
+);
+
+__PACKAGE__->add_preference(
+  name => 'pronoun',
+  validator => sub ($value) {
+    my %valid_pronouns = map { $_ => 1 } qw(he she they);
+
+    $value =~ s/\s*//g;
+    $value = lc $value;
+
+    unless (exists $valid_pronouns{$value}) {
+      my @p = shuffle keys %valid_pronouns;
+      my $d = "(If these words don't describe you, let us know and we'll get some that do!)";
+      return (undef, "Valid values are: '$p[0]', '$p[1]', or '$p[2]'. $d");
+    }
+
+    return $value;
   },
 );
 
