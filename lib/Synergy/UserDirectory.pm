@@ -154,22 +154,6 @@ __PACKAGE__->add_preference(
 );
 
 __PACKAGE__->add_preference(
-  name => 'pronoun',
-  validator => sub ($value) {
-    my %valid_pronouns = map { $_ => 1 } qw(he she they);
-
-    $value =~ s/\s*//g;
-    $value = lc $value;
-
-    unless (exists $valid_pronouns{$value}) {
-      return (undef, "Valid values for pronoun are: ".join(' ', sort keys %valid_pronouns));
-    }
-
-    return $value;
-  },
-);
-
-__PACKAGE__->add_preference(
   name => 'time-zone',
   validator => sub ($value) {
     my $err = qq{"$value" doesn't look like a valid time zone name};
