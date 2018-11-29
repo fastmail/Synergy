@@ -8,6 +8,7 @@ with 'Synergy::Role::Reactor';
 use experimental qw(signatures);
 use namespace::clean;
 use List::Util qw(first uniq);
+use Try::Tiny;
 
 sub listener_specs {
   return {
@@ -29,11 +30,11 @@ sub listener_specs {
 sub handle_help ($self, $event) {
   $event->mark_handled;
 
+  my ($help, $rest) = split /\s+/, $event->text, 2;
+
   my @help = map {; $_->help_entries }
              map {; $_->listeners }
              $self->hub->reactors;
-
-  my ($help, $rest) = split /\s+/, $event->text, 2;
 
   unless ($rest) {
     my $help_str = join q{, }, uniq sort map {; $_->{title} } @help;
@@ -44,6 +45,31 @@ sub handle_help ($self, $event) {
 
   $rest = lc $rest;
   $rest =~ s/\s+\z//;
+
+  if ($rest =~ /\Apreference\s+(\S+)\z/) {
+    my $pref_str = $1;
+
+    my ($comp_name, $pref_name) = $pref_str =~ m{
+      \A
+      ([-_a-z0-9]+) \. ([-_a-z0-9]+)
+      \z
+    }x;
+
+    my $component = eval { $self->hub->component_named($comp_name) };
+
+    my $help = $component
+            && $component->can('preference_help')
+            && $component->preference_help->{ $pref_name };
+
+    unless ($help) {
+      $event->reply("Sorry, I don't know that preference.");
+      return;
+    }
+
+    my $text = $help->{help} // $help->{description} // "(no help)";
+    $event->reply("*$pref_str* - $text");
+    return;
+  }
 
   @help = grep {; fc $_->{title} eq fc $rest } @help;
 
