@@ -47,12 +47,23 @@ role {
     return "$full_name: $desc";
   };
 
+  method preference_help => sub ($self) {
+    my %return;
+    for my $name (keys %pref_specs) {
+      $return{$name} = { $pref_specs{$name}->%{ qw(help description) } };
+    }
+
+    return \%return;
+  };
+
   # spec is (for now) {
-  #   name      => 'pref_name',
-  #   default   => value,
-  #   validator => sub ($val) {},
-  #   describer => sub ($val) {},
-  #   after_set => sub ($self, $username, $value) {},
+  #   name        => 'pref_name',
+  #   help        => "This is a cool thing.\nIt's very great.",
+  #   description => "a pref with a name",
+  #   default     => value,
+  #   validator   => sub ($val) {},
+  #   describer   => sub ($val) {},
+  #   after_set   => sub ($self, $username, $value) {},
   # }
   #
   # The validator sub will receive the raw text value from the user, and is

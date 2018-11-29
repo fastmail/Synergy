@@ -32,6 +32,7 @@ my $synergy = Synergy::Hub->synergize(
     },
     reactors => {
       echo => { class => 'Synergy::Reactor::Echo' },
+      pref => { class => 'Synergy::Reactor::Preferences' },
     }
   }
 );

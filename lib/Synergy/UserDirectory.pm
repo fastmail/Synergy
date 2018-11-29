@@ -137,6 +137,8 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name => 'pronoun',
+  help => q{This is the pronoun you'd prefer to be used for you.},
+  description => 'preferred personal pronoun (nominative case)',
   validator => sub ($value) {
     my %valid_pronouns = map { $_ => 1 } qw(he she they);
 
@@ -146,7 +148,7 @@ __PACKAGE__->add_preference(
     unless (exists $valid_pronouns{$value}) {
       my @p = shuffle keys %valid_pronouns;
       my $d = "(If these words don't describe you, let us know and we'll get some that do!)";
-      return (undef, "Valid values are: '$p[0]', '$p[1]', or '$p[2]'. $d");
+      return (undef, "Valid values are: $p[0], $p[1], or $p[2]. $d");
     }
 
     return $value;

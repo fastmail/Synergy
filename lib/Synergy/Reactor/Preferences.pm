@@ -23,6 +23,15 @@ sub listener_specs {
       },
     },
     {
+      name      => 'list_all_preferences',
+      method    => 'handle_list',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text =~ /\Alist\s+all\s+preferences\s*\z/i;
+      },
+    },
+    {
       name      => 'dump',
       method    => 'handle_dump',
       exclusive => 1,
@@ -85,6 +94,30 @@ sub handle_dump ($self, $event) {
 sub _error_no_prefs ($self, $event, $component) {
   $event->mark_handled;
   $event->reply("<$component> does not appear to have preferences");
+}
+
+sub handle_list ($self, $event) {
+  my @sources = map {; [ $_->preference_namespace, $_ ] }
+    $self->hub->user_directory,
+    grep {; $_->does('Synergy::Role::HasPreferences') } $self->hub->reactors;
+
+  my $text = qq{*Known preferences are:*\n};
+  for my $source (sort { $_->[0] cmp $_->[1] } @sources) {
+    my ($ns, $has_pref) = @$source;
+
+    my $help = $has_pref->preference_help;
+    for my $key (sort keys %$help) {
+      $text .= sprintf "%s.%s - %s\n",
+        $ns,
+        $key,
+        $help->{$key}{description} // 'mystery preference';
+    }
+  }
+
+  $event->mark_handled;
+
+  chomp $text;
+  $event->reply($text);
 }
 
 1;
