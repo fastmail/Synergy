@@ -172,19 +172,19 @@ sub _business_hours_status ($self, $event, $user) {
   my $today_hrs = $hours->{$dow};
 
   unless ($today_hrs) {
-    return sprintf "It's outside of %s's normal business hours.",
-      $user->username;
+    return sprintf "It's outside of %s normal business hours.",
+      $user->their;
   }
 
   my $time = $now->format_cldr('HH:mm');
 
   if ($time lt $today_hrs->{start} or $time gt $today_hrs->{end}) {
-    return sprintf "It's outside of %s's normal business hours.",
-      $user->username;
+    return sprintf "It's outside of %s normal business hours.",
+      $user->their;
   }
 
-  return sprintf "It's currently %s's normal business hours.",
-    $user->username;
+  return sprintf "It's currently %s normal business hours.",
+    $user->their;
 }
 
 sub _chatter_status ($self, $event, $user) {

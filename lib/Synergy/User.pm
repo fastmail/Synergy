@@ -48,20 +48,21 @@ sub realname ($self) {
 }
 
 my %PRONOUN = (
-  he    => [ qw( he   him   his     himself  ) ],
-  she   => [ qw( she  her   hers    herself  ) ],
-  they  => [ qw( they them  theirs  themself ) ],
+  he    => [ qw( he   him  his   his     himself  ) ],
+  she   => [ qw( she  her  her   hers    herself  ) ],
+  they  => [ qw( they them their theirs  themself ) ],
 );
 
 sub _pronoun {
   my $which = $_[0]->preference('pronoun') // 'they';
-  return $PRONOUN{ $which } // $PRONOUN{he};
+  return $PRONOUN{ $which } // $PRONOUN{they};
 }
 
 sub they      { $_[0]->_pronoun->[0] }
 sub them      { $_[0]->_pronoun->[1] }
-sub theirs    { $_[0]->_pronoun->[2] }
-sub themself  { $_[0]->_pronoun->[3] }
+sub their     { $_[0]->_pronoun->[2] }
+sub theirs    { $_[0]->_pronoun->[3] }
+sub themself  { $_[0]->_pronoun->[4] }
 
 has wtf_replies => (
   isa => 'ArrayRef',
