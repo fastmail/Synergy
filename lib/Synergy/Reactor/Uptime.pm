@@ -1,4 +1,5 @@
 use v5.24.0;
+use warnings;
 package Synergy::Reactor::Uptime;
 
 use Moose;

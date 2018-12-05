@@ -1,4 +1,5 @@
 use v5.16.0;
+use warnings;
 package Synergy::User;
 
 use Moose;
