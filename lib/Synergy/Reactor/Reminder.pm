@@ -67,7 +67,7 @@ sub handle_remind ($self, $event) {
     \s*
     (\S+)    # "me" or a nick
     \s+
-    (in|at) # duration type
+    (in|at|on) # duration type
     \s+
     (.+?)    # duration
     (\s+with\s+page\s*)?
@@ -79,7 +79,7 @@ sub handle_remind ($self, $event) {
   $_ = fc $_ for ($who, $prep, $dur_str, $want_page);
 
   my $fail = sub {
-    $event->reply('usage: remind WHO (in|at) (time) [with page]: (reminder)');
+    $event->reply('usage: remind WHO (in|at|on) (time) [with page]: (reminder)');
     return;
   };
 
@@ -100,6 +100,8 @@ sub handle_remind ($self, $event) {
   }
 
   my $time;
+  $prep = 'at' if $prep eq 'on';  # "remind me at monday" is bogus
+
   if ($prep eq 'in') {
     my $dur;
     $dur_str =~ s/^an?\s+/1 /;
