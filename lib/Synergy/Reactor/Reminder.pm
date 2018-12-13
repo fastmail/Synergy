@@ -109,7 +109,7 @@ sub handle_remind ($self, $event) {
     return $fail->() unless $ok;
     $time = time + $dur;
   } elsif ($prep eq 'at') {
-    my $dt = eval { parse_date_for_user($dur_str, $event->to_user) };
+    my $dt = eval { parse_date_for_user($dur_str, $to_user) };
     return $fail->() unless $dt;
     $time = $dt->epoch;
   } else {
