@@ -1,5 +1,6 @@
 use v5.24.0;
 use warnings;
+use utf8;
 package Synergy::Reactor::GitLab;
 
 use Moose;
@@ -505,13 +506,22 @@ sub handle_commit ($self, $event) {
       md5_hex($data->{author_email}),
     );
 
+    # We don't need to be _quite_ that precise.
+    $data->{authored_date} =~ s/\.[0-9]{3}Z$/Z/;
+
+    my $msg = sprintf("commit <%s|%s>\nAuthor: %s\nDate: %s\n\n%s",
+      $commit_url,
+      $data->{id},
+      $data->{author_name},
+      $data->{authored_date},
+      $data->{message}
+    );
+
     $slack = {
       text        => '',
       attachments => $JSON->encode([{
         fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
-        author_name => $data->{author_name},
-        author_icon => $author_icon,
-        text        => "<$commit_url|$proj\@$data->{short_id}> $data->{title}",
+        text        => $msg,
       }]),
     };
 
