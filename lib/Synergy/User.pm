@@ -154,4 +154,7 @@ has default_project_shortcut => (is => 'ro', isa => 'Str');
 
 has lp_id    => (is => 'ro', isa => 'Int', predicate => 'has_lp_id');
 
+has deleted => ( is => 'ro', isa => 'Bool' );
+sub is_deleted { $_[0]->deleted }
+
 1;

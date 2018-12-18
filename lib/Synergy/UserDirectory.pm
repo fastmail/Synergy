@@ -19,11 +19,11 @@ use List::Util qw(first shuffle);
 use DateTime;
 use utf8;
 
-has users => (
+has _users => (
   isa  => 'HashRef',
   traits  => [ 'Hash' ],
   handles => {
-    users      => 'values',
+    all_users  => 'values',
     user_named => 'get',
     usernames  => 'keys',
     _set_user  => 'set',
@@ -33,6 +33,9 @@ has users => (
   default => sub {  {}  },
 );
 
+sub users ($self) {
+  return grep {; ! $_->is_deleted } $self->all_users;
+}
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
@@ -124,6 +127,9 @@ sub resolve_name ($self, $name, $resolving_user) {
   unless ($user) {
     ($user) = grep {; grep { $_ eq $name } $_->nicknames } $self->users;
   }
+
+  # deleted users don't resolve
+  return undef if $user && $user->is_deleted;
 
   return $user;
 }

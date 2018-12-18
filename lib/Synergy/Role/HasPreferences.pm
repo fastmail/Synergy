@@ -122,6 +122,7 @@ role {
     die 'unknown pref' unless $self->is_known_preference($pref_name);
 
     my $username = blessed $user ? $user->username : $user;
+    return unless $username;
     my $user_prefs = $all_user_prefs{$username};
 
     return unless $user_prefs && exists $user_prefs->{$pref_name};
