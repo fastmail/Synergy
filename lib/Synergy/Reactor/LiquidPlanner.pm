@@ -3156,8 +3156,7 @@ sub _handle_contents ($self, $event, $rest) {
 
   my $slack_summary = $self->_slack_pkg_summary($pkg_summary, -1);
 
-  my $method = $event->is_public ? 'private_reply' : 'reply';
-  return $event->$method(
+  return $event->reply(
     "(this is only useful on Slack for now)",
     {
       slack => $slack_summary,
