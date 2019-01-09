@@ -2843,6 +2843,13 @@ sub _build_package_summary ($self, $package_id, $user) {
 sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my $text = "*—[ $summary->{name} ]—*\n";
 
+  my $total = sum0 map {; 0 + $summary->{$_}->@* }
+                   qw( containers tasks events others );
+
+  unless ($total) {
+    return "$text(no items)";
+  }
+
   my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
               $self->hub->user_directory->users;
 
@@ -3136,8 +3143,6 @@ sub _handle_contents ($self, $event, $rest) {
 
   return $event->reply("Sorry, I couldn't get the contents.")
     unless $res->is_success;
-
-  $Logger->log([ "contents retrieved: %s", $res->payload ]);
 
   my @items = grep {; $_->{id} != $item->{id} } $res->payload_list;
   my $total = @items;
