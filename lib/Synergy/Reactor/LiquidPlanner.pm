@@ -117,6 +117,7 @@ has [ qw( inbox_package_id urgent_package_id recurring_package_id ) ] => (
 my %KNOWN = (
   '++'      =>  [ \&_handle_plus_plus,
                   "++ TASK-SPEC: add a task for yourself" ],
+  '<<'      =>  [ \&_handle_angle_angle ],
   '>>'      =>  [ \&_handle_angle_angle,
                   ">> USER TASK-SPEC: add a task for someone else "],
   abort     =>  [ \&_handle_abort,
