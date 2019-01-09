@@ -13,6 +13,7 @@ use namespace::clean;
 use Lingua::EN::Inflect qw(PL_N);
 use List::Util qw(first sum0 uniq);
 use Net::Async::HTTP;
+use POSIX qw(ceil);
 use JSON 2 ();
 use Time::Duration;
 use Time::Duration::Parse;
@@ -2890,6 +2891,13 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
       $c->{type};
   }
 
+  if (
+    defined $summary->{page_count}
+    && $summary->{page_count} != $summary->{page}
+  ) {
+    $text .= "(page $summary->{page} of $summary->{page_count})\n";
+  }
+
   chomp $text;
   return $text;
 }
@@ -3088,8 +3096,17 @@ sub _handle_contents ($self, $event, $rest) {
 
   my ($what, $more) = split /\s+/, $rest, 2;
 
+  my $page = 1;
   if (length $more) {
-    return $event->reply(q{You can only say "contents ID" or "contents #shortcut".});
+    unless ($more =~ m{\Apage:([0-9]+)\z}) {
+      return $event->reply(q{You can only say "contents THING" optionally followed by "page:N".});
+    }
+
+    $page = 0 + $1;
+
+    unless ($page > 0 and $page < 10_000) {
+      return $event->reply(q{That page number didn't make sense to me.});
+    }
   }
 
   my $item;
@@ -3123,10 +3140,14 @@ sub _handle_contents ($self, $event, $rest) {
   $Logger->log([ "contents retrieved: %s", $res->payload ]);
 
   my @items = grep {; $_->{id} != $item->{id} } $res->payload_list;
-  $#items = 9 if @items > 10; # TODO: add pagination -- rjbs, 2018-07-12
+  my $total = @items;
+
+  @items = splice @items, 10 * ($page - 1), 10;
 
   my $pkg_summary = {
     name       => $item->{name},
+    page       => $page,
+    page_count => ceil($total / $page),
     containers => [ grep {; $_->{type} =~ /\A Project | Package | Folder \z/x } @items ],
     tasks      => [ grep {; $_->{type} eq 'Task' } @items ],
     events     => [ grep {; $_->{type} eq 'Event' } @items ],
