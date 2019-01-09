@@ -3147,7 +3147,7 @@ sub _handle_contents ($self, $event, $rest) {
   my $pkg_summary = {
     name       => $item->{name},
     page       => $page,
-    page_count => ceil($total / $page),
+    page_count => ceil($total / 10),
     containers => [ grep {; $_->{type} =~ /\A Project | Package | Folder \z/x } @items ],
     tasks      => [ grep {; $_->{type} eq 'Task' } @items ],
     events     => [ grep {; $_->{type} eq 'Event' } @items ],
