@@ -3145,21 +3145,13 @@ sub _handle_contents ($self, $event, $rest) {
     unless $res->is_success;
 
   my @items = grep {; $_->{id} != $item->{id} } $res->payload_list;
-  my $total = @items;
 
-  @items = splice @items, 10 * ($page - 1), 10;
+  my $summary = $self->_summarize_item_list(\@items, {
+    title => $item->{name},
+    page  => $page
+  });
 
-  my $pkg_summary = {
-    name       => $item->{name},
-    page       => $page,
-    page_count => ceil($total / 10),
-    containers => [ grep {; $_->{type} =~ /\A Project | Package | Folder \z/x } @items ],
-    tasks      => [ grep {; $_->{type} eq 'Task' } @items ],
-    events     => [ grep {; $_->{type} eq 'Event' } @items ],
-    others     => [ grep {; $_->{type} !~ /\A Project | Package | Folder | Task | Event \z/x } @items ],
-  };
-
-  my $slack_summary = $self->_slack_pkg_summary($pkg_summary, -1);
+  my $slack_summary = $self->_slack_pkg_summary($summary, -1);
 
   return $event->reply(
     "(this is only useful on Slack for now)",
@@ -3167,6 +3159,23 @@ sub _handle_contents ($self, $event, $rest) {
       slack => $slack_summary,
     },
   );
+}
+
+sub _summarize_item_list ($self, $items, $arg) {
+  my $page  = $arg->{page} // 1;
+  my $total = @$items;
+
+  @$items = splice @$items, 10 * ($page - 1), 10;
+
+  my $pkg_summary = {
+    name       => $arg->{title},
+    page       => $page,
+    page_count => ceil($total / 10),
+    containers => [ grep {; $_->{type} =~ /\A Project | Package | Folder \z/x } @$items ],
+    tasks      => [ grep {; $_->{type} eq 'Task' } @$items ],
+    events     => [ grep {; $_->{type} eq 'Event' } @$items ],
+    others     => [ grep {; $_->{type} !~ /\A Project | Package | Folder | Task | Event \z/x } @$items ],
+  };
 }
 
 1;
