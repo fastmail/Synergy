@@ -1408,7 +1408,7 @@ sub _start_timer ($self, $user, $task) {
   return 1;
 }
 
-sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
+sub lp_tasks_for_user ($self, $user, $count, $which = 'tasks') {
   my $lpc = $self->lp_client_for_user($user);
 
   my $res = $lpc->upcoming_tasks_for_member_id($user->lp_id);
@@ -1440,13 +1440,11 @@ sub lp_tasks_for_user ($self, $user, $count, $which='tasks', $arg = {}) {
 
   splice @tasks, $count;
 
-  unless ($arg->{no_prefix}) {
-    my $urgent = $self->urgent_package_id;
-    for (@tasks) {
-      $_->{name} = "[URGENT] $_->{name}"
-        if (grep { $urgent == $_ } $_->{parent_ids}->@*)
-        || (grep { $urgent == $_ } $_->{package_ids}->@*);
-    }
+  my $urgent = $self->urgent_package_id;
+  for (@tasks) {
+    $_->{name} = "🔥 $_->{name}"
+      if (grep { $urgent == $_ } $_->{parent_ids}->@*)
+      || (grep { $urgent == $_ } $_->{package_ids}->@*);
   }
 
   return \@tasks;
@@ -1744,8 +1742,7 @@ sub _handle_search ($self, $event, $text) {
 sub _handle_task_list ($self, $event, $cmd, $count) {
   my $user = $event->from_user;
 
-  my $arg = $cmd eq 'urgent' ? { no_prefix => 1 } : {};
-  my $lp_tasks = $self->lp_tasks_for_user($user, $count, $cmd, $arg);
+  my $lp_tasks = $self->lp_tasks_for_user($user, $count, $cmd);
 
   unless (@$lp_tasks) {
     my $suffix = $cmd =~ /(inbox|urgent)/n
