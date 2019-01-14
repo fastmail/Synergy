@@ -2840,7 +2840,7 @@ sub _build_package_summary ($self, $package_id, $user) {
 sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   my $text = "*—[ $summary->{name} ]—*\n";
 
-  my $total = sum0 map {; 0 + $summary->{$_}->@* }
+  my $total = sum0 map {; 0 + ($summary->{$_} // [])->@* }
                    qw( containers tasks events others );
 
   unless ($total) {
