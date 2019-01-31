@@ -1,6 +1,6 @@
 use v5.24.0;
 use warnings;
-package Synergy::Reactor::Roto;
+package Synergy::Reactor::Rototron;
 
 use Moose;
 use DateTime;
@@ -12,6 +12,7 @@ use namespace::clean;
 use JMAP::Tester;
 use JSON::MaybeXS;
 use Synergy::Logger '$Logger';
+use Synergy::Rototron;
 
 sub listener_specs {
   return {
@@ -39,11 +40,26 @@ has roto_config => (
   }
 );
 
+has availability_db_path => (
+  is => 'ro',
+  required => 1,
+);
+
+has availability_checker => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self, @) {
+    return Synergy::Rototron::AvailabilityChecker->new({
+      db_path => $self->availability_db_path,
+    });
+  },
+);
+
 has jmap_client => (
   is   => 'ro',
   lazy => 1,
   default => sub ($self, @) {
-    return Synergy::Reactor::Roto::MyJMAPClient->new({
+    return Synergy::Rototron::JMAPClient->new({
       api_uri  => $self->roto_config->{jmap}{api_uri},
       username => $self->roto_config->{jmap}{username},
       password => $self->roto_config->{jmap}{password},
@@ -103,26 +119,6 @@ sub handle_duty ($self, $event) {
             . join qq{\n}, sort map {; $_->{title} } @events;
 
   $event->reply($reply);
-}
-
-package Synergy::Reactor::Roto::MyJMAPClient {
-  use Moo;
-  use experimental 'signatures';
-
-  extends 'JMAP::Tester';
-  has [ qw(username password) ] => (is => 'ro', required => 1);
-
-  use MIME::Base64 ();
-
-  sub _maybe_auth_header ($self, @) {
-    my $auth = MIME::Base64::encode_base64(
-      join(q{:}, $self->username, $self->password),
-      ""
-    );
-    return("Authorization" => "Basic $auth");
-  }
-
-  no Moo;
 }
 
 1;
