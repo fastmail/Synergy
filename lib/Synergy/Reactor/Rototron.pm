@@ -26,9 +26,9 @@ sub listener_specs {
     },
     {
       name      => 'unavailable',
-      method    => 'handle_unavailable',
+      method    => 'handle_set_availability',
       exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^unavailable\b/i },
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^(un)?available\b/in },
     },
   );
 }
@@ -81,13 +81,14 @@ after register_with_hub => sub ($self, @) {
   $self->roto_config; # crash early, crash often -- rjbs, 2019-01-31
 };
 
-sub handle_unavailable ($self, $event) {
+sub handle_set_availability ($self, $event) {
   $event->mark_handled;
 
   my ($from, $to);
   my $ymd_re = qr{ ([0-9]{4}) - ([0-9]{2}) - ([0-9]{2}) }x;
 
-  my $text = $event->text =~ s/\Aunavailable\b//r;
+  my $adj  = $event->text =~ /\Aun/ ? 'available' : 'unavailable';
+  my $text = $event->text =~ s/\A(un)?available\b//rn;
   $text =~ s/\A\s+//;
 
   if ($text =~ m{\Aon\s+($ymd_re)\z}) {
@@ -99,8 +100,8 @@ sub handle_unavailable ($self, $event) {
     $to   = parse_date_for_user($d2, $event->from_user);
   } else {
     return $event->reply(
-      "It's: `unavailable on YYYY-MM-DD` "
-      . "or `unavailable from YYYY-MM-DD to YYYY-MM-DD`"
+      "It's: `$adj on YYYY-MM-DD` "
+      . "or `$adj from YYYY-MM-DD to YYYY-MM-DD`"
     );
   }
 
@@ -116,15 +117,16 @@ sub handle_unavailable ($self, $event) {
   unless (@dates) { return $event->reply("That range didn't make sense."); }
   if (@dates > 28) { return $event->reply("That range is too large."); }
 
+  my $method = qq{set_user_$adj\_on};
   for my $date (@dates) {
-    $self->availability_checker->set_user_unavailable_on(
+    $self->availability_checker->$method(
       $event->from_user->username,
       $date,
     );
   }
 
   return $event->reply(
-    sprintf "I marked you unavailable on %s %s.",
+    sprintf "I marked you $adj on %s %s.",
       NUMWORDS(0+@dates),
       PL_N('day', 0+@dates),
   );
