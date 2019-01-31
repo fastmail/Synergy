@@ -1,0 +1,274 @@
+#!perl
+use v5.24.0;
+use warnings;
+use utf8;
+
+use charnames qw( :full );
+use experimental qw(lexical_subs signatures);
+
+use DateTime;
+
+use Data::GUID qw(guid_string);
+use DBD::SQLite;
+use Getopt::Long::Descriptive;
+use JMAP::Tester;
+use JSON::MaybeXS;
+use List::Util qw( uniq );
+use Params::Util qw( _HASH0 );
+
+use Synergy::Rototron;
+
+binmode *STDOUT, 'encoding(:utf-8)';
+
+my $PROGRAM_ID = 'Synergy::Rototron/20190131.001';
+
+my ($opt, $desc) = describe_options(
+  '%c %o',
+  [ 'config|c=s',          'config file path',     { default => 'rototron.json' } ],
+  [ 'availability-db|a=s', 'availability db path', { default => 'availability.sqlite' } ],
+  [ 'really|r',            'really make changes', ],
+);
+
+my $config = do {
+  my $fn = $opt->config;
+  open my $fh, '<', $fn or die "can't read $fn: $!";
+  my $json = do { local $/; <$fh> };
+  JSON::MaybeXS->new->utf8(1)->decode($json);
+};
+
+my $now   = DateTime->now(time_zone => 'UTC');
+
+my $avail = Synergy::Rototron::AvailabilityChecker->new({
+  db_path => $opt->availability_db,
+});
+
+my @rotors;
+for my $key (keys $config->{rotors}->%*) {
+  push @rotors, Synergy::Rototron::Rotor->new({
+    $config->{rotors}{$key}->%*,
+    name        => $key,
+    full_staff  => $config->{staff},
+    availability_checker => $avail,
+  });
+}
+
+##############
+
+my %want;
+
+for my $rotor (@rotors) {
+  my $day_0 = $now->truncate(to => 'day');
+
+  # We want to populate out 90d, plus enough days to get us to a Friday.
+  my $days_out = 90 + 6 - $day_0->day_of_week % 7;
+
+  for my $i (0 .. $days_out - 1) {
+    my $day = $day_0->clone->add(days  => $i);
+
+    next if $rotor->excludes_dow($day->day_of_week);
+
+    my $user  = $rotor->user_for_day($day);
+
+    # TODO: never change the assignee of the current week when we change
+    # rotations, but... this can wait -- rjbs, 2019-01-30
+
+    my $start = $day->ymd . "T00:00:00";
+
+    $want{ $rotor->keyword }{ $start } = {
+      '@type'   => 'jsevent',
+      prodId    => "$PROGRAM_ID",
+      title     => join(q{ - },
+                    $rotor->description,
+                    $user->{name} // $user->{username}),
+      start     => $start,
+      duration  => "P1D",
+      isAllDay  => JSON::MaybeXS->true,
+      keywords  => { $rotor->keyword => JSON::MaybeXS->true },
+      replyTo   => { imip => "MAILTO:$user->{username}\@fastmailteam.com" },
+      freeBusyStatus  => "free",
+      calendarId      => $rotor->calendar_id,
+      participantId   => 'synergy',
+      participants    => {
+        synergy => {
+          name  => 'Synergy',
+          email => 'synergy@fastmailteam.com',
+          kind  => 'individual',
+          roles => {
+            owner => JSON::MaybeXS->true,
+          },
+        },
+        $user->{username} => {
+          name  => $user->{name} // $user->{username},
+          email => "$user->{username}\@fastmailteam.com",
+          kind  => "individual",
+          roles => {
+            # XXX: I don't think "owner" is correct, here, but if I don't put
+            # it in the event definition, it gets added anyway, and then when
+            # we run a second time, we detect a difference between plan and
+            # found, and update the event, fruitlessly hoping that the
+            # participant roles will be right this time.  Bah.
+            # -- rjbs, 2019-01-30
+            owner    => JSON::MaybeXS->true,
+
+            attendee => JSON::MaybeXS->true,
+          },
+        },
+      }
+    }
+  };
+}
+
+my $jmap_client = Synergy::Rototron::JMAPClient->new({
+  $config->{jmap}->%{ qw( api_uri username password ) },
+});
+
+my %want_calendar_id = map {; $_->calendar_id => 1 } @rotors;
+
+my $res = $jmap_client->request({
+  using       => [ 'urn:ietf:params:jmap:mail' ],
+  methodCalls => [
+    [
+      'CalendarEvent/query' => {
+        filter => {
+          inCalendars => [ keys %want_calendar_id ],
+          after       => $now->ymd . "T00:00:00Z",
+        },
+      },
+      'a',
+    ],
+    [
+      'CalendarEvent/get' => { '#ids' => {
+        resultOf => 'a',
+        name => 'CalendarEvent/query',
+        path => '/ids',
+      } }
+    ],
+  ]
+});
+
+$res->assert_successful;
+
+my @events =
+  grep {; $want_calendar_id{ $_->{calendarId} } }
+  $res->sentence_named('CalendarEvent/get')->as_stripped_pair->[1]{list}->@*;
+
+my %saw;
+
+my %update;
+my %create;
+my %should_destroy;
+
+for my $event (@events) {
+  my ($rtag, @more) = grep {; /\Arotor:/ } keys %{ $event->{keywords} || {} };
+
+  unless ($rtag) {
+    warn "skipping event with no rotor keywords: $event->{id}\n";
+    next;
+  }
+
+  if (@more) {
+    warn "skipping event with multiple rotor keywords: $event->{id}\n";
+    next;
+  }
+
+  if ($saw{$rtag}{ $event->{start} }++) {
+    warn "found duplicate event for $rtag on $event->{start}; skipping some\n";
+    next;
+  }
+
+  my $wanted = delete $want{$rtag}{ $event->{start} };
+
+  # If event isn't on the want list, plan a destroy.
+  if (! $wanted) {
+    warn "marking unwanted event $event->{id} for deletion\n";
+    $should_destroy{ $event->{id} } = 1;
+    next;
+  }
+
+  my @mismatches = event_mismatches($event, $wanted);
+
+  # If event is different than wanted, delete from %want and plan an update.
+  if (@mismatches) {
+    warn "updating event $event->{id} to align fields: @mismatches\n";
+    $update{ $event->{id} } = $wanted;
+    next;
+  }
+
+  # If event is equivalent to wanted, delete from %want and do nothing.
+}
+
+for my $rtag (sort keys %want) {
+  for my $start (sort keys $want{$rtag}->%*) {
+    $create{"$rtag/$start"} = $want{$rtag}{$start};
+    $create{"$rtag/$start"}{uid} = lc guid_string;
+  }
+}
+
+print JSON::MaybeXS->new->pretty->canonical->encode({
+  update  => \%update,
+  create  => \%create,
+  destroy => [ keys %should_destroy ],
+});
+
+if ($opt->really) {
+  my $res = $jmap_client->request({
+    using       => [ 'urn:ietf:params:jmap:mail' ],
+    methodCalls => [
+      [
+        'CalendarEvent/set' => {
+          update  => \%update,
+          create  => \%create,
+          destroy => [ keys %should_destroy ],
+        },
+      ],
+    ],
+  });
+
+  $res->assert_successful;
+
+  print JSON::MaybeXS->new->pretty->canonical->encode(
+    $res->sentence_named('CalendarEvent/set')->as_stripped_pair,
+  );
+}
+
+sub event_mismatches ($lhs, $rhs) {
+  my %mismatch;
+
+  for my $key (qw(
+    @type title start duration isAllDay freeBusyStatus
+    replyTo keywords
+  )) {
+    $mismatch{$key} = 1
+      if (defined $lhs->{$key} xor defined $rhs->{$key})
+      || (_HASH0 $lhs->{$key} xor _HASH0 $rhs->{$key})
+      || (_HASH0 $lhs->{$key} && join(qq{\0}, sort keys $lhs->{$key}->%*)
+                              ne join(qq{\0}, sort keys $rhs->{$key}->%*))
+      || (! _HASH0 $lhs->{$key}
+          && defined $lhs->{$key}
+          && $lhs->{$key} ne $rhs->{$key});
+  }
+
+  $mismatch{participants} = 1
+    if keys $lhs->{participants}->%* != keys $rhs->{participants}->%*;
+
+  $mismatch{participants} = 1
+    if grep { ! exists $rhs->{participants}{$_} } keys $lhs->{participants}->%*;
+
+  for my $pid (keys $lhs->{participants}->%*) {
+    my $lhsp = $lhs->{participants}->{$pid};
+    my $rhsp = $rhs->{participants}->{$pid};
+
+    for my $key (qw( name email kind roles )) {
+      $mismatch{"participants.$pid.$key"} = 1
+        if (defined $lhsp->{$key} xor defined $rhsp->{$key})
+        || (_HASH0 $lhsp->{$key} xor _HASH0 $rhsp->{$key})
+        || (_HASH0 $lhsp->{$key} && join(qq{\0}, sort keys $lhsp->{$key}->%*)
+                                ne join(qq{\0}, sort keys $rhsp->{$key}->%*))
+        || (! _HASH0 $lhsp->{$key}
+            && defined $lhsp->{$key}
+            && $lhsp->{$key} ne $rhsp->{$key});
+    }
+  }
+
+  return sort keys %mismatch;
+}
