@@ -124,7 +124,7 @@ sub duties_on ($self, $dt) {
   return $cached->{$ymd}{items};
 }
 
-sub _get_duty_items_between ($self, $after_ymd, $before_ymd) {
+sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
   my %want_calendar_id = map {; $_->{calendar_id} => 1 } $self->rotors;
 
   my $res = eval {
@@ -135,8 +135,8 @@ sub _get_duty_items_between ($self, $after_ymd, $before_ymd) {
           'CalendarEvent/query' => {
             filter => {
               inCalendars => [ keys %want_calendar_id ],
-              before      => $before_ymd . "T00:00:00Z",
-              after       => $after_ymd . "T00:00:00Z",
+              after       => $from_ymd . "T00:00:00Z",
+              before      => $to_ymd . "T00:00:00Z",
             },
           },
           'a',

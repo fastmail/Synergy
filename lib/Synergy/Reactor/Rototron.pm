@@ -108,6 +108,8 @@ sub handle_set_availability ($self, $event) {
 
 sub _replan_range ($self, $from_dt, $to_dt) {
   my $plan = $self->rototron->compute_rotor_update($from_dt, $to_dt);
+
+  $Logger->log([ 'replan plan %s - %s: %s', $from_dt, $to_dt, $plan ]);
   return unless $plan;
 
   my $res = $self->rototron->jmap_client->request({
@@ -117,7 +119,10 @@ sub _replan_range ($self, $from_dt, $to_dt) {
     ],
   });
 
+  $self->rototron->_duty_cache->%* = (); # should build this into Rototron
   # TODO: do something with result
+
+  return;
 }
 
 sub handle_duty ($self, $event) {
