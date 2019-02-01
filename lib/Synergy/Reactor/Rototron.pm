@@ -82,7 +82,7 @@ sub handle_set_availability ($self, $event) {
 
   my @dates;
   until ($from > $to) {
-    push @dates, $from;
+    push @dates, $from->clone;
     $from->add(days => 1);
   }
 
