@@ -2,11 +2,334 @@ use v5.24.0;
 use warnings;
 package Synergy::Rototron;
 
+use Moose;
+use experimental qw(lexical_subs signatures);
+
 use charnames qw( :full );
 
+use Data::GUID qw(guid_string);
 use DateTime ();
-
+use File::stat;
 use JMAP::Tester;
+use Params::Util qw(_HASH0);
+
+my $PROGRAM_ID = 'Synergy::Rototron/20190131.001';
+
+has config_path => (
+  is => 'ro',
+  required => 1,
+);
+
+has _cached_config => (
+  is => 'ro',
+  lazy     => 1,
+  init_arg => undef,
+  default  => sub {  {}  },
+);
+
+sub config ($self) {
+  my $cached = $self->_cached_config;
+
+  my $path = $self->config_path;
+  my $stat = stat $path;
+  my @fields = qw(dev ino mtime);
+
+  if ($cached && $cached->{mtime}) {
+    return $cached->{config}
+      if @fields == grep { $cached->{$_} == $stat->$_ } @fields;
+  }
+
+  my $config = do {
+    open my $fh, '<', $path or die "can't read $path: $!";
+    my $json = do { local $/; <$fh> };
+    JSON::MaybeXS->new->utf8(1)->decode($json);
+  };
+
+  %$cached = map {; $_ => $stat->$_ } @fields;
+  $cached->{config} = $config;
+
+  $self->_clear_availability_checker;
+  $self->_clear_jmap_client;
+  $self->_clear_rotors;
+
+  return $cached->{config}
+}
+
+has availability_checker => (
+  is    => 'ro',
+  lazy  => 1,
+  handles  => [ qw( user_is_available_on ) ],
+  clearer  => '_clear_availability_checker',
+  default  => sub ($self, @) {
+    Synergy::Rototron::AvailabilityChecker->new({
+      db_path => $self->config->{availability_db},
+    });
+  }
+);
+
+has jmap_client => (
+  is    => 'ro',
+  lazy  => 1,
+  clearer => '_clear_jmap_client',
+  default => sub ($self, @) {
+    return Synergy::Rototron::JMAPClient->new({
+      $self->config->{jmap}->%{ qw( api_uri username password ) },
+    });
+  },
+);
+
+has rotors => (
+  lazy  => 1,
+  traits  => [ qw(Array) ],
+  handles => { rotors => 'elements' },
+  clearer => '_clear_rotors',
+  default => sub ($self, @) {
+    my $config = $self->config;
+
+    my @rotors;
+    for my $key (keys $config->{rotors}->%*) {
+      push @rotors, Synergy::Rototron::Rotor->new({
+        $config->{rotors}{$key}->%*,
+        name        => $key,
+        full_staff  => $config->{staff},
+        availability_checker => $self->availability_checker,
+      });
+    }
+
+    \@rotors;
+  },
+);
+
+has _duty_cache => (
+  is      => 'ro',
+  lazy    => 1,
+  default => sub {  {}  },
+);
+
+sub duties_on ($self, $dt) {
+  my $ymd = $dt->ymd;
+
+  my $cached = $self->_duty_cache->{$ymd};
+
+  if (! $cached || (time - $cached->{at} > 900)) {
+    my $items = $self->_get_duty_items_between($ymd, $ymd);
+    return unless $items; # Error.
+
+    $cached->{$ymd} = {
+      at    => time,
+      items => $items,
+    };
+  }
+
+  return $cached->{$ymd}{items};
+}
+
+sub _get_duty_items_between ($self, $after_ymd, $before_ymd) {
+  my %want_calendar_id = map {; $_->{calendar_id} => 1 } $self->rotors;
+
+  my $res = eval {
+    my $res = $self->jmap_client->request({
+      using       => [ 'urn:ietf:params:jmap:mail' ],
+      methodCalls => [
+        [
+          'CalendarEvent/query' => {
+            filter => {
+              inCalendars => [ keys %want_calendar_id ],
+              before      => $before_ymd . "T00:00:00Z",
+              after       => $after_ymd . "T00:00:00Z",
+            },
+          },
+          'a',
+        ],
+        [
+          'CalendarEvent/get' => { '#ids' => {
+            resultOf => 'a',
+            name => 'CalendarEvent/query',
+            path => '/ids',
+          } }
+        ],
+      ]
+    });
+
+    $res->assert_successful;
+    $res;
+  };
+
+  # Error condition. -- rjbs, 2019-01-31
+  return undef unless $res;
+
+  my @events =
+    grep {; $want_calendar_id{ $_->{calendarId} } }
+    $res->sentence_named('CalendarEvent/get')->as_stripped_pair->[1]{list}->@*;
+
+  return \@events;
+}
+
+my sub event_mismatches ($lhs, $rhs) {
+  my %mismatch;
+
+  for my $key (qw(
+    @type title start duration isAllDay freeBusyStatus
+    replyTo keywords
+  )) {
+    $mismatch{$key} = 1
+      if (defined $lhs->{$key} xor defined $rhs->{$key})
+      || (_HASH0 $lhs->{$key} xor _HASH0 $rhs->{$key})
+      || (_HASH0 $lhs->{$key} && join(qq{\0}, sort keys $lhs->{$key}->%*)
+                              ne join(qq{\0}, sort keys $rhs->{$key}->%*))
+      || (! _HASH0 $lhs->{$key}
+          && defined $lhs->{$key}
+          && $lhs->{$key} ne $rhs->{$key});
+  }
+
+  $mismatch{participants} = 1
+    if keys $lhs->{participants}->%* != keys $rhs->{participants}->%*;
+
+  $mismatch{participants} = 1
+    if grep { ! exists $rhs->{participants}{$_} } keys $lhs->{participants}->%*;
+
+  for my $pid (keys $lhs->{participants}->%*) {
+    my $lhsp = $lhs->{participants}->{$pid};
+    my $rhsp = $rhs->{participants}->{$pid};
+
+    for my $key (qw( name email kind roles )) {
+      $mismatch{"participants.$pid.$key"} = 1
+        if (defined $lhsp->{$key} xor defined $rhsp->{$key})
+        || (_HASH0 $lhsp->{$key} xor _HASH0 $rhsp->{$key})
+        || (_HASH0 $lhsp->{$key} && join(qq{\0}, sort keys $lhsp->{$key}->%*)
+                                ne join(qq{\0}, sort keys $rhsp->{$key}->%*))
+        || (! _HASH0 $lhsp->{$key}
+            && defined $lhsp->{$key}
+            && $lhsp->{$key} ne $rhsp->{$key});
+    }
+  }
+
+  return sort keys %mismatch;
+}
+
+sub recompute_rotors ($self, $from_dt, $to_dt) {
+  my $now   = DateTime->now(time_zone => 'UTC');
+
+  my %want;
+
+  for my $rotor ($self->rotors) {
+    for (my $day = $from_dt->clone; $day <= $to_dt; $day->add(days => 1)) {
+      next if $rotor->excludes_dow($day->day_of_week);
+
+      my $user  = $rotor->user_for_day($day);
+
+      # TODO: never change the assignee of the current week when we change
+      # rotations, but... this can wait -- rjbs, 2019-01-30
+
+      my $start = $day->ymd . "T00:00:00";
+
+      $want{ $rotor->keyword }{ $start } = {
+        '@type'   => 'jsevent',
+        prodId    => "$PROGRAM_ID",
+        title     => join(q{ - },
+                      $rotor->description,
+                      $user->{name} // $user->{username}),
+        start     => $start,
+        duration  => "P1D",
+        isAllDay  => JSON::MaybeXS->true,
+        keywords  => { $rotor->keyword => JSON::MaybeXS->true },
+        replyTo   => { imip => "MAILTO:$user->{username}\@fastmailteam.com" },
+        freeBusyStatus  => "free",
+        calendarId      => $rotor->calendar_id,
+        participantId   => 'synergy',
+        participants    => {
+          synergy => {
+            name  => 'Synergy',
+            email => 'synergy@fastmailteam.com',
+            kind  => 'individual',
+            roles => {
+              owner => JSON::MaybeXS->true,
+            },
+          },
+          $user->{username} => {
+            name  => $user->{name} // $user->{username},
+            email => "$user->{username}\@fastmailteam.com",
+            kind  => "individual",
+            roles => {
+              # XXX: I don't think "owner" is correct, here, but if I don't put
+              # it in the event definition, it gets added anyway, and then when
+              # we run a second time, we detect a difference between plan and
+              # found, and update the event, fruitlessly hoping that the
+              # participant roles will be right this time.  Bah.
+              # -- rjbs, 2019-01-30
+              owner    => JSON::MaybeXS->true,
+
+              attendee => JSON::MaybeXS->true,
+            },
+          },
+        }
+      }
+    };
+  }
+
+  my %want_calendar_id = map {; $_->calendar_id => 1 } $self->rotors;
+
+  my $events = $self->_get_duty_items_between($from_dt->ymd, $to_dt->ymd);
+  Carp::confess("failed to get events") unless $events;
+
+  my %saw;
+
+  my %update;
+  my %create;
+  my %should_destroy;
+
+  for my $event (@$events) {
+    my ($rtag, @more) = grep {; /\Arotor:/ } keys %{ $event->{keywords} || {} };
+
+    unless ($rtag) {
+      # warn "skipping event with no rotor keywords: $event->{id}\n";
+      next;
+    }
+
+    if (@more) {
+      # warn "skipping event with multiple rotor keywords: $event->{id}\n";
+      next;
+    }
+
+    if ($saw{$rtag}{ $event->{start} }++) {
+      # warn "found duplicate event for $rtag on $event->{start}; skipping some\n";
+      next;
+    }
+
+    my $wanted = delete $want{$rtag}{ $event->{start} };
+
+    # If event isn't on the want list, plan a destroy.
+    if (! $wanted) {
+      # warn "marking unwanted event $event->{id} for deletion\n";
+      $should_destroy{ $event->{id} } = 1;
+      next;
+    }
+
+    my @mismatches = event_mismatches($event, $wanted);
+
+    # If event is different than wanted, delete from %want and plan an update.
+    if (@mismatches) {
+      # warn "updating event $event->{id} to align fields: @mismatches\n";
+      $update{ $event->{id} } = $wanted;
+      next;
+    }
+
+    # If event is equivalent to wanted, delete from %want and do nothing.
+  }
+
+  for my $rtag (sort keys %want) {
+    for my $start (sort keys $want{$rtag}->%*) {
+      $create{"$rtag/$start"} = $want{$rtag}{$start};
+      $create{"$rtag/$start"}{uid} = lc guid_string;
+    }
+  }
+
+  return {
+    update  => \%update,
+    create  => \%create,
+    destroy => [ keys %should_destroy ],
+  }
+}
 
 package Synergy::Rototron::Rotor {
   use Moose;
@@ -208,4 +531,5 @@ package Synergy::Rototron::JMAPClient {
   no Moose;
 }
 
+no Moose;
 1;

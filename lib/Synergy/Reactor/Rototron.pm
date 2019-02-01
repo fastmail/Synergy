@@ -38,47 +38,19 @@ has roto_config_path => (
   required => 1,
 );
 
-has roto_config => (
-  is   => 'ro',
-  lazy => 1,
-
+has rototron => (
+  is    => 'ro',
+  lazy  => 1,
+  handles => [ qw(availability_checker jmap_client) ],
   default => sub ($self, @) {
-    my $fn = $self->roto_config_path;
-    open my $fh, '<', $fn or die "can't read $fn: $!";
-    my $json = do { local $/; <$fh> };
-    JSON::MaybeXS->new->utf8(1)->decode($json);
-  }
-);
-
-has availability_db_path => (
-  is => 'ro',
-  required => 1,
-);
-
-has availability_checker => (
-  is => 'ro',
-  lazy => 1,
-  default => sub ($self, @) {
-    return Synergy::Rototron::AvailabilityChecker->new({
-      db_path => $self->availability_db_path,
-    });
-  },
-);
-
-has jmap_client => (
-  is   => 'ro',
-  lazy => 1,
-  default => sub ($self, @) {
-    return Synergy::Rototron::JMAPClient->new({
-      api_uri  => $self->roto_config->{jmap}{api_uri},
-      username => $self->roto_config->{jmap}{username},
-      password => $self->roto_config->{jmap}{password},
+    return Synergy::Rototron->new({
+      config_path => $self->roto_config_path,
     });
   },
 );
 
 after register_with_hub => sub ($self, @) {
-  $self->roto_config; # crash early, crash often -- rjbs, 2019-01-31
+  $self->rototron; # crash early, crash often -- rjbs, 2019-01-31
 };
 
 sub handle_set_availability ($self, $event) {
@@ -132,78 +104,12 @@ sub handle_set_availability ($self, $event) {
   );
 }
 
-has _duty_cache => (
-  is      => 'ro',
-  lazy    => 1,
-  default => sub {  {}  },
-);
-
-sub duties_on ($self, $dt) {
-  my $ymd = $dt->ymd;
-
-  my $cached = $self->_duty_cache->{$ymd};
-
-  if (! $cached || (time - $cached->{at} > 900)) {
-    my $items = $self->_get_duty_items($ymd);
-    return unless $items; # Error.
-
-    $cached->{$ymd} = {
-      at    => time,
-      items => $self->_get_duty_items($ymd),
-    };
-  }
-
-  return $cached->{$ymd}{items};
-}
-
-sub _get_duty_items ($self, $ymd) {
-  my %want_calendar_id = map {; $_->{calendar_id} => 1 }
-                         values $self->roto_config->{rotors}->%*;
-
-  my $res = eval {
-    my $res = $self->jmap_client->request({
-      using       => [ 'urn:ietf:params:jmap:mail' ],
-      methodCalls => [
-        [
-          'CalendarEvent/query' => {
-            filter => {
-              inCalendars => [ keys %want_calendar_id ],
-              before      => $ymd . "T00:00:00Z",
-              after       => $ymd . "T00:00:00Z",
-            },
-          },
-          'a',
-        ],
-        [
-          'CalendarEvent/get' => { '#ids' => {
-            resultOf => 'a',
-            name => 'CalendarEvent/query',
-            path => '/ids',
-          } }
-        ],
-      ]
-    });
-
-    $res->assert_successful;
-    $res;
-  };
-
-  # Error condition. -- rjbs, 2019-01-31
-  return undef unless $res;
-
-  my @events =
-    grep {; $want_calendar_id{ $_->{calendarId} } }
-    $res->sentence_named('CalendarEvent/get')->as_stripped_pair->[1]{list}->@*;
-
-  return \@events;
-}
-
 sub handle_duty ($self, $event) {
   $event->mark_handled;
 
   my $now = DateTime->now(time_zone => 'UTC');
 
-  my $duties = $self->duties_on($now);
+  my $duties = $self->rototron->duties_on($now);
 
   unless ($duties) {
     return $event->reply("I couldn't get the duty roster!  Sorry.");
