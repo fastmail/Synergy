@@ -132,11 +132,31 @@ sub handle_set_availability ($self, $event) {
   );
 }
 
-sub handle_duty ($self, $event) {
-  $event->mark_handled;
+has _duty_cache => (
+  is      => 'ro',
+  lazy    => 1,
+  default => sub {  {}  },
+);
 
-  my $now = DateTime->now(time_zone => 'UTC');
+sub duties_on ($self, $dt) {
+  my $ymd = $dt->ymd;
 
+  my $cached = $self->_duty_cache->{$ymd};
+
+  if (! $cached || (time - $cached->{at} > 900)) {
+    my $items = $self->_get_duty_items($ymd);
+    return unless $items; # Error.
+
+    $cached->{$ymd} = {
+      at    => time,
+      items => $self->_get_duty_items($ymd),
+    };
+  }
+
+  return $cached->{$ymd}{items};
+}
+
+sub _get_duty_items ($self, $ymd) {
   my %want_calendar_id = map {; $_->{calendar_id} => 1 }
                          values $self->roto_config->{rotors}->%*;
 
@@ -148,8 +168,8 @@ sub handle_duty ($self, $event) {
           'CalendarEvent/query' => {
             filter => {
               inCalendars => [ keys %want_calendar_id ],
-              before      => $now->ymd . "T00:00:00Z",
-              after       => $now->ymd . "T00:00:00Z",
+              before      => $ymd . "T00:00:00Z",
+              after       => $ymd . "T00:00:00Z",
             },
           },
           'a',
@@ -168,16 +188,29 @@ sub handle_duty ($self, $event) {
     $res;
   };
 
-  unless ($res) {
-    return $event->reply("Sorry, I couldn't get the duty roster.");
-  }
+  # Error condition. -- rjbs, 2019-01-31
+  return undef unless $res;
 
   my @events =
     grep {; $want_calendar_id{ $_->{calendarId} } }
     $res->sentence_named('CalendarEvent/get')->as_stripped_pair->[1]{list}->@*;
 
+  return \@events;
+}
+
+sub handle_duty ($self, $event) {
+  $event->mark_handled;
+
+  my $now = DateTime->now(time_zone => 'UTC');
+
+  my $duties = $self->duties_on($now);
+
+  unless ($duties) {
+    return $event->reply("I couldn't get the duty roster!  Sorry.");
+  }
+
   my $reply = "Today's duty roster:\n"
-            . join qq{\n}, sort map {; $_->{title} } @events;
+            . join qq{\n}, sort map {; $_->{title} } @$duties;
 
   $event->reply($reply);
 }
