@@ -234,17 +234,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
         replyTo   => { imip => "MAILTO:$user->{username}\@fastmailteam.com" },
         freeBusyStatus  => "free",
         calendarId      => $rotor->calendar_id,
-        participantId   => 'synergy',
         participants    => {
-          synergy => {
-            participationStatus => 'accepted',
-            name  => 'Synergy',
-            email => 'synergy@fastmailteam.com',
-            kind  => 'individual',
-            roles => {
-              owner => JSON::MaybeXS->true,
-            },
-          },
           $user->{username} => {
             participationStatus => 'accepted',
             name  => $user->{name} // $user->{username},
