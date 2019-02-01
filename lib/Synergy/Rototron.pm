@@ -208,8 +208,6 @@ my sub event_mismatches ($lhs, $rhs) {
 }
 
 sub compute_rotor_update ($self, $from_dt, $to_dt) {
-  my $now = DateTime->now(time_zone => 'UTC');
-
   my %want;
 
   for my $rotor ($self->rotors) {
