@@ -97,11 +97,27 @@ sub handle_set_availability ($self, $event) {
     );
   }
 
-  return $event->reply(
+  $event->reply(
     sprintf "I marked you $adj on %s %s.",
       NUMWORDS(0+@dates),
       PL_N('day', 0+@dates),
   );
+
+  $self->_replan_range($dates[0], $dates[-1]);
+}
+
+sub _replan_range ($self, $from_dt, $to_dt) {
+  my $plan = $self->rototron->compute_rotor_update($from_dt, $to_dt);
+  return unless $plan;
+
+  my $res = $self->rototron->jmap_client->request({
+    using       => [ 'urn:ietf:params:jmap:mail' ],
+    methodCalls => [
+      [ 'CalendarEvent/set' => $plan, ],
+    ],
+  });
+
+  # TODO: do something with result
 }
 
 sub handle_duty ($self, $event) {

@@ -207,8 +207,8 @@ my sub event_mismatches ($lhs, $rhs) {
   return sort keys %mismatch;
 }
 
-sub recompute_rotors ($self, $from_dt, $to_dt) {
-  my $now   = DateTime->now(time_zone => 'UTC');
+sub compute_rotor_update ($self, $from_dt, $to_dt) {
+  my $now = DateTime->now(time_zone => 'UTC');
 
   my %want;
 
@@ -323,6 +323,8 @@ sub recompute_rotors ($self, $from_dt, $to_dt) {
       $create{"$rtag/$start"}{uid} = lc guid_string;
     }
   }
+
+  return unless %update or %create or %should_destroy;
 
   return {
     update  => \%update,

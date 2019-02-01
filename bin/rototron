@@ -31,11 +31,13 @@ my $start = DateTime->today;
 my $days  = 90 + 6 - $start->day_of_week % 7;
 my $end   = $start->clone->add(days => $days);
 
-my $plan = $rototron->recompute_rotors($start, $end);
+my $plan = $rototron->compute_rotor_update($start, $end);
 
 if ($opt->debug) {
   print JSON::MaybeXS->new->pretty->canonical->encode($plan);
 }
+
+exit unless $plan;
 
 if ($opt->really) {
   my $res = $rototron->jmap_client->request({
