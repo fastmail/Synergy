@@ -192,7 +192,7 @@ my sub event_mismatches ($lhs, $rhs) {
     my $lhsp = $lhs->{participants}->{$pid};
     my $rhsp = $rhs->{participants}->{$pid};
 
-    for my $key (qw( name email kind roles )) {
+    for my $key (qw( name email kind roles participationStatus )) {
       $mismatch{"participants.$pid.$key"} = 1
         if (defined $lhsp->{$key} xor defined $rhsp->{$key})
         || (_HASH0 $lhsp->{$key} xor _HASH0 $rhsp->{$key})
@@ -237,6 +237,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
         participantId   => 'synergy',
         participants    => {
           synergy => {
+            participationStatus => 'accepted',
             name  => 'Synergy',
             email => 'synergy@fastmailteam.com',
             kind  => 'individual',
@@ -245,6 +246,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
             },
           },
           $user->{username} => {
+            participationStatus => 'accepted',
             name  => $user->{name} // $user->{username},
             email => "$user->{username}\@fastmailteam.com",
             kind  => "individual",
