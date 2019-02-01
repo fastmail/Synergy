@@ -34,7 +34,7 @@ my $end   = $start->clone->add(days => $days);
 my $plan = $rototron->compute_rotor_update($start, $end);
 
 if ($opt->debug) {
-  print $plan ? JSON::MaybeXS->new->pretty->canonical->encode($plan) : '{}';
+  print $plan ? JSON::MaybeXS->new->pretty->canonical->encode($plan) : "{}\n";
 }
 
 exit unless $plan;
