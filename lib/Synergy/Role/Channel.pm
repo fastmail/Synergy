@@ -18,7 +18,11 @@ requires qw(
 
 sub start ($self) { }
 
-sub note_error ($self, $res) { }
+# The idea here is that a channel might be able to keep track of errors and
+# take some action in response to them. Synergy::Event::error_reply calls this
+# with whatever the return value of the Channel's send_message is. (See
+# Synergy::Channel::Slack for an example.)
+sub note_error ($self, @send_message_response) { }
 
 1;
 

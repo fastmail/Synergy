@@ -97,8 +97,8 @@ sub source_identifier ($self) {
 }
 
 sub error_reply ($self, $text, $alts = {}) {
-  my @res = $self->reply($text, $alts);
-  $self->from_channel->note_error($self, @res);
+  my @ret = $self->reply($text, $alts);
+  $self->from_channel->note_error($self, @ret);
 }
 
 sub reply ($self, $text, $alts = {}) {

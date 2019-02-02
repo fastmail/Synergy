@@ -6,10 +6,12 @@ use Moose;
 use experimental qw(signatures);
 use utf8;
 use JSON::MaybeXS;
+use IO::Async::Timer::Periodic;
 
 use Synergy::External::Slack;
 use Synergy::Event;
 use Synergy::Logger '$Logger';
+
 
 use namespace::autoclean;
 use Data::Dumper::Concise;
@@ -45,16 +47,50 @@ my %pending_error_frames;
 
 # XXX this name sucks.
 has error_replies => (
-  is => 'ro',
-  isa => 'HashRef',
-  traits => ['Hash'],
-  lazy => 1,
+  is      => 'ro',
+  isa     => 'HashRef',
+  traits  => ['Hash'],
+  lazy    => 1,
   default => sub { {} },
-  # XXX delegate stuff
+  handles => {
+    error_reply_for        => 'get',
+    has_error_reply_for    => 'exists',
+    add_error_reply        => 'set',
+    error_reply_timestamps => 'keys',
+    delete_error_reply     => 'delete',
+  },
+);
+
+# Clean out our state so we don't respond to edits older than 2m
+has error_reply_reaper => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) {
+    return IO::Async::Timer::Periodic->new(
+      interval => 35,
+      on_tick  => sub {
+        my $then = time - 120;
+
+        for my $k (keys %pending_error_frames) {
+          if ($pending_error_frames{$k}->{ts} lt $then) {
+            delete $pending_error_frames{$k};
+            last;
+          }
+        }
+
+        for my $ts ($self->error_reply_timestamps) {
+          $self->delete_error_reply($ts) if $ts lt $then;
+        }
+      },
+    );
+  }
+
 );
 
 sub start ($self) {
   $self->slack->connect;
+  $self->error_reply_reaper->start;
+  $self->loop->add($self->error_reply_reaper);
 
   $self->slack->client->{on_frame} = sub ($client, $frame) {
     return unless $frame;
@@ -72,8 +108,8 @@ sub start ($self) {
 
       # Update the pending futures, passing it the timestamp of the message we
       # actually *sent*.
-      if (my $future = delete $pending_error_frames{ $slack_event->{reply_to} }) {
-        $future->done($slack_event->{ts});
+      if (my $data = delete $pending_error_frames{ $slack_event->{reply_to} }) {
+        $data->{future}->done($slack_event->{ts});
       }
 
       return;
@@ -220,30 +256,37 @@ sub send_message ($self, $target, $text, $alts = {}) {
   return $self->slack->send_message($target, $text, $alts);
 }
 
-sub note_error ($self, $event, $future, $frame_id) {
+sub note_error ($self, $event, $future, $frame_id = undef) {
   my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
   return unless $ts;
 
-  # TODO: we need a timer to clean out frames that are never going to be
-  # responded.
-  $pending_error_frames{$frame_id} = $future;
+  if ($frame_id) {
+    $pending_error_frames{$frame_id} = {
+      future => $future,
+      ts => $ts,
+    };
+  }
 
-  # TODO: We ALSO need a timer (could be longer) to clean out this
-  # error_replies, because we don't want to respond to messages older than
-  # say, 5m (or less). -- michael, 2019-02-01
-  $future->on_done(sub ($reply_ts) {
-    $self->error_replies->{ $ts } = {
+  $future->on_done(sub ($res) {
+    # This is silly, but Slack's _send_rich_text returns a Future that yields
+    # a JSON response, and our hand-rolled websocket frame future returns an
+    # string.
+    my $reply_ts = ref $res
+                 ? $JSON->decode($res->decoded_content)->{ts}
+                 : $res;
+
+    $self->add_error_reply($ts => {
       reply_ts => $reply_ts,
       channel => $channel,
-    };
+    });
   });
 }
 
 sub maybe_respond_to_edit ($self, $slack_event) {
   my $orig_ts = $slack_event->{message}{ts};
-  my $error_reply = delete $self->error_replies->{ $orig_ts };
+  my $error_reply = $self->error_reply_for($orig_ts);
 
-  unless ($error_reply) {
+  unless ($self->has_error_reply_for($orig_ts)) {
     $Logger->log("ignoring edit of a message we didn't respond to");
     return;
   }
@@ -252,12 +295,11 @@ sub maybe_respond_to_edit ($self, $slack_event) {
     $Logger->log(
       "edit channel doesn't match reply channel, reinserting error reply"
     );
-
-    $self->error_replies->{$orig_ts} = $error_reply;
     return;
   }
 
   # delete the original
+  $self->delete_error_reply($orig_ts);
   $self->slack->api_call('chat.delete', {
     channel => $error_reply->{channel},
     ts => $error_reply->{reply_ts},
