@@ -91,64 +91,68 @@ sub start ($self) {
       return;
     }
 
-    return if $slack_event->{bot_id};
-    return if $self->slack->username($slack_event->{user}) eq 'synergy';
-
-    # Ok, so we need to be able to look up the DM channels. If a bot replies
-    # over the websocket connection, it doesn't have a bot id. So we need to
-    # attempt to get the DM channel for this person. If it's a bot, slack will
-    # say "screw you, buddy," in which case we'll return undef, which we'll
-    # understand as "we will not ever respond to this person anyway. Thanks,
-    # Slack. -- michael, 2018-03-15
-    my $private_addr
-      = $slack_event->{channel} =~ /^G/
-      ? $slack_event->{channel}
-      : $self->slack->dm_channel_for_address($slack_event->{user});
-
-    return unless $private_addr;
-
-    my $from_user = $self->hub->user_directory->user_by_channel_and_address(
-      $self->name, $slack_event->{user}
-    );
-
-    my $from_username = $from_user
-                      ? $from_user->username
-                      : $self->slack->username($slack_event->{user});
-
-    # decode text
-    my $me = $self->slack->own_name;
-    my $text = $self->decode_slack_formatting($slack_event->{text});
-
-    my $was_targeted;
-
-    if ($text =~ s/\A \@?($me)(?=\W):?\s*//ix) {
-      $was_targeted = !! $1;
-    }
-
-    # Three kinds of channels, I think:
-    # C - public channel
-    # D - direct one-on-one message
-    # G - group chat
-    #
-    # Only public channels public.
-    # Everything is targeted if it's sent in direct message.
-    my $is_public    = $slack_event->{channel} =~ /^C/;
-    $was_targeted = 1 if $slack_event->{channel} =~ /^D/;
-
-    my $event = Synergy::Event->new({
-      type => 'message',
-      text => $text,
-      was_targeted => $was_targeted,
-      is_public => $is_public,
-      from_channel => $self,
-      from_address => $slack_event->{user},
-      ( $from_user ? ( from_user => $from_user ) : () ),
-      transport_data => $slack_event,
-      conversation_address => $slack_event->{channel},
-    });
-
-    $self->hub->handle_event($event);
+    $self->handle_slack_message($slack_event);
   };
+}
+
+sub handle_slack_message ($self, $slack_event) {
+  return if $slack_event->{bot_id};
+  return if $self->slack->username($slack_event->{user}) eq 'synergy';
+
+  # Ok, so we need to be able to look up the DM channels. If a bot replies
+  # over the websocket connection, it doesn't have a bot id. So we need to
+  # attempt to get the DM channel for this person. If it's a bot, slack will
+  # say "screw you, buddy," in which case we'll return undef, which we'll
+  # understand as "we will not ever respond to this person anyway. Thanks,
+  # Slack. -- michael, 2018-03-15
+  my $private_addr
+    = $slack_event->{channel} =~ /^G/
+    ? $slack_event->{channel}
+    : $self->slack->dm_channel_for_address($slack_event->{user});
+
+  return unless $private_addr;
+
+  my $from_user = $self->hub->user_directory->user_by_channel_and_address(
+    $self->name, $slack_event->{user}
+  );
+
+  my $from_username = $from_user
+                    ? $from_user->username
+                    : $self->slack->username($slack_event->{user});
+
+  # decode text
+  my $me = $self->slack->own_name;
+  my $text = $self->decode_slack_formatting($slack_event->{text});
+
+  my $was_targeted;
+
+  if ($text =~ s/\A \@?($me)(?=\W):?\s*//ix) {
+    $was_targeted = !! $1;
+  }
+
+  # Three kinds of channels, I think:
+  # C - public channel
+  # D - direct one-on-one message
+  # G - group chat
+  #
+  # Only public channels public.
+  # Everything is targeted if it's sent in direct message.
+  my $is_public    = $slack_event->{channel} =~ /^C/;
+  $was_targeted = 1 if $slack_event->{channel} =~ /^D/;
+
+  my $event = Synergy::Event->new({
+    type => 'message',
+    text => $text,
+    was_targeted => $was_targeted,
+    is_public => $is_public,
+    from_channel => $self,
+    from_address => $slack_event->{user},
+    ( $from_user ? ( from_user => $from_user ) : () ),
+    transport_data => $slack_event,
+    conversation_address => $slack_event->{channel},
+  });
+
+  $self->hub->handle_event($event);
 }
 
 sub decode_slack_formatting ($self, $text) {
