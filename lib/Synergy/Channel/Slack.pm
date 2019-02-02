@@ -71,13 +71,6 @@ has error_reply_reaper => (
       on_tick  => sub {
         my $then = time - 120;
 
-        for my $k (keys %pending_error_frames) {
-          if ($pending_error_frames{$k}->{ts} lt $then) {
-            delete $pending_error_frames{$k};
-            last;
-          }
-        }
-
         for my $ts ($self->error_reply_timestamps) {
           $self->delete_error_reply($ts) if $ts lt $then;
         }
@@ -89,8 +82,7 @@ has error_reply_reaper => (
 
 sub start ($self) {
   $self->slack->connect;
-  $self->error_reply_reaper->start;
-  $self->loop->add($self->error_reply_reaper);
+  $self->loop->add($self->error_reply_reaper->start);
 
   $self->slack->client->{on_frame} = sub ($client, $frame) {
     return unless $frame;
@@ -108,8 +100,8 @@ sub start ($self) {
 
       # Update the pending futures, passing it the timestamp of the message we
       # actually *sent*.
-      if (my $data = delete $pending_error_frames{ $slack_event->{reply_to} }) {
-        $data->{future}->done($slack_event->{ts});
+      if (my $future = delete $pending_error_frames{ $slack_event->{reply_to} }) {
+        $future->done($slack_event->{ts});
       }
 
       return;
@@ -260,11 +252,23 @@ sub note_error ($self, $event, $future, $frame_id = undef) {
   my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
   return unless $ts;
 
+  # If we get a frame ID, this is from a _send_plain_text in External::Slack.
+  # We'll stick the future into the pending error frames hash, and set a timer
+  # to remove it from that hash in 5s. (This prevents us from needing to store
+  # more data in that hash so that it can be cleaned out by the
+  # error_reply_reaper.)
+  #
+  # When the future is done (either the HTTP request to chat.postMessage
+  # finishes or we manually call $future->done when we get the reply_to frame
+  # across the websocket, we'll note the timestamp of the message we actually
+  # sent, and cancel the fail timer (if we made one).
+  my $timeout;
   if ($frame_id) {
-    $pending_error_frames{$frame_id} = {
-      future => $future,
-      ts => $ts,
-    };
+    $pending_error_frames{$frame_id} = $future;
+    $timeout = $self->loop->timeout_future(after => 2)->on_fail(sub {
+      $Logger->log("failed to get response from slack; removing error frame");
+      delete $pending_error_frames{$frame_id}
+    });
   }
 
   $future->on_done(sub ($res) {
@@ -279,6 +283,8 @@ sub note_error ($self, $event, $future, $frame_id = undef) {
       reply_ts => $reply_ts,
       channel => $channel,
     });
+
+    $timeout->cancel if $timeout;
   });
 }
 
