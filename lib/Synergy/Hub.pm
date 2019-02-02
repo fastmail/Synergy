@@ -251,10 +251,9 @@ sub handle_event ($self, $event) {
 
     my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
     @replies = 'Does not compute.' unless @replies;
-    $event->reply($replies[ rand @replies ]);
+    $event->error_reply($replies[ rand @replies ]);
     return;
   }
-
 
   return;
 }

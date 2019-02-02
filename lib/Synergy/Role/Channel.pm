@@ -18,6 +18,8 @@ requires qw(
 
 sub start ($self) { }
 
+sub note_error ($self, $res) { }
+
 1;
 
 =pod

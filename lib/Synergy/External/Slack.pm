@@ -126,6 +126,9 @@ sub send_frame ($self, $frame) {
     # Save it til after we've successfully reconnected
     $self->queue_frame($frame);
   }
+
+  my $future = $self->loop->new_future;
+  return wantarray ? ($future, $frame->{id}) : $future;
 }
 
 has _frame_queue => (
@@ -183,7 +186,7 @@ sub send_message ($self, $channel, $text, $alts = {}) {
 }
 
 sub _send_plain_text ($self, $channel, $text) {
-  $self->send_frame({
+  return $self->send_frame({
     type => 'message',
     channel => $channel,
     text    => $text,

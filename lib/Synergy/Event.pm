@@ -96,6 +96,11 @@ sub source_identifier ($self) {
     $self->conversation_address;
 }
 
+sub error_reply ($self, $text, $alts = {}) {
+  my @res = $self->reply($text, $alts);
+  $self->from_channel->note_error($self, @res);
+}
+
 sub reply ($self, $text, $alts = {}) {
   $Logger->log_debug("sending $text to someone");
 

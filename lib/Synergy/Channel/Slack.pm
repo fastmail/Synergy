@@ -41,6 +41,18 @@ has slack => (
   }
 );
 
+my %pending_error_frames;
+
+# XXX this name sucks.
+has error_replies => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits => ['Hash'],
+  lazy => 1,
+  default => sub { {} },
+  # XXX delegate stuff
+);
+
 sub start ($self) {
   $self->slack->connect;
 
@@ -56,6 +68,12 @@ sub start ($self) {
     if (! $slack_event->{type} && $slack_event->{reply_to}) {
       unless ($slack_event->{ok}) {
         $Logger->log([ "failed to send a response: %s", $slack_event ]);
+      }
+
+      # Update the pending futures, passing it the timestamp of the message we
+      # actually *sent*.
+      if (my $future = delete $pending_error_frames{ $slack_event->{reply_to} }) {
+        $future->done($slack_event->{ts});
       }
 
       return;
@@ -80,6 +98,11 @@ sub start ($self) {
     unless ($self->slack->is_ready) {
       $Logger->log("ignoring message, we aren't ready yet");
 
+      return;
+    }
+
+    if ($slack_event->{subtype} && $slack_event->{subtype} eq 'message_changed') {
+      $self->maybe_respond_to_edit($slack_event);
       return;
     }
 
@@ -194,9 +217,58 @@ sub send_message ($self, $target, $text, $alts = {}) {
   $text =~ s/</&lt;/g;
   $text =~ s/>/&gt;/g;
 
-  $self->slack->send_message($target, $text, $alts);
+  return $self->slack->send_message($target, $text, $alts);
+}
 
-  return;
+sub note_error ($self, $event, $future, $frame_id) {
+  my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
+  return unless $ts;
+
+  # TODO: we need a timer to clean out frames that are never going to be
+  # responded.
+  $pending_error_frames{$frame_id} = $future;
+
+  # TODO: We ALSO need a timer (could be longer) to clean out this
+  # error_replies, because we don't want to respond to messages older than
+  # say, 5m (or less). -- michael, 2019-02-01
+  $future->on_done(sub ($reply_ts) {
+    $self->error_replies->{ $ts } = {
+      reply_ts => $reply_ts,
+      channel => $channel,
+    };
+  });
+}
+
+sub maybe_respond_to_edit ($self, $slack_event) {
+  my $orig_ts = $slack_event->{message}{ts};
+  my $error_reply = delete $self->error_replies->{ $orig_ts };
+
+  unless ($error_reply) {
+    $Logger->log("ignoring edit of a message we didn't respond to");
+    return;
+  }
+
+  unless ($slack_event->{channel} eq $error_reply->{channel}) {
+    $Logger->log(
+      "edit channel doesn't match reply channel, reinserting error reply"
+    );
+
+    $self->error_replies->{$orig_ts} = $error_reply;
+    return;
+  }
+
+  # delete the original
+  $self->slack->api_call('chat.delete', {
+    channel => $error_reply->{channel},
+    ts => $error_reply->{reply_ts},
+  });
+
+  # Massage the slack event a bit, then reinject it.
+  my $message = $slack_event->{message};
+  $message->{channel} = $slack_event->{channel};
+  $message->{event_ts} = $slack_event->{event_ts};
+
+  $self->handle_slack_message($message);
 }
 
 sub _uri_from_event ($self, $event) {
