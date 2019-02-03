@@ -43,8 +43,6 @@ has slack => (
   }
 );
 
-my %pending_error_frames;
-
 # XXX this name sucks.
 has error_replies => (
   is      => 'ro',
@@ -93,15 +91,13 @@ sub start ($self) {
       return;
     }
 
+    # This is silly, but Websocket::Client's on_frame isn't a stack of
+    # subs to call, it's only a single sub. -- michael, 2019-02-03
+    $self->slack->handle_frame($slack_event);
+
     if (! $slack_event->{type} && $slack_event->{reply_to}) {
       unless ($slack_event->{ok}) {
         $Logger->log([ "failed to send a response: %s", $slack_event ]);
-      }
-
-      # Update the pending futures, passing it the timestamp of the message we
-      # actually *sent*.
-      if (my $future = delete $pending_error_frames{ $slack_event->{reply_to} }) {
-        $future->done($slack_event->{ts});
       }
 
       return;
@@ -112,17 +108,11 @@ sub start ($self) {
       return;
     }
 
-    if ($slack_event->{type} eq 'pong') {
-      $self->slack->pong_timeout->cancel;
-      return;
-    }
-
     # XXX dispatch these better
     return unless $slack_event->{type} eq 'message';
 
     unless ($self->slack->is_ready) {
       $Logger->log("ignoring message, we aren't ready yet");
-
       return;
     }
 
@@ -245,43 +235,15 @@ sub send_message ($self, $target, $text, $alts = {}) {
   return $self->slack->send_message($target, $text, $alts);
 }
 
-sub note_error ($self, $event, $future, $frame_id = undef) {
+sub note_error ($self, $event, $future) {
   my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
   return unless $ts;
 
-  # If we get a frame ID, this is from a _send_plain_text in External::Slack.
-  # We'll stick the future into the pending error frames hash, and set a timer
-  # to remove it from that hash in 5s. (This prevents us from needing to store
-  # more data in that hash so that it can be cleaned out by the
-  # error_reply_reaper.)
-  #
-  # When the future is done (either the HTTP request to chat.postMessage
-  # finishes or we manually call $future->done when we get the reply_to frame
-  # across the websocket, we'll note the timestamp of the message we actually
-  # sent, and cancel the fail timer (if we made one).
-  my $timeout;
-  if ($frame_id) {
-    $pending_error_frames{$frame_id} = $future;
-    $timeout = $self->loop->timeout_future(after => 2)->on_fail(sub {
-      $Logger->log("failed to get response from slack; removing error frame");
-      delete $pending_error_frames{$frame_id}
-    });
-  }
-
-  $future->on_done(sub ($res) {
-    # This is silly, but Slack's _send_rich_text returns a Future that yields
-    # a JSON response, and our hand-rolled websocket frame future returns an
-    # string.
-    my $reply_ts = ref $res
-                 ? $JSON->decode($res->decoded_content)->{ts}
-                 : $res;
-
+  $future->on_done(sub ($slack_frame) {
     $self->add_error_reply($ts => {
-      reply_ts => $reply_ts,
+      reply_ts => $slack_frame->{ts},
       channel => $channel,
     });
-
-    $timeout->cancel if $timeout;
   });
 }
 
@@ -295,9 +257,7 @@ sub maybe_respond_to_edit ($self, $slack_event) {
   }
 
   unless ($slack_event->{channel} eq $error_reply->{channel}) {
-    $Logger->log(
-      "edit channel doesn't match reply channel, reinserting error reply"
-    );
+    $Logger->log("ignoring edit whose channel doesn't match reply channel");
     return;
   }
 

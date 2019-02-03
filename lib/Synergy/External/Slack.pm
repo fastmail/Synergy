@@ -82,11 +82,6 @@ has client => (
   },
 );
 
-has pong_timeout => (
-  is => 'rw',
-  isa => 'Future',
-);
-
 has own_name => (
   is => 'ro',
   isa => 'Str',
@@ -114,10 +109,13 @@ sub connect ($self) {
             ->get;
 };
 
+my %pending_frames;
+my %pending_timeouts;
+
 sub send_frame ($self, $frame) {
   state $i = 1;
-
-  $frame->{id} = $i++;
+  my $frame_id = $i++;
+  $frame->{id} = $frame_id;
 
   if ($self->connected) {
     $self->client->send_frame(masked => 1, buffer => encode_json($frame));
@@ -126,8 +124,36 @@ sub send_frame ($self, $frame) {
     $self->queue_frame($frame);
   }
 
-  my $future = $self->loop->new_future;
-  return wantarray ? ($future, $frame->{id}) : $future;
+  my $f = $self->loop->new_future;
+  $pending_frames{$frame_id} = $f;
+
+  my $timeout = $self->loop->timeout_future(after => 3);
+  $timeout->on_fail(sub {
+    $Logger->log("failed to get response from slack; trying to reconnect");
+
+    $self->client->close;
+    $self->connect;
+
+    # Also fail any pending futures for this frame.
+    my $f = delete $pending_frames{$frame_id};
+    $f->fail if $f;
+  });
+
+  $pending_timeouts{$frame_id} = $timeout;
+
+  return $f;
+}
+
+sub handle_frame ($self, $slack_event) {
+  return unless my $reply_to = $slack_event->{reply_to};
+
+  # Cancel the timeout, then mark the future done with the decoded frame
+  # object.
+  my $timeout = delete $pending_timeouts{$reply_to};
+  $timeout->cancel;
+
+  my $f = delete $pending_frames{$reply_to};
+  $f->done($slack_event);
 }
 
 has _frame_queue => (
@@ -185,19 +211,29 @@ sub send_message ($self, $channel, $text, $alts = {}) {
 }
 
 sub _send_plain_text ($self, $channel, $text) {
-  return $self->send_frame({
+  my $f = $self->send_frame({
     type => 'message',
     channel => $channel,
     text    => $text,
   });
+
+  return $f;
 }
 
 sub _send_rich_text ($self, $channel, $rich) {
-  $self->api_call('chat.postMessage', {
+  my $http_future = $self->api_call('chat.postMessage', {
     (ref $rich ? (%$rich) : (text => $rich)),
     channel => $channel,
     as_user => 1,
   });
+
+  my $f = $self->loop->new_future;
+  $http_future->on_done(sub ($http_res) {
+    my $res = decode_json($http_res->decoded_content);
+    $f->done($res);
+  });
+
+  return $f;
 }
 
 sub _register_slack_rtm ($self, $res) {
@@ -226,15 +262,6 @@ sub _register_slack_rtm ($self, $res) {
         interval => 10,
         on_tick  => sub {
           $self->send_frame({ type => 'ping' });
-
-          my $pong_timeout = $self->loop->timeout_future(after => 2);
-          $pong_timeout->on_fail(sub {
-            $Logger->log("failed to get pong; trying to reconnect");
-            $self->client->close;
-            $self->connect;
-          });
-
-          $self->pong_timeout($pong_timeout);
         }
       );
 
