@@ -57,7 +57,7 @@ sub handle_set_availability ($self, $event) {
   $event->mark_handled;
 
   my ($from, $to);
-  my $ymd_re = qr{ ([0-9]{4}) - ([0-9]{2}) - ([0-9]{2}) }x;
+  my $ymd_re = qr{ [0-9]{4} - [0-9]{2} - [0-9]{2} }x;
 
   my $adj  = $event->text =~ /\Aun/ ? 'unavailable' : 'available';
   my $text = $event->text =~ s/\A(un)?available\b//rn;
