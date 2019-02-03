@@ -113,10 +113,7 @@ sub start ($self) {
     }
 
     if ($slack_event->{type} eq 'pong') {
-      my $pong_timer = $self->slack->pong_timer;
-      $pong_timer->stop;
-      $self->loop->remove($pong_timer);
-      $self->slack->clear_pong_timer;
+      $self->slack->pong_timeout->cancel;
       return;
     }
 

@@ -8,8 +8,6 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures);
 use namespace::clean;
-use List::Util qw(first uniq);
-use IO::Async::Timer::Countdown;
 
 sub listener_specs {
   return {
@@ -25,16 +23,10 @@ sub handle_eject ($self, $event) {
   return $event->reply('only the master user can do that')
     unless $event->from_user && $event->from_user->is_master;
 
-  $event->reply('Good bye.');
-
-  my $timer = IO::Async::Timer::Countdown->new(
-    delay => 1,
-    on_expire => sub { kill 'INT', $$ },
-  );
-
-  $timer->start;
-
-  $self->hub->loop->add($timer);
+  my $f = $event->reply('Good bye.');
+  $f->on_done(sub {
+    kill 'INT', $$;
+  });
 }
 
 1;

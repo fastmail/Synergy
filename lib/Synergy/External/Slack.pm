@@ -82,10 +82,9 @@ has client => (
   },
 );
 
-has pong_timer => (
+has pong_timeout => (
   is => 'rw',
-  isa => 'IO::Async::Timer::Countdown',
-  clearer => 'clear_pong_timer',
+  isa => 'Future',
 );
 
 has own_name => (
@@ -228,20 +227,14 @@ sub _register_slack_rtm ($self, $res) {
         on_tick  => sub {
           $self->send_frame({ type => 'ping' });
 
-          # If we don't get a pong in 2s, try reconnecting
-          my $pong_timer = IO::Async::Timer::Countdown->new(
-            delay            => 2,
-            remove_on_expire => 1,
-            on_expire        => sub {
-              $Logger->log("failed to get pong; trying to reconnect");
-              $self->client->close;
-              $self->connect;
-            },
-          );
+          my $pong_timeout = $self->loop->timeout_future(after => 2);
+          $pong_timeout->on_fail(sub {
+            $Logger->log("failed to get pong; trying to reconnect");
+            $self->client->close;
+            $self->connect;
+          });
 
-          $self->pong_timer($pong_timer);
-          $pong_timer->start;
-          $self->loop->add($pong_timer);
+          $self->pong_timeout($pong_timeout);
         }
       );
 
