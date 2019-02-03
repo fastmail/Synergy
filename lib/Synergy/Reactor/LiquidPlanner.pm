@@ -1440,13 +1440,6 @@ sub lp_tasks_for_user ($self, $user, $count, $which = 'tasks') {
 
   splice @tasks, $count;
 
-  my $urgent = $self->urgent_package_id;
-  for (@tasks) {
-    $_->{name} = "🔥 $_->{name}"
-      if (grep { $urgent == $_ } $_->{parent_ids}->@*)
-      || (grep { $urgent == $_ } $_->{package_ids}->@*);
-  }
-
   return \@tasks;
 }
 
