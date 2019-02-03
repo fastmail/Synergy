@@ -91,13 +91,14 @@ sub _slack_item_link_with_name ($self, $item) {
   state $shortcut_prefix = { Task => '*', Project => '#' };
   my $type = $item->{type};
   my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
+  my $pstatus  = $item->{custom_field_values}{"Project Status"};
 
   my $title = $item->{name};
   $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
 
   my $urgent = $self->urgent_package_id;
 
-  sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
+  my $text = sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
     $self->item_uri($item->{id}),
     $item->{id},
     ( $item->{is_done}
@@ -107,6 +108,10 @@ sub _slack_item_link_with_name ($self, $item) {
                                                                 : "•"
     ),
     $title;
+
+  $text .= " \N{EN DASH} \_$pstatus\_" if $pstatus;
+
+  return $text;
 }
 
 has [ qw( inbox_package_id urgent_package_id recurring_package_id ) ] => (
