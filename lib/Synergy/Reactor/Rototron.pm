@@ -136,6 +136,11 @@ sub handle_duty ($self, $event) {
     return $event->reply("I couldn't get the duty roster!  Sorry.");
   }
 
+  unless (@$duties) {
+    $event->reply("Like booze in an airport, today is duty free.");
+    return;
+  }
+
   my $reply = "Today's duty roster:\n"
             . join qq{\n}, sort map {; $_->{title} } @$duties;
 
