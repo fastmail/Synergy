@@ -63,6 +63,12 @@ has availability_checker => (
   default  => sub ($self, @) {
     Synergy::Rototron::AvailabilityChecker->new({
       db_path => $self->config->{availability_db},
+      calendars => $self->config->{availability_calendars},
+
+      # XXX This is bonkers. -- rjbs, 2019-02-02
+      jmap_client => Synergy::Rototron::JMAPClient->new({
+        $self->config->{jmap}->%{ qw( api_uri username password ) },
+      }),
     });
   }
 );
@@ -460,7 +466,107 @@ package Synergy::Rototron::AvailabilityChecker {
     },
   );
 
+  has jmap_client => (
+    is => 'ro',
+    required => 1,
+  );
+
+  has calendars => (
+    required  => 1,
+    traits    => [ 'Array' ],
+    handles   => { calendars => 'elements' },
+  );
+
+  has _calevent_cache => (
+    is => 'ro',
+    default   => sub {  {}  },
+  );
+
+  sub _leave_days ($self) {
+    my $cache = $self->_calevent_cache;
+    return $cache->{events}
+      if $cache->{cached_at} && (time - $cache->{cached_at} < 900);
+
+    my @calendars = $self->calendars;
+
+    die "only one calendar for now" if @calendars > 1;
+    return [] unless @calendars;
+
+    my $res = eval {
+      my $res = $self->jmap_client->request({
+        using       => [ 'urn:ietf:params:jmap:mail' ],
+        methodCalls => [
+          [
+            'CalendarEvent/query' => {
+              accountId   => $calendars[0]{accountId},
+              filter => {
+                inCalendars => [ $calendars[0]{calendarId} ],
+                after       => DateTime->now->ymd . "T00:00:00Z", # endAfter
+              },
+            },
+            'a',
+          ],
+          [
+            'CalendarEvent/get' => {
+              accountId   => $calendars[0]{accountId},
+              '#ids' => {
+                resultOf => 'a',
+                name => 'CalendarEvent/query',
+                path => '/ids',
+              }
+            }
+          ],
+        ]
+      });
+
+      $res;
+    };
+
+    # Error condition. -- rjbs, 2019-01-31
+    return undef unless $res;
+
+    my @events = $res->sentence_named('CalendarEvent/get')
+                     ->as_stripped_pair->[1]{list}->@*;
+
+    my %leave_days;
+
+    EVENT: for my $event (@events) {
+      my (@who) = map {; /^username:(\S+)\z/ ? $1 : () }
+                  keys $event->{keywords}->%*;
+
+      unless (@who) {
+        warn "skipping event with no usernames\n";
+        next EVENT;
+      }
+
+      my ($days) = ($event->{duration} // '') =~ /\AP([0-9]+)D\z/;
+      unless ($days) {
+        warn "skipping event with wonky duration\n";
+        next EVENT;
+      }
+
+      $days-- if $days;
+
+      my ($start) = split /T/, $event->{start};
+      my ($y, $m, $d) = split /-/, $start;
+      my $curr = DateTime->new(year => $y, month => $m, day => $d);
+
+      for (0 .. $days) {
+        $leave_days{ $_ }{ $curr->ymd } = 1 for @who;
+        $curr->add(days => 1);
+      }
+    }
+
+    %$cache = (cached_at => time, leave_days => \%leave_days);
+    return \%leave_days;
+  }
+
   sub user_is_available_on ($self, $username, $dt) {
+    my $ymd = $dt->ymd;
+
+    my $leave = $self->_leave_days;
+    return 1 if $leave->{$username}{$dt->ymd};
+
     my ($count) = $self->_dbh->selectrow_array(
       q{SELECT COUNT(*) FROM blocked_days WHERE username = ? AND date = ?},
       undef,
