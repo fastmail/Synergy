@@ -2721,7 +2721,7 @@ sub damage_report ($self, $event) {
 
   my $rototron = $self->_rototron;
   my $user_is_triage = do {
-    my $duties = $rototron->duties_on( DateTime->now(time_zone => 'UTC') );
+    my $duties = $rototron->duties_on( DateTime->now(time_zone => $target->time_zone ) );
     !! (grep {; ($_->{keywords}{"rotor:triage_us"} || $_->{keywords}{"rotor:triage_au"})
          && grep {; 0 == index $_->{email}, ($target->username . q{@}) } values $_->{participants}->%*
        } @$duties);
@@ -2755,7 +2755,8 @@ sub damage_report ($self, $event) {
   my @summaries = ("Damage report for $who_name:");
 
   CHK: for my $check (@to_check) {
-    my ($label, $icon, $package_id, $override_lp_id) = @$check;
+    my ($label, $icon, $package_id, $want_lp_id) = @$check;
+    $want_lp_id //= $lp_id;
 
     my $check_res = $self->lp_client_for_master->query_items({
       ($package_id ? (in => $package_id) : ()),
@@ -2765,7 +2766,7 @@ sub damage_report ($self, $event) {
       },
       filters => [
         [ is_done   => 'is',  'false' ],
-        [ owner_id  => '=',   $override_lp_id // $lp_id  ],
+        [ owner_id  => '=',   $want_lp_id  ],
       ],
     });
 
@@ -2783,7 +2784,7 @@ sub damage_report ($self, $event) {
 
     for my $item ($check_res->payload_list) {
       next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
-      my ($assign) = grep {; $_->{person_id} == $lp_id }
+      my ($assign) = grep {; $_->{person_id} == $want_lp_id }
                      $item->{assignments}->@*;
 
       next unless $assign and ! $assign->{is_done};
