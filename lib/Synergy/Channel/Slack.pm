@@ -12,7 +12,6 @@ use Synergy::External::Slack;
 use Synergy::Event;
 use Synergy::Logger '$Logger';
 
-
 use namespace::autoclean;
 use Data::Dumper::Concise;
 
@@ -43,24 +42,31 @@ has slack => (
   }
 );
 
-# XXX this name sucks.
-has error_replies => (
+# {
+#   user_message_ts => {
+#     reply_ts  => $our_ts,
+#     channel   => $channel,
+#     was_error => $bool,
+#     was_targeted => $bool,
+#   }
+# }
+has our_replies => (
   is      => 'ro',
   isa     => 'HashRef',
   traits  => ['Hash'],
   lazy    => 1,
   default => sub { {} },
   handles => {
-    error_reply_for        => 'get',
-    has_error_reply_for    => 'exists',
-    add_error_reply        => 'set',
-    error_reply_timestamps => 'keys',
-    delete_error_reply     => 'delete',
+    reply_for        => 'get',
+    has_reply_for    => 'exists',
+    add_reply        => 'set',
+    reply_timestamps => 'keys',
+    delete_reply     => 'delete',
   },
 );
 
 # Clean out our state so we don't respond to edits older than 2m
-has error_reply_reaper => (
+has reply_reaper => (
   is => 'ro',
   lazy => 1,
   default => sub ($self) {
@@ -69,8 +75,8 @@ has error_reply_reaper => (
       on_tick  => sub {
         my $then = time - 120;
 
-        for my $ts ($self->error_reply_timestamps) {
-          $self->delete_error_reply($ts) if $ts lt $then;
+        for my $ts ($self->reply_timestamps) {
+          $self->delete_reply($ts) if $ts lt $then;
         }
       },
     );
@@ -80,7 +86,7 @@ has error_reply_reaper => (
 
 sub start ($self) {
   $self->slack->connect;
-  $self->loop->add($self->error_reply_reaper->start);
+  $self->loop->add($self->reply_reaper->start);
 
   $self->slack->client->{on_frame} = sub ($client, $frame) {
     return unless $frame;
@@ -129,14 +135,15 @@ sub start ($self) {
       return;
     }
 
-    $self->handle_slack_message($slack_event);
+    return if $slack_event->{bot_id};
+    return if $self->slack->username($slack_event->{user}) eq 'synergy';
+
+    my $event = $self->synergy_event_from_slack_event($slack_event);
+    $self->hub->handle_event($event);
   };
 }
 
-sub handle_slack_message ($self, $slack_event) {
-  return if $slack_event->{bot_id};
-  return if $self->slack->username($slack_event->{user}) eq 'synergy';
-
+sub synergy_event_from_slack_event ($self, $slack_event, $type = 'message') {
   # Ok, so we need to be able to look up the DM channels. If a bot replies
   # over the websocket connection, it doesn't have a bot id. So we need to
   # attempt to get the DM channel for this person. If it's a bot, slack will
@@ -179,7 +186,7 @@ sub handle_slack_message ($self, $slack_event) {
   $was_targeted = 1 if $slack_event->{channel} =~ /^D/;
 
   my $event = Synergy::Event->new({
-    type => 'message',
+    type => $type,
     text => $text,
     was_targeted => $was_targeted,
     is_public => $is_public,
@@ -190,7 +197,6 @@ sub handle_slack_message ($self, $slack_event) {
     conversation_address => $slack_event->{channel},
   });
 
-  $self->hub->handle_event($event);
 }
 
 sub decode_slack_formatting ($self, $text) {
@@ -223,8 +229,7 @@ sub decode_slack_formatting ($self, $text) {
 
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
   my $where = $self->slack->dm_channel_for_user($user, $self);
-
-  $self->send_message($where, $text, $alts);
+  return $self->send_message($where, $text, $alts);
 }
 
 sub send_message ($self, $target, $text, $alts = {}) {
@@ -232,10 +237,11 @@ sub send_message ($self, $target, $text, $alts = {}) {
   $text =~ s/</&lt;/g;
   $text =~ s/>/&gt;/g;
 
-  return $self->slack->send_message($target, $text, $alts);
+  my $f = $self->slack->send_message($target, $text, $alts);
+  return $f;
 }
 
-sub note_error ($self, $event, $future) {
+sub note_reply ($self, $event, $future, $args = {}) {
   my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
   return unless $ts;
 
@@ -248,40 +254,53 @@ sub note_error ($self, $event, $future) {
       return;
     }
 
-    $self->add_error_reply($ts => {
-      reply_ts => $data->{transport_data}{ts},
-      channel => $channel,
+    $self->add_reply($ts => {
+      reply_ts  => $data->{transport_data}{ts},
+      channel   => $channel,
+      was_error => $args->{was_error} ? 1 : 0,
+      was_targeted => $event->was_targeted,
     });
   });
 }
 
 sub maybe_respond_to_edit ($self, $slack_event) {
   my $orig_ts = $slack_event->{message}{ts};
-  my $error_reply = $self->error_reply_for($orig_ts);
+  my $reply = $self->reply_for($orig_ts);
 
-  unless ($self->has_error_reply_for($orig_ts)) {
+  unless ($self->has_reply_for($orig_ts)) {
     $Logger->log("ignoring edit of a message we didn't respond to");
     return;
   }
 
-  unless ($slack_event->{channel} eq $error_reply->{channel}) {
+  unless ($slack_event->{channel} eq $reply->{channel}) {
     $Logger->log("ignoring edit whose channel doesn't match reply channel");
     return;
   }
-
-  # delete the original
-  $self->delete_error_reply($orig_ts);
-  $self->slack->api_call('chat.delete', {
-    channel => $error_reply->{channel},
-    ts => $error_reply->{reply_ts},
-  });
 
   # Massage the slack event a bit, then reinject it.
   my $message = $slack_event->{message};
   $message->{channel} = $slack_event->{channel};
   $message->{event_ts} = $slack_event->{event_ts};
 
-  $self->handle_slack_message($message);
+  unless ($reply->{was_error}) {
+    return unless $reply->{was_targeted};
+
+    my $event = $self->synergy_event_from_slack_event($message, 'edit');
+    $event->reply(
+      "I can only respond to edits of messages that caused errors, sorry."
+    );
+    return;
+  }
+
+  # delete the original
+  $self->delete_reply($orig_ts);
+  $self->slack->api_call('chat.delete', {
+    channel => $reply->{channel},
+    ts => $reply->{reply_ts},
+  });
+
+  my $event = $self->synergy_event_from_slack_event($message, 'message');
+  $self->hub->handle_event($event);
 }
 
 sub _uri_from_event ($self, $event) {

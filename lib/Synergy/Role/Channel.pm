@@ -19,10 +19,10 @@ requires qw(
 sub start ($self) { }
 
 # The idea here is that a channel might be able to keep track of errors and
-# take some action in response to them. Synergy::Event::error_reply calls this
-# with itself and the future that send_message returns. (See
+# take some action in response to them. Synergy::Event::reply calls this
+# with itself and the future that ->send_message returns. (See
 # Synergy::Channel::Slack for an example.)
-sub note_error ($self, $event, $future) { }
+sub note_reply ($self, $event, $future, $args = {}) { }
 
 1;
 
