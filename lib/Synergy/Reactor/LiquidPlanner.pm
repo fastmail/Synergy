@@ -2722,7 +2722,7 @@ sub damage_report ($self, $event) {
   my $rototron = $self->_rototron;
   my $user_is_triage = do {
     my $duties = $rototron->duties_on( DateTime->now(time_zone => 'UTC') );
-    !! grep {; ($_->{keywords}{"triage_us"} || $_->{keywords}{"triage_au"})
+    !! grep {; ($_->{keywords}{"rotor:triage_us"} || $_->{keywords}{"rotor:triage_au"})
          && grep {; 0 == index $_->{email}, ($target->username . q{@}) } $_->{participants}->@*
        } @$duties;
   };
