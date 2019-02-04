@@ -57,11 +57,11 @@ has our_replies => (
   lazy    => 1,
   default => sub { {} },
   handles => {
-    reply_for        => 'get',
-    has_reply_for    => 'exists',
-    add_reply        => 'set',
-    reply_timestamps => 'keys',
-    delete_reply     => 'delete',
+    reply_for           => 'get',
+    has_reply_for       => 'exists',
+    add_reply           => 'set',
+    reply_timestamps    => 'keys',
+    delete_reply_record => 'delete',
   },
 );
 
@@ -76,7 +76,7 @@ has reply_reaper => (
         my $then = time - 120;
 
         for my $ts ($self->reply_timestamps) {
-          $self->delete_reply($ts) if $ts lt $then;
+          $self->delete_reply_record($ts) if $ts lt $then;
         }
       },
     );
@@ -124,6 +124,11 @@ sub start ($self) {
 
     if ($slack_event->{subtype} && $slack_event->{subtype} eq 'message_changed') {
       $self->maybe_respond_to_edit($slack_event);
+      return;
+    }
+
+    if ($slack_event->{subtype} && $slack_event->{subtype} eq 'message_deleted') {
+      $self->maybe_delete_reply($slack_event);
       return;
     }
 
@@ -267,7 +272,7 @@ sub maybe_respond_to_edit ($self, $slack_event) {
   my $orig_ts = $slack_event->{message}{ts};
   my $reply = $self->reply_for($orig_ts);
 
-  unless ($self->has_reply_for($orig_ts)) {
+  unless ($reply) {
     $Logger->log("ignoring edit of a message we didn't respond to");
     return;
   }
@@ -292,15 +297,43 @@ sub maybe_respond_to_edit ($self, $slack_event) {
     return;
   }
 
-  # delete the original
   $self->delete_reply($orig_ts);
+
+  my $event = $self->synergy_event_from_slack_event($message, 'message');
+  $self->hub->handle_event($event);
+}
+
+sub delete_reply ($self, $orig_ts) {
+  my $reply = $self->delete_reply_record($orig_ts);
+  return unless $reply;
+
   $self->slack->api_call('chat.delete', {
     channel => $reply->{channel},
     ts => $reply->{reply_ts},
   });
+}
 
-  my $event = $self->synergy_event_from_slack_event($message, 'message');
-  $self->hub->handle_event($event);
+sub maybe_delete_reply ($self, $slack_event) {
+  my $orig_ts = $slack_event->{previous_message}{ts};
+  return unless $orig_ts;
+  my $reply = $self->reply_for($orig_ts);
+
+  unless ($reply) {
+    $Logger->log("ignoring deletion of a message we didn't respond to");
+    return;
+  }
+
+  unless ($slack_event->{channel} eq $reply->{channel}) {
+    $Logger->log("ignoring deletion whose channel doesn't match reply channel");
+    return;
+  }
+
+  unless ($reply->{was_error}) {
+    $Logger->log("ignoring deletion of a message that didn't result in error");
+    return;
+  }
+
+  $self->delete_reply($orig_ts);
 }
 
 sub _uri_from_event ($self, $event) {
