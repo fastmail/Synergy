@@ -390,6 +390,8 @@ sub _load_auto_shortcuts ($self) {
 }
 
 sub handle_merge_request ($self, $event) {
+  $event->mark_handled if $event->was_targeted;
+
   my @mrs = $event->text =~ /(?:^|\s)([-_a-z]+!\d+)(?=\W|$)/gi;
   state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
 
@@ -403,8 +405,6 @@ sub handle_merge_request ($self, $event) {
 
   @mrs = uniq @mrs;
   my @futures;
-  my $pending = $self->loop->new_future;
-  $event->pending_reply($pending);
   my $replied = 0;
 
   for my $mr (@mrs) {
@@ -494,14 +494,14 @@ sub handle_merge_request ($self, $event) {
     });
   }
 
-  # If we didn't actually reply, fail the pending reply so the hub knows to
-  # send a "does not compute".
   Future->wait_all(@futures)->on_done(sub {
-    $pending->fail("no reply") unless $replied;
+    return if $replied || ! $event->was_targeted;
+    $event->reply("Sorry, I couldn't find any merge request matching that.");
   })->retain;
 }
 
 sub handle_commit ($self, $event) {
+  $event->mark_handled if $event->was_targeted;
   my @commits = $event->text =~ /(?:^|\s)([-_a-z]+\@[0-9a-fA-F]{7,40})(?=\W|$)/gi;
 
   state $base = $self->url_base;
@@ -514,8 +514,6 @@ sub handle_commit ($self, $event) {
 
   @commits = uniq @commits;
   my @futures;
-  my $pending = $self->loop->new_future;
-  $event->pending_reply($pending);
   my $replied = 0;
 
   for my $commit (@commits) {
@@ -590,7 +588,8 @@ sub handle_commit ($self, $event) {
   }
 
   Future->wait_all(@futures)->on_done(sub {
-    $pending->fail("no reply") unless $replied;
+    return if $replied || ! $event->was_targeted;
+    $event->reply("I couldn't find a commit with that description.");
   })->retain;
 }
 
