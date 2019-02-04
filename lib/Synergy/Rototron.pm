@@ -484,7 +484,7 @@ package Synergy::Rototron::AvailabilityChecker {
 
   sub _leave_days ($self) {
     my $cache = $self->_calevent_cache;
-    return $cache->{events}
+    return $cache->{leave_days}
       if $cache->{cached_at} && (time - $cache->{cached_at} < 900);
 
     my @calendars = $self->calendars;
