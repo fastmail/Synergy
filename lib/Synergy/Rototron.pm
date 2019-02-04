@@ -343,6 +343,7 @@ package Synergy::Rototron::Rotor {
     'flag-au'   => flag('au'),
     'flag-us'   => flag('us'),
     'sparkles'  => "\N{SPARKLES}",
+    'helmet'    => "\N{HELMET WITH WHITE CROSS}",
   );
 
   has name => (is => 'ro', required => 1);

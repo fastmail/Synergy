@@ -2694,6 +2694,12 @@ sub _lp_assignment_is_unestimated {
       && ($assignment->{high_effort_remaining} // 0) < 0.00000001;
 }
 
+sub _rototron ($self) {
+  # TODO: indirection through rototron_reactor name on object
+  return unless my $roto_reactor = $self->hub->reactor_named('rototron');
+  return $roto_reactor->rototron;
+}
+
 sub damage_report ($self, $event) {
   $event->text =~ /\A
     \s*
@@ -2713,8 +2719,24 @@ sub damage_report ($self, $event) {
 
   my $lp_id = $target->lp_id;
 
+  my $rototron = $self->_rototron;
+  my $user_is_triage = do {
+    my $duties = $rototron->duties_on( DateTime->now(time_zone => 'UTC') );
+    !! grep {; ($_->{keywords}{"triage_us"} || $_->{keywords}{"triage_au"})
+         && grep {; 0 == index $_->{email}, ($target->username . q{@}) } $_->{participants}->@*
+       } @$duties;
+  };
+
+  my $triage_user = $rototron
+                  ? $self->hub->user_directory->user_named('triage')
+                  : undef;
+
   my @to_check = (
     [ inbox  => "📫" => $self->inbox_package_id   ],
+
+    (($user_is_triage && $triage_user && $triage_user->has_lp_id)
+      ?  [ triage => "⛑" => $self->urgent_package_id,  $triage_user->lp_id ]
+      : ()),
     [ urgent => "🔥" => $self->urgent_package_id  ],
   );
 
@@ -2733,7 +2755,7 @@ sub damage_report ($self, $event) {
   my @summaries = ("Damage report for $who_name:");
 
   CHK: for my $check (@to_check) {
-    my ($label, $icon, $package_id) = @$check;
+    my ($label, $icon, $package_id, $override_lp_id) = @$check;
 
     my $check_res = $self->lp_client_for_master->query_items({
       in    => $package_id,
@@ -2743,7 +2765,7 @@ sub damage_report ($self, $event) {
       },
       filters => [
         [ is_done   => 'is',  'false' ],
-        [ owner_id  => '=',   $lp_id  ],
+        [ owner_id  => '=',   $override_lp_id // $lp_id  ],
       ],
     });
 
