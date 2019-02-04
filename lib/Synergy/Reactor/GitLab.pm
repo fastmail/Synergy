@@ -18,6 +18,7 @@ use MIME::Base64;
 use YAML::XS;
 use Synergy::Logger '$Logger';
 use URI::Escape;
+use Future 0.36;  # for ->retain
 
 my $JSON = JSON->new->utf8->canonical;
 
@@ -102,18 +103,26 @@ after register_with_hub => sub ($self, @) {
 
 sub start ($self) {
   my $timer = IO::Async::Timer::Countdown->new(
-    delay => 60,
+    delay => 5,
     on_expire => sub {
       $Logger->log("fetching user config from GitLab");
 
-      my ($ok, $errors) = $self->_reload_all;
+      my $f = $self->_reload_all;
+      $f->on_done(sub {
+        my @errors = map {; $_->failure} $f->failed_futures;
+        $Logger->log([
+          "error doing initial user config load from GitLab: %s",
+          \@errors,
+        ]);
+      });
 
-      $Logger->log([
-        "error doing initial user config load from GitLab: %s",
-        $errors,
-      ]) unless $ok;
-
-      my ($repo_ok, $repo_error) = $self->_reload_repos;
+      my $f2 = $self->_reload_repos;
+      $f2->on_fail(sub ($err) {
+        $Logger->log([
+          "error doing initial repo load from GitLab: %s",
+          $err
+        ]);
+      });
     }
   );
 
@@ -192,46 +201,45 @@ sub handle_reload ($self, $event) {
 
 sub handle_my_config ($self, $event) {
   my $username = $event->from_user->username;
-  my ($ok, $error) = $self->_update_user_config($username);
+  my $f = $self->_update_user_config($username);
 
-  return $event->reply("your configuration has been reloaded") if $ok;
-  return $event->reply("error reloading config: $error");
+  $f->on_fail(sub ($err) { $event->reply("error reloading config: $err") });
+  $f->on_done(sub { $event->reply("your configuration has been reloaded") });
 }
 
 sub handle_all_config ($self, $event) {
   return $event->reply("Sorry, only the master user can do that")
     unless $event->from_user->is_master;
 
-  my ($ok, $errors) = $self->_reload_all;
-  return $event->reply("user config reloaded") if $ok;
+  my $f = $self->_reload_all;
+  $f->on_done(sub {
+    if ($f->ready_futures == $f->done_futures) {
+      return $event->reply("user config reload");
+    }
 
-  my $who = join ', ', sort @$errors;
-  return $event->reply("encounted errors while reloading following users: $who");
+    my @errors = map {; $_->failure } $f->failed_futures;
+    my $who = join ', ', sort @errors;
+    return $event->reply("encounted errors while reloading following users: $who");
+  });
 }
 
 sub handle_repos ($self, $event) {
-  my ($ok, $error) = $self->_reload_all;
-  return $event->reply("repo shortcuts reloaded") if $ok;
-  return $event->reply("encounted error while reloading repos: $error");
+  my $f = $self->_reload_repos;
+  $f->on_done(sub { return $event->reply("repo config reloaded") });
+  $f->on_fail(sub ($err) {
+    return $event->reply("encounter errors reloading repos: $err");
+  });
 }
 
 sub _reload_all ($self) {
-  my @errors;
+  my (@errors, @futures);
 
   for my $username ($self->hub->user_directory->usernames) {
-    my ($ok, $error) = $self->_update_user_config($username);
-    next if $ok;
-
-    push @errors, "$username: $error";
-    $Logger->log([
-      "error while fetching user config for %s: %s",
-      $username,
-      $error
-    ]);
+    my $f = $self->_update_user_config($username);
+    push @futures, $f;
   }
 
-  return (1, undef) unless @errors;
-  return (0, \@errors);
+  return Future->wait_all(@futures);
 }
 
 sub _update_user_config ($self, $username) {
@@ -241,35 +249,45 @@ sub _update_user_config ($self, $username) {
     $username,
   );
 
-  my $res = $self->hub->http_get(
+  my $http_future = $self->hub->http_get(
     $url,
     'PRIVATE-TOKEN' => $self->api_token,
+    async => 1,
   );
 
-  unless ($res->is_success) {
-    if ($res->code == 404) {
-      $self->hub->user_directory->reload_user($username, {});
-      return (undef, "no config in git");
+  my $ret_future = $self->loop->new_future;
+
+  $http_future->on_done(sub ($res) {
+    unless ($res->is_success) {
+      if ($res->code == 404) {
+        $self->hub->user_directory->reload_user($username, {});
+        return $ret_future->fail("$username: no config in git");
+      }
+
+      $Logger->log([ "Error: %s", $res->as_string ]);
+      return $ret_future->fail("$username: error retrieving config");
     }
 
-    $Logger->log([ "Error: %s", $res->as_string ]);
-    return (undef, "error retrieving config")
-  }
+    my $content = eval {
+      decode_base64( $JSON->decode( $res->decoded_content )->{content} );
+    };
 
-  my $content = eval {
-    decode_base64( $JSON->decode( $res->decoded_content )->{content} );
-  };
+    return $ret_future->fail("$username: error with GitLab response")
+      unless $content;
 
-  return (undef, "error with GitLab response") unless $content;
+    my $uconfig = eval { YAML::XS::Load($content) };
+    return $ret_future->fail("$username: error with YAML in config") 
+      unless $uconfig;
 
-  my $uconfig = eval { YAML::XS::Load($content) };
-  return (undef, "error with YAML in config") unless $uconfig;
+    $self->hub->user_directory->reload_user($username, $uconfig);
+    $self->hub->load_preferences_from_user($username);
+    $self->set_user($username => $uconfig);
+    $self->save_state;
 
-  $self->hub->user_directory->reload_user($username, $uconfig);
-  $self->hub->load_preferences_from_user($username);
-  $self->set_user($username => $uconfig);
-  $self->save_state;
-  return (1, undef);
+    $ret_future->done;
+  });
+
+  return $ret_future;
 }
 
 sub _reload_repos ($self) {
@@ -278,28 +296,36 @@ sub _reload_repos ($self) {
     $self->project_id,
   );
 
-  my $res = $self->hub->http_get(
+  my $ret_future = $self->loop->new_future;
+  my $http_future = $self->hub->http_get(
     $url,
     'PRIVATE-TOKEN' => $self->api_token,
+    async => 1,
   );
 
-  unless ($res->is_success) {
-    $Logger->log([ "Error: %s", $res->as_string ]);
-    return (undef, "error retrieving config")
-  }
+  $http_future->on_done(sub ($http_res) {
+    unless ($http_res->is_success) {
+      $Logger->log([ "Error: %s", $http_res->as_string ]);
+      return $ret_future->fail('error retrieving repo config');
+    }
 
-  my $content = eval {
-    decode_base64( $JSON->decode( $res->decoded_content )->{content} );
-  };
+    my $content = eval {
+      decode_base64( $JSON->decode( $http_res->decoded_content )->{content} );
+    };
 
-  return (undef, "error with GitLab response") unless $content;
+    return $ret_future->fail('error with GitLab response') unless $content;
 
-  my $repos = eval { YAML::XS::Load($content) };
-  return (undef, "error with YAML in config") unless $repos;
+    my $repos = eval { YAML::XS::Load($content) };
+    return $ret_future->fail('error with YAML in config') unless $repos;
 
-  $self->add_shortcuts(%$repos);
-  $self->_load_auto_shortcuts;
-  $self->save_state;
+    $self->add_shortcuts(%$repos);
+    $self->_load_auto_shortcuts;
+    $self->save_state;
+
+    $ret_future->done;
+  });
+
+  return $ret_future;
 }
 
 # For every namespace we care about (i.e., $self->relevant_owners), we'll add
@@ -308,47 +334,59 @@ sub _load_auto_shortcuts ($self) {
   my @conflicts;
   my %names;
 
+  my @futures;
+
   for my $owner ($self->relevant_owners->@*) {
     my $url = sprintf("%s/v4/groups/$owner/projects?simple=1&per_page=100",
       $self->api_uri,
     );
 
-    my $res = $self->hub->http_get($url, 'PRIVATE-TOKEN' => $self->api_token);
-    unless ($res->is_success) {
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      return;
-    }
+    my $http_future = $self->hub->http_get($url,
+      'PRIVATE-TOKEN' => $self->api_token,
+      async => 1
+    );
+    push @futures, $http_future;
 
-    my $data = $JSON->decode($res->decoded_content);
-
-    for my $proj (@$data) {
-      my $path = $proj->{path_with_namespace};
-
-      # Sometimes, for reasons I don't fully understand, this returns projects
-      # that are not actually owned by the owner.
-      my ($p_owner, $name) = split '/', $path;
-      next unless $p_owner eq $owner;
-
-      next if $self->is_known_project($name);
-
-      if ($names{$name}) {
-        $Logger->log([ "GitLab: ignoring auto-shorcut %s: %s conflicts with %s",
-          $name,
-          $path,
-          $names{$name},
-        ]);
-
-        push @conflicts, $name;
-        next;
+    $http_future->on_done(sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log([ "Error: %s", $res->as_string ]);
+        return;
       }
 
-      $names{$name} = $path;
-    }
+      my $data = $JSON->decode($res->decoded_content);
+
+      for my $proj (@$data) {
+        my $path = $proj->{path_with_namespace};
+
+        # Sometimes, for reasons I don't fully understand, this returns projects
+        # that are not actually owned by the owner.
+        my ($p_owner, $name) = split '/', $path;
+        next unless $p_owner eq $owner;
+
+        next if $self->is_known_project($name);
+
+        if ($names{$name}) {
+          $Logger->log([ "GitLab: ignoring auto-shorcut %s: %s conflicts with %s",
+            $name,
+            $path,
+            $names{$name},
+          ]);
+
+          push @conflicts, $name;
+          next;
+        }
+
+        $names{$name} = $path;
+      }
+    });
   }
 
-  delete $names{$_} for @conflicts;
-  return unless keys %names;
-  $self->add_shortcuts(%names);
+  Future->wait_all(@futures)->on_ready(sub {
+    $Logger->log("loaded project auto-shortcuts");
+    delete $names{$_} for @conflicts;
+    return unless keys %names;
+    $self->add_shortcuts(%names);
+  })->retain;
 }
 
 sub handle_merge_request ($self, $event) {
@@ -364,6 +402,10 @@ sub handle_merge_request ($self, $event) {
   }
 
   @mrs = uniq @mrs;
+  my @futures;
+  my $pending = $self->loop->new_future;
+  $event->pending_reply($pending);
+  my $replied = 0;
 
   for my $mr (@mrs) {
     my ($proj, $num) = split /!/, $mr, 2;
@@ -379,74 +421,84 @@ sub handle_merge_request ($self, $event) {
       $num,
     );
 
-    my $res = $self->hub->http_get(
+    my $http_future = $self->hub->http_get(
       $url,
       'PRIVATE-TOKEN' => $self->api_token,
+      async => 1,
     );
+    push @futures, $http_future;
 
-    unless ($res->is_success) {
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      next;
-    }
+    $http_future->on_done(sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log([ "Error: %s", $res->as_string ]);
+        return;
+      }
 
-    my $data = $JSON->decode($res->decoded_content);
+      my $data = $JSON->decode($res->decoded_content);
 
-    my $state = $data->{state};
+      my $state = $data->{state};
 
-    my $reply = "$mr [$state, created by $data->{author}->{username}]: ";
-    $reply   .= "$data->{title} ($data->{web_url})";
+      my $reply = "$mr [$state, created by $data->{author}->{username}]: ";
+      $reply   .= "$data->{title} ($data->{web_url})";
 
-    my $color = $state eq 'opened' ? '#1aaa4b'
-              : $state eq 'merged' ? '#1f78d1'
-              : $state eq 'closed' ? '#db3b21'
-              : undef;
+      my $color = $state eq 'opened' ? '#1aaa4b'
+                : $state eq 'merged' ? '#1f78d1'
+                : $state eq 'closed' ? '#db3b21'
+                : undef;
 
-    my @fields;
-    if ($state eq 'opened') {
-      my $assignee = $data->{assignee}{name} // 'nobody';
-      push @fields, {
-        title => "Assigned",
-        value => $assignee,
-        short => \1
-      };
-
-      my $created = DateTime::Format::ISO8601->parse_datetime($data->{created_at});
-
-      push @fields, {
-        title => "Opened",
-        value => $dt_formatter->format_datetime($created),
-        short => \1,
-      };
-    } else {
-      my $date = $data->{merged_at} // $data->{closed_at};
-      if ($date) {
-        # Huh! Turns out, sometimes MRs are marked merged or closed, but do
-        # not have an associated timestamp. -- michael, 2018-11-21
-        my $dt = DateTime::Format::ISO8601->parse_datetime($date);
+      my @fields;
+      if ($state eq 'opened') {
+        my $assignee = $data->{assignee}{name} // 'nobody';
         push @fields, {
-          title => ucfirst $state,
-          value => $dt_formatter->format_datetime($dt),
+          title => "Assigned",
+          value => $assignee,
+          short => \1
+        };
+
+        my $created = DateTime::Format::ISO8601->parse_datetime($data->{created_at});
+
+        push @fields, {
+          title => "Opened",
+          value => $dt_formatter->format_datetime($created),
           short => \1,
         };
+      } else {
+        my $date = $data->{merged_at} // $data->{closed_at};
+        if ($date) {
+          # Huh! Turns out, sometimes MRs are marked merged or closed, but do
+          # not have an associated timestamp. -- michael, 2018-11-21
+          my $dt = DateTime::Format::ISO8601->parse_datetime($date);
+          push @fields, {
+            title => ucfirst $state,
+            value => $dt_formatter->format_datetime($dt),
+            short => \1,
+          };
+        }
       }
-    }
 
-    my $slack = {
-      text        => "",
-      attachments => $JSON->encode([{
-        fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
-        author_name => $data->{author}->{name},
-        author_icon => $data->{author}->{avatar_url},
-        title       => "$mr: $data->{title}",
-        title_link  => "$data->{web_url}",
-        color       => $color,
-        fields      => \@fields,
-      }]),
-    };
+      my $slack = {
+        text        => "",
+        attachments => $JSON->encode([{
+          fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
+          author_name => $data->{author}->{name},
+          author_icon => $data->{author}->{avatar_url},
+          title       => "$mr: $data->{title}",
+          title_link  => "$data->{web_url}",
+          color       => $color,
+          fields      => \@fields,
+        }]),
+      };
 
-    $event->reply($reply, { slack => $slack });
-    $event->mark_handled;
+      $event->reply($reply, { slack => $slack });
+      $replied++;
+    });
   }
+
+  # If we didn't actually reply, fail the pending reply so the hub knows to
+  # send a "does not compute".
+  Future->wait_all(@futures)->on_done(sub {
+    $pending->fail("no reply") unless $replied;
+  })->retain;
 }
 
 sub handle_commit ($self, $event) {
@@ -461,6 +513,10 @@ sub handle_commit ($self, $event) {
   }
 
   @commits = uniq @commits;
+  my @futures;
+  my $pending = $self->loop->new_future;
+  $event->pending_reply($pending);
+  my $replied = 0;
 
   for my $commit (@commits) {
     my ($proj, $sha) = split /\@/, $commit, 2;
@@ -476,58 +532,66 @@ sub handle_commit ($self, $event) {
       $sha,
     );
 
-    my $res = $self->hub->http_get(
+    my $http_future = $self->hub->http_get(
       $url,
       'PRIVATE-TOKEN' => $self->api_token,
+      async => 1,
     );
+    push @futures, $http_future;
 
-    unless ($res->is_success) {
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      next;
-    }
+    $http_future->on_done(sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log([ "Error: %s", $res->as_string ]);
+        return;
+      }
 
-    my $data = $JSON->decode($res->decoded_content);
+      my $data = $JSON->decode($res->decoded_content);
 
-    my $commit_url = sprintf("%s/%s/commit/%s",
-      $self->url_base,
-      $project_id,
-      $data->{short_id},
-    );
+      my $commit_url = sprintf("%s/%s/commit/%s",
+        $self->url_base,
+        $project_id,
+        $data->{short_id},
+      );
 
-    my $reply = "$commit [$data->{author_name}]: $data->{title} ($commit_url)";
-    my $slack = sprintf("<%s|%s>: %s [%s]",
-      $commit_url,
-      $commit,
-      $data->{title},
-      $data->{author_name},
-    );
+      my $reply = "$commit [$data->{author_name}]: $data->{title} ($commit_url)";
+      my $slack = sprintf("<%s|%s>: %s [%s]",
+        $commit_url,
+        $commit,
+        $data->{title},
+        $data->{author_name},
+      );
 
-    my $author_icon = sprintf("https://www.gravatar.com/avatar/%s?s=16",
-      md5_hex($data->{author_email}),
-    );
+      my $author_icon = sprintf("https://www.gravatar.com/avatar/%s?s=16",
+        md5_hex($data->{author_email}),
+      );
 
-    # We don't need to be _quite_ that precise.
-    $data->{authored_date} =~ s/\.[0-9]{3}Z$/Z/;
+      # We don't need to be _quite_ that precise.
+      $data->{authored_date} =~ s/\.[0-9]{3}Z$/Z/;
 
-    my $msg = sprintf("commit <%s|%s>\nAuthor: %s\nDate: %s\n\n%s",
-      $commit_url,
-      $data->{id},
-      $data->{author_name},
-      $data->{authored_date},
-      $data->{message}
-    );
+      my $msg = sprintf("commit <%s|%s>\nAuthor: %s\nDate: %s\n\n%s",
+        $commit_url,
+        $data->{id},
+        $data->{author_name},
+        $data->{authored_date},
+        $data->{message}
+      );
 
-    $slack = {
-      text        => '',
-      attachments => $JSON->encode([{
-        fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
-        text        => $msg,
-      }]),
-    };
+      $slack = {
+        text        => '',
+        attachments => $JSON->encode([{
+          fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
+          text        => $msg,
+        }]),
+      };
 
-    $event->reply($reply, { slack => $slack });
-    $event->mark_handled;
+      $event->reply($reply, { slack => $slack });
+      $replied++;
+    });
   }
+
+  Future->wait_all(@futures)->on_done(sub {
+    $pending->fail("no reply") unless $replied;
+  })->retain;
 }
 
 sub handle_mr_report ($self, $event) {
@@ -540,6 +604,7 @@ sub handle_mr_report ($self, $event) {
   }
 
   my %result;
+  my @futures;
 
   for my $pair (
     # TODO: Cope with pagination for real. -- rjbs, 2018-08-17
@@ -550,45 +615,51 @@ sub handle_mr_report ($self, $event) {
   ) {
     my ($type, $uri) = @$pair;
 
-    my $res = $self->hub->http_get(
+    my $http_future = $self->hub->http_get(
       $uri,
       'PRIVATE-TOKEN' => $self->api_token,
+      async => 1,
     );
+    push @futures, $http_future;
 
-    unless ($res->is_success) {
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      return $event->reply(
-        "Something when wrong when trying to get your $type merge requests.",
-      );
-    }
+    $http_future->on_done(sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log([ "Error: %s", $res->as_string ]);
+        return $event->reply(
+          "Something when wrong when trying to get your $type merge requests.",
+        );
+      }
 
-    my $data = $JSON->decode($res->decoded_content);
-    for my $mr (@$data) {
-      $mr->{_isBacklogged} = 1
-        if grep {; lc $_ eq 'backlogged' } $mr->{labels}->@*;
+      my $data = $JSON->decode($res->decoded_content);
+      for my $mr (@$data) {
+        $mr->{_isBacklogged} = 1
+          if grep {; lc $_ eq 'backlogged' } $mr->{labels}->@*;
 
-      $mr->{_isSelfAssigned} = 1
-        if $mr->{assignee} && $mr->{assignee}{id} == $user_id;
-    }
-    $result{$type} = $data;
+        $mr->{_isSelfAssigned} = 1
+          if $mr->{assignee} && $mr->{assignee}{id} == $user_id;
+      }
+      $result{$type} = $data;
+    });
   }
 
-  my $template = <<'EOT';
+  Future->wait_all(@futures)->on_done(sub {
+    my $template = <<'EOT';
 Open merge requests you filed: %s (%s backlogged)
 Open merge request assigned to you: %s (%s backlogged)
 Open merge requests in both groups: %s (%s backlogged)
 EOT
 
-  $event->reply(sprintf
-    $template,
-    0 + $result{filed}->@*,
-    0 + (grep { $_->{_isBacklogged} } $result{filed}->@*),
-    0 + $result{assigned}->@*,
-    0 + (grep { $_->{_isBacklogged} } $result{assigned}->@*),
-    0 + (grep { $_->{_isSelfAssigned} } $result{filed}->@*),
-    0 + (grep { $_->{_isSelfAssigned} && $_->{_isBacklogged} }
-          $result{filed}->@*),
-  );
+    $event->reply(sprintf
+      $template,
+      0 + $result{filed}->@*,
+      0 + (grep { $_->{_isBacklogged} } $result{filed}->@*),
+      0 + $result{assigned}->@*,
+      0 + (grep { $_->{_isBacklogged} } $result{assigned}->@*),
+      0 + (grep { $_->{_isSelfAssigned} } $result{filed}->@*),
+      0 + (grep { $_->{_isSelfAssigned} && $_->{_isBacklogged} }
+            $result{filed}->@*),
+    );
+  })->retain;
 }
 
 __PACKAGE__->add_preference(
