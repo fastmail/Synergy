@@ -1671,7 +1671,7 @@ sub _handle_search ($self, $event, $text) {
       }
     }
   }
-  $item_type //= 'Task';
+  $item_type //= '*';
   push @filters, [ 'item_type', 'is', $item_type ] unless $item_type eq '*';
   $has_strong_check++ unless $item_type eq '*' or $item_type eq 'Task';
 
