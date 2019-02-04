@@ -2735,7 +2735,7 @@ sub damage_report ($self, $event) {
     [ inbox  => "📫" => $self->inbox_package_id   ],
 
     (($user_is_triage && $triage_user && $triage_user->has_lp_id)
-      ?  [ triage => "⛑" => $self->urgent_package_id,  $triage_user->lp_id ]
+      ?  [ triage => "⛑" => undef,  $triage_user->lp_id ]
       : ()),
     [ urgent => "🔥" => $self->urgent_package_id  ],
   );
@@ -2758,7 +2758,7 @@ sub damage_report ($self, $event) {
     my ($label, $icon, $package_id, $override_lp_id) = @$check;
 
     my $check_res = $self->lp_client_for_master->query_items({
-      in    => $package_id,
+      ($package_id ? (in => $package_id) : ()),
       flags => {
         depth => -1,
         flat  => 1,
