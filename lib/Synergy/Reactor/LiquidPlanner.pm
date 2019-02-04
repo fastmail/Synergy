@@ -20,7 +20,10 @@ use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
 use Synergy::LPC; # LiquidPlanner Client, of course
 use Synergy::Timer;
-use Synergy::Util qw(parse_time_hunk pick_one bool_from_text);
+use Synergy::Util qw(
+  parse_time_hunk pick_one bool_from_text
+  canonicalize_switches parse_switches
+);
 use DateTime;
 use DateTime::Format::ISO8601;
 use utf8;
@@ -1123,21 +1126,21 @@ sub _handle_subcmds ($self, $cmd_lines, $plan) {
   );
 
   for my $cmd_line (@$cmd_lines) {
-    my @cmd_strs = split m{(?:^|\s+)/}m, $cmd_line;
-    shift @cmd_strs; # the leading / means the first entry is always q{}
+    my ($switches, $error) = parse_switches($cmd_line);
+    push @errors, $error if $error and ! grep {; $_ eq $error } @errors;
 
-    CMDSTR: for my $cmd_str (@cmd_strs) {
-      my ($cmd, $rest) = split /\s+/, $cmd_str, 2;
+    canonicalize_switches($switches, \%alias);
 
-      $cmd = $alias{$cmd} if $alias{$cmd};
+    CMDSTR: for my $switch (@$switches) {
+      my ($cmd, $arg) = @$switch;
 
       my $method = $self->can("_task_subcmd_$cmd");
       unless ($method) {
-        push @bad_cmds, $cmd_str;
+        push @bad_cmds, $cmd;
         next CMDSTR;
       }
 
-      if (my $error = $self->$method($rest, $plan)) {
+      if (my $error = $self->$method($arg, $plan)) {
         push @errors, $error;
       }
     }

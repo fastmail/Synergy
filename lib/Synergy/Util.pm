@@ -13,6 +13,9 @@ use Sub::Exporter -setup => [ qw(
   parse_date_for_user
   parse_time_hunk
   pick_one
+
+  parse_switches
+  canonicalize_switches
 ) ];
 
 # Handles yes/no, y/n, 1/0, true/false, t/f, on/off
@@ -64,6 +67,78 @@ sub parse_time_hunk ($hunk, $user) {
 
 sub pick_one ($opts) {
   return $opts->[ rand @$opts ];
+}
+
+sub parse_switches ($string) {
+  my @tokens;
+
+  # The tokens we really want:
+  #   command   := '/' identifier
+  #   safestr   := not-slash+ spaceslash-or-end
+  #   quotestr  := '"' ( qchar | not-dquote )* '"' ws-or-end
+  #
+  # But for now we'll live without quotestr, because it seems very unlikley to
+  # come up. -- rjbs, 2019-02-04
+
+  while (length $string) {
+    $string =~ s{\A\s+}{}g;
+    $string =~ s{\s+\z}{}g;
+
+    if ($string =~ s{ \A /([-a-z]+) (\s* | $) }{}x) {
+      push @tokens, [ cmd => $1 ];
+      next;
+    } elsif ($string =~ s{ \A /(\S+) (\s* | $) }{}x) {
+      return (undef, "bogus /command: /$1");
+      # push @tokens, [ badcmd => $1 ];
+      # next;
+    } elsif ($string =~ s{ \A ( [^/]+ ) (\s+/ | $) }{$2}x) {
+      push @tokens, [ lit => $1 ];
+      next;
+    }
+
+    return (undef, "incomprehensible input");
+  }
+
+  my @switches;
+
+  my $curr_cmd;
+  my $acc_str;
+
+  while (my $token = shift @tokens) {
+    if ($token->[0] eq 'badcmd') {
+      Carp::confess("unreachable code");
+    }
+
+    if ($token->[0] eq 'cmd') {
+      if ($curr_cmd) {
+        push @switches, [ $curr_cmd, $acc_str ];
+      }
+
+      $curr_cmd = $token->[1];
+      undef $acc_str;
+      next;
+    }
+
+    if ($token->[0] eq 'lit') {
+      return (undef, "text with no switch") unless $curr_cmd;
+
+      $acc_str = ($acc_str // q{}) . $token->[1];
+      next;
+    }
+
+    Carp::confess("unreachable code");
+  }
+
+  if ($curr_cmd) {
+    push @switches, [ $curr_cmd, $acc_str ];
+  }
+
+  return (\@switches, undef);
+}
+
+sub canonicalize_switches ($switches, $aliases = {}) {
+  $aliases->{$_->[0]} && ($_->[0] = $aliases->{$_->[0]}) for @$switches;
+  return;
 }
 
 1;
