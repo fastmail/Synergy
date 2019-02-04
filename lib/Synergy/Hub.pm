@@ -251,8 +251,17 @@ sub handle_event ($self, $event) {
 
     my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
     @replies = 'Does not compute.' unless @replies;
+    my $reply = $replies[ rand @replies ];
 
-    $event->reply($replies[ rand @replies ]);
+    if (my $f = $event->pending_reply) {
+      $f->on_fail(sub {
+        $event->reply($reply);
+        $event->pending_reply(undef);
+      });
+      return;
+    }
+
+    $event->reply($reply);
     return;
   }
 
