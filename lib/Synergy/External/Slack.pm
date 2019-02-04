@@ -99,6 +99,20 @@ has _team_data => (
   writer => '_set_team_data',
 );
 
+has pending_frames => (
+  is => 'ro',
+  isa => 'HashRef',
+  lazy => 1,
+  default => sub { {} },
+);
+
+has pending_timeouts => (
+  is => 'ro',
+  isa => 'HashRef',
+  lazy => 1,
+  default => sub { {} },
+);
+
 sub connect ($self) {
   $self->connected(0);
 
@@ -108,9 +122,6 @@ sub connect ($self) {
             ->on_fail(sub ($err) { die "couldn't start RTM API: $err" })
             ->get;
 };
-
-my %pending_frames;
-my %pending_timeouts;
 
 sub send_frame ($self, $frame) {
   state $i = 1;
@@ -125,7 +136,7 @@ sub send_frame ($self, $frame) {
   }
 
   my $f = $self->loop->new_future;
-  $pending_frames{$frame_id} = $f;
+  $self->pending_frames->{$frame_id} = $f;
 
   my $timeout = $self->loop->timeout_future(after => 3);
   $timeout->on_fail(sub {
@@ -135,11 +146,11 @@ sub send_frame ($self, $frame) {
     $self->connect;
 
     # Also fail any pending futures for this frame.
-    my $f = delete $pending_frames{$frame_id};
+    my $f = delete $self->pending_frames->{$frame_id};
     $f->fail if $f;
   });
 
-  $pending_timeouts{$frame_id} = $timeout;
+  $self->pending_timeouts->{$frame_id} = $timeout;
 
   return $f;
 }
@@ -149,11 +160,11 @@ sub handle_frame ($self, $slack_event) {
 
   # Cancel the timeout, then mark the future done with the decoded frame
   # object.
-  my $timeout = delete $pending_timeouts{$reply_to};
+  my $timeout = delete $self->pending_timeouts->{$reply_to};
   $timeout->cancel;
 
-  my $f = delete $pending_frames{$reply_to};
   $f->done($slack_event);
+  my $f = delete $self->pending_frames->{$reply_to};
 }
 
 has _frame_queue => (
