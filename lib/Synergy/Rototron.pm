@@ -565,7 +565,7 @@ package Synergy::Rototron::AvailabilityChecker {
     my $ymd = $dt->ymd;
 
     my $leave = $self->_leave_days;
-    return 1 if $leave->{$username}{$dt->ymd};
+    return 0 if $leave->{$username}{$dt->ymd};
 
     my ($count) = $self->_dbh->selectrow_array(
       q{SELECT COUNT(*) FROM blocked_days WHERE username = ? AND date = ?},
