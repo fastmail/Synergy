@@ -226,18 +226,21 @@ sub handle_cat_pic ($self, $event) {
   my (undef, $fmt) = split /\s+/, lc $event->text, 2;
   $fmt = q{jpg,gif,png} if $fmt eq 'pic';
 
-  my $res = $self->hub->http->GET(
+  my $http_future = $self->hub->http->GET(
     "http://thecatapi.com/api/images/get?format=src&type=$fmt",
     max_redirects => 0,
-  )->get;
+  );
 
-  if ($res->code =~ /\A3..\z/) {
-    my $loc = $res->header('Location');
-    $event->reply($loc);
-    return;
-  }
+  $http_future->on_done(sub ($res) {
+    if ($res->code =~ /\A3..\z/) {
+      my $loc = $res->header('Location');
+      $event->reply($loc);
+      return;
+    }
 
-  $event->reply("Something went wrong getting the kitties! \N{CRYING CAT FACE}");
+    $event->reply("Something went wrong getting the kitties! \N{CRYING CAT FACE}");
+  });
+
   return;
 }
 
@@ -280,20 +283,24 @@ sub handle_misc_pic ($self, $event) {
 sub handle_dog_pic ($self, $event) {
   $event->mark_handled;
 
-  my $res = $self->hub->http_get(
+  my $http_future = $self->hub->http_get(
     "https://dog.ceo/api/breeds/image/random",
+    async => 1,
   );
 
-  my $json = eval { JSON::MaybeXS->new->decode( $res->decoded_content ) };
-  my $error = $@;
+  $http_future->on_done(sub ($res) {
+    my $json = eval { JSON::MaybeXS->new->decode( $res->decoded_content ) };
+    my $error = $@;
 
-  if ($json && $json->{status} eq 'success') {
-    $event->reply($json->{message});
-    return;
-  }
+    if ($json && $json->{status} eq 'success') {
+      $event->reply($json->{message});
+      return;
+    }
 
-  $Logger->log("doggo error: $error") if $error;
-  $event->reply("Something went wrong getting the doggos!");
+    $Logger->log("doggo error: $error") if $error;
+    $event->reply("Something went wrong getting the doggos!");
+  });
+
   return;
 }
 
