@@ -114,18 +114,18 @@ switches_fail(
 }
 
 {
-  my ($switches, $error) = parse_switches(q{/f b /foo /bar "some thing" /baz "some /thing" /meh a/b});
+  my ($switches, $error) = parse_switches(q{/f \\"b\\" /foo /bar "some thing" /baz "some \\" /thing\\"" /meh a/b});
 
   is($error, undef, 'no error');
 
   is_deeply(
     $switches,
     [
-      [ f   => 'b'           ],
-      [ foo => undef         ],
-      [ bar => "some thing"  ],
-      [ baz => "some /thing" ],
-      [ meh => "a/b"         ],
+      [ f   => '"b"'              ],
+      [ foo => undef              ],
+      [ bar => "some thing"       ],
+      [ baz => "some \" /thing\"" ],
+      [ meh => "a/b"              ],
     ],
     "quotes",
   );

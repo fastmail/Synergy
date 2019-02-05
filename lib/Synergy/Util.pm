@@ -90,10 +90,16 @@ sub parse_switches ($string) {
       # push @tokens, [ badcmd => $1 ];
       # next;
     } elsif ($string =~ s{ \A (?<!\\)" ( .*? ) (?<!\\)" }{}x) {
-      push @tokens, [ lit => $1 ];
+      my $val = $1;
+      $val =~ s/\\"/"/g;
+
+      push @tokens, [ lit => $val ];
       next;
     } elsif ($string =~ s{ \A ( .*? ) (\s+/ | $) }{$2}x) {
-      push @tokens, [ lit => $1 ];
+      my $val = $1;
+      $val =~ s/\\"/"/g;
+
+      push @tokens, [ lit => $val ];
       next;
     }
 
