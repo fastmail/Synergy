@@ -280,7 +280,7 @@ sub listener_specs {
 
 sub dispatch_event ($self, $event) {
   unless ($event->from_user) {
-    $event->reply("Sorry, I don't know who you are.");
+    $event->error_reply("Sorry, I don't know who you are.");
     $event->mark_handled;
     return 1;
   }
@@ -301,7 +301,7 @@ sub dispatch_event ($self, $event) {
 
   unless ($self->auth_header_for($event->from_user)) {
     $event->mark_handled;
-    $event->reply($ERR_NO_LP);
+    $event->error_reply($ERR_NO_LP);
     return 1;
   }
 
@@ -344,7 +344,7 @@ sub provide_lp_link ($self, $event) {
                . '_for_shortcut';
 
     my ($item, $error)  = $self->$method($shortcut);
-    return $event->reply($error) unless $item;
+    return $event->error_reply($error) unless $item;
 
     push @ids, $item->{id};
   }
@@ -361,7 +361,7 @@ sub provide_lp_link ($self, $event) {
 
     my $item;
     unless ($item = $item_res->payload) {
-      $event->reply("I can't find anything for LP$item_id.");
+      $event->error_reply("I can't find anything for LP$item_id.");
       next ITEM;
     }
 
@@ -864,7 +864,7 @@ sub lp_client_for_master ($self) {
 sub _handle_last ($self, $event, $text) {
   my $user = $event->from_user;
 
-  return $event->reply($ERR_NO_LP)
+  return $event->error_reply($ERR_NO_LP)
     unless $user && $self->auth_header_for($user);
 
   return if length $text;
@@ -883,7 +883,7 @@ sub _handle_last ($self, $event, $text) {
 sub _handle_timer ($self, $event, $text) {
   my $user = $event->from_user;
 
-  return $event->reply($ERR_NO_LP)
+  return $event->error_reply($ERR_NO_LP)
     unless $user && $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
@@ -1240,18 +1240,18 @@ sub _handle_update ($self, $event, $text) {
   } elsif ($what =~ /\A[0-9]+\z/) {
     my $item_res = $lpc->get_item($what);
 
-    return $event->reply("I can't find an item with that id!")
+    return $event->error_reply("I can't find an item with that id!")
       unless $item = $item_res->payload;
 
-    return $event->reply("You can only update tasks.")
+    return $event->error_reply("You can only update tasks.")
       unless $item->{type} eq 'Task';
   } else {
-    return $event->reply(q{You can only say "update ID ..." or "update *shortcut ...".});
+    return $event->error_reply(q{You can only say "update ID ..." or "update *shortcut ...".});
   }
 
   my ($ok, $error) = $self->_handle_subcmds([$cmds], $plan);
 
-  return $event->reply($error) unless $ok;
+  return $event->error_reply($error) unless $ok;
 
   return $event->reply( "Update plan for LP$item->{id}: ```"
                       . JSON->new->canonical->encode($plan)
@@ -1302,7 +1302,7 @@ sub _handle_task ($self, $event, $text) {
   my ($target, $spec_text) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
 
   unless ($target and $spec_text) {
-    return $event->reply("Does not compute.  Usage:  task for TARGET: TASK");
+    return $event->error_reply("Does not compute.  Usage:  task for TARGET: TASK");
   }
 
   my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
@@ -1321,7 +1321,7 @@ sub _handle_task ($self, $event, $text) {
 sub _execute_task_plan ($self, $event, $plan, $error) {
   if ($error) {
     my $errors = join q{  }, values %$error;
-    return $event->reply($errors);
+    return $event->error_reply($errors);
   }
 
   my $lpc = $self->lp_client_for_user($event->from_user);
@@ -1574,7 +1574,7 @@ sub _handle_search ($self, $event, $text) {
   my @words = $search->{words}->@*;
 
   if ($search->{flags}{parse_error}) {
-    return $event->reply("Your search blew my mind, and now I am dead.");
+    return $event->error_reply("Your search blew my mind, and now I am dead.");
   }
 
   my %error;
@@ -1708,7 +1708,7 @@ sub _handle_search ($self, $event, $text) {
   }
 
   if (%error) {
-    return $event->reply(join q{  }, sort values %error);
+    return $event->error_reply(join q{  }, sort values %error);
   }
 
   if ($debug) {
@@ -1772,7 +1772,7 @@ sub _handle_recurring ($self, $event, $text) {
 sub _handle_plus_plus ($self, $event, $text) {
   my $user = $event->from_user;
 
-  return $event->reply($ERR_NO_LP)
+  return $event->error_reply($ERR_NO_LP)
     unless $user && $self->auth_header_for($user);
 
   unless (length $text) {
@@ -1786,7 +1786,7 @@ sub _handle_plus_plus ($self, $event, $text) {
     my $last  = $self->get_last_utterance($event->source_identifier);
 
     unless (length $last) {
-      return $event->reply("I don't know what 'that' refers to.");
+      return $event->error_reply("I don't know what 'that' refers to.");
     }
 
     $pretend = "task for $who: $last";
@@ -1916,7 +1916,7 @@ sub expand_tasks ($self, $event, $expand_target, $prefix='') {
   }
 
   my @tasks = $user->tasks_for_expando($expand_target);
-  return $event->reply($prefix . "You don't have an expando for <$expand_target>")
+  return $event->error_reply($prefix . "You don't have an expando for <$expand_target>")
     unless @tasks;
 
   my $parent = $self->recurring_package_id;
@@ -2051,7 +2051,7 @@ sub _handle_shows ($self, $event, $text) {
 sub _handle_chill ($self, $event, $text) {
   my $user = $event->from_user;
 
-  return $event->reply($ERR_NO_LP)
+  return $event->error_reply($ERR_NO_LP)
     unless $user && $self->auth_header_for($user);
 
   {
@@ -2072,7 +2072,7 @@ sub _handle_chill ($self, $event, $text) {
   }
 
   my $time = parse_time_hunk($text, $user);
-  return $event->reply("Sorry, I couldn't parse '$text' into a time")
+  return $event->error_reply("Sorry, I couldn't parse '$text' into a time")
     unless $time;
 
   my $when = DateTime->from_epoch(
@@ -2081,7 +2081,7 @@ sub _handle_chill ($self, $event, $text) {
   )->format_cldr("yyyy-MM-dd HH:mm zzz");
 
   if ($time <= time) {
-    $event->reply("That sounded like you want to chill until the past ($when).");
+    $event->error_reply("That sounded like you want to chill until the past ($when).");
     return;
   }
 
@@ -2096,7 +2096,7 @@ sub _handle_triple_zed ($self, $event, $text) {
 
 sub _handle_commit ($self, $event, $comment) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2104,7 +2104,7 @@ sub _handle_commit ($self, $event, $comment) {
     my $last  = $self->get_last_utterance($event->source_identifier);
 
     unless (length $last) {
-      return $event->reply("I don't know what 'that' refers to.");
+      return $event->error_reply("I don't know what 'that' refers to.");
     }
 
     $comment = $last;
@@ -2220,11 +2220,11 @@ sub _handle_commit ($self, $event, $comment) {
 }
 
 sub _handle_abort ($self, $event, $text) {
-  return $event->reply("I didn't understand your abort request.")
+  return $event->error_reply("I didn't understand your abort request.")
     unless $text =~ /^timer\b/i;
 
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
@@ -2257,13 +2257,13 @@ sub _handle_abort ($self, $event, $text) {
 
 sub _handle_start ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
   if ($text =~ m{\A\s*\*(\w+)\s*\z}) {
     my ($task, $error) = $self->task_for_shortcut($1);
-    return $event->reply($error) unless $task;
+    return $event->error_reply($error) unless $task;
 
     return $self->_handle_start_existing($event, $task);
   }
@@ -2308,7 +2308,7 @@ sub _handle_start ($self, $event, $text) {
     }
   }
 
-  return $event->reply(q{You can either say "start LP-TASK-ID" or "start next".});
+  return $event->error_reply(q{You can either say "start LP-TASK-ID" or "start next".});
 }
 
 sub _handle_start_existing ($self, $event, $task) {
@@ -2338,7 +2338,7 @@ sub _handle_start_existing ($self, $event, $task) {
 
 sub _handle_resume ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
@@ -2385,12 +2385,12 @@ sub _handle_resume ($self, $event, $text) {
 
 sub _handle_stop ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   return $event->reply("Quit it!  I'm telling mom!")
     if $text =~ /\Ahitting yourself[.!]*\z/;
 
-  return $event->reply("I didn't understand your stop request.")
+  return $event->error_reply("I didn't understand your stop request.")
     unless $text eq 'timer';
 
   my $lpc = $self->lp_client_for_user($user);
@@ -2422,7 +2422,7 @@ sub _handle_stop ($self, $event, $text) {
 
 sub _handle_done ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $next;
   my $chill;
@@ -2435,7 +2435,7 @@ sub _handle_done ($self, $event, $text) {
       return -1;
     }
 
-    return $event->reply("No, it's nonsense to chill /and/ start a new task!")
+    return $event->error_reply("No, it's nonsense to chill /and/ start a new task!")
       if $chill && $next;
   }
 
@@ -2447,11 +2447,11 @@ sub _handle_done ($self, $event, $text) {
 
 sub _handle_reset ($self, $event, $text) {
   my $user = $event->from_user;
-  return $event->reply($ERR_NO_LP) unless $self->auth_header_for($user);
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
 
-  return $event->reply("I didn't understand your reset request. (try 'reset timer')")
+  return $event->error_reply("I didn't understand your reset request. (try 'reset timer')")
     unless ($text // 'timer') eq 'timer';
 
   my $timer_res = $lpc->my_running_timer;
@@ -2483,23 +2483,23 @@ sub _handle_reset ($self, $event, $text) {
 sub _handle_spent ($self, $event, $text) {
   my $user = $event->from_user;
 
-  return $event->reply($ERR_NO_LP)
+  return $event->error_reply($ERR_NO_LP)
     unless $user && $self->auth_header_for($user);
 
   my ($dur_str, $name) = $text =~ /\A(\V+?)(?:\s*:|\s*\son)\s+(\S.+)\z/s;
   unless ($dur_str && $name) {
-    return $event->reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
+    return $event->error_reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
   }
 
   my $duration;
   my $ok = eval { $duration = parse_duration($dur_str); 1 };
   unless ($ok) {
-    return $event->reply("I didn't understand how long you spent!");
+    return $event->error_reply("I didn't understand how long you spent!");
   }
 
   if ($duration > 12 * 86_400) {
     my $dur_restr = duration($duration);
-    return $event->reply(
+    return $event->error_reply(
         qq{You said to spend "$dur_str" which I read as $dur_restr.  }
       . qq{That's too long!},
     );
@@ -2521,12 +2521,12 @@ sub _handle_spent ($self, $event, $text) {
     return $event->reply($error) unless $task;
 
     my ($remainder, %plan) = $self->_extract_flags_from_task_text($rest);
-    return $event->reply("I didn't understand all the flags you used.")
+    return $event->error_reply("I didn't understand all the flags you used.")
       if $remainder =~ /\S/;
 
     my $start = delete $plan{start};
 
-    return $event->reply("The only special thing you can do when spending time on an existing task is start its timer.")
+    return $event->error_reply("The only special thing you can do when spending time on an existing task is start its timer.")
       if keys %plan;
 
     return $self->_spent_on_existing($event, $task->{id}, $duration, $start);
@@ -2655,7 +2655,7 @@ sub _handle_todo ($self, $event, $text) {
 
   # If it's for somebody else, it should be a task instead
   if ($desc =~ /^for\s+\S+?:/) {
-    return $event->reply("Sorry, I can only make todo items for you");
+    return $event->error_reply("Sorry, I can only make todo items for you");
   }
 
   my $lpc = $self->lp_client_for_user($user);
@@ -2714,7 +2714,7 @@ sub damage_report ($self, $event) {
 
   $event->mark_handled;
 
-  return $event->reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
+  return $event->error_reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
     unless $target && $self->auth_header_for($target);
 
   my $lp_id = $target->lp_id;
@@ -3127,13 +3127,13 @@ sub _handle_contents ($self, $event, $rest) {
   my $page = 1;
   if (length $more) {
     unless ($more =~ m{\Apage:([0-9]+)\z}) {
-      return $event->reply(q{You can only say "contents THING" optionally followed by "page:N".});
+      return $event->error_reply(q{You can only say "contents THING" optionally followed by "page:N".});
     }
 
     $page = 0 + $1;
 
     unless ($page > 0 and $page < 10_000) {
-      return $event->reply(q{That page number didn't make sense to me.});
+      return $event->error_reply(q{That page number didn't make sense to me.});
     }
   }
 
@@ -3142,14 +3142,14 @@ sub _handle_contents ($self, $event, $rest) {
   if ($what =~ /\A#(.+)/) {
     ($item, my $err) = $self->project_for_shortcut("$1");
 
-    return $event->reply($err) if $err;
+    return $event->error_reply($err) if $err;
   } elsif ($what =~ /\A[0-9]+\z/) {
     my $item_res = $lpc->get_item($what);
 
     return $event->reply("I can't find an item with that id!")
       unless $item = $item_res->payload;
   } else {
-    return $event->reply(q{You can only say "contents ID" or "contents #shortcut".});
+    return $event->error_reply(q{You can only say "contents ID" or "contents #shortcut".});
   }
 
   my $res = $lpc->query_items({

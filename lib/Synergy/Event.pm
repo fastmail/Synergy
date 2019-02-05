@@ -78,9 +78,10 @@ sub description ($self) {
   $self->from_channel->describe_event($self);
 }
 
+my %known_types = map {; $_ => 1 } qw(message edit);
 sub BUILD ($self, @) {
-  confess "only 'message' events exist for now"
-    unless $self->type eq 'message';
+  confess "unknown event type " . $self->type
+    unless $known_types{ $self->type };
 }
 
 sub source_identifier ($self) {
@@ -96,18 +97,25 @@ sub source_identifier ($self) {
     $self->conversation_address;
 }
 
-sub reply ($self, $text, $alts = {}) {
+sub error_reply ($self, $text, $alts = {}) {
+  return $self->reply($text, $alts, { was_error => 1 });
+}
+
+sub reply ($self, $text, $alts = {}, $args = {}) {
   $Logger->log_debug("sending $text to someone");
 
   my $prefix = $self->is_public
              ? ($self->from_user->username . q{: })
              : q{};
 
-  return $self->from_channel->send_message(
+  my $future = $self->from_channel->send_message(
     $self->conversation_address,
     $prefix . $text,
     $alts,
   );
+
+  $self->from_channel->note_reply($self, $future, $args);
+  return $future;
 }
 
 sub private_reply ($self, $text, $alts = {}) {

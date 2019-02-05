@@ -49,7 +49,7 @@ sub handle_event ($self, $event) {
     my $user = first { $_->{name} eq $who }
                values $event->from_channel->slack->users->%*;
 
-    return $event->reply("Sorry, I don't know who $who is")
+    return $event->error_reply("Sorry, I don't know who $who is")
       unless $user;
 
     return $event->reply("The Slack id for $who is $user->{id}");
@@ -59,13 +59,13 @@ sub handle_event ($self, $event) {
     my $ch_name = $1;
     my $channel = $event->from_channel->slack->channel_named($ch_name);
 
-    return $event->reply("Sorry, I can't find #$ch_name.")
+    return $event->error_reply("Sorry, I can't find #$ch_name.")
       unless $channel;
 
     return $event->reply("The Slack id for #$ch_name is $channel->{id}");
   }
 
-  return $event->reply(qq{Sorry, I don't know how to resolve that.});
+  return $event->error_reply(qq{Sorry, I don't know how to resolve that.});
 }
 
 sub handle_reload_slack ($self, $event) {

@@ -218,8 +218,8 @@ sub handle_event ($self, $event) {
       $_->[0]->name, '/', $_->[1]->name,
       $_->[1]->is_exclusive ? ('**') : (),
     } @hits;
-    $event->reply("Sorry, I find that message ambiguous.\n" .
-                  "The following reactions matched: " . join(", ", @names));
+    $event->error_reply("Sorry, I find that message ambiguous.\n" .
+                    "The following reactors matched: " . join(", ", @names));
     return;
   }
 
@@ -251,10 +251,9 @@ sub handle_event ($self, $event) {
 
     my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
     @replies = 'Does not compute.' unless @replies;
-    $event->reply($replies[ rand @replies ]);
+    $event->error_reply($replies[ rand @replies ]);
     return;
   }
-
 
   return;
 }

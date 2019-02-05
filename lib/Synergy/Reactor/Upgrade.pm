@@ -116,22 +116,17 @@ sub handle_upgrade ($self, $event) {
     return;
   }
 
-  $event->reply("Upgraded from $old_version to $new_version; Restarting...");
-
   $self->save_state({
     restart_channel_name => $event->from_channel->name,
     restart_to_address   => $event->conversation_address,
     restart_version_desc => $self->get_version_desc,
   });
 
-  my $timer = IO::Async::Timer::Countdown->new(
-    delay => 1,
-    on_expire => sub { kill 'INT', $$ }, # Why not just exit?
-  );
-
-  $self->hub->loop->add($timer);
-
-  $timer->start;
+  my $f = $event->reply("Upgraded from $old_version to $new_version; Restarting...");
+  $f->on_done(sub {
+    # Why is this a SIGINT and not just an exit?
+    kill 'INT', $$;
+  });
 }
 
 sub handle_version ($self, $event) {

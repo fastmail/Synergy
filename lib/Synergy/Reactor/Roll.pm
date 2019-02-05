@@ -27,12 +27,12 @@ sub handle_roll ($self, $event) {
 
   my (undef, $spec) = split /\s+/, $event->text, 2;
   unless ($spec) {
-    return $event->reply("usage: roll DICE-SPEC");
+    return $event->error_reply("usage: roll DICE-SPEC");
   }
 
   my ($total, $rolls) = $self->_roll($spec);
   unless ($total) {
-    return $event->reply(qq{Sorry, I can't roll those sorts of dice.});
+    return $event->error_reply(qq{Sorry, I can't roll those sorts of dice.});
   }
 
   my $result = @$rolls == 1

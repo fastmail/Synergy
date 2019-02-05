@@ -58,7 +58,7 @@ sub handle_remind ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
-    $event->reply("I don't know who you are, so I'm not going to do that.");
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
     return;
   }
 
@@ -79,7 +79,7 @@ sub handle_remind ($self, $event) {
   $_ = fc $_ for ($who, $prep, $dur_str, $want_page);
 
   my $fail = sub {
-    $event->reply('usage: remind WHO (in|at|on) (time) [with page]: (reminder)');
+    $event->error_reply('usage: remind WHO (in|at|on) (time) [with page]: (reminder)');
     return;
   };
 
@@ -95,7 +95,7 @@ sub handle_remind ($self, $event) {
   my $to_user = $self->resolve_name($who, $event->from_user);
 
   unless ($to_user) {
-    $event->reply(qq{Sorry, I don't know who "$who" is.});
+    $event->error_reply(qq{Sorry, I don't know who "$who" is.});
     return;
   }
 
@@ -117,7 +117,7 @@ sub handle_remind ($self, $event) {
   }
 
   if ($time <= time) {
-    $event->reply("That sounded like you want a reminder sent in the past.");
+    $event->error_reply("That sounded like you want a reminder sent in the past.");
     return;
   }
 

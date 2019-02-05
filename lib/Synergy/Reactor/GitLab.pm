@@ -183,7 +183,7 @@ sub listener_specs {
 sub handle_reload ($self, $event) {
   $event->mark_handled;
 
-  return $event->reply("Sorry, I don't know who you are.")
+  return $event->error_reply("Sorry, I don't know who you are.")
     unless $event->from_user;
 
   my $text = $event->text;
@@ -196,7 +196,7 @@ sub handle_reload ($self, $event) {
   return $self->handle_all_config($event) if $what eq 'all user config';
   return $self->handle_repos($event)      if $what eq 'repos';
 
-  return $event->reply("I don't know how to reload <$what>");
+  return $event->error_reply("I don't know how to reload <$what>");
 }
 
 sub handle_my_config ($self, $event) {

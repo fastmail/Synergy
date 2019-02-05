@@ -6,6 +6,7 @@ use Moose;
 use experimental qw(signatures);
 use utf8;
 use JSON::MaybeXS;
+use IO::Async::Timer::Periodic;
 
 use Synergy::External::Slack;
 use Synergy::Event;
@@ -41,8 +42,51 @@ has slack => (
   }
 );
 
+# {
+#   user_message_ts => {
+#     reply_ts  => $our_ts,
+#     channel   => $channel,
+#     was_error => $bool,
+#     was_targeted => $bool,
+#   }
+# }
+has our_replies => (
+  is      => 'ro',
+  isa     => 'HashRef',
+  traits  => ['Hash'],
+  lazy    => 1,
+  default => sub { {} },
+  handles => {
+    reply_for           => 'get',
+    has_reply_for       => 'exists',
+    add_reply           => 'set',
+    reply_timestamps    => 'keys',
+    delete_reply_record => 'delete',
+  },
+);
+
+# Clean out our state so we don't respond to edits older than 2m
+has reply_reaper => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) {
+    return IO::Async::Timer::Periodic->new(
+      interval => 35,
+      on_tick  => sub {
+        my $then = time - 120;
+
+        for my $ts ($self->reply_timestamps) {
+          $self->delete_reply_record($ts) if $ts lt $then;
+        }
+      },
+    );
+  }
+
+);
+
 sub start ($self) {
   $self->slack->connect;
+  $self->loop->add($self->reply_reaper->start);
 
   $self->slack->client->{on_frame} = sub ($client, $frame) {
     return unless $frame;
@@ -52,6 +96,10 @@ sub start ($self) {
       $Logger->log("error decoding frame content: <$frame> <$@>");
       return;
     }
+
+    # This is silly, but Websocket::Client's on_frame isn't a stack of
+    # subs to call, it's only a single sub. -- michael, 2019-02-03
+    $self->slack->handle_frame($slack_event);
 
     if (! $slack_event->{type} && $slack_event->{reply_to}) {
       unless ($slack_event->{ok}) {
@@ -66,20 +114,21 @@ sub start ($self) {
       return;
     }
 
-    if ($slack_event->{type} eq 'pong') {
-      my $pong_timer = $self->slack->pong_timer;
-      $pong_timer->stop;
-      $self->loop->remove($pong_timer);
-      $self->slack->clear_pong_timer;
-      return;
-    }
-
     # XXX dispatch these better
     return unless $slack_event->{type} eq 'message';
 
     unless ($self->slack->is_ready) {
       $Logger->log("ignoring message, we aren't ready yet");
+      return;
+    }
 
+    if ($slack_event->{subtype} && $slack_event->{subtype} eq 'message_changed') {
+      $self->maybe_respond_to_edit($slack_event);
+      return;
+    }
+
+    if ($slack_event->{subtype} && $slack_event->{subtype} eq 'message_deleted') {
+      $self->maybe_delete_reply($slack_event);
       return;
     }
 
@@ -94,61 +143,65 @@ sub start ($self) {
     return if $slack_event->{bot_id};
     return if $self->slack->username($slack_event->{user}) eq 'synergy';
 
-    # Ok, so we need to be able to look up the DM channels. If a bot replies
-    # over the websocket connection, it doesn't have a bot id. So we need to
-    # attempt to get the DM channel for this person. If it's a bot, slack will
-    # say "screw you, buddy," in which case we'll return undef, which we'll
-    # understand as "we will not ever respond to this person anyway. Thanks,
-    # Slack. -- michael, 2018-03-15
-    my $private_addr
-      = $slack_event->{channel} =~ /^G/
-      ? $slack_event->{channel}
-      : $self->slack->dm_channel_for_address($slack_event->{user});
-
-    return unless $private_addr;
-
-    my $from_user = $self->hub->user_directory->user_by_channel_and_address(
-      $self->name, $slack_event->{user}
-    );
-
-    my $from_username = $from_user
-                      ? $from_user->username
-                      : $self->slack->username($slack_event->{user});
-
-    # decode text
-    my $me = $self->slack->own_name;
-    my $text = $self->decode_slack_formatting($slack_event->{text});
-
-    my $was_targeted;
-
-    if ($text =~ s/\A \@?($me)(?=\W):?\s*//ix) {
-      $was_targeted = !! $1;
-    }
-
-    # Three kinds of channels, I think:
-    # C - public channel
-    # D - direct one-on-one message
-    # G - group chat
-    #
-    # Only public channels public.
-    # Everything is targeted if it's sent in direct message.
-    my $is_public    = $slack_event->{channel} =~ /^C/;
-    $was_targeted = 1 if $slack_event->{channel} =~ /^D/;
-
-    my $event = Synergy::Event->new({
-      type => 'message',
-      text => $text,
-      was_targeted => $was_targeted,
-      is_public => $is_public,
-      from_channel => $self,
-      from_address => $slack_event->{user},
-      ( $from_user ? ( from_user => $from_user ) : () ),
-      transport_data => $slack_event,
-      conversation_address => $slack_event->{channel},
-    });
-
+    my $event = $self->synergy_event_from_slack_event($slack_event);
     $self->hub->handle_event($event);
   };
+}
+
+sub synergy_event_from_slack_event ($self, $slack_event, $type = 'message') {
+  # Ok, so we need to be able to look up the DM channels. If a bot replies
+  # over the websocket connection, it doesn't have a bot id. So we need to
+  # attempt to get the DM channel for this person. If it's a bot, slack will
+  # say "screw you, buddy," in which case we'll return undef, which we'll
+  # understand as "we will not ever respond to this person anyway. Thanks,
+  # Slack. -- michael, 2018-03-15
+  my $private_addr
+    = $slack_event->{channel} =~ /^G/
+    ? $slack_event->{channel}
+    : $self->slack->dm_channel_for_address($slack_event->{user});
+
+  return unless $private_addr;
+
+  my $from_user = $self->hub->user_directory->user_by_channel_and_address(
+    $self->name, $slack_event->{user}
+  );
+
+  my $from_username = $from_user
+                    ? $from_user->username
+                    : $self->slack->username($slack_event->{user});
+
+  # decode text
+  my $me = $self->slack->own_name;
+  my $text = $self->decode_slack_formatting($slack_event->{text});
+
+  my $was_targeted;
+
+  if ($text =~ s/\A \@?($me)(?=\W):?\s*//ix) {
+    $was_targeted = !! $1;
+  }
+
+  # Three kinds of channels, I think:
+  # C - public channel
+  # D - direct one-on-one message
+  # G - group chat
+  #
+  # Only public channels public.
+  # Everything is targeted if it's sent in direct message.
+  my $is_public    = $slack_event->{channel} =~ /^C/;
+  $was_targeted = 1 if $slack_event->{channel} =~ /^D/;
+
+  my $event = Synergy::Event->new({
+    type => $type,
+    text => $text,
+    was_targeted => $was_targeted,
+    is_public => $is_public,
+    from_channel => $self,
+    from_address => $slack_event->{user},
+    ( $from_user ? ( from_user => $from_user ) : () ),
+    transport_data => $slack_event,
+    conversation_address => $slack_event->{channel},
+  });
+
 }
 
 sub decode_slack_formatting ($self, $text) {
@@ -181,8 +234,7 @@ sub decode_slack_formatting ($self, $text) {
 
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
   my $where = $self->slack->dm_channel_for_user($user, $self);
-
-  $self->send_message($where, $text, $alts);
+  return $self->send_message($where, $text, $alts);
 }
 
 sub send_message ($self, $target, $text, $alts = {}) {
@@ -190,9 +242,98 @@ sub send_message ($self, $target, $text, $alts = {}) {
   $text =~ s/</&lt;/g;
   $text =~ s/>/&gt;/g;
 
-  $self->slack->send_message($target, $text, $alts);
+  my $f = $self->slack->send_message($target, $text, $alts);
+  return $f;
+}
 
-  return;
+sub note_reply ($self, $event, $future, $args = {}) {
+  my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
+  return unless $ts;
+
+  $future->on_done(sub ($data) {
+    unless ($data->{type} eq 'slack') {
+      $Logger->log([
+        "got bizarre type back from slack future: %s",
+        $data
+      ]);
+      return;
+    }
+
+    $self->add_reply($ts => {
+      reply_ts  => $data->{transport_data}{ts},
+      channel   => $channel,
+      was_error => $args->{was_error} ? 1 : 0,
+      was_targeted => $event->was_targeted,
+    });
+  });
+}
+
+sub maybe_respond_to_edit ($self, $slack_event) {
+  my $orig_ts = $slack_event->{message}{ts};
+  my $reply = $self->reply_for($orig_ts);
+
+  unless ($reply) {
+    $Logger->log("ignoring edit of a message we didn't respond to");
+    return;
+  }
+
+  unless ($slack_event->{channel} eq $reply->{channel}) {
+    $Logger->log("ignoring edit whose channel doesn't match reply channel");
+    return;
+  }
+
+  # Massage the slack event a bit, then reinject it.
+  my $message = $slack_event->{message};
+  $message->{channel} = $slack_event->{channel};
+  $message->{event_ts} = $slack_event->{event_ts};
+
+  unless ($reply->{was_error}) {
+    return unless $reply->{was_targeted};
+
+    my $event = $self->synergy_event_from_slack_event($message, 'edit');
+    $event->reply(
+      "I can only respond to edits of messages that caused errors, sorry."
+    );
+    return;
+  }
+
+  $self->delete_reply($orig_ts);
+
+  my $event = $self->synergy_event_from_slack_event($message, 'message');
+  $self->hub->handle_event($event);
+}
+
+sub delete_reply ($self, $orig_ts) {
+  my $reply = $self->delete_reply_record($orig_ts);
+  return unless $reply;
+
+  $self->slack->api_call('chat.delete', {
+    channel => $reply->{channel},
+    ts => $reply->{reply_ts},
+  });
+}
+
+sub maybe_delete_reply ($self, $slack_event) {
+  my $orig_ts = $slack_event->{previous_message}{ts};
+  return unless $orig_ts;
+  my $reply = $self->reply_for($orig_ts);
+
+  unless ($reply) {
+    $Logger->log("ignoring deletion of a message we didn't respond to");
+    return;
+  }
+
+  unless ($slack_event->{channel} eq $reply->{channel}) {
+    $Logger->log("ignoring deletion whose channel doesn't match reply channel");
+    return;
+  }
+
+  unless ($reply->{was_error}) {
+    $Logger->log("ignoring deletion of a message that didn't result in error");
+    return;
+  }
+
+  $self->delete_reply($orig_ts);
 }
 
 sub _uri_from_event ($self, $event) {
