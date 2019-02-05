@@ -33,7 +33,7 @@ sub handle_who ($self, $event) {
   return -1 unless $what =~ s/\A(is|am)\s+//n;
 
   my $who = $self->resolve_name($what, $event->from_user);
-  return $event->reply(qq!I don't know who "$what" is!) if ! $who;
+  return $event->error_reply(qq!I don't know who "$what" is!) if ! $who;
 
   my $whois = sprintf "%s (%s)", $who->username, $who->realname;
 

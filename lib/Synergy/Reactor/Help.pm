@@ -39,7 +39,7 @@ sub handle_help ($self, $event) {
 
   unless ($rest) {
     my $help_str = join q{, }, uniq sort map {; $_->{title} } @help;
-    $event->reply(qq{You can say "help TOPIC" for help on a topic.  }
+    $event->error_reply(qq{You can say "help TOPIC" for help on a topic.  }
                 . qq{Here are topics I know about: $help_str});
     return;
   }
@@ -63,7 +63,7 @@ sub handle_help ($self, $event) {
             && $component->preference_help->{ $pref_name };
 
     unless ($help) {
-      $event->reply("Sorry, I don't know that preference.");
+      $event->error_reply("Sorry, I don't know that preference.");
       return;
     }
 
@@ -75,7 +75,7 @@ sub handle_help ($self, $event) {
   @help = grep {; fc $_->{title} eq fc $rest } @help;
 
   unless (@help) {
-    $event->reply("Sorry, I don't have any help on that topic.");
+    $event->error_reply("Sorry, I don't have any help on that topic.");
     return;
   }
 

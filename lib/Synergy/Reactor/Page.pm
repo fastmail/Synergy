@@ -44,14 +44,14 @@ sub handle_page ($self, $event) {
   my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):?\s+(.*)/is;
 
   unless (length $who and length $what) {
-    $event->reply("usage: page USER: MESSAGE");
+    $event->error_reply("usage: page USER: MESSAGE");
     return;
   }
 
   my $user = $self->resolve_name($who, $event->from_user);
 
   unless ($user) {
-    $event->reply("I don't know who '$who' is. Sorry :confused:");
+    $event->error_reply("I don't know who '$who' is. Sorry :confused:");
     return;
   }
 

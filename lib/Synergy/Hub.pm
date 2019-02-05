@@ -218,8 +218,8 @@ sub handle_event ($self, $event) {
       $_->[0]->name, '/', $_->[1]->name,
       $_->[1]->is_exclusive ? ('**') : (),
     } @hits;
-    $event->reply("Sorry, I find that message ambiguous.\n" .
-                  "The following reactions matched: " . join(", ", @names));
+    $event->error_reply("Sorry, I find that message ambiguous.\n" .
+                    "The following reactors matched: " . join(", ", @names));
     return;
   }
 

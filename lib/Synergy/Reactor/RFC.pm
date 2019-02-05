@@ -55,7 +55,7 @@ sub handle_rfc ($self, $event) {
 
   unless (defined $num && defined $link) {
     if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+/ix) {
-      $event->reply("Oddly, I could not figure out what RFC you meant");
+      $event->error_reply("Oddly, I could not figure out what RFC you meant");
 
       $event->mark_handled;
     }
@@ -70,7 +70,7 @@ sub handle_rfc ($self, $event) {
 
   my $entry = $self->rfc_entry_for($num);
   unless ($entry) {
-    $event->reply("I'm unable to find an RFC by that number, sorry.");
+    $event->error_reply("I'm unable to find an RFC by that number, sorry.");
     return;
   }
 

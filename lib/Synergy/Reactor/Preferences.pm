@@ -76,7 +76,7 @@ sub handle_dump ($self, $event) {
   my $for_user = $self->resolve_name($who, $event->from_user);
   unless ($for_user) {
     $event->mark_handled;
-    return $event->reply(qq!I don't know who "$who" is!);
+    return $event->error_reply(qq!I don't know who "$who" is!);
   }
 
   my @pref_strings;

@@ -216,7 +216,7 @@ sub handle_status ($self, $event) {
   $event->mark_handled;
 
   unless ($who) {
-    return $event->reply(qq{Sorry, I don't know who "$who_name" is.});
+    return $event->error_reply(qq{Sorry, I don't know who "$who_name" is.});
   }
 
   my $plain = q{};
@@ -297,7 +297,7 @@ sub handle_doing ($self, $event) {
       my ($name, $value) = split /\s+/, $switch, 2;
 
       if ($name eq 'dnd' or $name eq 'chill') {
-        return $event->reply("/$name doesn't take an argument")
+        return $event->error_reply("/$name doesn't take an argument")
           if length $value;
 
         $doing{dnd} = 1;
@@ -307,10 +307,10 @@ sub handle_doing ($self, $event) {
       if ($name eq 'u' or $name eq 'until') {
         my $until = parse_time_hunk("until $value", $event->from_user);
 
-        return $event->reply("I didn't understand your /until switch.")
+        return $event->error_reply("I didn't understand your /until switch.")
           unless $until;
 
-        return $event->reply("Your /until switch seems to be in the past.")
+        return $event->error_reply("Your /until switch seems to be in the past.")
           unless $until > time;
 
         $doing{until} = $until;
@@ -320,17 +320,17 @@ sub handle_doing ($self, $event) {
       if ($name eq 'f' or $name eq 'for') {
         my $until = parse_time_hunk("for $value", $event->from_user);
 
-        return $event->reply("I didn't understand your /for switch.")
+        return $event->error_reply("I didn't understand your /for switch.")
           unless $until;
 
-        return $event->reply("Your /for switch seems to go into the past.")
+        return $event->error_reply("Your /for switch seems to go into the past.")
           unless $until > time;
 
         $doing{until} = $until;
         next SWITCH;
       }
 
-      return $event->reply(qq{I don't understand the "/$name" switch.});
+      return $event->error_reply(qq{I don't understand the "/$name" switch.});
     }
   }
 

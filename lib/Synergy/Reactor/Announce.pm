@@ -40,7 +40,7 @@ sub handle_announce ($self, $event) {
   $event->mark_handled;
 
   if ($event->from_channel->name eq $self->to_channel_name) {
-    $event->reply("You're already using the target system!");
+    $event->error_reply("You're already using the target system!");
     return 1;
   }
 

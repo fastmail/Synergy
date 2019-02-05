@@ -86,8 +86,8 @@ sub handle_set_availability ($self, $event) {
     $from->add(days => 1);
   }
 
-  unless (@dates) { return $event->reply("That range didn't make sense."); }
-  if (@dates > 28) { return $event->reply("That range is too large."); }
+  unless (@dates) { return $event->error_reply("That range didn't make sense."); }
+  if (@dates > 28) { return $event->error_reply("That range is too large."); }
 
   my $method = qq{set_user_$adj\_on};
   for my $date (@dates) {

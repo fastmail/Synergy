@@ -88,7 +88,7 @@ role {
   method set_preference => sub ($self, $event, $pref_name, $value) {
     unless ($self->is_known_preference($pref_name)) {
       my $full_name = $self->preference_namespace . q{.} . $pref_name;
-      $event->reply("I don't know about the $full_name preference");
+      $event->error_reply("I don't know about the $full_name preference");
       $event->mark_handled;
       return;
     }
@@ -99,7 +99,7 @@ role {
     my $full_name = $self->preference_namespace . q{.} . $pref_name;
 
     if ($err) {
-      $event->reply("I don't understand the value you gave for $full_name: $err");
+      $event->error_reply("I don't understand the value you gave for $full_name: $err");
       $event->mark_handled;
       return;
     }
