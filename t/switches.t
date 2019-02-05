@@ -62,20 +62,39 @@ switches_fail(
   "text with no switch",
 );
 
-my $B = "\N{REVERSE SOLIDUS}";
+{
+  my $B = "\N{REVERSE SOLIDUS}";
 
-# Later, we will add support for qstrings. -- rjbs, 2019-02-04
-switches_fail(
-  qq{/foo "bar $B/baz" /buz},
-  "incomprehensible input",
-);
+  my ($switches, $error) = parse_switches(qq{/foo "bar $B/baz" /buz});
 
-# Later, qstrings will allow embedded slashes, and maybe we'll allow them
-# anyway if they're inside words.  For now, ban them. -- rjbs, 2019-02-04
-switches_fail(
-  qq{/foo hunter/killer program /buz},
-  "incomprehensible input",
-);
+  is($error, undef, 'no error');
+
+  is_deeply(
+    $switches,
+    [
+      [ foo => "bar $B/baz" ],
+      [ buz => undef        ],
+    ],
+    "quotes",
+  );
+}
+
+{
+  my $B = "\N{REVERSE SOLIDUS}";
+
+  my ($switches, $error) = parse_switches(qq{/foo hunter/killer program /buz});
+
+  is($error, undef, 'no error');
+
+  is_deeply(
+    $switches,
+    [
+      [ foo => "hunter/killer program" ],
+      [ buz => undef                   ],
+    ],
+    "quotes",
+  );
+}
 
 {
   my ($switches, $error) = parse_switches("/f b /b f /foo /bar /foo bar");
@@ -90,6 +109,25 @@ switches_fail(
       [ bar => undef ],
       [ foo => 'bar' ],
     ],
+    "canonicalize_switches",
+  );
+}
+
+{
+  my ($switches, $error) = parse_switches(q{/f b /foo /bar "some thing" /baz "some /thing" /meh a/b});
+
+  is($error, undef, 'no error');
+
+  is_deeply(
+    $switches,
+    [
+      [ f   => 'b'           ],
+      [ foo => undef         ],
+      [ bar => "some thing"  ],
+      [ baz => "some /thing" ],
+      [ meh => "a/b"         ],
+    ],
+    "quotes",
   );
 }
 

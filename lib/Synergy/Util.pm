@@ -77,8 +77,6 @@ sub parse_switches ($string) {
   #   safestr   := not-slash+ spaceslash-or-end
   #   quotestr  := '"' ( qchar | not-dquote )* '"' ws-or-end
   #
-  # But for now we'll live without quotestr, because it seems very unlikley to
-  # come up. -- rjbs, 2019-02-04
 
   while (length $string) {
     $string =~ s{\A\s+}{}g;
@@ -91,12 +89,15 @@ sub parse_switches ($string) {
       return (undef, "bogus /command: /$1");
       # push @tokens, [ badcmd => $1 ];
       # next;
-    } elsif ($string =~ s{ \A ( [^/]+ ) (\s+/ | $) }{$2}x) {
+    } elsif ($string =~ s{ \A (?<!\\)" ( .*? ) (?<!\\)" }{}x) {
+      push @tokens, [ lit => $1 ];
+      next;
+    } elsif ($string =~ s{ \A ( .*? ) (\s+/ | $) }{$2}x) {
       push @tokens, [ lit => $1 ];
       next;
     }
 
-    return (undef, "incomprehensible input");
+    return (undef, "incomprehensible input ($string)");
   }
 
   my @switches;
