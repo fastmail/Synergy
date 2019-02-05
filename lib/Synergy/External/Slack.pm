@@ -205,7 +205,8 @@ sub send_message ($self, $channel, $text, $alts = {}) {
       && $e->from_channel->slack == $self # O_O -- rjbs, 2018-06-13
     ) {
       my $remove = $r->{reaction} =~ s/^-//;
-      $self->api_call(
+
+      my $http_future = $self->api_call(
         ($remove ? 'reactions.remove' : 'reactions.add'),
         {
           name      => $r->{reaction},
@@ -214,7 +215,16 @@ sub send_message ($self, $channel, $text, $alts = {}) {
         }
       );
 
-      return;
+      my $f = $self->loop->new_future;
+      $http_future->on_done(sub ($http_res) {
+        my $res = decode_json($http_res->decoded_content);
+        $f->done({
+          type => 'slack',
+          transport_data => $res
+        });
+      });
+
+      return $f;
     }
   }
 

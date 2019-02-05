@@ -259,6 +259,10 @@ sub note_reply ($self, $event, $future, $args = {}) {
       return;
     }
 
+    # Slack reactions results just have { ok: true }
+    # -- michael, 2019-02-05
+    return unless $data->{transport_data}{ts};
+
     $self->add_reply($ts => {
       reply_ts  => $data->{transport_data}{ts},
       channel   => $channel,
