@@ -239,9 +239,17 @@ sub note_error ($self, $event, $future) {
   my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
   return unless $ts;
 
-  $future->on_done(sub ($slack_frame) {
+  $future->on_done(sub ($data) {
+    unless ($data->{type} eq 'slack') {
+      $Logger->log([
+        "got bizarre type back from slack future: %s",
+        $data
+      ]);
+      return;
+    }
+
     $self->add_error_reply($ts => {
-      reply_ts => $slack_frame->{ts},
+      reply_ts => $data->{transport_data}{ts},
       channel => $channel,
     });
   });

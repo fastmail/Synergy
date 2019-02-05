@@ -163,8 +163,11 @@ sub handle_frame ($self, $slack_event) {
   my $timeout = delete $self->pending_timeouts->{$reply_to};
   $timeout->cancel;
 
-  $f->done($slack_event);
   my $f = delete $self->pending_frames->{$reply_to};
+  $f->done({
+    type => 'slack',
+    transport_data => $slack_event,
+  });
 }
 
 has _frame_queue => (
@@ -241,7 +244,10 @@ sub _send_rich_text ($self, $channel, $rich) {
   my $f = $self->loop->new_future;
   $http_future->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
-    $f->done($res);
+    $f->done({
+      type => 'slack',
+      transport_data => $res
+    });
   });
 
   return $f;
