@@ -574,7 +574,7 @@ sub see_if_back ($self, $event) {
     $timer->chill_until_active(0);
     $timer->clear_chilltill;
     $self->save_state;
-    $event->reply("You're back!  No longer chilling.")
+    $event->ephemeral_reply("You're back!  No longer chilling.")
       if $timer->is_business_hours and $timer_res->is_nil;
   }
 }

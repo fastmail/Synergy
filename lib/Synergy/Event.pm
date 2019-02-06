@@ -97,6 +97,18 @@ sub source_identifier ($self) {
     $self->conversation_address;
 }
 
+# Ephemeral replies cannot have alts. -- michael, 2019-02-05
+sub ephemeral_reply($self, $text) {
+  return $self->reply($text)
+    unless $self->from_channel->can('send_ephemeral_message');
+
+  return $self->from_channel->send_ephemeral_message(
+    $self->conversation_address,
+    $self->from_address,
+    "Psst: $text",
+  );
+}
+
 sub error_reply ($self, $text, $alts = {}) {
   return $self->reply($text, $alts, { was_error => 1 });
 }

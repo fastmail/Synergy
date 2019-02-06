@@ -568,10 +568,12 @@ sub handle_merge_request ($self, $event) {
   }
 
   Future->wait_all(@futures)->on_done(sub {
-    return if $replied || ! $event->was_targeted;
+    return if $replied;
 
-    return $event->reply("I've expanded that recently here; just scroll up a bit.")
+    return $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
       if $declined_to_reply;
+
+    return unless $event->was_targeted;
 
     $event->reply("Sorry, I couldn't find any merge request matching that.");
   })->retain;
@@ -674,10 +676,12 @@ sub handle_commit ($self, $event) {
   }
 
   Future->wait_all(@futures)->on_done(sub {
-    return if $replied || ! $event->was_targeted;
+    return if $replied;
 
-    return $event->reply("I've expanded that recently here; just scroll up a bit.")
+    return $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
       if $declined_to_reply;
+
+    return unless $event->was_targeted;
 
     $event->reply("I couldn't find a commit with that description.");
   })->retain;
