@@ -80,6 +80,60 @@ has relevant_owners => (
   default => sub { [] },
 );
 
+has _recent_mr_expansions => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits => ['Hash'],
+  lazy => 1,
+  default => sub { {} },
+  handles => {
+    has_expanded_mr_recently => 'exists',
+    note_mr_expansion        => 'set',
+    remove_mr_expansion      => 'delete',
+    recent_mr_expansions     => 'keys',
+    mr_expansion_for         => 'get',
+  },
+);
+
+has _recent_commit_expansions => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits => ['Hash'],
+  lazy => 1,
+  default => sub { {} },
+  handles => {
+    has_expanded_commit_recently => 'exists',
+    note_commit_expansion        => 'set',
+    remove_commit_expansion      => 'delete',
+    recent_commit_expansions     => 'keys',
+    commit_expansion_for         => 'get',
+  },
+);
+
+# We'll only keep records of expansions for 2m or so.
+has expansion_record_reaper => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) {
+    return IO::Async::Timer::Periodic->new(
+      interval => 30,
+      on_tick  => sub {
+        my $then = time - 120;
+
+        for my $key ($self->recent_mr_expansions) {
+          my $ts = $self->mr_expansion_for($key);
+          $self->remove_mr_expansion($key) if $ts lt $then;
+        }
+
+        for my $key ($self->recent_commit_expansions) {
+          my $ts = $self->commit_expansion_for($key);
+          $self->remove_commit_expansion($key) if $ts lt $then;
+        }
+      },
+    );
+  }
+);
+
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
     # Backcompat: the user config used to be the only thing in state, and it's
@@ -128,7 +182,7 @@ sub start ($self) {
 
   $timer->start;
   $self->hub->loop->add($timer);
-
+  $self->hub->loop->add($self->expansion_record_reaper->start);
 }
 
 sub state ($self) {
@@ -276,7 +330,7 @@ sub _update_user_config ($self, $username) {
       unless $content;
 
     my $uconfig = eval { YAML::XS::Load($content) };
-    return $ret_future->fail("$username: error with YAML in config") 
+    return $ret_future->fail("$username: error with YAML in config")
       unless $uconfig;
 
     $self->hub->user_directory->reload_user($username, $uconfig);
@@ -389,6 +443,16 @@ sub _load_auto_shortcuts ($self) {
   })->retain;
 }
 
+sub _key_for_gitlab_data ($self, $event, $data) {
+  # Not using $event->source_identifier here because we don't care _who_
+  # triggered the expansion. -- michael, 2019-02-05
+  return join(';',
+    $data->{id},
+    $event->from_channel->name,
+    $event->conversation_address
+  );
+}
+
 sub handle_merge_request ($self, $event) {
   $event->mark_handled if $event->was_targeted;
 
@@ -406,6 +470,7 @@ sub handle_merge_request ($self, $event) {
   @mrs = uniq @mrs;
   my @futures;
   my $replied = 0;
+  my $declined_to_reply = 0;
 
   for my $mr (@mrs) {
     my ($proj, $num) = split /!/, $mr, 2;
@@ -435,6 +500,14 @@ sub handle_merge_request ($self, $event) {
       }
 
       my $data = $JSON->decode($res->decoded_content);
+
+      my $key = $self->_key_for_gitlab_data($event, $data);
+      if ($self->has_expanded_mr_recently($key)) {
+        $declined_to_reply++;
+        return;
+      }
+
+      $self->note_mr_expansion($key, time);
 
       my $state = $data->{state};
 
@@ -496,6 +569,10 @@ sub handle_merge_request ($self, $event) {
 
   Future->wait_all(@futures)->on_done(sub {
     return if $replied || ! $event->was_targeted;
+
+    return $event->reply("I've expanded that recently here; just scroll up a bit.")
+      if $declined_to_reply;
+
     $event->reply("Sorry, I couldn't find any merge request matching that.");
   })->retain;
 }
@@ -515,6 +592,7 @@ sub handle_commit ($self, $event) {
   @commits = uniq @commits;
   my @futures;
   my $replied = 0;
+  my $declined_to_reply = 0;
 
   for my $commit (@commits) {
     my ($proj, $sha) = split /\@/, $commit, 2;
@@ -544,6 +622,14 @@ sub handle_commit ($self, $event) {
       }
 
       my $data = $JSON->decode($res->decoded_content);
+
+      my $key = $self->_key_for_gitlab_data($event, $data);
+      if ($self->has_expanded_commit_recently($key)) {
+        $declined_to_reply++;
+        return;
+      }
+
+      $self->note_commit_expansion($key, time);
 
       my $commit_url = sprintf("%s/%s/commit/%s",
         $self->url_base,
@@ -589,6 +675,10 @@ sub handle_commit ($self, $event) {
 
   Future->wait_all(@futures)->on_done(sub {
     return if $replied || ! $event->was_targeted;
+
+    return $event->reply("I've expanded that recently here; just scroll up a bit.")
+      if $declined_to_reply;
+
     $event->reply("I couldn't find a commit with that description.");
   })->retain;
 }
