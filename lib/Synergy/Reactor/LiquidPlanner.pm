@@ -1471,8 +1471,7 @@ sub _send_task_list ($self, $event, $tasks, $arg = {}) {
   chomp $reply;
   chomp $slack;
 
-  my $method = $arg->{public} ? 'reply' : 'private_reply';
-  $event->$method($reply, { slack => $slack });
+  $event->reply($reply, { slack => $slack });
 }
 
 sub _handle_tasks ($self, $event, $text) {
@@ -1498,8 +1497,6 @@ sub _handle_tasks ($self, $event, $text) {
     unless @task_page;
 
   $self->_send_task_list($event, \@task_page);
-
-  $event->reply("Responses to <tasks> are sent privately.") if $event->is_public;
 }
 
 sub _parse_search ($self, $text) {
@@ -1754,7 +1751,6 @@ sub _handle_task_list ($self, $event, $cmd, $count) {
   }
 
   $self->_send_task_list($event, $lp_tasks);
-  $event->reply("Responses to <$cmd> are sent privately.") if $event->is_public;
 }
 
 sub _handle_inbox ($self, $event, $text) {
@@ -2826,8 +2822,7 @@ sub damage_report ($self, $event) {
     { slack_reaction => { event => $event, reaction => '-hourglass_flowing_sand' } },
   );
 
-  my $method = $event->is_public ? 'private_reply' : 'reply';
-  return $event->$method(
+  return $event->reply(
     $reply,
     {
       slack => $slack_summary,
