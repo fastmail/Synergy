@@ -217,6 +217,11 @@ sub listener_specs {
         $e->was_targeted && $e->text =~ /\Acat\s+(pic|jpg|gif|png)\z/i
       },
     },
+    {
+      name      => 'jazz-pic',
+      method    => 'handle_jazz_pic',
+      predicate => sub ($self, $e) { $e->text =~ /jazz/i },
+    },
   );
 }
 
@@ -276,6 +281,22 @@ sub handle_misc_pic ($self, $event) {
     $event->reply($emoji) if $exact;
     return;
   }
+
+  return;
+}
+
+# Sometimes, respond in passing to a mention of "jazz" with a saxophone
+# slackmoji. -- michael, 2019-02-06
+sub handle_jazz_pic ($self, $event) {
+  return unless $event->from_channel->isa('Synergy::Channel::Slack');
+  return unless rand() < 0.1;
+
+  return $event->reply(
+    "\N{SAXOPHONE}",
+    {
+      slack_reaction => { event => $event, reaction => 'saxophone' },
+    },
+  );
 
   return;
 }
