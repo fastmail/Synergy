@@ -1569,15 +1569,16 @@ sub _handle_search ($self, $event, $text) {
 
   my %flag  = $search->{flags}->%*;
   my @words = $search->{words}->@*;
+  my %error;
 
   if ($search->{flags}{parse_error}) {
     return $event->error_reply("Your search blew my mind, and now I am dead.");
   }
 
-  my %error;
-
   my %qflag = (flat => 1, depth => -1);
+  my $q_in;
   my @filters;
+
   my $has_strong_check = 0;
 
   # TODO: make this less of a hack, maybe drop done:X for is:done
@@ -1587,6 +1588,22 @@ sub _handle_search ($self, $event, $text) {
   }
 
   delete $flag{is} if $flag{is} and ! keys $flag{is}->%*;
+
+  if (my $in = delete $flag{in}) {
+    my @values = keys %$in;
+    if (@values > 1) {
+      $error{in} = qq{You gave more than one "in" value.};
+    } else {
+      # TODO: Accept LP#xxx and LPnnn
+      if (lc $values[0] eq 'inbox') {
+        $q_in = $self->inbox_package_id;
+      } elsif (lc $values[0] eq 'urgent') {
+        $q_in = $self->urgent_package_id;
+      } else {
+        $error{in} = qq{Unknown value for "in".};
+      }
+    }
+  }
 
   if (my $done = delete $flag{done}) {
     my @values = keys %$done;
@@ -1598,6 +1615,14 @@ sub _handle_search ($self, $event, $text) {
   } else {
     push @filters, [ 'is_done', 'is', 'false' ];
   }
+
+  # If is_done is in there, it's *just* in there, so it's the last thing.  If
+  # we're only looking at open tasks in one container, we'll assume it's a
+  # small enough set to just search. -- rjbs, 2019-02-07
+  $has_strong_check = 1
+    if  $q_in
+    and $filters[-1][0] eq 'is_done'
+    and $filters[-1][2] eq 'false';
 
   if (my $proj = delete $flag{project}) {
     my @values = keys %$proj;
@@ -1632,6 +1657,7 @@ sub _handle_search ($self, $event, $text) {
       }
     }
   }
+
   $qflag{limit} = $limit;
 
   if (my $owners = delete $flag{user}) {
@@ -1710,13 +1736,17 @@ sub _handle_search ($self, $event, $text) {
 
   if ($debug) {
     $event->reply(
-      "I'm going to run this query:\n"
-      . JSON->new->canonical->encode({ %qflag, filters => \@filters }),
+      "I'm going to run this query:\n" . JSON->new->canonical->encode({
+        in      => $q_in,
+        flags   => \%qflag,
+        filters => \@filters,
+      }),
     );
   }
 
   my $check_res = $self->lp_client_for_user($event->from_user)->query_items({
-    %qflag,
+    ($q_in ? (in => $q_in) : ()),
+    flags   => \%qflag,
     filters => \@filters,
   });
 
