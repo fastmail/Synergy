@@ -206,7 +206,8 @@ sub listener_specs {
       method    => 'handle_dog_pic',
       exclusive => 1,
       predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /\Adog\s+pic\z/i
+        $e->was_targeted && ($e->text =~ /\Adog\s+pic\z/i ||
+                             $e->text =~ /\Aunleash\s+the\s+hounds\z/i);
       },
     },
     {
