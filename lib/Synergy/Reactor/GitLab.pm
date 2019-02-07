@@ -110,7 +110,7 @@ has _recent_commit_expansions => (
   },
 );
 
-# We'll only keep records of expansions for 2m or so.
+# We'll only keep records of expansions for 5m or so.
 has expansion_record_reaper => (
   is => 'ro',
   lazy => 1,
@@ -118,7 +118,7 @@ has expansion_record_reaper => (
     return IO::Async::Timer::Periodic->new(
       interval => 30,
       on_tick  => sub {
-        my $then = time - 120;
+        my $then = time - (60 * 5);
 
         for my $key ($self->recent_mr_expansions) {
           my $ts = $self->mr_expansion_for($key);
