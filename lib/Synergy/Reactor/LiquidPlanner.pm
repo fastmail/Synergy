@@ -1501,7 +1501,7 @@ sub _handle_tasks ($self, $event, $text) {
 
 sub _parse_search ($self, $text) {
   my @words;
-  my %flag = ();
+  my %kvs = ();
 
   state $prefix_re  = qr{!?\^?};
   state $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
@@ -1512,7 +1512,7 @@ sub _parse_search ($self, $text) {
 
     # Abort!  Shouldn't happen. -- rjbs, 2018-06-30
     if ($last eq $text) {
-      $flag{parse_error} = 1;
+      $kvs{parse_error} = 1;
       last TOKEN;
     }
     $last = $text;
@@ -1533,12 +1533,12 @@ sub _parse_search ($self, $text) {
     }
 
     if ($text =~ s/^\#($ident_re)(?: \s | \z)//x) {
-      $flag{ project }{$1}++;
+      $kvs{ project }{$1}++;
       next TOKEN;
     }
 
     if ($text =~ s/^($ident_re):([0-9]+|\*|$ident_re)(?: \s | \z)//x) {
-      $flag{$1}{$2}++;
+      $kvs{$1}{$2}++;
       next TOKEN;
     }
 
@@ -1560,71 +1560,56 @@ sub _parse_search ($self, $text) {
 
   return {
     words => \@words,
-    flags => \%flag,
+    kvs   => \%kvs,
   }
 }
 
-sub _handle_search ($self, $event, $text) {
-  my $search = $self->_parse_search($text);
-
-  my %flag  = $search->{flags}->%*;
-  my @words = $search->{words}->@*;
+sub _interpret_search ($self, $kvs, $from_user) {
+  my %flag;
   my %error;
 
-  if ($search->{flags}{parse_error}) {
-    return $event->error_reply("Your search blew my mind, and now I am dead.");
+  my sub wtf ($n) { "I don't understand the value you gave for `$n:`." }
+
+  # done:
+  F_DONE: {
+    $flag{done} = 0;
+
+    if (my $done = delete $kvs->{done}) {
+      last F_DONE unless $done;
+
+      my @values = keys %$done;
+
+      if (@values > 1) {
+        $error{done} = "You specified more than one value for done:X!";
+        last F_DONE;
+      }
+
+      if    ($values[0] eq 'yes')  { $flag{done} = 1; }
+      elsif ($values[0] eq 'no')   { $flag{done} = 0; }
+      elsif ($values[0] eq 'both') { $flag{done} = undef }
+      else                         { $error{done} = wtf('done') }
+    }
   }
 
-  my %qflag = (flat => 1, depth => -1);
-  my $q_in;
-  my @filters;
-
-  my $has_strong_check = 0;
-
-  # TODO: make this less of a hack, maybe drop done:X for is:done
-  # -- rjbs, 2018-08-18
-  if (delete $flag{is}{done}) {
-    $flag{done}{1}++;
-  }
-
-  delete $flag{is} if $flag{is} and ! keys $flag{is}->%*;
-
-  if (my $in = delete $flag{in}) {
+  # in:
+  if (my $in = delete $kvs->{in}) {
     my @values = keys %$in;
     if (@values > 1) {
       $error{in} = qq{You gave more than one "in" value.};
     } else {
       # TODO: Accept LP#xxx and LPnnn
       if (lc $values[0] eq 'inbox') {
-        $q_in = $self->inbox_package_id;
+        $flag{in} = $self->inbox_package_id;
       } elsif (lc $values[0] eq 'urgent') {
-        $q_in = $self->urgent_package_id;
+        $flag{in} = $self->urgent_package_id;
       } else {
-        $error{in} = qq{Unknown value for "in".};
+        $error{in} = qq{I don't understand the value you gave for `in:`.};
       }
     }
   }
 
-  if (my $done = delete $flag{done}) {
-    my @values = keys %$done;
-    if (@values > 1) {
-      $error{done} = qq{You gave more than one "done" value.};
-    } else {
-      push @filters, [ 'is_done', 'is', ($values[0] ? 'true' : 'false') ];
-    }
-  } else {
-    push @filters, [ 'is_done', 'is', 'false' ];
-  }
-
-  # If is_done is in there, it's *just* in there, so it's the last thing.  If
-  # we're only looking at open tasks in one container, we'll assume it's a
-  # small enough set to just search. -- rjbs, 2019-02-07
-  $has_strong_check = 1
-    if  $q_in
-    and $filters[-1][0] eq 'is_done'
-    and $filters[-1][2] eq 'false';
-
-  if (my $proj = delete $flag{project}) {
+  # project:
+  if (my $proj = delete $kvs->{project}) {
     my @values = keys %$proj;
     if (@values > 1) {
       $error{project} = "You can only limit by one project at a time.";
@@ -1632,16 +1617,15 @@ sub _handle_search ($self, $event, $text) {
       my ($project, $err) = $self->project_for_shortcut($values[0]);
 
       if ($project) {
-        $has_strong_check++;
-        push @filters, [ 'project_id', '=', $project->{id} ];
+        $flag{project} = $project->{id};
       } else {
         $error{project} = $err;
       }
     }
   }
 
-  my ($limit, $offset) = (11, 0);
-  if (my $page = delete $flag{page}) {
+  # page:
+  if (my $page = delete $kvs->{page}) {
     my @values = keys %$page;
     if (@values > 1) {
       $error{page} = "You asked for more than one distinct page number.";
@@ -1652,19 +1636,17 @@ sub _handle_search ($self, $event, $text) {
       } elsif ($value > 10) {
         $error{page} = "Sorry, you can't get a page past the tenth.";
       } else {
-        $offset = ($value - 1) * 10;
-        $limit += $offset;
+        $flag{page} = $values[0];
       }
     }
   }
 
-  $qflag{limit} = $limit;
-
-  if (my $owners = delete $flag{user}) {
+  # user:
+  if (my $owners = delete $kvs->{user}) {
     my %member;
     my %unknown;
     for my $who (keys %$owners) {
-      my $target = $self->resolve_name($who, $event->from_user);
+      my $target = $self->resolve_name($who, $from_user);
       my $lp_id  = $target && $target->lp_id;
 
       if ($lp_id) { $member{$lp_id}++ }
@@ -1675,35 +1657,91 @@ sub _handle_search ($self, $event, $text) {
       $error{user} = "I don't know who these users are: "
                    . join q{, }, sort keys %unknown;
     } else {
-      push @filters, map {; [ 'owner_id', '=', $_ ] } keys %member;
+      $flag{owner}{$_} = 1 for keys %member;
     }
   }
 
-  my $item_type;
-  if (my $type = delete $flag{type}) {
+  if (my $type = delete $kvs->{type}) {
     my (@types) = keys %$type;
 
     if (@types > 1) {
       $error{type} = "You can only filter on one type at a time.";
     } else {
-      my $got_type = fc $types[0];
+      my $got_type = lc $types[0];
       if ($got_type =~ /\A project | task | package | \* \z/x) {
-        $item_type = ucfirst $got_type;
+        # * means explicit "no filter"
+        $flag{type} = $got_type unless $got_type eq '*';
       } else {
-        $error{type} = qq{I don't know what a "$got_type" type item is.};
+        $error{type} = wtf('type');
       }
     }
   }
-  $item_type //= '*';
-  push @filters, [ 'item_type', 'is', $item_type ] unless $item_type eq '*';
-  $has_strong_check++ unless $item_type eq '*' or $item_type eq 'Task';
 
-  my $debug = $flag{debug} && grep { $_ } keys((delete $flag{debug})->%*);
+  # Whatever, if you put debug:anything in there, we turn it on.
+  # Live with it. -- rjbs, 2019-02-07
+  $flag{debug} = 1 if delete $kvs->{debug};
 
-  if (keys %flag) {
-    $error{unknown} = "You used some flags I don't understand: "
-                    . join q{, }, sort keys %flag;
+  if (keys %$kvs) {
+    $error{unknown} = "You used some parameters I don't understand: "
+                    . join q{, }, sort keys %$kvs;
   }
+
+  return (\%flag, (%error ? \%error : undef));
+}
+
+sub _handle_search ($self, $event, $text) {
+  my $search = $self->_parse_search($text);
+
+  if ($search->{flags}{parse_error}) {
+    return $event->error_reply("Your search blew my mind, and now I am dead.");
+  }
+
+  my ($flag_ref, $flag_error) = $self->_interpret_search(
+    $search->{kvs},
+    $event->from_user,
+  );
+
+  my %flag  = %$flag_ref;
+  my @words = $search->{words}->@*;
+  my %error;
+
+  %error = %$flag_error if $flag_error;
+
+  my %qflag = (flat => 1, depth => -1);
+  my $q_in;
+  my @filters;
+
+  my $has_strong_check = 0;
+
+  my ($limit, $offset) = (11, 0);
+
+  if (defined $flag{done}) {
+    push @filters, [ 'is_done', 'is', ($flag{done} ? 'true' : 'false') ];
+  }
+
+  if (defined $flag{project}) {
+    $has_strong_check = 1;
+    push @filters, [ 'project_id', '=', $flag{project} ];
+  }
+
+  if ($flag{page}) {
+    $offset = ($flag{page} - 1) * 10;
+    $limit += $offset;
+  }
+
+  if ($flag{owner}) {
+    push @filters, map {; [ 'owner_id', '=', $_ ] } keys $flag{owner}->%*;
+  }
+
+  if ($flag{type}) {
+    push @filters, [ 'item_type', 'is', $flag{type} ];
+  }
+
+  # If we're only looking at open tasks in one container, we'll assume it's a
+  # small enough set to just search. -- rjbs, 2019-02-07
+  $has_strong_check = 1 if $flag{in} and defined $flag{done} and ! $flag{done};
+
+  $has_strong_check = 1 if $flag{type} && $flag{type} ne 'task';
 
   WORD: for my $word (@words) {
     if ($word->{op} eq 'does_not_contain') {
@@ -1734,21 +1772,22 @@ sub _handle_search ($self, $event, $text) {
     return $event->error_reply(join q{  }, sort values %error);
   }
 
-  if ($debug) {
+  my %to_query = (
+    in      => $q_in,
+    flags   => \%qflag,
+    filters => \@filters,
+  );
+
+  if ($flag{debug}) {
     $event->reply(
-      "I'm going to run this query:\n" . JSON->new->canonical->encode({
-        in      => $q_in,
-        flags   => \%qflag,
-        filters => \@filters,
-      }),
+      "I'm going to run this query: ```"
+      . JSON->new->pretty->canonical->encode(\%to_query)
+      . "```"
     );
   }
 
-  my $check_res = $self->lp_client_for_user($event->from_user)->query_items({
-    ($q_in ? (in => $q_in) : ()),
-    flags   => \%qflag,
-    filters => \@filters,
-  });
+  my $check_res = $self->lp_client_for_user($event->from_user)
+                       ->query_items(\%to_query);
 
   return $event->reply("Something went wrong when running that search.")
     unless $check_res->is_success;

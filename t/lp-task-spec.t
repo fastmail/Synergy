@@ -300,7 +300,7 @@ plan_ok(
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo"),
   {
-    flags => {},
+    kvs   => {},
     words => [
       { op => 'contains', word => 'foo' },
     ],
@@ -311,7 +311,7 @@ is_deeply(
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo done:1 bar"),
   {
-    flags => { done => { 1 => 1 } },
+    kvs   => { done => { 1 => 1 } },
     words => [
       { op => 'contains', word => 'foo' },
       { op => 'contains', word => 'bar' },
@@ -323,7 +323,7 @@ is_deeply(
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo done:1 type:*"),
   {
-    flags => {
+    kvs   => {
       done => { 1 => 1 },
       type => { '*' => 1 },
     },
