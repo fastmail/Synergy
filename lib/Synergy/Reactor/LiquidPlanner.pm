@@ -1478,7 +1478,7 @@ sub _handle_tasks ($self, $event, $text) {
   my $user = $event->from_user;
   my ($how_many) = $text =~ /\Atasks\s+([0-9]+)\z/;
 
-  my $per_page = 5;
+  my $per_page = 10;
   my $page = $how_many && $how_many > 0 ? $how_many : 1;
 
   unless ($page <= 10) {
