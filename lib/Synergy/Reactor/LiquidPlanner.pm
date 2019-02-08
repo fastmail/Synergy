@@ -1696,20 +1696,26 @@ sub _handle_search ($self, $event, $text) {
     return $event->error_reply("Your search blew my mind, and now I am dead.");
   }
 
-  return $self->_do_search($event, $search);
-}
-
-sub _do_search ($self, $event, $search) {
   my ($flag_ref, $flag_error) = $self->_interpret_search(
     $search->{kvs},
     $event->from_user,
   );
 
-  my %flag  = %$flag_ref;
-  my @words = $search->{words} ? $search->{words}->@* : ();
-  my %error;
+  return $self->_do_search(
+    $event,
+    {
+      words => $search->{words},
+      flags => $flag_ref,
+    },
+    $flag_error // {},
+  );
+}
 
-  %error = %$flag_error if $flag_error;
+sub _do_search ($self, $event, $search, $orig_error = {}) {
+  my %flag  = $search->{flags} ? $search->{flags}->%* : ();
+  my @words = $search->{words} ? $search->{words}->@* : ();
+
+  my %error = %$orig_error;
 
   my %qflag = (flat => 1, depth => -1);
   my $q_in;
@@ -1823,9 +1829,11 @@ sub _handle_inbox ($self, $event, $text) {
   $self->_do_search(
     $event,
     {
-      user => { $event->from_user->lp_id => 1 },
-      in   => $self->inbox_package_id,
-      done => 0,
+      flags => {
+        owner => { $event->from_user->lp_id => 1 },
+        in    => $self->inbox_package_id,
+        done  => 0,
+      },
     },
   );
 }
@@ -1834,9 +1842,11 @@ sub _handle_urgent ($self, $event, $text) {
   $self->_do_search(
     $event,
     {
-      user => { $event->from_user->lp_id => 1 },
-      in   => $self->urgent_package_id,
-      done => 0,
+      flags => {
+        owner => { $event->from_user->lp_id => 1 },
+        in    => $self->urgent_package_id,
+        done  => 0,
+      },
     },
   );
 }
@@ -1845,9 +1855,11 @@ sub _handle_recurring ($self, $event, $text) {
   $self->_do_search(
     $event,
     {
-      user => { $event->from_user->lp_id => 1 },
-      in   => $self->recurring_package_id,
-      done => 0,
+      flags => {
+        owner => { $event->from_user->lp_id => 1 },
+        in    => $self->recurring_package_id,
+        done  => 0,
+      },
     },
   );
 }
