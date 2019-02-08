@@ -1803,6 +1803,11 @@ sub _do_search ($self, $event, $search) {
   my %seen;
   my @tasks = grep {; ! $seen{$_->{id}}++ } $check_res->payload_list;
 
+  if ($q_in) {
+    # If you search for the contents of n, you will get n back also.
+    @tasks = grep {; $_->{id} != $q_in } @tasks;
+  }
+
   return $event->reply("Nothing matched that search.") unless @tasks;
 
   # fix and more to live in send-task-list
