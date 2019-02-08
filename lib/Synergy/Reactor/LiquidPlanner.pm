@@ -1744,7 +1744,7 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   }
 
   if ($flag{type}) {
-    push @filters, [ 'item_type', 'is', $flag{type} ];
+    push @filters, [ 'item_type', 'is', ucfirst $flag{type} ];
   }
 
   if (defined $flag{in}) {
