@@ -283,7 +283,7 @@ __PACKAGE__->add_preference(
 # valid. This routine loads up our preferences from the user object, unless we
 # already have a better preference saved for them.
 sub load_preferences_from_user ($self, $username) {
-  $Logger->log([ "Loading global preferences for %s", $username ]);
+  $Logger->log_debug([ "Loading global preferences for %s", $username ]);
   my $user = $self->user_named($username);
 
   $self->set_user_preference($user, 'time-zone', $user->_time_zone)
