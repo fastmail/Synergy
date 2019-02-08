@@ -334,4 +334,18 @@ is_deeply(
   'simple search with type:*',
 );
 
+is_deeply(
+  $synergy->reactor_named('lp')->_parse_search("foo done:1 in:#tx"),
+  {
+    kvs   => {
+      done => { 1 => 1 },
+      in   => { '#tx' => 1 },
+    },
+    words => [
+      { op => 'contains', word => 'foo' },
+    ],
+  },
+  'simple search with type:*',
+);
+
 done_testing;

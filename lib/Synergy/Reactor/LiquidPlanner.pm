@@ -1537,7 +1537,7 @@ sub _parse_search ($self, $text) {
       next TOKEN;
     }
 
-    if ($text =~ s/^($ident_re):([0-9]+|\*|$ident_re)(?: \s | \z)//x) {
+    if ($text =~ s/^($ident_re):([0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
       $kvs{$1}{$2}++;
       next TOKEN;
     }
@@ -1597,13 +1597,25 @@ sub _interpret_search ($self, $kvs, $from_user) {
     if (@values > 1) {
       $error{in} = qq{You gave more than one "in" value.};
     } else {
-      # TODO: Accept LP#xxx and LPnnn
-      if (lc $values[0] eq 'inbox') {
-        $flag{in} = $self->inbox_package_id;
-      } elsif (lc $values[0] eq 'urgent') {
-        $flag{in} = $self->urgent_package_id;
+      my $in = lc $values[0];
+
+      if    ($in eq 'inbox')  { $flag{in} = $self->inbox_package_id;  }
+      elsif ($in eq 'urgent') { $flag{in} = $self->urgent_package_id; }
+
+      # Will anyone ever use this?
+      elsif ($in eq 'recurring') { $flag{in} = $self->recurring_package_id; }
+
+      elsif ($in =~ /\A#(.+)/) {
+        my ($item, $err) = $self->project_for_shortcut("$1");
+        if ($err) {
+          $error{in} = $err;
+        } else {
+          $flag{in} = $item->{id};
+        }
+      } elsif ($in =~ /\A[0-9]+\z/) {
+        $flag{in} = $in;
       } else {
-        $error{in} = qq{I don't understand the value you gave for `in:`.};
+        $error{in} = wtf('in');
       }
     }
   }
