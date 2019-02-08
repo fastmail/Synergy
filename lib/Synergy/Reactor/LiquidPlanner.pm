@@ -1798,9 +1798,18 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     $q_in = $flag{in};
   }
 
-  # If we're only looking at open tasks in one container, we'll assume it's a
-  # small enough set to just search. -- rjbs, 2019-02-07
-  $has_strong_check = 1 if $flag{in} and defined $flag{done} and ! $flag{done};
+  if (defined $flag{done} and ! $flag{done}) {
+    # If we're only looking at open tasks in one container, we'll assume it's a
+    # small enough set to just search. -- rjbs, 2019-02-07
+    $has_strong_check = 1 if $flag{in};
+
+    # If we're looking for only open triage tasks, that should be small, too.
+    # -- rjbs, 2019-02-08
+    my $triage_user = $self->hub->user_directory->user_named('triage');
+    if ($triage_user && grep {; $_ == $triage_user->lp_id } keys $flag{owner}->%*) {
+      $has_strong_check = 1;
+    }
+  }
 
   $has_strong_check = 1 if $flag{type} && $flag{type} ne 'task';
 
