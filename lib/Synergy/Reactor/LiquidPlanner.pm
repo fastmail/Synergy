@@ -1661,6 +1661,7 @@ sub _interpret_search ($self, $kvs, $from_user) {
     }
   }
 
+  # type:
   if (my $type = delete $kvs->{type}) {
     my (@types) = keys %$type;
 
@@ -1673,6 +1674,28 @@ sub _interpret_search ($self, $kvs, $from_user) {
         $flag{type} = $got_type unless $got_type eq '*';
       } else {
         $error{type} = wtf('type');
+      }
+    }
+  }
+
+  # phase:
+  if (my $phase = delete $kvs->{phase}) {
+    my (@values) = keys %$phase;
+
+    if (@values > 1) {
+      $error{phase} = "You can only filter on one project phase at a time.";
+    } else {
+      # TODO: validate phases
+      my %Phase = (
+        none   => 'none',
+        flight => 'In Flight',
+        map {; $_ => ucfirst } qw(desired planning waiting circling landing)
+      );
+
+      if (my $got = $Phase{ lc $values[0] }) {
+        $flag{phase} = $got;
+      } else {
+        $error{phase} = wtf('phase');
       }
     }
   }
@@ -1743,6 +1766,18 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     push @filters, map {; [ 'owner_id', '=', $_ ] } keys $flag{owner}->%*;
   }
 
+  if (defined $flag{phase}) {
+    # If you're asking for something by phase, you probably want a project.
+    # You can override this if you want with "phase:planning type:task" but
+    # it's a little weird. -- rjbs, 2019-02-07
+    $flag{type} //= 'project';
+
+    push @filters,
+      $flag{phase} eq 'none'
+      ? [ "custom_field:'Project Status'", 'is_not_set' ]
+      : [ "custom_field:'Project Status'", '=', "'$flag{phase}'" ];
+  }
+
   if ($flag{type}) {
     push @filters, [ 'item_type', 'is', ucfirst $flag{type} ];
   }
@@ -1756,6 +1791,9 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   $has_strong_check = 1 if $flag{in} and defined $flag{done} and ! $flag{done};
 
   $has_strong_check = 1 if $flag{type} && $flag{type} ne 'task';
+
+  $has_strong_check = 1 if $flag{phase} && $flag{phase} ne 'none'
+                        && $flag{type} ne 'task';
 
   WORD: for my $word (@words) {
     if ($word->{op} eq 'does_not_contain') {
