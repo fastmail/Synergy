@@ -1814,32 +1814,37 @@ sub _do_search ($self, $event, $search) {
   $self->_send_task_list($event, \@tasks, { public => 1 });
 }
 
-sub _handle_task_list ($self, $event, $cmd, $count) {
-  my $user = $event->from_user;
-
-  my $lp_tasks = $self->lp_tasks_for_user($user, $count, $cmd);
-
-  unless (@$lp_tasks) {
-    my $suffix = $cmd =~ /(inbox|urgent)/n
-               ? ' \o/'
-               : '';
-    $event->reply("You don't have any open $cmd tasks right now.$suffix");
-    return;
-  }
-
-  $self->_send_task_list($event, $lp_tasks);
-}
-
 sub _handle_inbox ($self, $event, $text) {
-  return $self->_handle_task_list($event, 'inbox', 200);
+  $self->_do_search(
+    $event,
+    {
+      user => { $event->from_user->lp_id => 1 },
+      in   => $self->inbox_package_id,
+      done => 0,
+    },
+  );
 }
 
 sub _handle_urgent ($self, $event, $text) {
-  return $self->_handle_task_list($event, 'urgent', 100);
+  $self->_do_search(
+    $event,
+    {
+      user => { $event->from_user->lp_id => 1 },
+      in   => $self->urgent_package_id,
+      done => 0,
+    },
+  );
 }
 
 sub _handle_recurring ($self, $event, $text) {
-  return $self->_handle_task_list($event, 'recurring', 100);
+  $self->_do_search(
+    $event,
+    {
+      user => { $event->from_user->lp_id => 1 },
+      in   => $self->recurring_package_id,
+      done => 0,
+    },
+  );
 }
 
 sub _handle_plus_plus ($self, $event, $text) {
