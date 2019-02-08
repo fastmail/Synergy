@@ -1741,6 +1741,10 @@ sub _do_search ($self, $event, $search) {
     push @filters, [ 'item_type', 'is', $flag{type} ];
   }
 
+  if (defined $flag{in}) {
+    $q_in = $flag{in};
+  }
+
   # If we're only looking at open tasks in one container, we'll assume it's a
   # small enough set to just search. -- rjbs, 2019-02-07
   $has_strong_check = 1 if $flag{in} and defined $flag{done} and ! $flag{done};
