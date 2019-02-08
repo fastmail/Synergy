@@ -1760,6 +1760,7 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
 
   my ($limit, $offset) = (11, 0);
 
+  $flag{done} = 0 unless exists $flag{done};
   if (defined $flag{done}) {
     push @filters, [ 'is_done', 'is', ($flag{done} ? 'true' : 'false') ];
   }
@@ -1891,7 +1892,6 @@ sub _handle_inbox ($self, $event, $text) {
       flags => {
         owner => { $event->from_user->lp_id => 1 },
         in    => $self->inbox_package_id,
-        done  => 0,
       },
     },
   );
@@ -1904,7 +1904,6 @@ sub _handle_urgent ($self, $event, $text) {
       flags => {
         owner => { $event->from_user->lp_id => 1 },
         in    => $self->urgent_package_id,
-        done  => 0,
       },
     },
   );
@@ -1917,7 +1916,6 @@ sub _handle_recurring ($self, $event, $text) {
       flags => {
         owner => { $event->from_user->lp_id => 1 },
         in    => $self->recurring_package_id,
-        done  => 0,
       },
     },
   );
