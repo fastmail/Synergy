@@ -1696,6 +1696,10 @@ sub _handle_search ($self, $event, $text) {
     return $event->error_reply("Your search blew my mind, and now I am dead.");
   }
 
+  return $self->_do_search($event, $search);
+}
+
+sub _do_search ($self, $event, $search) {
   my ($flag_ref, $flag_error) = $self->_interpret_search(
     $search->{kvs},
     $event->from_user,
