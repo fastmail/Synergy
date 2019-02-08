@@ -1573,24 +1573,19 @@ sub _interpret_search ($self, $kvs, $from_user) {
 
   my sub wtf ($n) { "I don't understand the value you gave for `$n:`." }
 
-  # done:
-  F_DONE: {
-    $flag{done} = 0;
-
-    if (my $done = delete $kvs->{done}) {
-      last F_DONE unless $done;
-
-      my @values = keys %$done;
+  # done: and onhold: and scheduled:
+  for my $name (qw(done onhold scheduled)) {
+    if (my $hunk = delete $kvs->{$name}) {
+      my @values = keys %$hunk;
 
       if (@values > 1) {
-        $error{done} = "You specified more than one value for done:X!";
-        last F_DONE;
+        $error{$name} = "You specified more than one value for $name:X!";
+      } else {
+        if    ($values[0] eq 'yes')  { $flag{$name} = 1; }
+        elsif ($values[0] eq 'no')   { $flag{$name} = 0; }
+        elsif ($values[0] eq 'both') { $flag{$name} = undef }
+        else                         { $error{$name} = wtf($name) }
       }
-
-      if    ($values[0] eq 'yes')  { $flag{done} = 1; }
-      elsif ($values[0] eq 'no')   { $flag{done} = 0; }
-      elsif ($values[0] eq 'both') { $flag{done} = undef }
-      else                         { $error{done} = wtf('done') }
     }
   }
 
@@ -1766,6 +1761,16 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   $flag{done} = 0 unless exists $flag{done};
   if (defined $flag{done}) {
     push @filters, [ 'is_done', 'is', ($flag{done} ? 'true' : 'false') ];
+  }
+
+  if (defined $flag{onhold}) {
+    push @filters, [ 'is_on_hold', 'is', ($flag{onhold} ? 'true' : 'false') ];
+  }
+
+  if (defined $flag{scheduled}) {
+    push @filters, $flag{scheduled}
+      ? [ 'earliest_start', 'after', '2001-01-01' ]
+      : [ 'earliest_start', 'never' ];
   }
 
   if (defined $flag{project}) {
