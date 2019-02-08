@@ -1454,7 +1454,7 @@ sub lp_tasks_for_user ($self, $user, $count, $which = 'tasks') {
   return \@tasks;
 }
 
-sub _send_task_list ($self, $event, $tasks, $arg = {}) {
+sub _send_task_list ($self, $event, $tasks) {
   my $reply = q{};
   my $slack = q{};
 
@@ -1885,7 +1885,7 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
 
   return $event->reply("That's past the last page of results.") unless @tasks;
 
-  $self->_send_task_list($event, \@tasks, { public => 1 });
+  $self->_send_task_list($event, \@tasks);
 }
 
 for my $package (qw(inbox urgent recurring)) {
