@@ -1706,7 +1706,7 @@ sub _do_search ($self, $event, $search) {
   );
 
   my %flag  = %$flag_ref;
-  my @words = $search->{words}->@*;
+  my @words = $search->{words} ? $search->{words}->@* : ();
   my %error;
 
   %error = %$flag_error if $flag_error;
