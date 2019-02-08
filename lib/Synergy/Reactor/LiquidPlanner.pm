@@ -200,6 +200,9 @@ my %KNOWN = (
                 ],
   todo      =>  [ \&_handle_todo,        ],
   todos     =>  [ \&_handle_todos,       ],
+  triage    =>  [ \&_handle_triage,
+                  "triage [PAGE-NUMBER]: list the tasks awaiting triage",
+                ],
   update    =>  [ \&_handle_update,      ],
   urgent    =>  [ \&_handle_urgent,
                   "urgent [PAGE-NUMBER]: list your urgent tasks",
@@ -1885,40 +1888,51 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   $self->_send_task_list($event, \@tasks, { public => 1 });
 }
 
-sub _handle_inbox ($self, $event, $text) {
-  $self->_do_search(
-    $event,
-    {
-      flags => {
-        owner => { $event->from_user->lp_id => 1 },
-        in    => $self->inbox_package_id,
-      },
+for my $package (qw(inbox urgent recurring)) {
+  my $pkg_id_method = "$package\_package_id";
+  Sub::Install::install_sub({
+    as    => "_handle_$package",
+    code  => sub ($self, $event, $text) {
+      $self->_handle_quick_search(
+        $event,
+        $text,
+        $package,
+        sub ($, $, $search) {
+          $search->{flags}{owner}{ $event->from_user->lp_id } = 1;
+          $search->{flags}{in} = $self->$pkg_id_method;
+        },
+      );
     },
-  );
+  });
 }
 
-sub _handle_urgent ($self, $event, $text) {
-  $self->_do_search(
+sub _handle_triage ($self, $event, $text) {
+  my $triage_user = $self->hub->user_directory->user_named('triage');
+
+  return $event->error_reply("There is no triage user configured.")
+    unless $triage_user;
+
+  $self->_handle_quick_search(
     $event,
-    {
-      flags => {
-        owner => { $event->from_user->lp_id => 1 },
-        in    => $self->urgent_package_id,
-      },
-    },
-  );
+    $text,
+    "triage",
+    sub ($, $, $search) { $search->{flags}{owner}{ $triage_user->lp_id } = 1 },
+  )
 }
 
-sub _handle_recurring ($self, $event, $text) {
-  $self->_do_search(
-    $event,
-    {
-      flags => {
-        owner => { $event->from_user->lp_id => 1 },
-        in    => $self->recurring_package_id,
-      },
-    },
-  );
+sub _handle_quick_search ($self, $event, $text, $cmd, $munger) {
+  if ($text && $text !~ /\A\s*([1-9][0-9]*)\s*\z/i) {
+    return $event->error_reply(
+      "The only argument for $cmd is an optional page number."
+    );
+  }
+
+  my $page = $1 // 1;
+
+  my %search = (flags => { page => $page });
+  $self->$munger($event, \%search);
+
+  $self->_do_search($event, \%search);
 }
 
 sub _handle_plus_plus ($self, $event, $text) {
