@@ -1788,7 +1788,6 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   }
 
   if (defined $flag{project}) {
-    $has_strong_check = 1;
     push @filters, [ 'project_id', '=', $flag{project} ];
   }
 
@@ -1835,10 +1834,13 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     }
   }
 
+  $has_strong_check = 1 if $flag{project};
+
   $has_strong_check = 1 if $flag{type} && $flag{type} ne 'task';
 
-  $has_strong_check = 1 if $flag{phase} && $flag{phase} ne 'none'
-                        && $flag{type} ne 'task';
+  $has_strong_check = 1 if $flag{phase}
+                        && (defined $flag{done} && ! $flag{done})
+                        && ($flag{phase} ne 'none' || $flag{type} ne 'task');
 
   WORD: for my $word (@words) {
     if ($word->{op} eq 'does_not_contain') {
@@ -1860,9 +1862,10 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   }
 
   unless ($has_strong_check) {
-    $error{strong} = "Your search has to be either be limited to one project, "
-                   . "an item type other than task, or must have at least one "
-                   . "non-negated search term.";
+    $error{strong} = "This search is too broad.  Try adding search terms or "
+                   . "more limiting conditions.  I'm sorry this advice is so "
+                   . "vague, but the existing rules are silly and subject to "
+                   . "change at any time.";
   }
 
   if (%error) {
