@@ -1419,42 +1419,21 @@ sub _start_timer ($self, $user, $task) {
   return 1;
 }
 
-sub lp_tasks_for_user ($self, $user, $count, $which = 'tasks') {
+sub upcoming_tasks_for_user ($self, $user, $count) {
   my $lpc = $self->lp_client_for_user($user);
 
-  my $res = $lpc->upcoming_tasks_for_member_id($user->lp_id);
+  my $res = $lpc->upcoming_task_groups_for_member_id($user->lp_id, $count);
 
   return unless $res->is_success;
 
-  my @tasks = grep {; $_->{type} eq 'Task' } $res->payload_list;
-
-  if ($which eq 'tasks') {
-    @tasks = grep {;
-      (! grep { $self->inbox_package_id == $_ } $_->{parent_ids}->@*)
-      &&
-      (! grep { $self->inbox_package_id == $_ } $_->{package_ids}->@*)
-    } @tasks;
-  } else {
-    my $method = "$which\_package_id";
-    my $package_id = $self->$method;
-    unless ($package_id) {
-      $Logger->log("can't find package_id for '$which'");
-      return;
-    }
-
-    @tasks = grep {;
-      (grep { $package_id == $_ } $_->{parent_ids}->@*)
-      ||
-      (grep { $package_id == $_ } $_->{package_ids}->@*)
-    } @tasks;
-  }
-
-  splice @tasks, $count;
+  my @tasks = map   {; $_->{items}->@* }
+              grep  {; $_->{group} ne 'INBOX' }
+              $res->payload_list;
 
   return \@tasks;
 }
 
-sub _send_task_list ($self, $event, $tasks) {
+sub _send_task_list ($self, $event, $tasks, $arg = {}) {
   my $reply = q{};
   my $slack = q{};
 
@@ -1471,6 +1450,20 @@ sub _send_task_list ($self, $event, $tasks) {
     $slack .= "$icon " . $self->_slack_item_link_with_name($task) . "\n";
   }
 
+  if ($arg->{header} or $arg->{page}) {
+    my $header = $arg->{header} && $arg->{page} ? "$arg->{header}, page "
+               : $arg->{header}                 ? $arg->{header}
+               : $arg->{page}                   ? "Page "
+               : Carp::confess("unreachable code");
+
+    $header .= $arg->{page} if $arg->{page};
+    $header .= " of " . ($arg->{more} ? "$arg->{page}+n" : $arg->{page})
+                if defined $arg->{more};
+
+    $slack = "*$header*\n$slack";
+    $reply = "$header\n$reply";
+  }
+
   chomp $reply;
   chomp $slack;
 
@@ -1479,27 +1472,48 @@ sub _send_task_list ($self, $event, $tasks) {
 
 sub _handle_tasks ($self, $event, $text) {
   my $user = $event->from_user;
-  my ($how_many) = $text =~ /\Atasks\s+([0-9]+)\z/;
 
   my $per_page = 10;
-  my $page = $how_many && $how_many > 0 ? $how_many : 1;
+  my $page = 1;
+  if (length $text) {
+    if ($text =~ /\A\s*([1-9][0-9]*)\s*\z/) {
+      $page = $1;
+    } else {
+      $event->reply_error(qq{It's "tasks" and then optionally a page number.});
+      return;
+    }
+  }
 
-  unless ($page <= 10) {
-    return $event->reply(
+  if ($page > 10) {
+    return $event->reply_error(
       "If it's not in your first ten pages, better go to the web.",
     );
   }
 
+  # paginator
+  #   tells you how many to query
+  #   takes page number
+  #   takes callback for filter,
+  #   returns (set-of-items, has-more)
+
   my $count = $per_page * $page;
   my $start = $per_page * ($page - 1);
 
-  my $lp_tasks = $self->lp_tasks_for_user($user, $count, 'tasks');
+  my $lp_tasks = $self->upcoming_tasks_for_user($user, $count + 10);
   my @task_page = splice @$lp_tasks, $start, $per_page;
 
   return $event->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
 
-  $self->_send_task_list($event, \@task_page);
+  $self->_send_task_list(
+    $event,
+    \@task_page,
+    {
+      header  => sprintf("Upcoming tasks for %s", $user->username),
+      more    => (@$lp_tasks > 0 ? 1 : 0),
+      page    => $page,
+    }
+  );
 }
 
 sub _parse_search ($self, $text) {
@@ -1778,6 +1792,7 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     push @filters, [ 'project_id', '=', $flag{project} ];
   }
 
+  $flag{page} //= 1;
   if ($flag{page}) {
     $offset = ($flag{page} - 1) * 10;
     $limit += $offset;
@@ -1885,12 +1900,20 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   return $event->reply("Nothing matched that search.") unless @tasks;
 
   # fix and more to live in send-task-list
-  my $total = @tasks;
+  my $more  = @tasks > $offset + 11;
   @tasks = splice @tasks, $offset, 10;
 
   return $event->reply("That's past the last page of results.") unless @tasks;
 
-  $self->_send_task_list($event, \@tasks);
+  $self->_send_task_list(
+    $event,
+    \@tasks,
+    {
+      header  => $flag{header} // "Search results",
+      page    => $flag{page},
+      more    => $more ? 1 : 0,
+    },
+  );
 }
 
 for my $package (qw(inbox urgent recurring)) {
@@ -1903,6 +1926,9 @@ for my $package (qw(inbox urgent recurring)) {
         $text,
         $package,
         sub ($, $, $search) {
+          $search->{flags}{header} = sprintf '%s tasks for %s',
+            ucfirst $package,
+            $event->from_user->username;
           $search->{flags}{owner}{ $event->from_user->lp_id } = 1;
           $search->{flags}{in} = $self->$pkg_id_method;
         },
@@ -2453,7 +2479,7 @@ sub _handle_start ($self, $event, $text) {
   }
 
   if ($text eq 'next') {
-    my $lp_tasks = $self->lp_tasks_for_user($user, 1);
+    my $lp_tasks = $self->upcoming_tasks_for_user($user, 1);
 
     unless ($lp_tasks && $lp_tasks->[0]) {
       return $event->reply("I can't get your tasks to start the next one.");

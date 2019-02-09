@@ -185,9 +185,9 @@ sub query_items ($self, $arg) {
   return $self->http_get("$query");
 }
 
-sub upcoming_tasks_for_member_id ($self, $member_id) {
+sub upcoming_task_groups_for_member_id ($self, $member_id, $limit = 200) {
   return $self->http_get(
-    "/upcoming_tasks?limit=200&flat=true&member_id=$member_id",
+    "/upcoming_tasks?limit=$limit&member_id=$member_id",
   );
 }
 
