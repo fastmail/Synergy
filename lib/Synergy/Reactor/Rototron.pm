@@ -22,7 +22,7 @@ sub listener_specs {
       name      => 'duty',
       method    => 'handle_duty',
       exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^duty$/i },
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^duty(?:\s|$)/i },
     },
     {
       name      => 'unavailable',
@@ -128,9 +128,18 @@ sub _replan_range ($self, $from_dt, $to_dt) {
 sub handle_duty ($self, $event) {
   $event->mark_handled;
 
-  my $now = DateTime->now(time_zone => 'UTC');
+  my (undef, $when) = split /\s+/, $event->text, 2;
 
-  my $duties = $self->rototron->duties_on($now);
+  my $when_dt;
+  if ($when) {
+    $when_dt = eval { parse_date_for_user($when, $event->from_user) };
+    return $event->reply_error("I didn't understand the day you asked about")
+      unless $when_dt;
+  } else {
+    $when_dt = DateTime->now(time_zone => $event->from_user->time_zone);
+  }
+
+  my $duties = $self->rototron->duties_on($when_dt);
 
   unless ($duties) {
     return $event->reply("I couldn't get the duty roster!  Sorry.");
@@ -141,7 +150,7 @@ sub handle_duty ($self, $event) {
     return;
   }
 
-  my $reply = "Today's duty roster:\n"
+  my $reply = "Duty roster for " . $when_dt->ymd . ":\n"
             . join qq{\n}, sort map {; $_->{title} } @$duties;
 
   $event->reply($reply);
