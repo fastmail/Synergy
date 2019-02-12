@@ -55,6 +55,8 @@ sub handle_set ($self, $event) {
 
   return unless $who;
 
+  $who =~ s/'s$//;
+
   my $component;
   try {
     $component = $self->hub->component_named($comp_name);
