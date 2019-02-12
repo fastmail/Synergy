@@ -20,7 +20,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\Aset\s+my/i;
+        return unless $e->text =~ /\Aset\s+(my|\w+'s)/in;
       },
     },
     {
@@ -47,11 +47,13 @@ sub listener_specs {
 }
 
 sub handle_set ($self, $event) {
-  my ($comp_name, $pref_name, $pref_value) =
-    $event->text =~ m{\A set \s+ my \s+                 # set my
+  my ($who, $comp_name, $pref_name, $pref_value) =
+    $event->text =~ m{\A set \s+ (my|\w+'s) \s+         # set my
                       ([-_a-z0-9]+) \.  ([-_a-z0-9]+)   # component.pref
                       \s+ to \s+ (.*)                   # to value
                      }x;
+
+  return unless $who;
 
   my $component;
   try {
@@ -61,12 +63,26 @@ sub handle_set ($self, $event) {
       if /Could not find channel or reactor/;
   };
 
+  my $whose = $who eq 'my'
+            ? $event->from_user
+            : $self->hub->user_directory->user_named($who);
+
+  unless ($whose) {
+    return $event->error_reply("Sorry, I couldn't find a user for <$who>");
+  }
+
+  if ($whose != $event->from_user && ! $event->from_user->is_master) {
+    return $event->error_reply(
+      "Sorry, only master users can set preferences for other people"
+    );
+  }
+
   return unless $component;
 
   return $self->_error_no_prefs($event, $comp_name)
     unless $component->can('set_preference');
 
-  $component->set_preference($event, $pref_name, $pref_value);
+  $component->set_preference($event, $pref_name, $pref_value, $whose);
 }
 
 sub handle_dump ($self, $event) {
