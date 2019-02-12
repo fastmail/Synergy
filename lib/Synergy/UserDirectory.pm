@@ -134,6 +134,24 @@ sub resolve_name ($self, $name, $resolving_user) {
   return $user;
 }
 
+my %known_alphabets = map {; lc $_ => $_ } qw(
+  Latin
+);
+
+my $alphabets = join(', ', values %known_alphabets);
+
+__PACKAGE__->add_preference(
+  name        => 'alphabet',
+  help        => "Preferred alphabet (default: English): One of: $alphabets",
+  description => "Preferred alphabet for responses",
+  validator   => sub {
+    $known_alphabets{lc $_[0]}
+      ? $known_alphabets{lc $_[0]}
+      : (undef, "alphabet must be one of $alphabets"),
+  },
+  default     => 'English',
+);
+
 __PACKAGE__->add_preference(
   name => 'realname',
   validator => sub { "$_[0]" },
