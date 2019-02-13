@@ -161,7 +161,7 @@ my %Trans = (
     my @cps = split //, $s;
     return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
   },
-  Futhark => sub ($s) {
+  futhark => sub ($s) {
     my $map = {
       'a' => 'ᚨ',
       'b' => 'ᛒ',
@@ -170,7 +170,7 @@ my %Trans = (
       'e' => 'ᛖ',
       'ei' => 'ᛇ',
       'f' => 'ᚠ',
-       'g' => 'ᚷ',
+      'g' => 'ᚷ',
       'h' => 'ᚺ',
       'i' => 'ᛁ',
       'j' => 'ᛃ',
@@ -188,6 +188,8 @@ my %Trans = (
       'u' => 'ᚢ',
       'v' => 'ᚢ',
       'w' => 'ᚹ',
+      'x' => 'ᚲᛊ',
+      'y' => 'ᛃ',
       'z' => 'ᛉ',
     };
     my $transliterated = '';
