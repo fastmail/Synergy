@@ -2,6 +2,7 @@ use v5.24.0;
 use warnings;
 package Synergy::Util;
 
+use utf8;
 use experimental qw(signatures);
 
 use DateTime::Format::Natural;
