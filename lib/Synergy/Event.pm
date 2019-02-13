@@ -117,7 +117,7 @@ sub error_reply ($self, $text, $alts = {}) {
 sub reply ($self, $text, $alts = {}, $args = {}) {
   $Logger->log_debug("sending $text to someone");
 
-  my $prefix = $self->is_public
+  my $prefix = $self->from_user && $self->is_public
              ? ($self->from_user->username . q{: })
              : q{};
 

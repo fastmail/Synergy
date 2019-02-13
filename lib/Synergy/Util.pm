@@ -179,7 +179,52 @@ sub transliterate ($alphabet, $str) {
 
       my @cps = split //, $s;
       return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
-    }
+    },
+    Futhark => sub ($s) {
+      my $map = {
+        'a' => 'ᚨ',
+        'b' => 'ᛒ',
+        'c' => 'ᚲ',
+        'd' => 'ᛞ',
+        'e' => 'ᛖ',
+        'ei' => 'ᛇ',
+        'f' => 'ᚠ',
+        'g' => 'ᚷ',
+        'h' => 'ᚺ',
+        'i' => 'ᛁ',
+        'j' => 'ᛃ',
+        'k' => 'ᚲ',
+        'l' => 'ᛚ',
+        'm' => 'ᛗ',
+        'n' => 'ᚾ',
+        'o' => 'ᛟ',
+        'p' => 'ᛈ',
+        'q' => 'ᚲᚹ',
+        'r' => 'ᚱ',
+        's' => 'ᛊ',
+        't' => 'ᛏ',
+        'th' => 'ᚦ',
+        'u' => 'ᚢ',
+        'v' => 'ᚢ',
+        'w' => 'ᚹ',
+        'z' => 'ᛉ',
+      };
+      my $transliterated = '';
+      LETTER:
+      while ( $s ) {
+        MATCH:
+        foreach my $try ( sort { length $b cmp length $a } keys %$map ) {
+          if ( $s =~ /^$try/i ) {
+            $transliterated .= $map->{$try};
+            $s =~ s/^$try//i;
+            next LETTER;
+          }
+        }
+        $transliterated .= substr($s,0,1);
+        $s = substr($s,1);
+      }
+      return $transliterated;
+    },
   );
 
   return $str unless exists $trans{$alphabet};

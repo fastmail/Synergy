@@ -138,6 +138,7 @@ my %known_alphabets = map {; lc $_ => $_ } qw(
   Latin
   Rot13
   Alexandrian
+  Futhark
 );
 
 my $alphabets = join(', ', values %known_alphabets);
