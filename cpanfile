@@ -1,5 +1,6 @@
 # libssl-dev
 # zlib1g-dev
+requires 'Acme::Zalgo';
 requires 'Carp';
 requires 'Cpanel::JSON::XS';
 requires 'DBD::SQLite';

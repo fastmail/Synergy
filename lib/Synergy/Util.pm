@@ -6,6 +6,7 @@ use utf8;
 use experimental qw(lexical_subs signatures);
 
 use charnames ();
+use Acme::Zalgo ();
 use DateTime::Format::Natural;
 use List::Util qw(first);
 use Time::Duration::Parse;
@@ -217,6 +218,8 @@ my %Trans = (
   fraktur => _wonky_style('fraktur'),
   sans    => _wonky_style('ss'),
   double  => _wonky_style('double'),
+
+  zalgo   => sub ($s) { Acme::Zalgo::zalgo($s, 0, 2, 0, 0, 0, 2); },
 );
 
 sub _wonky_style ($style) {
