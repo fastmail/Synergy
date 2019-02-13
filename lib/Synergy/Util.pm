@@ -153,27 +153,27 @@ sub transliterate ($alphabet, $str) {
         c /
         d ﻝ
         e Ф
-        f Ⓕ
-        g Ⓖ
+        f �
+        g �
         h ʖ
         i 𝑜
-        j Ⓙ
+        j �
         k ✓
         l _
         m ㇵ
         n ߣ
         o □
         p Г
-        q Ⓠ
+        q �
         r w
         s |
         t Δ
         u ゝ
-        v Ⓥ
+        v �
         w +
         x ⌿
         y A
-        z Ⓩ
+        z �
       );
 
       my @cps = split //, $s;
