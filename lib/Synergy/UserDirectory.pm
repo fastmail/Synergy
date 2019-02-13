@@ -14,6 +14,7 @@ use JSON::MaybeXS ();
 use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
+use Synergy::Util qw(known_alphabets);
 use Synergy::Logger '$Logger';
 use List::Util qw(first shuffle);
 use DateTime;
@@ -134,22 +135,16 @@ sub resolve_name ($self, $name, $resolving_user) {
   return $user;
 }
 
-my %known_alphabets = map {; lc $_ => $_ } qw(
-  Latin
-  Rot13
-  Alexandrian
-);
-
-my $alphabets = join(', ', values %known_alphabets);
+my $Alphabets = join q{, }, sort { $a cmp $b } known_alphabets();
 
 __PACKAGE__->add_preference(
   name        => 'alphabet',
-  help        => "Preferred alphabet (default: English): One of: $alphabets",
+  help        => "Preferred alphabet (default: English): One of: $Alphabets",
   description => "Preferred alphabet for responses",
-  validator   => sub {
-    $known_alphabets{lc $_[0]}
-      ? $known_alphabets{lc $_[0]}
-      : (undef, "alphabet must be one of $alphabets"),
+  validator   => sub ($value) {
+    my ($known) = grep {; lc $_ eq lc $value } known_alphabets;
+    return $known if $known;
+    return (undef, "alphabet must be one of $Alphabets");
   },
   default     => 'English',
 );

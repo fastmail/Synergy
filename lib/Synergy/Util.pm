@@ -17,6 +17,8 @@ use Sub::Exporter -setup => [ qw(
 
   parse_switches
   canonicalize_switches
+
+  known_alphabets
   transliterate
 ) ];
 
@@ -143,47 +145,31 @@ sub canonicalize_switches ($switches, $aliases = {}) {
   return;
 }
 
+my %Trans = (
+  latin => sub ($s) { $s },
+  rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
+  alexandrian => sub ($s) {
+    my %letter = qw(
+      a Σ     b h     c /     d ﻝ     e Ф
+      f �     g �     h ʖ     i 𝑜     j �
+      k ✓     l _     m ㇵ    n ߣ     o □
+      p Г     q �     r w     s |     t Δ
+      u ゝ    v �     w +     x ⌿     y A
+      z �
+    );
+
+    my @cps = split //, $s;
+    return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
+  }
+);
+
+sub known_alphabets {
+  map {; ucfirst } keys %Trans;
+}
+
 sub transliterate ($alphabet, $str) {
-  my %trans = (
-    Latin => sub ($s) { $s },
-    Rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
-    Alexandrian => sub ($s) {
-      my %letter = qw(
-        a Σ
-        b h
-        c /
-        d ﻝ
-        e Ф
-        f �
-        g �
-        h ʖ
-        i 𝑜
-        j �
-        k ✓
-        l _
-        m ㇵ
-        n ߣ
-        o □
-        p Г
-        q �
-        r w
-        s |
-        t Δ
-        u ゝ
-        v �
-        w +
-        x ⌿
-        y A
-        z �
-      );
-
-      my @cps = split //, $s;
-      return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
-    }
-  );
-
-  return $str unless exists $trans{$alphabet};
-  return $trans{$alphabet}->($str);
+  return $str unless exists $Trans{lc $alphabet};
+  return $Trans{lc $alphabet}->($str);
 }
 
 1;
