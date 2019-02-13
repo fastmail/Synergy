@@ -9,6 +9,7 @@ use utf8;
 use namespace::autoclean;
 
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(transliterate);
 
 has type => (is => 'ro', isa => 'Str', required => 1);
 has text => (is => 'ro', isa => 'Str', required => 1); # clearly per-type
@@ -119,6 +120,10 @@ sub reply ($self, $text, $alts = {}, $args = {}) {
   my $prefix = $self->is_public
              ? ($self->from_user->username . q{: })
              : q{};
+
+  if ($self->from_user && $self->from_user->preference('alphabet')) {
+    $text = transliterate($self->from_user->preference('alphabet'), $text);
+  }
 
   my $future = $self->from_channel->send_message(
     $self->conversation_address,
