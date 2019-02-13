@@ -153,7 +153,7 @@ my %Trans = (
   alexandrian => sub ($s) {
     my %letter = qw(
       a Σ     b h     c /     d ﻝ     e Ф
-      f �     g �     h ʖ     i 𝑜     j �
+      f �     g ߔ     h b     i 𝑜     j �
       k ✓     l _     m ㇵ    n ߣ     o □
       p Г     q �     r w     s |     t Δ
       u ゝ    v �     w +     x ⌿     y A
