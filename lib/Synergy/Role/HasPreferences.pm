@@ -85,7 +85,7 @@ role {
   };
 
 
-  method set_preference => sub ($self, $event, $pref_name, $value, $user=undef) {
+  method set_preference => sub ($self, $user, $pref_name, $value, $event) {
     unless ($self->is_known_preference($pref_name)) {
       my $full_name = $self->preference_namespace . q{.} . $pref_name;
       $event->error_reply("I don't know about the $full_name preference");
@@ -104,7 +104,6 @@ role {
       return;
     }
 
-    $user //= $event->from_user;
     my $got = $self->set_user_preference($user, $pref_name, $actual_value);
     my $desc = $self->describe_user_preference($user, $pref_name);
 

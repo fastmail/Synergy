@@ -5,6 +5,7 @@ package Synergy::Util;
 use utf8;
 use experimental qw(lexical_subs signatures);
 
+use charnames ();
 use DateTime::Format::Natural;
 use List::Util qw(first);
 use Time::Duration::Parse;

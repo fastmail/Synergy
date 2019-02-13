@@ -65,26 +65,22 @@ sub handle_set ($self, $event) {
       if /Could not find channel or reactor/;
   };
 
-  my $whose = $who eq 'my'
-            ? $event->from_user
-            : $self->hub->user_directory->user_named($who);
+  return unless $component;
 
-  unless ($whose) {
-    return $event->error_reply("Sorry, I couldn't find a user for <$who>");
-  }
+  my $user = $self->hub->user_directory->resolve_name($who, $event->from_user);
+  return $event->error_reply("Sorry, I couldn't find a user for <$who>")
+    unless $user;
 
-  if ($whose != $event->from_user && ! $event->from_user->is_master) {
+  if ($user != $event->from_user && ! $event->from_user->is_master) {
     return $event->error_reply(
       "Sorry, only master users can set preferences for other people"
     );
   }
 
-  return unless $component;
-
   return $self->_error_no_prefs($event, $comp_name)
     unless $component->can('set_preference');
 
-  $component->set_preference($event, $pref_name, $pref_value, $whose);
+  $component->set_preference($user, $pref_name, $pref_value, $event);
 }
 
 sub handle_dump ($self, $event) {
