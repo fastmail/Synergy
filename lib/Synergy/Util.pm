@@ -16,6 +16,7 @@ use Sub::Exporter -setup => [ qw(
 
   parse_switches
   canonicalize_switches
+  transliterate
 ) ];
 
 # Handles yes/no, y/n, 1/0, true/false, t/f, on/off
@@ -139,6 +140,49 @@ sub parse_switches ($string) {
 sub canonicalize_switches ($switches, $aliases = {}) {
   $aliases->{$_->[0]} && ($_->[0] = $aliases->{$_->[0]}) for @$switches;
   return;
+}
+
+sub transliterate ($alphabet, $str) {
+  my %trans = (
+    latin => sub ($s) { $s },
+    rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
+    alexandrian => sub ($s) {
+      my %letter = qw(
+        a Σ
+        b h
+        c /
+        d ﻝ
+        e Ф
+        f Ⓕ
+        g Ⓖ
+        h ʖ
+        i 𝑜
+        j Ⓙ
+        k ✓
+        l _
+        m ㇵ
+        n ߣ
+        o □
+        p Г
+        q Ⓠ
+        r w
+        s |
+        t Δ
+        u ゝ
+        v Ⓥ
+        w +
+        x ⌿
+        y A
+        z Ⓩ
+      );
+
+      my @cps = split //, $s;
+      return join q{}, map {; exists $letter{$_} ? $letter{$_} : $_ } @cps;
+    }
+  );
+
+  return $str unless exists $trans{$alphabet};
+  return $trans{$alphabet}->($str);
 }
 
 1;
