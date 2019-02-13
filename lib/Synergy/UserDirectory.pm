@@ -139,7 +139,7 @@ my $Alphabets = join q{, }, sort { $a cmp $b } known_alphabets();
 
 __PACKAGE__->add_preference(
   name        => 'alphabet',
-  help        => "Preferred alphabet (default: English): One of: $Alphabets",
+  help        => "Preferred alphabet (default: Latin): One of: $Alphabets",
   description => "Preferred alphabet for responses",
   validator   => sub ($value) {
     my ($known) = grep {; lc $_ eq lc $value } known_alphabets;
