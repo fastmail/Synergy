@@ -144,9 +144,9 @@ sub canonicalize_switches ($switches, $aliases = {}) {
 
 sub transliterate ($alphabet, $str) {
   my %trans = (
-    latin => sub ($s) { $s },
-    rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
-    alexandrian => sub ($s) {
+    Latin => sub ($s) { $s },
+    Rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
+    Alexandrian => sub ($s) {
       my %letter = qw(
         a Σ
         b h

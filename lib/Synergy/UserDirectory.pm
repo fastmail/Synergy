@@ -136,6 +136,8 @@ sub resolve_name ($self, $name, $resolving_user) {
 
 my %known_alphabets = map {; lc $_ => $_ } qw(
   Latin
+  Rot13
+  Alexandrian
 );
 
 my $alphabets = join(', ', values %known_alphabets);
