@@ -7,7 +7,7 @@ with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures);
 use namespace::clean;
-use Synergy::Util qw(transliterate);
+use Synergy::Util qw(known_alphabets transliterate);
 
 sub listener_specs {
   return {
@@ -26,6 +26,9 @@ sub handle_transliterate ($self, $event) {
   $event->mark_handled;
 
   my ($alphabet, $text) = $event->text =~ /\Atransliterate to (\S+): (.+)\z/;
+
+  $event->reply_error("Sorry, I don't know that alphabet.")
+    unless grep {; lc $_ eq lc $alphabet } known_alphabets;
 
   $text = transliterate($alphabet, $text);
 

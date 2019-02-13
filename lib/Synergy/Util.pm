@@ -17,6 +17,8 @@ use Sub::Exporter -setup => [ qw(
 
   parse_switches
   canonicalize_switches
+
+  known_alphabets
   transliterate
 ) ];
 
@@ -143,92 +145,120 @@ sub canonicalize_switches ($switches, $aliases = {}) {
   return;
 }
 
-sub transliterate ($alphabet, $str) {
-  my %trans = (
-    Latin => sub ($s) { $s },
-    Rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
-    Alexandrian => sub ($s) {
-      my %letter = qw(
-        a Σ
-        b h
-        c /
-        d ﻝ
-        e Ф
-        f �
-        g �
-        h ʖ
-        i 𝑜
-        j �
-        k ✓
-        l _
-        m ㇵ
-        n ߣ
-        o □
-        p Г
-        q �
-        r w
-        s |
-        t Δ
-        u ゝ
-        v �
-        w +
-        x ⌿
-        y A
-        z �
-      );
+my %Trans = (
+  latin => sub ($s) { $s },
+  rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
+  alexandrian => sub ($s) {
+    my %letter = qw(
+      a Σ     b h     c /     d ﻝ     e Ф
+      f �     g �     h ʖ     i 𝑜     j �
+      k ✓     l _     m ㇵ    n ߣ     o □
+      p Г     q �     r w     s |     t Δ
+      u ゝ    v �     w +     x ⌿     y A
+      z �
+    );
 
-      my @cps = split //, $s;
-      return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
-    },
-    Futhark => sub ($s) {
-      my $map = {
-        'a' => 'ᚨ',
-        'b' => 'ᛒ',
-        'c' => 'ᚲ',
-        'd' => 'ᛞ',
-        'e' => 'ᛖ',
-        'ei' => 'ᛇ',
-        'f' => 'ᚠ',
-        'g' => 'ᚷ',
-        'h' => 'ᚺ',
-        'i' => 'ᛁ',
-        'j' => 'ᛃ',
-        'k' => 'ᚲ',
-        'l' => 'ᛚ',
-        'm' => 'ᛗ',
-        'n' => 'ᚾ',
-        'o' => 'ᛟ',
-        'p' => 'ᛈ',
-        'q' => 'ᚲᚹ',
-        'r' => 'ᚱ',
-        's' => 'ᛊ',
-        't' => 'ᛏ',
-        'th' => 'ᚦ',
-        'u' => 'ᚢ',
-        'v' => 'ᚢ',
-        'w' => 'ᚹ',
-        'z' => 'ᛉ',
-      };
-      my $transliterated = '';
-      LETTER:
-      while ( $s ) {
-        MATCH:
-        foreach my $try ( sort { length $b cmp length $a } keys %$map ) {
-          if ( $s =~ /^$try/i ) {
-            $transliterated .= $map->{$try};
-            $s =~ s/^$try//i;
-            next LETTER;
-          }
+    my @cps = split //, $s;
+    return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
+  },
+  Futhark => sub ($s) {
+    my $map = {
+      'a' => 'ᚨ',
+      'b' => 'ᛒ',
+      'c' => 'ᚲ',
+      'd' => 'ᛞ',
+      'e' => 'ᛖ',
+      'ei' => 'ᛇ',
+      'f' => 'ᚠ',
+       'g' => 'ᚷ',
+      'h' => 'ᚺ',
+      'i' => 'ᛁ',
+      'j' => 'ᛃ',
+      'k' => 'ᚲ',
+      'l' => 'ᛚ',
+      'm' => 'ᛗ',
+      'n' => 'ᚾ',
+      'o' => 'ᛟ',
+      'p' => 'ᛈ',
+      'q' => 'ᚲᚹ',
+      'r' => 'ᚱ',
+      's' => 'ᛊ',
+      't' => 'ᛏ',
+      'th' => 'ᚦ',
+      'u' => 'ᚢ',
+      'v' => 'ᚢ',
+      'w' => 'ᚹ',
+      'z' => 'ᛉ',
+    };
+    my $transliterated = '';
+    LETTER:
+    while ( $s ) {
+      MATCH:
+      foreach my $try ( sort { length $b cmp length $a } keys %$map ) {
+        if ( $s =~ /^$try/i ) {
+          $transliterated .= $map->{$try};
+          $s =~ s/^$try//i;
+          next LETTER;
         }
-        $transliterated .= substr($s,0,1);
-        $s = substr($s,1);
       }
-      return $transliterated;
-    },
-  );
+      $transliterated .= substr($s,0,1);
+      $s = substr($s,1);
+    }
+    return $transliterated;
+  },
 
-  return $str unless exists $trans{$alphabet};
-  return $trans{$alphabet}->($str);
+  # Further wonky styles, which come from github.com/rjbs/misc/unicode-style,
+  # are left up to wonkier people than me. -- rjbs, 2019-02-12
+  script  => _wonky_style('script'),
+  fraktur => _wonky_style('fraktur'),
+  sans    => _wonky_style('ss'),
+);
+
+sub _wonky_style ($style) {
+  my $i = 0;
+  my %digit = map { $i++ => $_ }
+    qw(ZERO ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE);
+
+  my $type = $style eq 'bold'    ? 'MATHEMATICAL BOLD'
+           : $style eq 'script'  ? 'MATHEMATICAL BOLD SCRIPT'
+           : $style eq 'fraktur' ? 'MATHEMATICAL FRAKTUR'
+           : $style eq 'italic'  ? 'MATHEMATICAL ITALIC'
+           : $style eq 'ss'      ? 'MATHEMATICAL SANS-SERIF'
+           : $style eq 'sc'      ? 'LATIN LETTER SMALL'
+           : $style eq 'ssb'     ? 'MATHEMATICAL SANS-SERIF BOLD'
+           : $style eq 'ssi'     ? 'MATHEMATICAL SANS-SERIF ITALIC'
+           : $style eq 'ssbi'    ? 'MATHEMATICAL SANS-SERIF BOLD ITALIC'
+           : $style eq 'fw'      ? 'FULLWIDTH LATIN'
+           : die "unknown type: $style";
+
+  return sub ($str) {
+    if ($style eq 'sc') {
+      $str =~ s<([a-z])><
+        my $name = $1 ge 'a' && $1 le 'z' ? "$type CAPITAL \U$1" : undef;
+        $name ? charnames::string_vianame($name) // $1 : $1;
+      >ge;
+    } else {
+      $str =~ s<([a-z0-9])><
+        my $name = $1 ge 'a' && $1 le 'z' ? "$type SMALL \U$1"
+                 : $1 ge 'A' && $1 le 'Z' ? "$type CAPITAL $1"
+                 : $1 ge '0' && $1 le '9' ? "MATHEMATICAL BOLD DIGIT $digit{$1}"
+                 : undef;
+        $name =~ s/ (.)$/ LETTER $1/ if $style eq 'fw';
+        $name ? charnames::string_vianame($name) // $1 : $1;
+      >gei;
+    }
+
+    return $str;
+  };
+}
+
+sub known_alphabets {
+  map {; ucfirst } keys %Trans;
+}
+
+sub transliterate ($alphabet, $str) {
+  return $str unless exists $Trans{lc $alphabet};
+  return $Trans{lc $alphabet}->($str);
 }
 
 1;
