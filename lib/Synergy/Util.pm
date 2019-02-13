@@ -3,9 +3,10 @@ use warnings;
 package Synergy::Util;
 
 use utf8;
-use experimental qw(signatures);
+use experimental qw(lexical_subs signatures);
 
 use DateTime::Format::Natural;
+use List::Util qw(first);
 use Time::Duration::Parse;
 use Time::Duration;
 
@@ -214,6 +215,7 @@ my %Trans = (
   script  => _wonky_style('script'),
   fraktur => _wonky_style('fraktur'),
   sans    => _wonky_style('ss'),
+  double  => _wonky_style('double'),
 );
 
 sub _wonky_style ($style) {
@@ -227,11 +229,27 @@ sub _wonky_style ($style) {
            : $style eq 'italic'  ? 'MATHEMATICAL ITALIC'
            : $style eq 'ss'      ? 'MATHEMATICAL SANS-SERIF'
            : $style eq 'sc'      ? 'LATIN LETTER SMALL'
+           : $style eq 'double'  ? [ 'MATHEMATICAL DOUBLE-STRUCK', 'DOUBLE-STRUCK' ]
            : $style eq 'ssb'     ? 'MATHEMATICAL SANS-SERIF BOLD'
            : $style eq 'ssi'     ? 'MATHEMATICAL SANS-SERIF ITALIC'
            : $style eq 'ssbi'    ? 'MATHEMATICAL SANS-SERIF BOLD ITALIC'
            : $style eq 'fw'      ? 'FULLWIDTH LATIN'
            : die "unknown type: $style";
+
+  my sub xlate ($c) {
+    for my $t (ref $type ? @$type : $type) {
+      my $name = $1 ge 'a' && $1 le 'z' ? "$t SMALL \U$1"
+               : $1 ge 'A' && $1 le 'Z' ? "$t CAPITAL $1"
+               : $1 ge '0' && $1 le '9' ? "MATHEMATICAL BOLD DIGIT $digit{$1}"
+               : undef;
+
+      $name =~ s/ (.)$/ LETTER $1/ if $style eq 'fw';
+      my $c2 = charnames::string_vianame($name);
+      return $c2 if $c2;
+    }
+
+    return $c;
+  }
 
   return sub ($str) {
     if ($style eq 'sc') {
@@ -240,14 +258,7 @@ sub _wonky_style ($style) {
         $name ? charnames::string_vianame($name) // $1 : $1;
       >ge;
     } else {
-      $str =~ s<([a-z0-9])><
-        my $name = $1 ge 'a' && $1 le 'z' ? "$type SMALL \U$1"
-                 : $1 ge 'A' && $1 le 'Z' ? "$type CAPITAL $1"
-                 : $1 ge '0' && $1 le '9' ? "MATHEMATICAL BOLD DIGIT $digit{$1}"
-                 : undef;
-        $name =~ s/ (.)$/ LETTER $1/ if $style eq 'fw';
-        $name ? charnames::string_vianame($name) // $1 : $1;
-      >gei;
+      $str =~ s<([a-z0-9])><xlate($1)>gei;
     }
 
     return $str;
