@@ -177,7 +177,7 @@ sub transliterate ($alphabet, $str) {
       );
 
       my @cps = split //, $s;
-      return join q{}, map {; exists $letter{$_} ? $letter{$_} : $_ } @cps;
+      return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
     }
   );
 
