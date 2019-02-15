@@ -22,7 +22,9 @@ sub listener_specs {
       return unless $channel eq 'yelling';
 
       my $text = $e->text;
-      $text =~ s/[#@](?:\S+)//g; # don't complain about @rjbs
+      $text =~ s/[#@](?:\S+)//g;  # don't complain about @rjbs
+      $text =~ s/:[-_a-z0-9]+://g; # don't complain about :smile:
+
       return $text =~ /\p{Ll}/;
     },
   };
