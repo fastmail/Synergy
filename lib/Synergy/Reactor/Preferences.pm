@@ -29,7 +29,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\Alist\s+all\s+preferences\s*\z/i;
+        return unless $e->text =~ /\Alist(\s+all)?\s+(settings|pref(erence)s?)\s*\z/i;
       },
     },
     {
@@ -38,8 +38,9 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return 1 if $e->text =~ /\Adump\s+my\s+pref(erence)?s/in;
-        return 1 if $e->text =~ /\Adump\s+pref(erence)?s\s+for/in;
+        return 1 if $e->text =~ /\Apref(erence)?s\z/in;
+        return 1 if $e->text =~ /\A(dump|show)(\s+my)?\s+(settings|pref(erence)?s)/in;
+        return 1 if $e->text =~ /\A(dump|show)\s+(settings|pref(erence)?s)\s+for/in;
         return;
       },
     }
