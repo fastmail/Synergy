@@ -28,7 +28,7 @@ use Sub::Exporter -setup => [ qw(
 # Handles yes/no, y/n, 1/0, true/false, t/f, on/off
 sub bool_from_text ($text) {
   return 1 if $text =~ /^(yes|y|true|t|1|on|nahyeah)$/in;
-  return 0 if $text =~ /^(no|n|false|f|0|off|yeahnah)/in;
+  return 0 if $text =~ /^(no|n|false|f|0|off|yeahnah)$/in;
 
   return (undef, "you can use yes/no, y/n, 1/0, true/false, t/f, on/off, or yeahnah/nahyeah");
 }
