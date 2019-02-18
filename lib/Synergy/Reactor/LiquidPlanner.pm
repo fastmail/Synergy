@@ -1770,7 +1770,14 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
 
   my $has_strong_check = 0;
 
-  my ($limit, $offset) = (11, 0);
+  # We start with a limit higher than one page because there are reasons we
+  # need to overshoot.  One common reason: if we've got an "in" filter, the
+  # container may be removed, and we want to drop it.  We'll crank the limit up
+  # more, later, if we're filtering by user on un-done tasks, because the
+  # LiquidPlanner behavior on owner filtering is less than ideal.
+  # -- rjbs, 2019-02-18
+  my $page_size = 10;
+  my ($limit, $offset) = ($page_size + 5, 0);
 
   $flag{done} = 0 unless exists $flag{done};
   if (defined $flag{done}) {
@@ -1797,8 +1804,23 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     $limit += $offset;
   }
 
-  if ($flag{owner}) {
+  if ($flag{owner} && keys $flag{owner}->%*) {
+    # So, this is really $!%@# annoying.  The owner_id filter finds tasks that
+    # have an assignment for the given owner, but they don't care whether the
+    # assignment is done or not.  So, if you're looking for tasks that are
+    # undone for a given user, you need to do filtering in the application
+    # layer, because LiquidPlanner does not have your back.
+    # -- rjbs, 2019-02-18
     push @filters, map {; [ 'owner_id', '=', $_ ] } keys $flag{owner}->%*;
+
+    if (defined $flag{done} && ! $flag{done}) {
+      # So, if we're looking for specific users, and we want non-done tasks,
+      # let's only find ones where those users' assignments are not done.
+      # We'll have to do that filtering at this end, so we need to over-select.
+      # I have no idea what to guess, so I picked 3x, just because.
+      # -- rjbs, 2019-02-18
+      $limit *= 3;
+    }
   }
 
   if (defined $flag{phase}) {
@@ -1898,6 +1920,17 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   if ($q_in) {
     # If you search for the contents of n, you will get n back also.
     @tasks = grep {; $_->{id} != $q_in } @tasks;
+  }
+
+  if ($flag{owner} && keys $flag{owner}->%*
+      && defined $flag{done} && ! $flag{done}
+  ) {
+    @tasks = grep {;
+      keys $flag{owner}->%*
+      ==
+      grep {; ! $_->{is_done} and $flag{owner}{ $_->{person_id} } }
+        $_->{assignments}->@*;
+    } @tasks;
   }
 
   return $event->reply("Nothing matched that search.") unless @tasks;
