@@ -2344,7 +2344,7 @@ sub _handle_commit ($self, $event, $comment) {
   }
 
   my %meta;
-  while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL)\z//) {
+  while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL)\s*\z//) {
     $meta{$1}++;
   }
 
