@@ -24,6 +24,24 @@ sub start ($self) { }
 # Synergy::Channel::Slack for an example.)
 sub note_reply ($self, $event, $future, $args = {}) { }
 
+has _pre_message_hooks => (
+  is => 'ro',
+  isa => 'ArrayRef[CodeRef]',
+  traits => ['Array'],
+  lazy => 1,
+  default => sub { [] },
+  handles => {
+    pre_message_hooks => 'elements',
+    register_pre_message_hook => 'push',
+  },
+);
+
+sub run_pre_message_hooks ($self, $event, $text_ref, $alts) {
+  for my $hook ($self->pre_message_hooks) {
+    $hook->($event, $text_ref, $alts);
+  }
+}
+
 1;
 
 =pod

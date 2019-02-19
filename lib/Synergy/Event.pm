@@ -125,9 +125,13 @@ sub reply ($self, $text, $alts = {}, $args = {}) {
     $text = transliterate($self->from_user->preference('alphabet'), $text);
   }
 
+  $text = $prefix . $text;
+
+  $self->from_channel->run_pre_message_hooks($self, \$text, $alts);
+
   my $future = $self->from_channel->send_message(
     $self->conversation_address,
-    $prefix . $text,
+    $text,
     $alts,
   );
 
