@@ -223,6 +223,11 @@ sub listener_specs {
       method    => 'handle_jazz_pic',
       predicate => sub ($self, $e) { $e->text =~ /jazz/i },
     },
+    {
+      name      => 'eyes-pic',
+      method    => 'handle_eyes_pic',
+      predicate => sub ($self, $e) { $e->text =~ /nicola/i },
+    },
   );
 }
 
@@ -296,6 +301,22 @@ sub handle_jazz_pic ($self, $event) {
     "\N{SAXOPHONE}",
     {
       slack_reaction => { event => $event, reaction => 'saxophone' },
+    },
+  );
+
+  return;
+}
+
+# Sometimes, respond in passing to a mention of "nicola" with googly eyes
+# slackmoji. -- brong, 2019-02-19
+sub handle_eyes_pic ($self, $event) {
+  return unless $event->from_channel->isa('Synergy::Channel::Slack');
+  return unless rand() < 0.1;
+
+  return $event->reply(
+    "\N{EYES}",
+    {
+      slack_reaction => { event => $event, reaction => 'eyes' },
     },
   );
 
