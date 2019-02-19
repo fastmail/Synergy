@@ -154,11 +154,11 @@ my %Trans = (
   alexandrian => sub ($s) {
     my %letter = qw(
       a Σ     b h     c /     d ﻝ     e Ф
-      f �     g ߔ     h b     i 𝑜     j �
+      f Ŧ     g ߔ     h b     i 𝑜     j i
       k ✓     l _     m ㇵ    n ߣ     o □
-      p Г     q �     r w     s |     t Δ
-      u ゝ    v �     w +     x ⌿     y A
-      z �
+      p Г     q ᒣ     r w     s |     t Δ
+      u ゝ    v ˧     w +     x ⌿     y A
+      z ∞
     );
 
     my @cps = split //, $s;
