@@ -114,12 +114,16 @@ sub error_reply ($self, $text, $alts = {}) {
   return $self->reply($text, $alts, { was_error => 1 });
 }
 
+sub get_reply_prefix ($self) {
+  return $self->from_user && $self->is_public
+             ? ($self->from_user->username . q{: })
+             : q{};
+}
+
 sub reply ($self, $text, $alts = {}, $args = {}) {
   $Logger->log_debug("sending $text to someone");
 
-  my $prefix = $self->from_user && $self->is_public
-             ? ($self->from_user->username . q{: })
-             : q{};
+  my $prefix = $self->get_reply_prefix;
 
   if ($self->from_user && $self->from_user->preference('alphabet')) {
     $text = transliterate($self->from_user->preference('alphabet'), $text);
