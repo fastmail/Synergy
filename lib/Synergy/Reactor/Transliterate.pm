@@ -27,7 +27,7 @@ sub handle_transliterate ($self, $event) {
 
   my ($alphabet, $text) = $event->text =~ /\Atransliterate to (\S+): (.+)\z/;
 
-  $event->reply_error("Sorry, I don't know that alphabet.")
+  return $event->error_reply("Sorry, I don't know that alphabet.")
     unless grep {; lc $_ eq lc $alphabet } known_alphabets;
 
   $text = transliterate($alphabet, $text);
