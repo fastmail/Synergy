@@ -25,7 +25,7 @@ sub listener_specs {
 sub handle_transliterate ($self, $event) {
   $event->mark_handled;
 
-  my ($alphabet, $text) = $event->text =~ /\Atransliterate to (\S+): (.+)\z/;
+  my ($alphabet, $text) = $event->text =~ /\Atransliterate to (\S+): (.+)\z/i;
 
   return $event->error_reply("Sorry, I don't know that alphabet.")
     unless grep {; lc $_ eq lc $alphabet } known_alphabets;
