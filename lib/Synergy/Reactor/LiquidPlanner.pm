@@ -1523,6 +1523,10 @@ sub _parse_search ($self, $text) {
   state $prefix_re  = qr{!?\^?};
   state $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
 
+  my %flag_alias = (
+    u => 'user',
+  );
+
   my $last = q{};
   TOKEN: while (length $text) {
     $text =~ s/^\s+//;
@@ -1555,7 +1559,9 @@ sub _parse_search ($self, $text) {
     }
 
     if ($text =~ s/^($ident_re):([0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
-      $kvs{$1}{$2}++;
+      my ($k, $v) = ($1, $2);
+      $k = $flag_alias{$k} if $flag_alias{$k};
+      $kvs{$k}{$v}++;
       next TOKEN;
     }
 
