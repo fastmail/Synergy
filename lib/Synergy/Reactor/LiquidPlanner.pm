@@ -48,6 +48,10 @@ my sub _split_lines ($input, $n = -1) {
   return @lines;
 }
 
+my sub parse_lp_datetime ($str) {
+  DateTime::Format::ISO8601->parse_datetime($str);
+}
+
 has workspace_id => (
   is  => 'ro',
   isa => 'Int',
@@ -90,14 +94,27 @@ sub _slack_item_link ($self, $item) {
     $item->{id};
 }
 
-sub _slack_item_link_with_name ($self, $item) {
-  state $shortcut_prefix = { Task => '*', Project => '#' };
-  my $type = $item->{type};
-  my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
-  my $pstatus  = $item->{custom_field_values}{"Project Status"};
+sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
+  my %arg = (
+    shortcuts => 1,
+    phase     => 1,
+    staleness => 0,
+    # stuff we could make optional later:
+    #   name
+    #   type icon
+    #   doneness
+    #   urgentness
+    ($input_arg ? %$input_arg : ()),
+  );
 
+  my $type  = $item->{type};
   my $title = $item->{name};
-  $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
+
+  if ($arg{shortcut}) {
+    state $shortcut_prefix = { Task => '*', Project => '#' };
+    my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
+    $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
+  }
 
   my $urgent = $self->urgent_package_id;
 
@@ -112,7 +129,15 @@ sub _slack_item_link_with_name ($self, $item) {
     ),
     $title;
 
-  $text .= " \N{EN DASH} \_$pstatus\_" if $pstatus;
+  if ($arg{phase}) {
+    my $pstatus  = $item->{custom_field_values}{"Project Status"};
+    $text .= " \N{EN DASH} \_$pstatus\_" if $pstatus;
+  }
+
+  if ($arg{staleness}) {
+    my $updated = parse_lp_datetime($item->{updated_at});
+    $text .= " \N{EN DASH} updated " .  concise(ago(time - $updated->epoch));
+  }
 
   return $text;
 }
@@ -1452,7 +1477,9 @@ sub _send_task_list ($self, $event, $tasks, $arg = {}) {
              : $task->{type} eq 'Folder'  ? "🗂"
              :                              "❓";
 
-    $slack .= "$icon " . $self->_slack_item_link_with_name($task) . "\n";
+    $slack .= "$icon "
+           .  $self->_slack_item_link_with_name($task, $arg->{show})
+           .  "\n";
   }
 
   if ($arg->{header} or $arg->{page}) {
@@ -1959,6 +1986,7 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
       header  => $flag{header} // "Search results",
       page    => $flag{page},
       more    => $more ? 1 : 0,
+      show    => $flag{show},
     },
   );
 }
@@ -1978,6 +2006,8 @@ for my $package (qw(inbox urgent recurring)) {
             $event->from_user->username;
           $search->{flags}{owner}{ $event->from_user->lp_id } = 1;
           $search->{flags}{in} = $self->$pkg_id_method;
+
+          $search->{flags}{show}{staleness} = 1;
         },
       );
     },
