@@ -130,7 +130,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     $title;
 
   if ($arg{phase}) {
-    my $pstatus  = $item->{custom_field_values}{"Project Status"};
+    my $pstatus  = $item->{custom_field_values}{"Project Phase"};
     $text .= " \N{EN DASH} \_$pstatus\_" if $pstatus;
   }
 
@@ -1869,8 +1869,8 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
 
     push @filters,
       $flag{phase} eq 'none'
-      ? [ "custom_field:'Project Status'", 'is_not_set' ]
-      : [ "custom_field:'Project Status'", '=', "'$flag{phase}'" ];
+      ? [ "custom_field:'Project Phase'", 'is_not_set' ]
+      : [ "custom_field:'Project Phase'", '=', "'$flag{phase}'" ];
   }
 
   if ($flag{type}) {
