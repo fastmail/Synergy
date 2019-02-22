@@ -303,12 +303,16 @@ sub _register_slack_rtm ($self, $res) {
 # something like slack_call($method, {})->on_done(sub { do_something }).
 sub api_call ($self, $method, $arg = {}) {
   my $url = "https://slack.com/api/$method";
-  my $payload = {
-    token => $self->api_key,
-    %$arg,
-  };
+  my $json = encode_json($arg);
 
-  return Future->wrap($self->hub->http->POST(URI->new($url), $payload));
+  return Future->wrap($self->hub->http->POST(
+    URI->new($url),
+    $json,
+    content_type => 'application/json; charset=utf-8',
+    headers => [
+      Authorization => 'Bearer ' . $self->api_key,
+    ],
+  ));
 }
 
 sub setup ($self) {
@@ -391,8 +395,6 @@ sub is_ready ($self) {
 sub load_users ($self) {
   $self->api_call('users.list', {
     presence => 0,
-    callback => sub ($resp) {
-    },
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
     $self->_set_users({
