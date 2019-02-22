@@ -2017,7 +2017,9 @@ for my $package (qw(inbox urgent recurring)) {
           $search->{flags}{owner}{ $event->from_user->lp_id } = 1;
           $search->{flags}{in} = $self->$pkg_id_method;
 
-          $search->{flags}{show}{staleness} = 1;
+          $search->{flags}{show}{staleness} = 1
+            if $package eq 'inbox'
+            or $package eq 'urgent';
         },
       );
     },
@@ -2034,7 +2036,10 @@ sub _handle_triage ($self, $event, $text) {
     $event,
     $text,
     "triage",
-    sub ($, $, $search) { $search->{flags}{owner}{ $triage_user->lp_id } = 1 },
+    sub ($, $, $search) {
+      $search->{flags}{owner}{ $triage_user->lp_id } = 1;
+      $search->{flags}{show}{staleness} = 1;
+    },
   )
 }
 
