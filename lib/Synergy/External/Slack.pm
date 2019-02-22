@@ -248,7 +248,7 @@ sub _send_rich_text ($self, $channel, $rich) {
   my $http_future = $self->api_call('chat.postMessage', {
     (ref $rich ? (%$rich) : (text => $rich)),
     channel => $channel,
-    as_user => 1,
+    as_user => \1,
   });
 
   my $f = $self->loop->new_future;
