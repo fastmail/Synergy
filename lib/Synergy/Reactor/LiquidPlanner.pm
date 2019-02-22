@@ -301,7 +301,6 @@ sub listener_specs {
       name      => "lp-mention-in-passing",
       method    => "provide_lp_link",
       predicate => sub { 1 },
-
     },
     {
       name      => "last-thing-said",
@@ -349,6 +348,9 @@ sub provide_lp_link ($self, $event) {
   state $lp_id_re       = qr/\bLP\s*([1-9][0-9]{5,10})\b/i;
   state $lp_shortcut_re = qr/\bLP\s*([*#][-_a-z0-9]+)\b/i;
 
+  # This is a stupid hack to replace later. -- rjbs, 2019-02-22
+  state $lp_flags = qr{\/desc(?:ription)?};
+
   my $workspace_id  = $self->workspace_id;
   my $lp_url_re     = qr{\b(?:\Qhttps://app.liquidplanner.com/space/$workspace_id\E/.*/)([0-9]+)P?/?\b};
 
@@ -357,14 +359,18 @@ sub provide_lp_link ($self, $event) {
 
   my $as_cmd;
 
+  my %flag;
   if (
     $event->was_targeted
-    && ($event->text =~ /\A\s* $lp_id_re \s*\z/x
-    ||  $event->text =~ /\A\s* $lp_shortcut_re \s*\z/x
-    ||  $event->text =~ /\A\s* $lp_url_re \s*\z/x)
+    && ($event->text =~ /\A\s* $lp_id_re        (?<flag>\s+$lp_flags)? \s*\z/x
+    ||  $event->text =~ /\A\s* $lp_shortcut_re  (?<flag>\s+$lp_flags)? \s*\z/x
+    ||  $event->text =~ /\A\s* $lp_url_re       (?<flag>\s+$lp_flags)? \s*\z/x)
   ) {
+    $flag{description} = 1 if $+{flag};
+
     # do better than bort
     $event->mark_handled;
+
     $as_cmd = 1;
   }
 
@@ -462,6 +468,10 @@ sub provide_lp_link ($self, $event) {
           );
 
           $slack .= "*$pair->[0]*: $str\n";
+        }
+
+        if ($flag{description}) {
+          $slack .= "\n>>> $item->{description}\n";
         }
       }
 
