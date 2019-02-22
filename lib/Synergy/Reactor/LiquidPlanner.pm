@@ -110,7 +110,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   my $type  = $item->{type};
   my $title = $item->{name};
 
-  if ($arg{shortcut}) {
+  if ($arg{shortcuts}) {
     state $shortcut_prefix = { Task => '*', Project => '#' };
     my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
     $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
