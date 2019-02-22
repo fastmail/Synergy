@@ -260,7 +260,7 @@ sub send_ephemeral_message ($self, $channel, $user, $text) {
     text => $text,
     channel => $channel,
     user => $user,
-    as_user => 1,
+    as_user => \1,
   })->on_done(sub ($http_res) {
     my $json = $JSON->decode($http_res->decoded_content);
     $ret_future->done($json);
