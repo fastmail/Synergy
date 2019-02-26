@@ -551,7 +551,7 @@ sub handle_merge_request ($self, $event) {
 
       my $slack = {
         text        => "",
-        attachments => $JSON->encode([{
+        attachments => [{
           fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
           author_name => $data->{author}->{name},
           author_icon => $data->{author}->{avatar_url},
@@ -559,7 +559,7 @@ sub handle_merge_request ($self, $event) {
           title_link  => "$data->{web_url}",
           color       => $color,
           fields      => \@fields,
-        }]),
+        }],
       };
 
       $event->reply($reply, { slack => $slack });
@@ -664,10 +664,10 @@ sub handle_commit ($self, $event) {
 
       $slack = {
         text        => '',
-        attachments => $JSON->encode([{
+        attachments => [{
           fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
           text        => $msg,
-        }]),
+        }],
       };
 
       $event->reply($reply, { slack => $slack });
