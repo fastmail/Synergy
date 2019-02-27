@@ -62,7 +62,7 @@ role {
   #   help        => "This is a cool thing.\nIt's very great.",
   #   description => "a pref with a name",
   #   default     => value,
-  #   validator   => sub ($val) {},
+  #   validator   => sub ($self, $val, $event) {},
   #   describer   => sub ($val) {},
   #   after_set   => sub ($self, $username, $value) {},
   # }
@@ -94,7 +94,7 @@ role {
     }
 
     my $spec = $pref_specs{ $pref_name };
-    my ($actual_value, $err) = $spec->{validator}->($value);
+    my ($actual_value, $err) = $spec->{validator}->($self, $value, $event);
 
     my $full_name = $self->preference_namespace . q{.} . $pref_name;
 

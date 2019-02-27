@@ -757,7 +757,7 @@ EOT
 
 __PACKAGE__->add_preference(
   name      => 'user-id',
-  validator => sub ($value) {
+  validator => sub ($self, $value, @) {
     return $value if $value =~ /\A[0-9]+\z/;
     return (undef, "Your user-id must be a positive integer.")
   },

@@ -141,7 +141,7 @@ __PACKAGE__->add_preference(
   name        => 'alphabet',
   help        => "Preferred alphabet (default: Latin): One of: $Alphabets",
   description => "Preferred alphabet for responses",
-  validator   => sub ($value) {
+  validator   => sub ($self, $value, @) {
     my ($known) = grep {; lc $_ eq lc $value } known_alphabets;
     return $known if $known;
     return (undef, "alphabet must be one of $Alphabets");
@@ -151,7 +151,7 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name => 'realname',
-  validator => sub { "$_[0]" },
+  validator => sub { "$_[1]" },
   after_set => sub ($self, $username, $value) {
     $self->reload_user($username, { realname => $value });
   },
@@ -162,13 +162,22 @@ __PACKAGE__->add_preference(
   help => 'one or more comma-separated aliases',
   description => "alternate names for a person",
   default => sub { [] },
-  validator => sub ($value) {
+  validator => sub ($self, $value, $event) {
     my @names = map  {; lc $_    }
                 grep { length $_ }
                 split /\s*,\s*/, $value;
 
     unless (all { /^[a-z0-9]+$/ } @names) {
       return (undef, "nicknames must be all ascii characters with no spaces");
+    }
+
+    my @taken = grep {;
+      my $user = $self->resolve_name($_, $event->from_user);
+      $user && lc $user->username ne lc $event->from_user->username;
+    } @names;
+
+    if (@taken) {
+      return (undef, "Sorry, these nicknames were already taken: @taken");
     }
 
     return \@names;
@@ -184,7 +193,7 @@ __PACKAGE__->add_preference(
   name => 'pronoun',
   help => q{This is the pronoun you'd prefer to be used for you.},
   description => 'preferred personal pronoun (nominative case)',
-  validator => sub ($value) {
+  validator => sub ($self, $value, @) {
     my %valid_pronouns = map { $_ => 1 } qw(he she they);
 
     $value =~ s/\s*//g;
@@ -202,7 +211,7 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name => 'time-zone',
-  validator => sub ($value) {
+  validator => sub ($self, $value, @) {
     my $err = qq{"$value" doesn't look like a valid time zone name};
 
     eval { DateTime->now(time_zone => $value) };
@@ -243,7 +252,7 @@ __PACKAGE__->add_preference(
     return join q{, }, map {; $desc{$_} ? "\u$_: $desc{$_}" : () }
       (qw(weekdays sun), @wdays, qw(sat weekends));
   },
-  validator => sub ($value) {
+  validator => sub ($self, $value, @) {
     my $err = q{you can use "weekdays, 09:00-17:00" or "Mon: 09:00-17:00, Tue: 10:00-12:00, (etc.)"};
 
     my sub validate_start_end ($start, $end) {

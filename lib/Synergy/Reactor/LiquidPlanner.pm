@@ -3334,14 +3334,14 @@ sub summarize_container ($item, $summary, $member_id) {
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  validator => sub ($value) { return $value },
+  validator => sub ($self, $value, @) { return $value },
   describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
   default   => undef,
 );
 
 __PACKAGE__->add_preference(
   name      => 'should-nag',
-  validator => sub ($value) { return bool_from_text($value) },
+  validator => sub ($self, $value, @) { return bool_from_text($value) },
   default   => 0,
 );
 
