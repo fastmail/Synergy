@@ -1521,13 +1521,13 @@ sub _handle_tasks ($self, $event, $text) {
     if ($text =~ /\A\s*([1-9][0-9]*)\s*\z/) {
       $page = $1;
     } else {
-      $event->reply_error(qq{It's "tasks" and then optionally a page number.});
+      $event->error_reply(qq{It's "tasks" and then optionally a page number.});
       return;
     }
   }
 
   if ($page > 10) {
-    return $event->reply_error(
+    return $event->error_reply(
       "If it's not in your first ten pages, better go to the web.",
     );
   }
