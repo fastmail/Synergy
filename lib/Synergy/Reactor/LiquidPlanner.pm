@@ -3103,8 +3103,7 @@ sub damage_report ($self, $event) {
     push @summaries, $summary;
   }
 
-  my $iteration_pkg = $lpc->current_iteration->{package}{id};
-  my $pkg_summary   = $self->_build_package_summary($iteration_pkg, $target);
+  my $pkg_summary   = $self->_build_iteration_summary($lpc->current_iteration, $target);
   my $slack_summary = join qq{\n},
                       @summaries,
                       $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
@@ -3131,18 +3130,22 @@ sub reload_shortcuts ($self, $event) {
   $event->mark_handled;
 }
 
-sub _build_package_summary ($self, $package_id, $user) {
+sub _build_iteration_summary ($self, $iteration, $user) {
   my $items_res = $self->lp_client_for_master->query_items({
-    in    => $package_id,
+    in    => $iteration->{package}{id},
     flags => { depth => -1 },
   });
 
   unless ($items_res->is_success) {
-    $Logger->log("error getting tree for package $package_id");
+    $Logger->log([
+      "error getting tree for iteration %s, package %s",
+      $iteration->{number},
+      $iteration->{package}{id},
+    ]);
     return;
   }
 
-  my $summary = summarize_iteration($items_res->payload, $user->lp_id);
+  my $summary = summarize_iteration($iteration, $items_res->payload, $user->lp_id);
 }
 
 sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
@@ -3214,7 +3217,7 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
   return $text;
 }
 
-sub summarize_iteration ($item, $member_id) {
+sub summarize_iteration ($iteration, $item, $member_id) {
   my @containers;
   my @events;
   my @tasks;
@@ -3228,6 +3231,10 @@ sub summarize_iteration ($item, $member_id) {
                      $c->{assignments}->@*;
 
       next unless $assign;
+
+      # If the user's assignment was done before this iteration started,
+      # pretend it isn't even here. -- rjbs, 2019-02-27
+      next if $assign->{done_on} && $assign->{done_on} lt $iteration->{start};
 
       push @tasks, {
         id        => $c->{id},
@@ -3251,7 +3258,7 @@ sub summarize_iteration ($item, $member_id) {
         done_tasks  => 0,
       };
 
-      summarize_container($c, $summary, $member_id);
+      summarize_container($iteration, $c, $summary, $member_id);
 
       next CHILD unless $summary->{total_tasks}
                  or     $summary->{owner_id} == $member_id;
@@ -3309,7 +3316,7 @@ sub summarize_iteration ($item, $member_id) {
   };
 }
 
-sub summarize_container ($item, $summary, $member_id) {
+sub summarize_container ($iteration, $item, $summary, $member_id) {
   CHILD: for my $c (@{ $item->{children} // []}) {
     if ($c->{type} eq 'Task') {
       my ($assign) = grep {; $_->{person_id} == $member_id }
@@ -3317,12 +3324,16 @@ sub summarize_container ($item, $summary, $member_id) {
 
       next CHILD unless $assign;
 
+      # If the user's assignment was done before this iteration started,
+      # pretend it isn't even here. -- rjbs, 2019-02-27
+      next if $assign->{done_on} && $assign->{done_on} lt $iteration->{start};
+
       $summary->{total_tasks}++;
       $summary->{done_tasks}++ if $assign->{is_done};
       next CHILD;
     }
 
-    summarize_container($c, $summary, $member_id);
+    summarize_container($iteration, $c, $summary, $member_id);
   }
 
   return;
