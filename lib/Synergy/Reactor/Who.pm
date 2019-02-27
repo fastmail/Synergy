@@ -22,7 +22,7 @@ sub listener_specs {
 sub handle_who ($self, $event) {
   $event->mark_handled;
 
-  my ($what) = $event->text =~ /^who\s*(.*)/;
+  my ($what) = $event->text =~ /^who\s*(.*)/i;
   $what =~ s/\s*\?*\z//;
 
   if ($what =~ /\A\s*(is|are)\s+(you|synergy)\s*\z/) {
