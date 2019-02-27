@@ -175,6 +175,7 @@ __PACKAGE__->add_preference(
   },
   describer => sub ($value) {
     return '<undef>' unless $value;
+    return '<undef>' unless @$value;
     return join(q{, }, @$value);
   },
 );

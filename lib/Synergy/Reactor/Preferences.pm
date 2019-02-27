@@ -24,6 +24,15 @@ sub listener_specs {
       },
     },
     {
+      name      => 'clear',
+      method    => 'handle_clear',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text =~ /\Aclear\s+(my|\w+'s)/in;
+      },
+    },
+    {
       name      => 'list_all_preferences',
       method    => 'handle_list',
       exclusive => 1,
@@ -48,15 +57,37 @@ sub listener_specs {
 }
 
 sub handle_set ($self, $event) {
-  my ($who, $comp_name, $pref_name, $pref_value) =
+  my ($who, $pref_name, $pref_value) =
     $event->text =~ m{\A set \s+ (my|\w+'s) \s+         # set my
-                      ([-_a-z0-9]+) \.  ([-_a-z0-9]+)   # component.pref
+                      ([-_a-z0-9]+  \.   [-_a-z0-9]+)   # component.pref
                       \s+ to \s+ (.*)                   # to value
                      }x;
 
-  return unless $who;
+  return $self->_set_pref($event, $who, $pref_name, $pref_value);
+}
 
+sub handle_clear ($self, $event) {
+  my ($who, $pref_name, $rest) =
+    $event->text =~ m{\A clear \s+ (my|\w+'s) \s+       # set my
+                      ([-_a-z0-9]+  \.  [-_a-z0-9]+)    # component.pref
+                      \s* (.+)?
+                     }x;
+
+  return $event->error_reply("You can't pass a value to 'clear'")
+    if $rest;
+
+  return $self->_set_pref($event, $who, $pref_name, undef);
+}
+
+sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
+  return unless $who;
   $who =~ s/'s$//;
+
+  my $user = $self->hub->user_directory->resolve_name($who, $event->from_user);
+  return $event->error_reply("Sorry, I couldn't find a user for <$who>")
+    unless $user;
+
+  my ($comp_name, $pref_name) = split /\./, $full_name, 2;
 
   my $component;
   try {
@@ -67,10 +98,6 @@ sub handle_set ($self, $event) {
   };
 
   return unless $component;
-
-  my $user = $self->hub->user_directory->resolve_name($who, $event->from_user);
-  return $event->error_reply("Sorry, I couldn't find a user for <$who>")
-    unless $user;
 
   if ($user != $event->from_user && ! $event->from_user->is_master) {
     return $event->error_reply(
