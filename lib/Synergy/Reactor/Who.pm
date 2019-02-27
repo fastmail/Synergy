@@ -20,17 +20,19 @@ sub listener_specs {
 }
 
 sub handle_who ($self, $event) {
-  $event->mark_handled;
-
   my ($what) = $event->text =~ /^who\s*(.*)/i;
   $what =~ s/\s*\?*\z//;
 
   if ($what =~ /\A\s*(is|are)\s+(you|synergy)\s*\z/) {
+    $event->mark_handled;
+
     return $event->reply(
       qq!I am Synergy, a holographic computer designed to be the ultimate audio-visual entertainment synthesizer.  I also help out with the timekeeping.!);
   }
 
   return -1 unless $what =~ s/\A(is|am)\s+//n;
+
+  $event->mark_handled;
 
   my $who = $self->resolve_name($what, $event->from_user);
   return $event->error_reply(qq!I don't know who "$what" is!) if ! $who;
