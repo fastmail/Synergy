@@ -341,9 +341,13 @@ sub load_preferences_from_user ($self, $username) {
     $self->set_user_preference($user, 'realname', $existing_real);
   }
 
-  unless ($self->user_has_preference($user, 'nicknames')) {
-    my @nicks = $user->nicknames;
-    $self->set_user_preference($user, 'nicknames', \@nicks);
+  # If we have nicknames already, and those nicknames are from user config,
+  # and we don't have a pref already...load them.
+  my @existing_nicks = $user->has_nicknames ? $user->_nicknames->@* : undef;
+  my $pref_nicks = $self->get_user_preference($user, 'nicknames') // [];
+
+  if (@existing_nicks && ! @$pref_nicks) {
+    $self->set_user_preference($user, 'nicknames', \@existing_nicks);
   }
 }
 

@@ -136,6 +136,8 @@ has _nicknames => (
   is      => 'ro',
   isa     => 'ArrayRef[Str]',
   default => sub {  []  },
+  predicate => 'has_nicknames',
+  init_arg  => 'nicknames',
 );
 
 sub nicknames ($self) {
