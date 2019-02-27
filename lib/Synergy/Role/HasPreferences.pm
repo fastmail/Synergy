@@ -142,7 +142,14 @@ role {
     $all_user_prefs{$username} //= {};
 
     my $uprefs = $all_user_prefs{$username};
-    $uprefs->{$pref_name} = $value // $spec->{default};
+
+    # This is necessary if the default value is an empty arrayref or something.
+    my $default = $spec->{default};
+    if ($default && ref $default eq 'CODE') {
+      $default = $default->();
+    }
+
+    $uprefs->{$pref_name} = $value // $default;
 
     $spec->{after_set}->($self, $username, $value);
 

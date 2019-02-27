@@ -132,12 +132,16 @@ has want_page   => (is => 'ro', isa => 'Bool', default => 1);
 
 has should_nag  => (is => 'ro', isa => 'Bool', default => 0);
 
-has nicknames => (
+has _nicknames => (
+  is      => 'ro',
   isa     => 'ArrayRef[Str]',
-  traits  => [ 'Array' ],
-  handles => { nicknames => 'elements' },
   default => sub {  []  },
 );
+
+sub nicknames ($self) {
+  my $nicks = $self->preference('nicknames') // $self->_nicknames;
+  return @$nicks;
+}
 
 has business_hours => (
   is => 'ro',

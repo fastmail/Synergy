@@ -16,7 +16,7 @@ use Path::Tiny;
 use Synergy::User;
 use Synergy::Util qw(known_alphabets);
 use Synergy::Logger '$Logger';
-use List::Util qw(first shuffle);
+use List::Util qw(first shuffle all);
 use DateTime;
 use utf8;
 
@@ -154,6 +154,28 @@ __PACKAGE__->add_preference(
   validator => sub { "$_[0]" },
   after_set => sub ($self, $username, $value) {
     $self->reload_user($username, { realname => $value });
+  },
+);
+
+__PACKAGE__->add_preference(
+  name => 'nicknames',
+  help => 'one or more comma-separated aliases',
+  description => "alternate names for a person",
+  default => sub { [] },
+  validator => sub ($value) {
+    my @names = map  {; lc $_    }
+                grep { length $_ }
+                split /\s*,\s*/, $value;
+
+    unless (all { /^[a-z0-9]+$/ } @names) {
+      return (undef, "nicknames must be all ascii characters with no spaces");
+    }
+
+    return \@names;
+  },
+  describer => sub ($value) {
+    return '<undef>' unless $value;
+    return join(q{, }, @$value);
   },
 );
 
@@ -316,6 +338,11 @@ sub load_preferences_from_user ($self, $username) {
   # username, overwrite it.
   if ($existing_pref && $existing_pref eq $username && $existing_real) {
     $self->set_user_preference($user, 'realname', $existing_real);
+  }
+
+  unless ($self->user_has_preference($user, 'nicknames')) {
+    my @nicks = $user->nicknames;
+    $self->set_user_preference($user, 'nicknames', \@nicks);
   }
 }
 
