@@ -455,10 +455,11 @@ sub provide_lp_link ($self, $event) {
         for my $pair (
           [ 'Created',      'created_at' ],
           [ 'Last Updated', 'updated_at' ],
+          [ 'Completed',    'done_on' ],
         ) {
-          my $dt = DateTime::Format::ISO8601->parse_datetime(
-            $item->{ $pair->[1] }
-          );
+          next unless my $date_str = $item->{ $pair->[1] };
+
+          my $dt = DateTime::Format::ISO8601->parse_datetime($date_str);
 
           my $str = $self->hub->format_friendly_date(
             $dt,
