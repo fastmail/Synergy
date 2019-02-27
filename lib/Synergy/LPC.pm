@@ -289,6 +289,20 @@ sub create_todo_item ($self, $todo) {
   );
 }
 
+sub current_iteration ($self) {
+  my $helper = LPC::IterationHelper->new({ lpc => $self });
+
+  my $iter    = $helper->current_iteration;
+  my $pkg_res = $helper->package_for_iteration_number($iter->{number});
+
+  return unless $pkg_res->is_success;
+
+  return {
+    %$iter,
+    package => $pkg_res->payload,
+  };
+}
+
 package LPC::Timer {
   use Moose;
   use namespace::autoclean;
@@ -367,6 +381,117 @@ package LPC::Result::Failure {
   sub payload_list  { Carp::confess("tried to interpret failure as success") }
 
   __PACKAGE__->meta->make_immutable;
+}
+
+package LPC::IterationHelper {
+  use Moose;
+  use MooseX::StrictConstructor;
+  use namespace::autoclean;
+  use experimental qw(signatures lexical_subs);
+
+  has lpc => (is => 'ro', required => 1, weak_ref => 1);
+
+  # This is stupid hard-coding, but it eliminates much, much stupider
+  # hard-coding. -- rjbs, 2019-02-27
+  my @Sync_Points = (
+    [ '2016-12-31' => '200' ],
+    [ '2017-12-24' => '224' ],
+  );
+
+  sub iteration_by_number ($self, $n) {
+    my @candidates = grep {; $_->[1] <= $n } @Sync_Points;
+    die "can't compute iteration #$n" unless @candidates;
+
+    my ($sync_start, $sync_number) = @{ $candidates[-1] };
+
+    my (@ymd) = split /-/, $sync_start;
+    my $sync_start_dt = DateTime->new(
+      year  => $ymd[0],
+      month => $ymd[1],
+      day   => $ymd[2],
+    );
+
+    my $iters = $n - $sync_number;
+
+    my $i_start = $sync_start_dt + DateTime::Duration->new(days => $iters * 14);
+    my $i_end   = $i_start       + DateTime::Duration->new(days => 13);
+
+    return {
+      number => $n,
+      start  => $i_start->ymd,
+      end    => $i_end->ymd,
+    };
+  }
+
+  sub iteration_on_date ($self, $datetime) {
+    if (! ref $datetime) {
+      state $strp = DateTime::Format::Strptime->new(pattern => '%F');
+      my $obj = $strp->parse_datetime($datetime);
+      die qq{can't understand date string "$datetime"} unless $obj;
+      $datetime = $obj;
+    }
+
+    my $ymd = $datetime->ymd('-');
+    my @candidates = grep {; $_->[0] le $ymd } @Sync_Points;
+    die "can't compute iteration for $ymd" unless @candidates;
+
+    my ($sync_start, $sync_number) = @{ $candidates[-1] };
+
+    my (@ymd) = split /-/, $sync_start;
+    my $sync_start_dt = DateTime->new(
+      year  => $ymd[0],
+      month => $ymd[1],
+      day   => $ymd[2],
+    );
+
+    my $days = int($datetime->jd) - int($sync_start_dt->jd);
+    my $fns = int $days / 14;
+
+    my $i_start = $sync_start_dt + DateTime::Duration->new(days => $fns * 14);
+    my $i_end   = $i_start       + DateTime::Duration->new(days => 13);
+
+    return {
+      number => $sync_number + $fns,
+      start  => $i_start->ymd,
+      end    => $i_end->ymd,
+    };
+  }
+
+  sub current_iteration ($self) {
+    my $iter = $self->iteration_on_date(DateTime->now);
+    return $iter;
+  }
+
+  sub iteration_relative_to_current ($self, $delta_n) {
+    return $self->iteration_on_date(
+      DateTime->now->add(weeks => 2 * $delta_n)
+    );
+  }
+
+  sub package_for_iteration_number ($self, $n) {
+    # We could cache this, but the lifecycle of IterationHelper and LPC objects
+    # is not really reliable and we'd end up with duplicates and it would be
+    # stupid. -- rjbs, 2019-02-27
+    my $res = $self->lpc->query_items({
+      # in => $root_id
+      flags => {
+        depth => -1,
+        flat  => 1,
+      },
+      filters => [
+        [ name   => 'starts_with',  "#$n" ],
+      ],
+    });
+
+    return $res unless $res->is_success;
+
+    return _success($res->payload->[0]);
+  }
+
+  sub package_for_current_iteration ($self) {
+    state $iter = $self->iteration_on_date(DateTime->now);
+    return $self->package_for_iteration_number($iter->{number});
+  }
 }
 
 1;

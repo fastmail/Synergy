@@ -3043,11 +3043,13 @@ sub damage_report ($self, $event) {
 
   my @summaries = ("Damage report for $who_name:");
 
+  my $lpc = $self->lp_client_for_master;
+
   CHK: for my $check (@to_check) {
     my ($label, $icon, $package_id, $want_lp_id) = @$check;
     $want_lp_id //= $lp_id;
 
-    my $check_res = $self->lp_client_for_master->query_items({
+    my $check_res = $lpc->query_items({
       ($package_id ? (in => $package_id) : ()),
       flags => {
         depth => -1,
@@ -3101,9 +3103,8 @@ sub damage_report ($self, $event) {
     push @summaries, $summary;
   }
 
-  # XXX Needs reworking when we have current-iteration tracking.
-  # -- rjbs, 2018-06-15
-  my $pkg_summary   = $self->_build_package_summary(-1, $target);
+  my $iteration_pkg = $lpc->current_iteration->{package}{id};
+  my $pkg_summary   = $self->_build_package_summary($iteration_pkg, $target);
   my $slack_summary = join qq{\n},
                       @summaries,
                       $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
@@ -3131,11 +3132,6 @@ sub reload_shortcuts ($self, $event) {
 }
 
 sub _build_package_summary ($self, $package_id, $user) {
-  # This is hard-coded because all the iteration-handling code is buried in
-  # LP-Tools, and merging that with Synergy without making a big pain right now
-  # is... it's not happening this Friday afternoon. -- rjbs, 2018-06-15
-  $package_id = 49448854;
-
   my $items_res = $self->lp_client_for_master->query_items({
     in    => $package_id,
     flags => { depth => -1 },
