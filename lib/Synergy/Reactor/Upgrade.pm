@@ -5,7 +5,7 @@ package Synergy::Reactor::Upgrade;
 use Moose;
 with 'Synergy::Role::Reactor';
 
-use experimental qw(signatures);
+use experimental qw(lexical_subs signatures);
 use namespace::clean;
 use File::pushd;
 use File::Find;
@@ -73,27 +73,32 @@ sub handle_upgrade ($self, $event) {
 
   my $status;
 
+  my sub block ($s) {
+    $s =~ s{\n$}{};
+    return "\n```\n$s\n```\n";
+  }
+
   if (my $status_err = $self->git_do(
     "status --porcelain --untracked-files=no",
     \$status,
   )) {
-    $event->reply("Failed to git status: $status_err");
+    $event->reply("Failed to git status: " . block($status_err));
 
     return;
   } elsif ($status) {
-    $event->reply("git directory dirty, can't upgrade: $status");
+    $event->reply("git directory dirty, can't upgrade: " . block($status));
 
     return;
   }
 
   if (my $fetch_err = $self->git_do("fetch $spec")) {
-    $event->reply("git fetch $spec failed: $fetch_err");
+    $event->reply("git fetch $spec failed: " . block($fetch_err));
 
     return;
   }
 
   if (my $reset_err = $self->git_do("reset --hard FETCH_HEAD")) {
-    $event->reply("git reset --hard FETCH_HEAD failed: $reset_err");
+    $event->reply("git reset --hard FETCH_HEAD failed: " . block($reset_err));
 
     return;
   }
@@ -107,10 +112,10 @@ sub handle_upgrade ($self, $event) {
   }
 
   if (my $err = $self->check_next) {
-    $event->reply("Ugrade failed. Version $new_version has problems: $err");
+    $event->reply("Ugrade failed. Version $new_version has problems: " . block($err));
 
     if (my $reset_err = $self->git_do("reset --hard $old_version")) {
-      $event->reply("Failed to reset back to old version $old_version. Manual intervention probably required. Error: $reset_err");
+      $event->reply("Failed to reset back to old version $old_version. Manual intervention probably required. Error: " . block($reset_err));
     }
 
     return;
