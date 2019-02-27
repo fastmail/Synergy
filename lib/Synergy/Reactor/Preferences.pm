@@ -61,7 +61,7 @@ sub handle_set ($self, $event) {
     $event->text =~ m{\A set \s+ (my|\w+'s) \s+         # set my
                       ([-_a-z0-9]+  \.   [-_a-z0-9]+)   # component.pref
                       \s+ to \s+ (.*)                   # to value
-                     }x;
+                     }ix;
 
   return $self->_set_pref($event, $who, $pref_name, $pref_value);
 }
@@ -71,7 +71,7 @@ sub handle_clear ($self, $event) {
     $event->text =~ m{\A clear \s+ (my|\w+'s) \s+       # set my
                       ([-_a-z0-9]+  \.  [-_a-z0-9]+)    # component.pref
                       \s* (.+)?
-                     }x;
+                     }ix;
 
   return $event->error_reply("You can't pass a value to 'clear'")
     if $rest;
