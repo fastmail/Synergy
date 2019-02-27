@@ -30,7 +30,7 @@ requires 'Moose';
 requires 'Moose::Role';
 requires 'MooseX::Role::Parameterized';
 requires 'MooseX::StrictConstructor';
-requires 'Net::Async::HTTP';
+requires 'Net::Async::HTTP', '0.44';
 requires 'Net::Async::HTTP::Server::PSGI';
 requires 'Net::Async::WebSocket::Client';
 requires 'Path::Tiny';
