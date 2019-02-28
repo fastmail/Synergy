@@ -2040,6 +2040,7 @@ sub _handle_triage ($self, $event, $text) {
     sub ($, $, $search) {
       $search->{flags}{owner}{ $triage_user->lp_id } = 1;
       $search->{flags}{show}{staleness} = 1;
+      $search->{flags}{header} = "\N{HELMET WITH WHITE CROSS} Tasks to triage";
     },
   )
 }
