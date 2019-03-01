@@ -30,6 +30,8 @@ use utf8;
 
 my $JSON = JSON->new->utf8;
 
+my $TRIAGE_EMOJI = "\N{HELMET WITH WHITE CROSS}";
+
 my $LINESEP = qr{(
   # space or newlines
   #   then, not a backslash
@@ -1773,9 +1775,10 @@ sub _interpret_search ($self, $kvs, $from_user) {
     }
   }
 
-  # Whatever, if you put debug:anything in there, we turn it on.
+  # Whatever, if you put debug:anythingtrue in there, we turn it on.
   # Live with it. -- rjbs, 2019-02-07
   $flag{debug} = 1 if delete $kvs->{debug};
+  $flag{force} = 1 if delete $kvs->{force};
 
   if (keys %$kvs) {
     $error{unknown} = "You used some parameters I don't understand: "
@@ -1905,13 +1908,12 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     }
   }
 
-  $has_strong_check = 1 if $flag{project};
-
-  $has_strong_check = 1 if $flag{type} && $flag{type} ne 'task';
-
-  $has_strong_check = 1 if $flag{phase}
-                        && (defined $flag{done} && ! $flag{done})
-                        && ($flag{phase} ne 'none' || $flag{type} ne 'task');
+  $has_strong_check = 1
+    if ($flag{project})
+    || ($flag{debug} || $flag{force})
+    || ($flag{type} && $flag{type} ne 'task')
+    || ($flag{phase} && (defined $flag{done} && ! $flag{done})
+                     && ($flag{phase} ne 'none' || $flag{type} ne 'task'));
 
   WORD: for my $word (@words) {
     if ($word->{op} eq 'does_not_contain') {
@@ -2040,7 +2042,7 @@ sub _handle_triage ($self, $event, $text) {
     sub ($, $, $search) {
       $search->{flags}{owner}{ $triage_user->lp_id } = 1;
       $search->{flags}{show}{staleness} = 1;
-      $search->{flags}{header} = "\N{HELMET WITH WHITE CROSS} Tasks to triage";
+      $search->{flags}{header} = "$TRIAGE_EMOJI Tasks to triage";
     },
   )
 }
@@ -2285,6 +2287,30 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
   my $res = $lpc->create_task($payload);
 
   return unless $res->is_success;
+
+  # If the task is assigned to the triage user, inform them.
+  # -- rjbs, 2019-02-28
+  if (my $rototron = $self->_rototron) {
+    my $roto_reactor = $self->hub->reactor_named('rototron');
+
+    my $triage_user = $self->hub->user_directory->user_named('triage');
+
+    my $channel = $self->hub->channel_named($self->primary_nag_channel_name);
+    for my $officer ($roto_reactor->_current_triage_officers) {
+      $channel->send_message_to_user(
+        $officer,
+        sprintf(
+          "$TRIAGE_EMOJI New task created for triage: %s (%s)",
+          $res->payload->{name},
+          $self->item_uri($res->payload->{id})
+        ),
+        {
+          slack => sprintf "$TRIAGE_EMOJI %s",
+            $self->_slack_item_link_with_name($res->payload)
+        }
+      );
+    }
+  }
 
   return $res->payload;
 }
@@ -3012,7 +3038,10 @@ sub damage_report ($self, $event) {
 
   my $rototron = $self->_rototron;
   my $user_is_triage = do {
-    my $duties = $rototron->duties_on( DateTime->now(time_zone => $target->time_zone ) );
+    my $duties = $rototron->duties_on(
+      DateTime->now(time_zone => $target->time_zone )
+    );
+
     !! (grep {; ($_->{keywords}{"rotor:triage_us"} || $_->{keywords}{"rotor:triage_au"})
          && grep {; 0 == index $_->{email}, ($target->username . q{@}) } values $_->{participants}->%*
        } @$duties);

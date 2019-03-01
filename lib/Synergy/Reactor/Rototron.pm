@@ -12,6 +12,7 @@ use namespace::clean;
 use JMAP::Tester;
 use JSON::MaybeXS;
 use Lingua::EN::Inflect qw(NUMWORDS PL_N);
+use List::Util qw(uniq);
 use Synergy::Logger '$Logger';
 use Synergy::Rototron;
 use Synergy::Util qw(parse_date_for_user);
@@ -125,6 +126,45 @@ sub _replan_range ($self, $from_dt, $to_dt) {
   return;
 }
 
+sub _current_triage_officers ($self) {
+  my $rototron = $self->rototron;
+
+  my @tzs = sort {; $a cmp $b }
+            uniq
+            grep {; defined }
+            map  {; $_->time_zone }
+            $self->hub->user_directory->users;
+
+  my @users;
+
+  for my $tz (@tzs) {
+    my $keyword = $tz =~ m{^America/New_York} ? 'triage_us'
+                : $tz =~ m{^Australia/}       ? 'triage_au'
+                : undef;
+
+    next unless $keyword;
+
+
+    push @users, grep {; defined }
+                 map  {; $self->hub->user_directory->user_named($_) }
+                 map  {; $_->{email} =~ /\A(.+)\@/ ? $1 : () }
+                 map  {; values $_->{participants}->%* }
+                 grep {; $_->{keywords}{"rotor:$keyword"} }
+                 $rototron->duties_on( DateTime->now(time_zone => $tz) )->@*;
+  }
+
+  for (my $i = $#users; $i >= 0; $i--) {
+    my $timer = Synergy::Timer->new({
+      time_zone      => $users[$i]->time_zone,
+      business_hours => $users[$i]->business_hours,
+    });
+
+    splice @users, $i, 1 unless $timer->is_business_hours;
+  }
+
+  return @users;
+}
+
 sub handle_duty ($self, $event) {
   $event->mark_handled;
 
@@ -152,6 +192,11 @@ sub handle_duty ($self, $event) {
 
   my $reply = "Duty roster for " . $when_dt->ymd . ":\n"
             . join qq{\n}, sort map {; $_->{title} } @$duties;
+
+  if (my @users = $self->_current_triage_officers) {
+    $reply .= "\n\nCurrent triage officers on the clock: "
+            . join qq{, }, map {; $_->username } @users;
+  }
 
   $event->reply($reply);
 }
