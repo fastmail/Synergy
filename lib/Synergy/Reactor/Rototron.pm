@@ -145,24 +145,23 @@ sub _current_triage_officers ($self) {
     next unless $keyword;
 
 
-    push @users, grep {; defined }
-                 map  {; $self->hub->user_directory->user_named($_) }
-                 map  {; $_->{email} =~ /\A(.+)\@/ ? $1 : () }
-                 map  {; values $_->{participants}->%* }
+    push @users, grep {; defined && $_->is_working_now }
+                 map  {; $self->_user_from_duty($_) }
                  grep {; $_->{keywords}{"rotor:$keyword"} }
                  $rototron->duties_on( DateTime->now(time_zone => $tz) )->@*;
   }
 
-  for (my $i = $#users; $i >= 0; $i--) {
-    my $timer = Synergy::Timer->new({
-      time_zone      => $users[$i]->time_zone,
-      business_hours => $users[$i]->business_hours,
-    });
-
-    splice @users, $i, 1 unless $timer->is_business_hours;
-  }
-
   return @users;
+}
+
+sub _user_from_duty ($self, $duty) {
+  # We assume only one participant, obviously. -- rjbs, 2019-03-01
+  my ($participant) = values $duty->{participants}->%*;
+  my ($username)    = $participant->{email} =~ /\A(.+)\@/ ? $1 : undef;
+
+  return unless $username;
+
+  return $self->hub->user_directory->user_named($username);
 }
 
 sub handle_duty ($self, $event) {
@@ -171,32 +170,45 @@ sub handle_duty ($self, $event) {
   my (undef, $when) = split /\s+/, $event->text, 2;
 
   my $when_dt;
+  my $is_now;
+
   if ($when) {
     $when_dt = eval { parse_date_for_user($when, $event->from_user) };
     return $event->reply_error("I didn't understand the day you asked about")
       unless $when_dt;
   } else {
+    $is_now = 1;
     $when_dt = DateTime->now(time_zone => $event->from_user->time_zone);
   }
 
-  my $duties = $self->rototron->duties_on($when_dt);
+  my @lines;
+  for my $rotor ($self->rototron->rotors) {
+    my $dt = $when_dt;
+    if ($rotor->time_zone && $is_now) {
+      $dt = $dt->clone;
+      $dt->set_time_zone($rotor->time_zone);
+    }
 
-  unless ($duties) {
-    return $event->reply("I couldn't get the duty roster!  Sorry.");
+    for my $duty (@{ $self->rototron->duties_on($dt) || [] }) {
+      next unless $duty->{keywords}{ $rotor->keyword };
+
+      my $user = $self->_user_from_duty($duty);
+      push @lines, $duty->{title}
+                 . ', ' . $dt->ymd
+                 . (($is_now && $user && $user->is_working_now)
+                    ? q{ *(on the clock)*}
+                    : q{});
+    }
   }
 
-  unless (@$duties) {
-    $event->reply("Like booze in an airport, today is duty free.");
+  unless (@lines) {
+    my $str = $is_now ? q{today} : q{that time};
+    $event->reply("Like booze in an airport, $str is duty free.");
     return;
   }
 
-  my $reply = "Duty roster for " . $when_dt->ymd . ":\n"
-            . join qq{\n}, sort map {; $_->{title} } @$duties;
-
-  if (my @users = $self->_current_triage_officers) {
-    $reply .= "\n\nCurrent triage officers on the clock: "
-            . join qq{, }, map {; $_->username } @users;
-  }
+  my $reply = "*Duty roster for " . $when_dt->ymd . ":*\n"
+            . join qq{\n}, sort @lines;
 
   $event->reply($reply);
 }

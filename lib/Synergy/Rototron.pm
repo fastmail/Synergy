@@ -344,9 +344,11 @@ package Synergy::Rototron::Rotor {
     'flag-us'   => flag('us'),
     'sparkles'  => "\N{SPARKLES}",
     'helmet'    => "\N{HELMET WITH WHITE CROSS}",
+    'wrench'    => "\N{WRENCH}",
   );
 
   has name => (is => 'ro', required => 1);
+  has time_zone => (is => 'ro');
 
   has raw_description => (
     is => 'ro',
