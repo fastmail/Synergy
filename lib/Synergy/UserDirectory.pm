@@ -67,17 +67,6 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
   return undef;
 }
 
-sub user_by_name ($self, $name) {
-  # XXX - probably just put user_by_name in handles
-  return $self->user_named($name);
-}
-
-sub user_by_nickname ($self, $name) {
-  return first {;
-    grep {; lc $_ eq lc $name } $_->nicknames
-  } $self->users;
-}
-
 sub load_users_from_file ($self, $file) {
   my $user_config;
   if ($file =~ /\.ya?ml\z/) {
