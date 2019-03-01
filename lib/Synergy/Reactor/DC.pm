@@ -45,6 +45,10 @@ sub handle_dc($self, $event) {
     return $event->reply("Sory, I didn't understand that. Try: dc -e '1 2 +p', for example");
   }
 
+  if ($cmd =~ /!(?![<=>])/) {
+    return $event->reply("Sorry, but !<system command> is *not* allowed");
+  }
+
   my $resp;
 
   my $process = IO::Async::Process->new(
