@@ -2295,20 +2295,24 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
 
     my $triage_user = $self->hub->user_directory->user_named('triage');
 
-    my $channel = $self->hub->channel_named($self->primary_nag_channel_name);
-    for my $officer ($roto_reactor->_current_triage_officers) {
-      $channel->send_message_to_user(
-        $officer,
-        sprintf(
-          "$TRIAGE_EMOJI New task created for triage: %s (%s)",
-          $res->payload->{name},
-          $self->item_uri($res->payload->{id})
-        ),
-        {
-          slack => sprintf "$TRIAGE_EMOJI %s",
-            $self->_slack_item_link_with_name($res->payload)
+    if ($triage_user->has_lp_id) {
+      if (grep {; $_->{person_id} eq $triage_user->lp_id } @{ $res->payload->{assignments} }) {
+        my $channel = $self->hub->channel_named($self->primary_nag_channel_name);
+        for my $officer ($roto_reactor->_current_triage_officers) {
+          $channel->send_message_to_user(
+            $officer,
+            sprintf(
+              "$TRIAGE_EMOJI New task created for triage: %s (%s)",
+              $res->payload->{name},
+              $self->item_uri($res->payload->{id})
+            ),
+            {
+              slack => sprintf "$TRIAGE_EMOJI %s",
+                $self->_slack_item_link_with_name($res->payload)
+            }
+          );
         }
-      );
+      }
     }
   }
 
