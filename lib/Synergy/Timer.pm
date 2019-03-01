@@ -75,17 +75,20 @@ sub is_business_hours {
   my $hour = $now->hour;
   my $min  = $now->minute;
 
-  # Weekends off.
-  return if $dow == 7 or $dow == 6;
+  state $key = [ undef, qw( mon tue wed thu fri sat sun ) ];
+  my $hours = $self->business_hours->{ $key->[ $dow ] };
+
+  # No hours for today?  Not working.
+  return unless $hours;
 
   # Start nagging
-  my ($start_h, $start_m) = split /:/, $self->business_hours->{start}, 2;
+  my ($start_h, $start_m) = split /:/, $hours->{start}, 2;
 
   return if $hour <  $start_h,
          or $hour == $start_h && $min < $start_m;
 
   # Stop nagging
-  my ($end_h, $end_m) = split /:/, $self->business_hours->{end}, 2;
+  my ($end_h, $end_m) = split /:/, $hours->{end}, 2;
 
   return if $hour >  $end_h
          or $hour == $end_h && $min > $end_m;

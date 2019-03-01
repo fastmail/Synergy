@@ -145,16 +145,29 @@ sub nicknames ($self) {
   return @$nicks;
 }
 
-has business_hours => (
-  is => 'ro',
-  isa => 'HashRef',
-  default => sub {
-    {
-      start => '10:30',
-      end   => '17:00',
-    }
-  },
-);
+sub business_hours ($self) {
+  my $hours = $self->preference('business-hours');
+  $hours //= {
+    sun => undef,
+    mon => { start => '09:30', end => '17:00' },
+    tue => { start => '09:30', end => '17:00' },
+    wed => { start => '09:30', end => '17:00' },
+    thu => { start => '09:30', end => '17:00' },
+    fri => { start => '09:30', end => '17:00' },
+    sat => undef,
+  };
+
+  return $hours;
+}
+
+sub is_working_now ($self) {
+  my $timer = Synergy::Timer->new({
+    time_zone      => $self->time_zone,
+    business_hours => $self->business_hours,
+  });
+
+  return $timer->is_business_hours;
+}
 
 has default_project_shortcut => (is => 'ro', isa => 'Str');
 
