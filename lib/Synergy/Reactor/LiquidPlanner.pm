@@ -1744,7 +1744,7 @@ sub _interpret_search ($self, $kvs, $from_user) {
       $error{type} = "You can only filter on one type at a time.";
     } else {
       my $got_type = lc $types[0];
-      if ($got_type =~ /\A project | task | package | \* \z/x) {
+      if ($got_type =~ /\A (?: project | task | package | \* ) \z/x) {
         # * means explicit "no filter"
         $flag{type} = $got_type unless $got_type eq '*';
       } else {
