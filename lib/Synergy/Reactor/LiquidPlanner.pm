@@ -101,6 +101,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     shortcuts => 1,
     phase     => 1,
     staleness => 0,
+    due       => 1,
     # stuff we could make optional later:
     #   name
     #   type icon
@@ -130,6 +131,28 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
                                                                 : "•"
     ),
     $title;
+
+  if ($arg{due} && $item->{promise_by}) {
+    my ($y, $m, $d) = split /-/, $item->{promise_by};
+    state $month = [ qw(
+      Nuluary
+      January February  March
+      April   May       June
+      July    August    September
+      October November  December
+    ) ];
+
+    my $str = $d >  20 ? 'late '
+            : $d <= 10 ? 'early '
+            :            'mid-';
+    $str .= $month->[$m];
+
+    my $now = DateTime->now;
+    $str .= ", $y" unless $y == $now->year;
+
+    $text .= " \N{EN DASH} due $str";
+    $text .= " \N{CROSS MARK}" if $item->{promise_by} lt $now->ymd;
+  }
 
   if ($arg{phase}) {
     my $pstatus  = $item->{custom_field_values}{"Project Phase"};
