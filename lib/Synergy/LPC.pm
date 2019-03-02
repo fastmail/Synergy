@@ -126,6 +126,13 @@ sub http_post ($self, $path, @arg) {
   return _success($payload);
 }
 
+sub get_clients ($self) {
+  my $lp_res = $self->http_get("/clients");
+
+  return $lp_res unless $lp_res->is_success;
+  return _success($lp_res->payload);
+}
+
 sub get_item ($self, $item_id) {
   my $lp_res = $self->http_get("/treeitems/?filter[]=id=$item_id");
 

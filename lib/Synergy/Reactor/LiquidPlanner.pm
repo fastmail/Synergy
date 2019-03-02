@@ -300,6 +300,15 @@ sub listener_specs {
       ]
     },
     {
+      name      => "reload-clients",
+      method    => "reload_clients",
+      exclusive => 1,
+      predicate => sub ($, $e) {
+        $e->was_targeted &&
+        $e->text =~ /^reload\s+clients\s*$/i;
+      },
+    },
+    {
       name      => "reload-shortcuts",
       method    => "reload_shortcuts",
       exclusive => 1,
@@ -675,6 +684,36 @@ has tasks => (
   },
   writer    => '_set_tasks',
 );
+
+has clients => (
+  lazy    => 1,
+  isa     => 'HashRef',
+  traits  => [ 'Hash' ],
+  handles => {
+    clients => 'values',
+    client_named => 'get',
+  },
+  clearer => '_clear_clients',
+  default => sub ($self) {
+    my $lpc = $self->lp_client_for_master;
+    my $clients_res = $lpc->get_clients;
+    return {} unless $clients_res->is_success;
+
+    return { map {; lc $_->{name} => $_ } $clients_res->payload_list };
+  }
+);
+
+sub reload_clients ($self, $event) {
+  $self->_clear_clients;
+  my $clients = $self->clients;
+
+  $event->mark_handled;
+  if (%$clients) {
+    $event->reply("Client list reloaded.");
+  } else {
+    $event->reply("There was a problem reloading the LiquidPlanner client list.  Now that list is empty.  Oops.");
+  }
+}
 
 sub _item_for_shortcut ($self, $thing, $shortcut) {
   my $getter = "_$thing\_by_shortcut";
@@ -1722,6 +1761,20 @@ sub _interpret_search ($self, $kvs, $from_user) {
     }
   }
 
+  # client:
+  if (my $client = delete $kvs->{client}) {
+    my @values = keys %$client;
+    if (@values > 1) {
+      $error{client} = "You can only limit by one client at a time.";
+    } else {
+      if (my $client = $self->client_named(lc $values[0])) {
+        $flag{client} = $client->{id};
+      } else {
+        $error{client} = "I couldn't find a client with the specified name.";
+      }
+    }
+  }
+
   # page:
   if (my $page = delete $kvs->{page}) {
     my @values = keys %$page;
@@ -1871,6 +1924,10 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
 
   if (defined $flag{project}) {
     push @filters, [ 'project_id', '=', $flag{project} ];
+  }
+
+  if (defined $flag{client}) {
+    push @filters, [ 'client_id', '=', $flag{client} ];
   }
 
   $flag{page} //= 1;
