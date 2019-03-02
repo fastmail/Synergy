@@ -79,7 +79,7 @@ sub is_business_hours {
   my $hours = $self->business_hours->{ $key->[ $dow ] };
 
   # No hours for today?  Not working.
-  return unless $hours;
+  return unless $hours && %$hours;
 
   # Start nagging
   my ($start_h, $start_m) = split /:/, $hours->{start}, 2;
