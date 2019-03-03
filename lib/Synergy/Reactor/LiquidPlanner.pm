@@ -202,6 +202,11 @@ my %KNOWN = (
   inbox     =>  [ \&_handle_inbox,
                   "inbox [PAGE-NUMBER]: list the tasks in your inbox",
                 ],
+  iteration =>  [ \&_handle_iteration,
+                  "iteration: show details of the current iteration",
+                  "iteration ±N: show the iteration N before or after this one",
+                  "iteration N: show the iteration numbered N",
+                ],
   last      =>  [ \&_handle_last   ],
   projects  =>  [ \&_handle_projects,
                   "projects: list all known project shortcuts",
@@ -3099,6 +3104,33 @@ sub _rototron ($self) {
   # TODO: indirection through rototron_reactor name on object
   return unless my $roto_reactor = $self->hub->reactor_named('rototron');
   return $roto_reactor->rototron;
+}
+
+sub _handle_iteration ($self, $event, $rest) {
+  my $lpc = $self->lp_client_for_master;
+  my $iteration
+    = ! length $rest            ? $lpc->current_iteration
+    : $rest =~ /^([-+][0-9]+)$/ ? $lpc->iteration_relative_to_current("$1")
+    : $rest =~ /^([0-9]+)$/     ? $lpc->iteration_by_number("$1")
+    : undef;
+
+  $event->mark_handled;
+
+  return $event->reply("Sorry, I couldn't find that iteration")
+    unless $iteration;
+
+  my $reply = sprintf "Iteration %s: %s to %s",
+      $iteration->{number},
+      $iteration->{start},
+      $iteration->{end};
+
+  return $event->reply(
+    $reply . $self->item_uri($iteration->{package}),
+    {
+      slack => "$reply\n",
+               $self->_slack_item_link_with_name($iteration->{package}),
+    }
+  );
 }
 
 sub damage_report ($self, $event) {

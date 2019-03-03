@@ -310,6 +310,34 @@ sub current_iteration ($self) {
   };
 }
 
+sub iteration_by_number ($self, $n) {
+  my $helper = LPC::IterationHelper->new({ lpc => $self });
+
+  my $iter    = $helper->iteration_by_number($n);
+  my $pkg_res = $helper->package_for_iteration_number($iter->{number});
+
+  return unless $pkg_res->is_success;
+
+  return {
+    %$iter,
+    package => $pkg_res->payload,
+  };
+}
+
+sub iteration_relative_to_current ($self, $delta_n) {
+  my $helper = LPC::IterationHelper->new({ lpc => $self });
+
+  my $iter    = $helper->iteration_relative_to_current($delta_n);
+  my $pkg_res = $helper->package_for_iteration_number($iter->{number});
+
+  return unless $pkg_res->is_success;
+
+  return {
+    %$iter,
+    package => $pkg_res->payload,
+  };
+}
+
 package LPC::Timer {
   use Moose;
   use namespace::autoclean;
