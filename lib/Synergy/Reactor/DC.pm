@@ -73,8 +73,24 @@ sub handle_dc($self, $event) {
         return 0;
       },
     },
-    on_finish => sub {
+    on_finish => sub ($pid, $exitcode) {
+      my $status = ( $exitcode >> 8 );
+
       chomp($resp);
+
+      if ($status) {
+        $event->reply("Sorry, dc exited unexpectedly? (EC: $exitcode, S: $status, OUTPUT: $resp)");
+
+        return;
+      } elsif ($exitcode) {
+        $event->reply("Sorry, dc terminated on signal $exitcode");
+
+        return;
+      } elsif (! $resp) {
+        $event->reply("<no output>");
+
+        return;
+      }
 
       if (split(/\n/, $resp) > 1) {
         $event->reply("```$resp```");
@@ -88,6 +104,17 @@ sub handle_dc($self, $event) {
   );
 
   $self->hub->loop->add($process);
+
+  my $timer = IO::Async::Timer::Countdown->new(
+    delay => 5,
+    on_expire => sub {
+      $process->is_running && $process->kill('KILL');
+    },
+  );
+
+  $timer->start;
+
+  $self->hub->loop->add($timer);
 
   return;
 }
