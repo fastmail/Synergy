@@ -3134,14 +3134,21 @@ sub _handle_iteration ($self, $event, $rest) {
 }
 
 sub damage_report ($self, $event) {
-  $event->text =~ /\A
-    \s*
-    ( damage \s+ )?
-    report
-    ( \s+ for \s+ (?<who> [a-z]+ ) )
-    \s*
-  \z/nix;
-  my $who_name = $+{who} // $event->from_user->username;
+  my $who_name;
+
+  if (
+    $event->text =~ /\A
+      \s*
+      ( damage \s+ )?
+      report
+      ( \s+ for \s+ (?<who> [a-z]+ ) )?
+      \s*
+    \z/nix
+  ) {
+    $who_name = $+{who};
+  }
+
+  $who_name //= $event->from_user->username;
 
   my $target = $self->resolve_name($who_name, $event->from_user);
 
