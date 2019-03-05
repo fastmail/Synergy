@@ -3127,7 +3127,7 @@ sub _handle_iteration ($self, $event, $rest) {
   return $event->reply(
     $reply . $self->item_uri($iteration->{package}),
     {
-      slack => "$reply\n",
+      slack => "$reply\n" .
                $self->_slack_item_link_with_name($iteration->{package}),
     }
   );
