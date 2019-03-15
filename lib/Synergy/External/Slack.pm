@@ -147,7 +147,7 @@ sub send_frame ($self, $frame) {
 
     # Also fail any pending futures for this frame.
     my $f = delete $self->pending_frames->{$frame_id};
-    $f->fail if $f;
+    $f->fail("timed out on connection to slack")  if $f;
   });
 
   $self->pending_timeouts->{$frame_id} = $timeout;
