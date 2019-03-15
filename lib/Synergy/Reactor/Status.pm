@@ -6,6 +6,7 @@ use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor', 'Synergy::Role::ProvidesUserStatus';
 
+use utf8;
 use experimental qw(signatures);
 use namespace::clean;
 use List::Util qw(first);
