@@ -19,6 +19,7 @@ use Synergy::Logger '$Logger';
 use List::Util qw(first shuffle all);
 use DateTime;
 use Defined::KV;
+use Try::Tiny;
 use utf8;
 
 has _users => (
@@ -53,6 +54,16 @@ sub state ($self) {
 
 sub master_users ($self) {
   return grep {; $_->is_master } $self->users;
+}
+
+sub master_user_string ($self, $conj = 'or') {
+  my @masters = map {; $_->username } $self->master_users;
+
+  return $masters[0] if @masters == 1;
+  return "$masters[0] $conj $masters[1]" if @masters == 2;
+
+  $masters[-1] = "$conj " . $masters[-1];
+  return join(', ', @masters);
 }
 
 sub user_by_channel_and_address ($self, $channel_name, $address) {
@@ -119,18 +130,6 @@ sub load_users_from_file ($self, $file) {
     Carp::confess("unknown filetype: $file");
   }
 
-  my $dbh = $self->hub->_state_dbh;
-  my $user_insert_sth = $dbh->prepare(join(q{ },
-    q{INSERT INTO users},
-    q{   (username, lp_id, is_master, is_virtual, is_deleted)},
-    q{VALUES (?,?,?,?,?)}
-  ));
-
-  my $identity_insert_sth = $dbh->prepare(join(q{ },
-    q{INSERT INTO user_identities (username, identity_name, identity_value)},
-    q{VALUES (?,?,?)}
-  ));
-
   for my $username (keys %$user_config) {
     if ($self->user_named($username)) {
       $Logger->log_debug([
@@ -148,21 +147,54 @@ sub load_users_from_file ($self, $file) {
       directory => $self,
     });
 
-    $self->_set_user($username, $user);
+    $self->register_user($user);
+  }
+}
 
-    # Save these for next time.
+# Save them in memory, and also insert them into the database.
+sub register_user ($self, $user) {
+  my $dbh = $self->hub->_state_dbh;
+  state $user_insert_sth = $dbh->prepare(join(q{ },
+    q{INSERT INTO users},
+    q{   (username, lp_id, is_master, is_virtual, is_deleted)},
+    q{VALUES (?,?,?,?,?)}
+  ));
+
+  state $identity_insert_sth = $dbh->prepare(join(q{ },
+    q{INSERT INTO user_identities (username, identity_name, identity_value)},
+    q{VALUES (?,?,?)}
+  ));
+
+  $Logger->log(['registering user %s', $user->username]);
+
+  # Save these for next time.
+  my $ok = 0;
+  $dbh->begin_work;
+  try {
     $user_insert_sth->execute(
-      $username,
-      $uconfig->@{qw(lp_id is_master is_virtual deleted)}
+      $user->username,
+      $user->lp_id,
+      $user->is_master,
+      $user->is_virtual,
+      $user->is_deleted,
     );
 
-    next unless $uconfig->{identities};
-
-    for my $identity_name (keys $uconfig->{identities}->%*) {
-      my $identity_value = $uconfig->{identities}{$identity_name};
-      $identity_insert_sth->execute($username, $identity_name, $identity_value);
+    for my $pair ($user->identity_pairs) {
+      $identity_insert_sth->execute($user->username, $pair->[0], $pair->[1]);
     }
-  }
+
+    $self->_set_user($user->username, $user);
+    $dbh->commit;
+    $ok = 1;
+  } catch {
+    my $err = $_;
+    $dbh->rollback;
+
+    $Logger->log(["Error while registering user: %s", $err]);
+    $ok = 0;
+  };
+
+  return $ok;
 }
 
 sub reload_user ($self, $username, $data) {
