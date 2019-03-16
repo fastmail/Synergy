@@ -20,7 +20,7 @@ has prefix => (
 );
 
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
-  my $to_address = $user->identities->{ $self->name };
+  my $to_address = $user->identity_for($self->name);
 
   unless ($to_address) {
     confess(
