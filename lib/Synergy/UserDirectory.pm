@@ -18,6 +18,7 @@ use Synergy::Util qw(known_alphabets);
 use Synergy::Logger '$Logger';
 use List::Util qw(first shuffle all);
 use DateTime;
+use Defined::KV;
 use utf8;
 
 has _users => (
@@ -67,6 +68,47 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
   return undef;
 }
 
+sub load_users_from_database ($self) {
+  my $dbh = $self->hub->_state_dbh;
+  my %users;
+
+  my $user_sth = $dbh->prepare('SELECT * FROM users');
+  $user_sth->execute;
+
+  while (my $row = $user_sth->fetchrow_hashref) {
+    my $username = $row->{username};
+    $users{$username} = Synergy::User->new({
+      directory => $self,
+      username  => $username,
+      defined_kv(is_master  => $row->{is_master}),
+      defined_kv(is_virtual => $row->{is_virtual}),
+      defined_kv(deleted    => $row->{is_deleted}),
+      defined_kv(lp_id      => $row->{lp_id}),
+    });
+  }
+
+  my $identity_sth = $dbh->prepare('SELECT * FROM user_identities');
+  $identity_sth->execute;
+
+  while (my $row = $identity_sth->fetchrow_hashref) {
+    my $username = $row->{username};
+    my $user = $users{$username};
+
+    unless ($user) {
+      $Logger->log(["Found identity for %s, but no matching user!", $username]);
+      next;
+    }
+
+    $user->add_identity($row->{identity_name}, $row->{identity_value});
+  }
+
+  $self->_set_users(\%users);
+  return \%users;
+}
+
+# The source of truth will now be the sqlite database. But if we have a user
+# file anyway, we'll update the database (so we'll be right next time) and
+# load this user directly.
 sub load_users_from_file ($self, $file) {
   my $user_config;
   if ($file =~ /\.ya?ml\z/) {
@@ -77,19 +119,50 @@ sub load_users_from_file ($self, $file) {
     Carp::confess("unknown filetype: $file");
   }
 
-  my %users;
+  my $dbh = $self->hub->_state_dbh;
+  my $user_insert_sth = $dbh->prepare(join(q{ },
+    q{INSERT INTO users},
+    q{   (username, lp_id, is_master, is_virtual, is_deleted)},
+    q{VALUES (?,?,?,?,?)}
+  ));
+
+  my $identity_insert_sth = $dbh->prepare(join(q{ },
+    q{INSERT INTO user_identities (username, identity_name, identity_value)},
+    q{VALUES (?,?,?)}
+  ));
 
   for my $username (keys %$user_config) {
-    $users{$username} = Synergy::User->new({
-      $user_config->{$username}->%*,
+    if ($self->user_named($username)) {
+      $Logger->log_debug([
+        "Tried to load user %s from file, but already existed in user db",
+        $username,
+      ]);
+      next;
+    }
+
+    my $uconfig = $user_config->{$username};
+
+    my $user = Synergy::User->new({
+      $uconfig->%*,
       username => $username,
       directory => $self,
     });
+
+    $self->_set_user($username, $user);
+
+    # Save these for next time.
+    $user_insert_sth->execute(
+      $username,
+      $uconfig->@{qw(lp_id is_master is_virtual deleted)}
+    );
+
+    next unless $uconfig->{identities};
+
+    for my $identity_name (keys $uconfig->{identities}->%*) {
+      my $identity_value = $uconfig->{identities}{$identity_name};
+      $identity_insert_sth->execute($username, $identity_name, $identity_value);
+    }
   }
-
-  $self->_set_users(\%users);
-
-  return \%users;
 }
 
 sub reload_user ($self, $username, $data) {
