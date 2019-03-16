@@ -124,7 +124,15 @@ sub tasks_for_expando ($self, $name) {
 has identities => (
   is => 'ro',
   isa => 'HashRef',
+  traits => [ 'Hash' ],
   default => sub {  {}  },
+  handles => {
+    add_identity        => 'set',
+    identity_for        => 'get',
+    has_identity_for    => 'exists',
+    delete_identity_for => 'delete',
+    identity_pairs      => 'kv',
+  },
 );
 
 has phone       => (is => 'ro', isa => 'Str', predicate => 'has_phone');

@@ -18,6 +18,8 @@ use Synergy::Util qw(known_alphabets);
 use Synergy::Logger '$Logger';
 use List::Util qw(first shuffle all);
 use DateTime;
+use Defined::KV;
+use Try::Tiny;
 use utf8;
 
 has _users => (
@@ -54,6 +56,16 @@ sub master_users ($self) {
   return grep {; $_->is_master } $self->users;
 }
 
+sub master_user_string ($self, $conj = 'or') {
+  my @masters = map {; $_->username } $self->master_users;
+
+  return $masters[0] if @masters == 1;
+  return "$masters[0] $conj $masters[1]" if @masters == 2;
+
+  $masters[-1] = "$conj " . $masters[-1];
+  return join(', ', @masters);
+}
+
 sub user_by_channel_and_address ($self, $channel_name, $address) {
   $channel_name = $channel_name->name
     if blessed $channel_name && $channel_name->does('Synergy::Role::Channel');
@@ -67,6 +79,47 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
   return undef;
 }
 
+sub load_users_from_database ($self) {
+  my $dbh = $self->hub->_state_dbh;
+  my %users;
+
+  my $user_sth = $dbh->prepare('SELECT * FROM users');
+  $user_sth->execute;
+
+  while (my $row = $user_sth->fetchrow_hashref) {
+    my $username = $row->{username};
+    $users{$username} = Synergy::User->new({
+      directory => $self,
+      username  => $username,
+      defined_kv(is_master  => $row->{is_master}),
+      defined_kv(is_virtual => $row->{is_virtual}),
+      defined_kv(deleted    => $row->{is_deleted}),
+      defined_kv(lp_id      => $row->{lp_id}),
+    });
+  }
+
+  my $identity_sth = $dbh->prepare('SELECT * FROM user_identities');
+  $identity_sth->execute;
+
+  while (my $row = $identity_sth->fetchrow_hashref) {
+    my $username = $row->{username};
+    my $user = $users{$username};
+
+    unless ($user) {
+      $Logger->log(["Found identity for %s, but no matching user!", $username]);
+      next;
+    }
+
+    $user->add_identity($row->{identity_name}, $row->{identity_value});
+  }
+
+  $self->_set_users(\%users);
+  return \%users;
+}
+
+# The source of truth will now be the sqlite database. But if we have a user
+# file anyway, we'll update the database (so we'll be right next time) and
+# load this user directly.
 sub load_users_from_file ($self, $file) {
   my $user_config;
   if ($file =~ /\.ya?ml\z/) {
@@ -77,19 +130,71 @@ sub load_users_from_file ($self, $file) {
     Carp::confess("unknown filetype: $file");
   }
 
-  my %users;
-
   for my $username (keys %$user_config) {
-    $users{$username} = Synergy::User->new({
-      $user_config->{$username}->%*,
+    if ($self->user_named($username)) {
+      $Logger->log_debug([
+        "Tried to load user %s from file, but already existed in user db",
+        $username,
+      ]);
+      next;
+    }
+
+    my $uconfig = $user_config->{$username};
+
+    my $user = Synergy::User->new({
+      $uconfig->%*,
       username => $username,
       directory => $self,
     });
+
+    $self->register_user($user);
   }
+}
 
-  $self->_set_users(\%users);
+# Save them in memory, and also insert them into the database.
+sub register_user ($self, $user) {
+  my $dbh = $self->hub->_state_dbh;
+  state $user_insert_sth = $dbh->prepare(join(q{ },
+    q{INSERT INTO users},
+    q{   (username, lp_id, is_master, is_virtual, is_deleted)},
+    q{VALUES (?,?,?,?,?)}
+  ));
 
-  return \%users;
+  state $identity_insert_sth = $dbh->prepare(join(q{ },
+    q{INSERT INTO user_identities (username, identity_name, identity_value)},
+    q{VALUES (?,?,?)}
+  ));
+
+  $Logger->log(['registering user %s', $user->username]);
+
+  # Save these for next time.
+  my $ok = 0;
+  $dbh->begin_work;
+  try {
+    $user_insert_sth->execute(
+      $user->username,
+      $user->lp_id,
+      $user->is_master,
+      $user->is_virtual,
+      $user->is_deleted,
+    );
+
+    for my $pair ($user->identity_pairs) {
+      $identity_insert_sth->execute($user->username, $pair->[0], $pair->[1]);
+    }
+
+    $self->_set_user($user->username, $user);
+    $dbh->commit;
+    $ok = 1;
+  } catch {
+    my $err = $_;
+    $dbh->rollback;
+
+    $Logger->log(["Error while registering user: %s", $err]);
+    $ok = 0;
+  };
+
+  return $ok;
 }
 
 sub reload_user ($self, $username, $data) {

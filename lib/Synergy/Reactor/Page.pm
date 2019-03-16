@@ -57,7 +57,7 @@ sub handle_page ($self, $event) {
 
   my $paged = 0;
 
-  if ($user->identities->{ $self->page_channel_name } || $user->has_phone) {
+  if ($user->has_identity_for($self->page_channel_name) || $user->has_phone) {
 
     my $page_channel = $self->hub->channel_named($self->page_channel_name);
 
@@ -69,7 +69,7 @@ sub handle_page ($self, $event) {
     $paged = 1;
   }
 
-  if ($user->identities->{ $self->pushover_channel_name }) {
+  if ($user->has_identity_for($self->pushover_channel_name)) {
     my $page_channel = $self->hub->channel_named($self->pushover_channel_name);
 
     my $from = $event->from_user ? $event->from_user->username

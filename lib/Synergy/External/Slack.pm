@@ -328,7 +328,7 @@ sub username ($self, $id) {
 }
 
 sub dm_channel_for_user ($self, $user, $channel) {
-  my $identity = $user->identities->{$channel->name};
+  my $identity = $user->identity_for($channel->name);
   unless ($identity) {
     $Logger->log([
       "No known identity for %s for channel %s",

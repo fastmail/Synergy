@@ -65,6 +65,28 @@ has _state_dbh => (
       );
     });
 
+    $dbh->do(q{
+      CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        lp_id TEXT,
+        is_master INTEGER DEFAULT 0,
+        is_virtual INTEGER DEFAULT 0,
+        is_deleted INTEGER DEFAULT 0
+      );
+    });
+
+    $dbh->do(q{
+      CREATE TABLE IF NOT EXISTS user_identities (
+        id INTEGER PRIMARY KEY,
+        username TEXT NOT NULL,
+        identity_name TEXT NOT NULL,
+        identity_value TEXT NOT NULL,
+        FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
+        CONSTRAINT constraint_username_identity UNIQUE (username, identity_name),
+        UNIQUE (identity_name, identity_value)
+      );
+    });
+
     return $dbh;
   },
 );
@@ -301,10 +323,6 @@ sub synergize {
   #   state_directory: ...
   my $directory = Synergy::UserDirectory->new({ name => '_user_directory' });
 
-  if ($config->{user_directory}) {
-    $directory->load_users_from_file($config->{user_directory});
-  }
-
   my $hub = $class->new({
     user_directory  => $directory,
     defined_kv(time_zone_names => $config->{time_zone_names}),
@@ -314,6 +332,11 @@ sub synergize {
   });
 
   $directory->register_with_hub($hub);
+  $directory->load_users_from_database;
+
+  if ($config->{user_directory}) {
+    $directory->load_users_from_file($config->{user_directory});
+  }
 
   for my $thing (qw( channel reactor )) {
     my $plural    = "${thing}s";

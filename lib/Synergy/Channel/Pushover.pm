@@ -29,7 +29,7 @@ sub http_post {
 }
 
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
-  unless ($user->identities->{ $self->name }) {
+  unless ($user->has_identity_for($self->name)) {
     $Logger->log([
       "can't send message, no api key for %s",
       $user->username,
@@ -37,7 +37,7 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
     return;
   }
 
-  my $where = $user->identities->{ $self->name };
+  my $where = $user->identity_for($self->name);
   my $who = $user->username;
 
   $Logger->log([ "sending pushover <$text> to $who" ]);
