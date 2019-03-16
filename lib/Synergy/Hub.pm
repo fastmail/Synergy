@@ -46,6 +46,7 @@ has state_dbfile => (
 has _state_dbh => (
   is  => 'ro',
   init_arg => undef,
+  lazy => 1,
   default  => sub ($self, @) {
     my $dbf = $self->state_dbfile;
 
@@ -329,6 +330,7 @@ sub synergize {
     defined_kv(server_port     => $config->{server_port}),
     defined_kv(tls_cert_file   => $config->{tls_cert_file}),
     defined_kv(tls_key_file    => $config->{tls_key_file}),
+    defined_kv(state_dbfile    => $config->{state_dbfile}),
   });
 
   $directory->register_with_hub($hub);

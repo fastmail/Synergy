@@ -8,9 +8,11 @@ use utf8;
 use Test::More;
 use Test::Deep;
 
+use Path::Tiny ();
 use Synergy::Logger::Test '$Logger';
 use Synergy::Hub;
 
+my $tmpfile = Path::Tiny->tempfile;
 my $synergy = Synergy::Hub->synergize(
   {
     user_directory => "t/data/users-lp.yaml",
@@ -31,7 +33,8 @@ my $synergy = Synergy::Hub->synergize(
 
         primary_nag_channel_name => "test-channel",
       },
-    }
+    },
+    state_dbfile => "$tmpfile",
   }
 );
 

@@ -12,9 +12,12 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Path::Tiny ();
 use Synergy::Hub;
 
 my $PAGE = "Hello\n\nfriend.";
+
+my $tmpfile = Path::Tiny->tempfile;
 
 # Initialize Synergy.
 my $synergy = Synergy::Hub->synergize(
@@ -43,7 +46,8 @@ my $synergy = Synergy::Hub->synergize(
         page_channel_name => 'test-2',
         pushover_channel_name => 'test-3',
       },
-    }
+    },
+    state_dbfile => "$tmpfile",
   }
 );
 
