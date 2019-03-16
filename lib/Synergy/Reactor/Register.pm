@@ -36,7 +36,7 @@ sub handle_register_me ($self, $event) {
   $username = lc $username;
 
   return $event->error_reply("Sorry, usernames must be all letters")
-    if $username =~ /[^A-Za-z]/i;
+    if $username =~ /[^a-z]/;
 
   die "crazy case: event has no from address??" unless $event->from_address;
 
