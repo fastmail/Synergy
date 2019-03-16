@@ -81,8 +81,9 @@ has _state_dbh => (
         username TEXT NOT NULL,
         identity_name TEXT NOT NULL,
         identity_value TEXT NOT NULL,
-        FOREIGN KEY (username) REFERENCES users(username),
-        CONSTRAINT constraint_username_identity UNIQUE (username, identity_name)
+        FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
+        CONSTRAINT constraint_username_identity UNIQUE (username, identity_name),
+        UNIQUE (identity_name, identity_value)
       );
     });
 
