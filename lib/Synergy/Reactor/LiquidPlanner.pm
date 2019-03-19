@@ -2004,7 +2004,7 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   }
 
   $has_strong_check = 1
-    if ($flag{project})
+    if ($flag{project} || $flag{in})
     || ($flag{debug} || $flag{force})
     || ($flag{type} && $flag{type} ne 'task')
     || ($flag{phase} && (defined $flag{done} && ! $flag{done})
