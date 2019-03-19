@@ -65,6 +65,16 @@ has activity_id => (
   isa => 'Int',
 );
 
+has triage_channel_name => (
+  is  => 'ro',
+  isa => 'Str',
+);
+
+has triage_address => (
+  is  => 'ro',
+  isa => 'Str',
+);
+
 my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
 
 sub _lp_base_uri ($self) {
@@ -2375,33 +2385,41 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
 
   # If the task is assigned to the triage user, inform them.
   # -- rjbs, 2019-02-28
-  if (my $rototron = $self->_rototron) {
-    my $roto_reactor = $self->hub->reactor_named('rototron');
+  my $triage_user = $self->hub->user_directory->user_named('triage');
+  if ($triage_user && $triage_user->has_lp_id) {
+    if (grep {; $_->{person_id} eq $triage_user->lp_id } @{ $res->payload->{assignments} }) {
+      my $text = sprintf
+        "$TRIAGE_EMOJI New task created for triage: %s (%s)",
+        $res->payload->{name},
+        $self->item_uri($res->payload->{id});
 
-    my $triage_user = $self->hub->user_directory->user_named('triage');
+      my $alt = {
+        slack => sprintf "$TRIAGE_EMOJI *New task created for triage:* %s",
+          $self->_slack_item_link_with_name($res->payload)
+      };
 
-    if ($triage_user->has_lp_id) {
-      if (grep {; $_->{person_id} eq $triage_user->lp_id } @{ $res->payload->{assignments} }) {
-        my $channel = $self->hub->channel_named($self->primary_nag_channel_name);
-        for my $officer ($roto_reactor->_current_triage_officers) {
-          $channel->send_message_to_user(
-            $officer,
-            sprintf(
-              "$TRIAGE_EMOJI New task created for triage: %s (%s)",
-              $res->payload->{name},
-              $self->item_uri($res->payload->{id})
-            ),
-            {
-              slack => sprintf "$TRIAGE_EMOJI %s",
-                $self->_slack_item_link_with_name($res->payload)
-            }
-          );
-        }
-      }
+      $self->_inform_triage($text, $alt);
     }
   }
 
   return $res->payload;
+}
+
+sub _inform_triage ($self, $text, $alt = {}) {
+  return unless $self->triage_channel_name;
+  return unless my $channel = $self->hub->channel_named($self->triage_channel_name);
+
+  if (my $rototron = $self->_rototron) {
+    my $roto_reactor = $self->hub->reactor_named('rototron');
+
+    for my $officer ($roto_reactor->_current_triage_officers) {
+      $channel->send_message_to_user($officer, $text, $alt);
+    }
+  }
+
+  if ($self->triage_channel_name && $self->triage_address) {
+    $channel->send_message($self->triage_address, $text, $alt);
+  }
 }
 
 sub lp_timer_for_user ($self, $user) {
