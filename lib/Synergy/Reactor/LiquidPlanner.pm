@@ -1649,6 +1649,10 @@ sub _parse_search ($self, $text) {
     u => 'user',
   );
 
+  my %flag_flatten = (
+    map {; $_ => 1 } qw(done onhold scheduled)
+  );
+
   my $last = q{};
   TOKEN: while (length $text) {
     $text =~ s/^\s+//;
@@ -1683,6 +1687,9 @@ sub _parse_search ($self, $text) {
     if ($text =~ s/^($ident_re):([0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
       my ($k, $v) = ($1, $2);
       $k = $flag_alias{$k} if $flag_alias{$k};
+
+      $v = fc $v if $flag_flatten{$k};
+
       $kvs{$k}{$v}++;
       next TOKEN;
     }
