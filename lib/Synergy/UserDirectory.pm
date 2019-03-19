@@ -16,7 +16,7 @@ use Path::Tiny;
 use Synergy::User;
 use Synergy::Util qw(known_alphabets read_config_file);
 use Synergy::Logger '$Logger';
-use List::Util qw(first shuffle all);
+use List::Util qw(first shuffle all uniq);
 use DateTime;
 use Defined::KV;
 use Try::Tiny;
@@ -315,6 +315,23 @@ __PACKAGE__->add_preference(
     my @names = map  {; lc $_    }
                 grep { length $_ }
                 split /\s*,\s*/, $value;
+
+    my $mode = $names[0] eq '+' ? 'add'
+             : $names[0] eq '-' ? 'remove'
+             :                    'set';
+
+    shift @names if $mode ne 'set';
+
+    unless (@names) {
+      return (undef, "no nicknames provided");
+    }
+
+    if ($names[0] eq 'add') {
+      @names = uniq(@names, $event->from_user->nicknames);
+    } elsif ($names[0] eq 'remove') {
+      my %remove = map {; $_ => 1 } @names;
+      @names = grep {; ! $remove{$_} } $event->from_user->nickname;
+    }
 
     unless (all { /^[a-z0-9]+$/ } @names) {
       return (undef, "nicknames must be all ascii characters with no spaces");
