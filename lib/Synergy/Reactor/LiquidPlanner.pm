@@ -3144,10 +3144,8 @@ sub _handle_iteration ($self, $event, $rest) {
   );
 }
 
-sub legacy_lp_report ($self, $who) {
-  return unless $who->lp_id;
-
-  my $lp_id = $who->lp_id;
+sub container_report ($self, $who) {
+  return unless my $lp_id = $who->lp_id;
 
   my $rototron = $self->_rototron;
   my $user_is_triage = do {
@@ -3235,6 +3233,17 @@ sub legacy_lp_report ($self, $who) {
     push @summaries, $summary;
   }
 
+  my $text = join qq{\n}, @summaries;
+
+  return Future->done([ $text, { slack => $text } ]);
+}
+
+sub iteration_report ($self, $who) {
+  return unless my $lp_id = $who->lp_id;
+
+  my $lpc = $self->lp_client_for_master;
+  my @summaries;
+
   my $pkg_summary   = $self->_build_iteration_summary($lpc->current_iteration, $who);
   my $slack_summary = join qq{\n},
                       @summaries,
@@ -3242,12 +3251,12 @@ sub legacy_lp_report ($self, $who) {
 
   my $reply = join qq{\n}, @summaries;
 
-  return [
+  return Future->done([
     $reply,
     {
       slack => $slack_summary,
     },
-  ];
+  ]);
 }
 
 sub reload_shortcuts ($self, $event) {
