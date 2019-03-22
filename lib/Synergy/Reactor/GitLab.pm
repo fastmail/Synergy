@@ -216,13 +216,6 @@ sub listener_specs {
       }
     },
     {
-      name => 'mr-report',
-      method => 'handle_mr_report',
-      predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /^\s*mr report\s*\z/i;
-      }
-    },
-    {
       name => 'mention-commit',
       method => 'handle_commit',
       predicate => sub ($self, $e) {
@@ -685,22 +678,6 @@ sub handle_commit ($self, $event) {
     return unless $event->was_targeted;
 
     $event->reply("I couldn't find a commit with that description.");
-  })->retain;
-}
-
-sub handle_mr_report ($self, $event) {
-  $event->mark_handled;
-
-  my $user_id = $self->get_user_preference($event->from_user, 'user-id');
-
-  unless (defined $user_id) {
-    return $event->reply("I can't check your MR status, you don't have an user-id preference set!");
-  }
-
-  my $report = $self->mr_report($event->from_user);
-
-  $report->on_done(sub ($pair) {
-    $event->reply(@$pair);
   })->retain;
 }
 

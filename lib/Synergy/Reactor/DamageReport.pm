@@ -13,6 +13,7 @@ sub listener_specs {
   return {
     name      => "report",
     method    => "report",
+    exclusive => 1,
     predicate => sub ($, $e) {
       $e->was_targeted &&
       $e->text =~ /^\s*([a-z]+\s+)?report(\s+for\s+([a-z]+))?\s*$/in;
@@ -105,7 +106,7 @@ sub report ($self, $event) {
   my @hunks = map {; Future->unwrap($_) } @results;
 
   unless (@hunks) {
-    return $event->reply("I have nothing at all to report.  Woah!");
+    return $event->reply("I have nothing at all to report!");
   }
 
   # This \u is bogus, we should allow canonical name to be in the report
