@@ -3260,8 +3260,8 @@ sub project_report ($self, $who) {
       [ item_type => '='  => 'Project'  ],
       [ owner_id  => '='  => $lp_id     ],
       [ is_done   => is   => 'false'    ],
-      [ "custom_field:'Project Phase'" => 'is_set' ],
       [ parent_id => '='  => $self->project_portfolio_id ],
+      [ "custom_field:'Project Phase'" => 'is_set' ],
     ],
   });
 
@@ -3283,7 +3283,11 @@ sub project_report ($self, $who) {
     # Nothing to do here, generally..? -- rjbs, 2019-03-22
     next if $phase eq 'Desired' or $phase eq 'Waiting' or $phase eq 'Circling';
 
-    push @lines, $self->_slack_item_link_with_name($project);
+    push @lines, sprintf '%s %s • *%s*: %s',
+      ($project->{custom_field_values}{Emoji} // "\N{FILE FOLDER}"),
+      $self->_slack_item_link($project),
+      $phase,
+      ($project->{name} =~ s/^P:\s+//r);
   }
 
   return unless @lines;
