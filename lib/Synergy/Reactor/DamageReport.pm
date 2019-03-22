@@ -86,8 +86,8 @@ sub damage_report ($self, $event) {
     return $event->reply("I have nothing at all to report.  Woah!");
   }
 
-  my $text  = q{};
-  my $slack = q{};
+  my $text  = q{Damage report for } . $who->username . q{:};
+  my $slack = qq{*$text*};
 
   while (my $hunk = shift @hunks) {
     $text   .= $hunk->[0];

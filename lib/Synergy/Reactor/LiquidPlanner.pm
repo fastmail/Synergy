@@ -3173,7 +3173,7 @@ sub legacy_lp_report ($self, $who) {
     [ urgent => "🔥" => $self->urgent_package_id  ],
   );
 
-  my @summaries = ("Damage report for " . $who->username . ":");
+  my @summaries;
 
   my $lpc = $self->lp_client_for_master;
 
