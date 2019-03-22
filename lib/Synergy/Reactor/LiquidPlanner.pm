@@ -333,20 +333,6 @@ sub listener_specs {
       },
     },
     {
-      name      => "damage-report",
-      method    => "damage_report",
-      predicate => sub ($, $e) {
-        $e->was_targeted &&
-        $e->text =~ /^\s*(damage\s+)?report(\s+for\s+([a-z]+))?\s*$/in;
-      },
-      help_entries => [
-        {
-          title => "report",
-          text => "report [for USER]: show the user's current LiquidPlanner workload",
-        }
-      ],
-    },
-    {
       name      => "lp-mention-in-passing",
       method    => "provide_lp_link",
       predicate => sub { 1 },
@@ -3158,40 +3144,19 @@ sub _handle_iteration ($self, $event, $rest) {
   );
 }
 
-sub damage_report ($self, $event) {
-  my $who_name;
+sub legacy_lp_report ($self, $who) {
+  return unless $who->lp_id;
 
-  if (
-    $event->text =~ /\A
-      \s*
-      ( damage \s+ )?
-      report
-      ( \s+ for \s+ (?<who> [a-z]+ ) )?
-      \s*
-    \z/nix
-  ) {
-    $who_name = $+{who};
-  }
-
-  $who_name //= $event->from_user->username;
-
-  my $target = $self->resolve_name($who_name, $event->from_user);
-
-  $event->mark_handled;
-
-  return $event->error_reply("Sorry, I don't know who $who_name is, at least in LiquidPlanner.")
-    unless $target && $self->auth_header_for($target);
-
-  my $lp_id = $target->lp_id;
+  my $lp_id = $who->lp_id;
 
   my $rototron = $self->_rototron;
   my $user_is_triage = do {
     my $duties = $rototron->duties_on(
-      DateTime->now(time_zone => $target->time_zone )
+      DateTime->now(time_zone => $who->time_zone )
     );
 
     !! (grep {; ($_->{keywords}{"rotor:triage_us"} || $_->{keywords}{"rotor:triage_au"})
-         && grep {; 0 == index $_->{email}, ($target->username . q{@}) } values $_->{participants}->%*
+         && grep {; 0 == index $_->{email}, ($who->username . q{@}) } values $_->{participants}->%*
        } @$duties);
   };
 
@@ -3208,19 +3173,7 @@ sub damage_report ($self, $event) {
     [ urgent => "🔥" => $self->urgent_package_id  ],
   );
 
-  if ($event->is_public) {
-    $event->reply(
-      "I'm generating that report now, and I'll send it to you privately in just a moment.",
-      { slack_reaction => { event => $event, reaction => 'hourglass_flowing_sand' } },
-    );
-  } else {
-    $event->reply(
-      "I'm generating that report now, it'll be just a moment",
-      { slack_reaction => { event => $event, reaction => 'hourglass_flowing_sand' } },
-    );
-  }
-
-  my @summaries = ("Damage report for $who_name:");
+  my @summaries = ("Damage report for " . $who->username . ":");
 
   my $lpc = $self->lp_client_for_master;
 
@@ -3282,24 +3235,19 @@ sub damage_report ($self, $event) {
     push @summaries, $summary;
   }
 
-  my $pkg_summary   = $self->_build_iteration_summary($lpc->current_iteration, $target);
+  my $pkg_summary   = $self->_build_iteration_summary($lpc->current_iteration, $who);
   my $slack_summary = join qq{\n},
                       @summaries,
-                      $self->_slack_pkg_summary($pkg_summary, $target->lp_id);
+                      $self->_slack_pkg_summary($pkg_summary, $who->lp_id);
 
   my $reply = join qq{\n}, @summaries;
 
-  $event->private_reply(
-    "Report sent!",
-    { slack_reaction => { event => $event, reaction => '-hourglass_flowing_sand' } },
-  );
-
-  return $event->reply(
+  return [
     $reply,
     {
       slack => $slack_summary,
     },
-  );
+  ];
 }
 
 sub reload_shortcuts ($self, $event) {
