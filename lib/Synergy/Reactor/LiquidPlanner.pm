@@ -449,6 +449,7 @@ sub provide_lp_link ($self, $event) {
                : $item->{type} eq 'Package' ? "📦"
                : $item->{type} eq 'Project' ? "📁"
                : $item->{type} eq 'Folder'  ? "🗂"
+               : $item->{type} eq 'Inbox'   ? "📫"
                :                              confess("unreachable");
 
       my $uri = $self->item_uri($item_id);
@@ -1552,6 +1553,7 @@ sub _send_task_list ($self, $event, $tasks, $arg = {}) {
              : $task->{type} eq 'Package' ? "📦"
              : $task->{type} eq 'Project' ? "📁"
              : $task->{type} eq 'Folder'  ? "🗂"
+             : $task->{type} eq 'Inbox'   ? "📫"
              :                              "❓";
 
     $slack .= "$icon "
@@ -3363,6 +3365,7 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
       ( $c->{type} eq 'Package' ? "\N{PACKAGE}"
       : $c->{type} eq 'Project' ? "\N{FILE FOLDER}"
       : $c->{type} eq 'Folder'  ? "\N{CARD INDEX DIVIDERS}"
+      : $c->{type} eq 'Inbox'   ? "📫"
       :                           "❓"),
 
       $self->_slack_item_link_with_name($c),
