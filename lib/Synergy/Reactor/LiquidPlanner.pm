@@ -113,6 +113,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     phase     => 1,
     staleness => 0,
     due       => 1,
+    emoji     => 1,
     # stuff we could make optional later:
     #   name
     #   type icon
@@ -135,6 +136,10 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   if ($arg{phase} && (my $pstatus = $item->{custom_field_values}{"Project Phase"})) {
     $title =~ s/^(P:\s+)//n;
     $title = "*$pstatus:* $title";
+  }
+
+  if ($arg{emoji} && $item->{custom_field_values}{Emoji}) {
+    $title = "$item->{custom_field_values}{Emoji} $title";
   }
 
   my $text = sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
