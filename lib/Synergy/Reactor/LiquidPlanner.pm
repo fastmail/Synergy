@@ -132,6 +132,11 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
 
   my $urgent = $self->urgent_package_id;
 
+  if ($arg{phase} && (my $pstatus = $item->{custom_field_values}{"Project Phase"})) {
+    $title =~ s/^(P:\s+)//n;
+    $title = "*$pstatus:* $title";
+  }
+
   my $text = sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
     $self->item_uri($item->{id}),
     $item->{id},
@@ -163,11 +168,6 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
 
     $text .= " \N{EN DASH} due $str";
     $text .= " \N{CROSS MARK}" if $item->{promise_by} lt $now->ymd;
-  }
-
-  if ($arg{phase}) {
-    my $pstatus  = $item->{custom_field_values}{"Project Phase"};
-    $text .= " \N{EN DASH} \_$pstatus\_" if $pstatus;
   }
 
   if ($arg{staleness}) {
