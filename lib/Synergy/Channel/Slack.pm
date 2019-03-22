@@ -309,6 +309,12 @@ sub maybe_respond_to_edit ($self, $slack_event) {
     return;
   }
 
+  if ($slack_event->{message}{attachments}
+    && ! $slack_event->{previous_message}{attachments}) {
+    $Logger->log("ignoring edit of message that added attachments");
+    return;
+  }
+
   # Massage the slack event a bit, then reinject it.
   my $message = $slack_event->{message};
   $message->{channel} = $slack_event->{channel};
