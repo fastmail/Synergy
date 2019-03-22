@@ -131,26 +131,27 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
   }
 
-  my $urgent = $self->urgent_package_id;
+  my $is_urgent = sub () {
+    my $urgent = $self->urgent_package_id;
+    scalar grep {; $_ == $urgent }
+      ($item->{parent_ids}->@*, $item->{package_ids}->@*)
+  };
 
   if ($arg{phase} && (my $pstatus = $item->{custom_field_values}{"Project Phase"})) {
     $title =~ s/^(P:\s+)//n;
     $title = "*$pstatus:* $title";
   }
 
-  if ($arg{emoji} && $item->{custom_field_values}{Emoji}) {
-    $title = "$item->{custom_field_values}{Emoji} $title";
-  }
+  my $emoji   = $item->{custom_field_values}{Emoji};
+  my $bullet  = $item->{is_done}      ? "✓"
+              : $is_urgent->()        ? "\N{FIRE}"
+              : $arg{emoji} && $emoji ? $emoji
+              :                         "•";
 
   my $text = sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
     $self->item_uri($item->{id}),
     $item->{id},
-    ( $item->{is_done}
-      ? "✓"
-      : (grep {; $_ == $urgent }
-          ($item->{parent_ids}->@*, $item->{package_ids}->@*))  ? "\N{FIRE}"
-                                                                : "•"
-    ),
+    $bullet,
     $title;
 
   if ($arg{due} && $item->{promise_by}) {
