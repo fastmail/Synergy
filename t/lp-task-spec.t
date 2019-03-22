@@ -31,6 +31,8 @@ my $synergy = Synergy::Hub->synergize(
         inbox_package_id => 3,
         recurring_package_id => 4,
 
+        project_portfolio_id => 5,
+
         primary_nag_channel_name => "test-channel",
       },
     },

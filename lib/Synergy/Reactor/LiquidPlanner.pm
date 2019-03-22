@@ -26,6 +26,7 @@ use Synergy::Util qw(
 );
 use DateTime;
 use DateTime::Format::ISO8601;
+
 use utf8;
 
 my $JSON = JSON->new->utf8;
@@ -177,7 +178,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   return $text;
 }
 
-has [ qw( inbox_package_id urgent_package_id recurring_package_id ) ] => (
+has [ qw( inbox_package_id urgent_package_id project_portfolio_id recurring_package_id ) ] => (
   is  => 'ro',
   isa => 'Int',
   required => 1,
@@ -3173,7 +3174,7 @@ sub container_report ($self, $who) {
 
   my @summaries;
 
-  my $lpc = $self->lp_client_for_master;
+  my $lpc = $self->lp_client_for_user($who);
 
   CHK: for my $check (@to_check) {
     my ($label, $icon, $package_id, $want_lp_id) = @$check;
@@ -3238,10 +3239,61 @@ sub container_report ($self, $who) {
   return Future->done([ $text, { slack => $text } ]);
 }
 
+my %Phase_Pos = (
+  'Desired'   => 0,
+  'Planning'  => 1,
+  'Waiting'   => 2,
+  'In Flight' => 3,
+  'Circling'  => 4,
+  'Landing'   => 5,
+);
+
+sub project_report ($self, $who) {
+  return unless my $lp_id = $who->lp_id;
+
+  my $lpc = $self->lp_client_for_user($who);
+
+  my $res = $lpc->query_items({
+    filters => [
+      [ item_type => '='  => 'Project'  ],
+      [ owner_id  => '='  => $lp_id     ],
+      [ is_done   => is   => 'false'    ],
+      [ "custom_field:'Project Phase'" => 'is_set' ],
+      [ parent_id => '='  => $self->project_portfolio_id ],
+    ],
+  });
+
+  unless ($res->is_success) {
+    $Logger->log("problems getting project report for " . $who->username);
+    return;
+  }
+
+  my @projects =
+    map  {; $_->[1] }
+    sort {; ($Phase_Pos{ $a->[0] } // 99) <=> ($Phase_Pos{ $b->[0] } // 99) }
+    map  {; [ $_->{custom_field_values}{'Project Phase'}, $_ ] }
+    $res->payload_list;
+
+  my @lines;
+  for my $project (@projects) {
+    my $phase = $project->{custom_field_values}{'Project Phase'};
+
+    # Nothing to do here, generally..? -- rjbs, 2019-03-22
+    next if $phase eq 'Desired' or $phase eq 'Waiting' or $phase eq 'Circling';
+
+    push @lines, $self->_slack_item_link_with_name($project);
+  }
+
+  return unless @lines;
+
+  my $text = join qq{\n}, @lines;
+  return Future->done([ $text, { slack => $text } ]);
+}
+
 sub iteration_report ($self, $who) {
   return unless my $lp_id = $who->lp_id;
 
-  my $lpc = $self->lp_client_for_master;
+  my $lpc = $self->lp_client_for_user($who);
   my @summaries;
 
   my $pkg_summary   = $self->_build_iteration_summary($lpc->current_iteration, $who);
