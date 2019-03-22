@@ -11,11 +11,11 @@ use namespace::clean;
 
 sub listener_specs {
   return {
-    name      => "damage-report",
-    method    => "damage_report",
+    name      => "report",
+    method    => "report",
     predicate => sub ($, $e) {
       $e->was_targeted &&
-      $e->text =~ /^\s*(damage\s+)?report(\s+for\s+([a-z]+))?\s*$/in;
+      $e->text =~ /^\s*([a-z]+\s+)?report(\s+for\s+([a-z]+))?\s*$/in;
     },
     help_entries => [
       {
@@ -26,33 +26,53 @@ sub listener_specs {
   };
 }
 
-has sections => (
-  isa => 'ArrayRef',
-  traits  => [ 'Array' ],
-  default => sub {  []  },
-  handles => { sections => 'elements' },
+has default_report => (
+  is  => 'ro',
+  isa => 'Str',
+  required => 1,
 );
 
-sub damage_report ($self, $event) {
+has reports => (
+  isa => 'HashRef',
+  traits    => [ 'Hash' ],
+  required  => 1,
+  handles   => {
+    report_names => 'keys',
+    report_named => 'get',
+  },
+);
+
+sub report ($self, $event) {
+  my $report_name;
   my $who_name;
 
   if (
     $event->text =~ /\A
       \s*
-      ( damage \s+ )?
+      ((?<which>[a-z]+) \s+ )?
       report
       ( \s+ for \s+ (?<who> [a-z]+ ) )?
       \s*
     \z/nix
   ) {
     $who_name = $+{who};
+    $report_name = $+{which};
   }
 
+  $report_name //= $self->default_report;
   $who_name //= $event->from_user->username;
+
+  $report_name = fc $report_name;
 
   my $target = $self->resolve_name($who_name, $event->from_user);
 
   $event->mark_handled;
+
+  my $report = $self->report_named($report_name);
+  unless ($report) {
+    my $names = join q{, }, $self->report_names;
+    return $event->error_reply("Sorry, I don't know that report!  I know these reports: $names.");
+  }
 
   unless ($target) {
     return $event->error_reply("Sorry, I don't know who $who_name is!");
@@ -72,7 +92,7 @@ sub damage_report ($self, $event) {
 
   my @results;
 
-  for my $section ($self->sections) {
+  for my $section ($report->{sections}->@*) {
     my ($reactor_name, $method) = @$section;
 
     my $reactor = $hub->reactor_named($reactor_name);
@@ -88,7 +108,9 @@ sub damage_report ($self, $event) {
     return $event->reply("I have nothing at all to report.  Woah!");
   }
 
-  my $text  = q{Damage report for } . $target->username . q{:};
+  # This \u is bogus, we should allow canonical name to be in the report
+  # definition. -- rjbs, 2019-03-22
+  my $text  = qq{\u$report_name report for } . $target->username . q{:};
   my $slack = qq{*$text*};
 
   while (my $hunk = shift @hunks) {
