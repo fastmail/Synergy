@@ -80,22 +80,20 @@ sub damage_report ($self, $event) {
     push @results, $reactor->$method($target);
   }
 
-  my @hunks = Future->unwrap(@results);
+  # unwrap collapses futures, but only if given exactly one future, so we map
+  # -- rjbs, 2019-03-21
+  my @hunks = map {; Future->unwrap($_) } @results;
 
   unless (@hunks) {
     return $event->reply("I have nothing at all to report.  Woah!");
   }
 
-  my $text  = q{Damage report for } . $who->username . q{:};
+  my $text  = q{Damage report for } . $target->username . q{:};
   my $slack = qq{*$text*};
 
   while (my $hunk = shift @hunks) {
-    $text   .= $hunk->[0];
-    $slack  .= ($hunk->[1]{slack} // qq{`$hunk->[0]`});
-
-    if (@hunks) {
-      $_ .= "\n" for ($text, $slack);
-    }
+    $text   .= "\n" . $hunk->[0];
+    $slack  .= "\n" . ($hunk->[1]{slack} // qq{`$hunk->[0]`});
   }
 
   $event->private_reply(

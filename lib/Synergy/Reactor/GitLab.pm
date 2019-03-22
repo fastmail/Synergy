@@ -13,6 +13,7 @@ use DateTime::Format::ISO8601;
 use DateTimeX::Format::Ago;
 use Digest::MD5 qw(md5_hex);
 use JSON 2 ();
+use Lingua::EN::Inflect qw(PL_N);
 use List::Util qw(uniq);
 use MIME::Base64;
 use YAML::XS;
@@ -696,8 +697,19 @@ sub handle_mr_report ($self, $event) {
     return $event->reply("I can't check your MR status, you don't have an user-id preference set!");
   }
 
-  my %result;
+  my $report = $self->mr_report($event->from_user);
+
+  $report->on_done(sub ($pair) {
+    $event->reply(@$pair);
+  })->retain;
+}
+
+sub mr_report ($self, $who) {
   my @futures;
+
+  my $user_id = $self->get_user_preference($who, 'user-id');
+
+  return unless $user_id;
 
   for my $pair (
     # TODO: Cope with pagination for real. -- rjbs, 2018-08-17
@@ -713,14 +725,12 @@ sub handle_mr_report ($self, $event) {
       'PRIVATE-TOKEN' => $self->api_token,
       async => 1,
     );
-    push @futures, $http_future;
 
-    $http_future->on_done(sub ($res) {
+    push @futures, $http_future->then(sub ($res) {
       unless ($res->is_success) {
         $Logger->log([ "Error: %s", $res->as_string ]);
-        return $event->reply(
-          "Something when wrong when trying to get your $type merge requests.",
-        );
+
+        return Future->done($type => undef);
       }
 
       my $data = $JSON->decode($res->decoded_content);
@@ -731,28 +741,44 @@ sub handle_mr_report ($self, $event) {
         $mr->{_isSelfAssigned} = 1
           if $mr->{assignee} && $mr->{assignee}{id} == $user_id;
       }
-      $result{$type} = $data;
+
+      return Future->done($type => $data);
     });
   }
 
-  Future->wait_all(@futures)->on_done(sub {
-    my $template = <<'EOT';
-Open merge requests you filed: %s (%s backlogged)
-Open merge request assigned to you: %s (%s backlogged)
-Open merge requests in both groups: %s (%s backlogged)
-EOT
+  Future->wait_all(@futures)->then(sub (@futures) {
+    my %result = map {; $_->get } @futures;
 
-    $event->reply(sprintf
-      $template,
-      0 + $result{filed}->@*,
-      0 + (grep { $_->{_isBacklogged} } $result{filed}->@*),
-      0 + $result{assigned}->@*,
-      0 + (grep { $_->{_isBacklogged} } $result{assigned}->@*),
-      0 + (grep { $_->{_isSelfAssigned} } $result{filed}->@*),
-      0 + (grep { $_->{_isSelfAssigned} && $_->{_isBacklogged} }
-            $result{filed}->@*),
-    );
-  })->retain;
+    if (! defined $result{assigned} || ! defined $result{filed}) {
+      return Future->new->done(
+        [ "Something when wrong when trying to get merge request data." ]
+      );
+    }
+
+    # Self assigned MRs count as assigned, but not filed, because you're not
+    # waiting on them. -- rjbs, 2019-03-21
+    my $assigned = grep {; ! $_->{_isBacklogged} } $result{assigned}->@*;
+    my $filed    = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
+                   $result{filed}->@*;
+
+    return unless $filed || $assigned;
+
+    my $string = q{};
+
+    if ($filed) {
+      $string .= sprintf "\N{LOWER LEFT CRAYON} Waiting for review on %i merge %s",
+        $filed, PL_N('request', $filed);
+
+      $string .= "\n" if $assigned;
+    }
+
+    if ($assigned) {
+      $string .= sprintf "\N{LOWER LEFT CRAYON} Responsible for review on %i merge %s",
+        $assigned, PL_N('request', $assigned);
+    }
+
+    return Future->done([ $string, { slack => $string } ]);
+  });
 }
 
 __PACKAGE__->add_preference(
