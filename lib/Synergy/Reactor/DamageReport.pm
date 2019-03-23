@@ -110,6 +110,16 @@ sub report ($self, $event) {
   my @hunks = map {; Future->unwrap($_) } @results;
 
   unless (@hunks) {
+    $event->private_reply(
+      "Nothing to report.",
+      {
+        slack_reaction => {
+          event => $event,
+          reaction => '-hourglass_flowing_sand',
+        }
+      },
+    );
+
     return $event->reply("I have nothing at all to report!");
   }
 
