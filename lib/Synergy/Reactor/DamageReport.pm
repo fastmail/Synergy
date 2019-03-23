@@ -94,11 +94,15 @@ sub report ($self, $event) {
   my @results;
 
   for my $section ($report->{sections}->@*) {
-    my ($reactor_name, $method) = @$section;
+    my ($reactor_name, $method, $arg) = @$section;
 
     my $reactor = $hub->reactor_named($reactor_name);
 
-    push @results, $reactor->$method($target);
+    # I think this will need rejiggering later. -- rjbs, 2019-03-22
+    push @results, $reactor->$method(
+      $target,
+      ($arg ? $arg : ()),
+    );
   }
 
   # unwrap collapses futures, but only if given exactly one future, so we map
