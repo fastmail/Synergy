@@ -3,8 +3,7 @@ use warnings;
 package Synergy::Reactor::HelpSpot;
 
 use Moose;
-with 'Synergy::Role::Reactor',
-     'Synergy::Role::HasPreferences';
+with 'Synergy::Role::Reactor';
 
 use URI;
 use URI::QueryParam;
@@ -43,13 +42,5 @@ sub helpspot_report ($self, $who) {
   return Future->done([ "not yet implemented" ]);
 }
 
-__PACKAGE__->add_preference(
-  name      => 'user-id',
-  validator => sub ($self, $value, @) {
-    return $value if $value =~ /\A[0-9]+\z/;
-    return (undef, "Your user-id must be a positive integer.")
-  },
-  default   => undef,
-);
 
 1;
