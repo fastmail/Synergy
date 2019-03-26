@@ -46,6 +46,8 @@ sub helpspot_report ($self, $who) {
 }
 
 sub unassigned_report ($self, $who, $arg = {}) {
+  return if $arg->{triage_only} && ! $who->is_on_triage;
+
   $self->_http_get({
     method => 'private.request.search',
     ($arg->{search_args} ? $arg->{search_args}->%* : ()),
