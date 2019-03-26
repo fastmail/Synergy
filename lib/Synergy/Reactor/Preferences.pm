@@ -112,7 +112,7 @@ sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
 }
 
 sub handle_dump ($self, $event) {
-  my ($who) = $event->text =~ /\Adump\s+pref(?:erence)?s\s+for\s+(\w+)/i;
+  my ($who) = $event->text =~ /\A(?:show|dump)\s+pref(?:erence)?s\s+for\s+(\w+)/i;
   $who //= 'me';
 
   my $for_user = $self->resolve_name($who, $event->from_user);
