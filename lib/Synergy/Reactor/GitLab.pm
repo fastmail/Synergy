@@ -733,30 +733,37 @@ sub mr_report ($self, $who) {
       );
     }
 
-    my $selfies  = grep {; ! $_->{_isBacklogged} &&   $_->{_isSelfAssigned} }
+    my @selfies  = grep {; ! $_->{_isBacklogged} &&   $_->{_isSelfAssigned} }
                    $result{filed}->@*;
-    my $filed    = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
+    my @filed    = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
                    $result{filed}->@*;
-    my $assigned = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
+    my @assigned = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
                    $result{assigned}->@*;
 
-    return unless $filed || $assigned || $selfies;
+    return unless @filed || @assigned || @selfies;
 
     my $string = q{};
 
-    if ($filed) {
-      $string .= sprintf "\N{LOWER LEFT CRAYON} Merge %s waiting on others: %i\n",
-        PL_N('request', $filed), $filed;
+    my $wipstr = sub ($mrs) {
+      my $wip = grep {; $_->{title} =~ /^wip:/i } @$mrs;
+      return $wip ? (sprintf ' (of which %i are WIP)', $wip) : '';
+    };
+
+    if (@filed) {
+      $string .= sprintf "\N{LOWER LEFT CRAYON} Merge %s waiting on others: %i%s\n",
+        PL_N('request', 0+@filed), 0+@filed, $wipstr->(\@filed);
     }
 
-    if ($assigned) {
-      $string .= sprintf "\N{LOWER LEFT CRAYON} Merge %s to review: %i\n",
-        PL_N('request', $assigned), $assigned;
+    if (@assigned) {
+      my $wip = grep {; $_->{title} =~ /^wip:/i } @filed;
+      $string .= sprintf "\N{LOWER LEFT CRAYON} Merge %s to review: %i%s\n",
+        PL_N('request', 0+@assigned), 0+@assigned, $wipstr->(\@assigned);
     }
 
-    if ($selfies) {
-      $string .= sprintf "\N{LOWER LEFT CRAYON} Self-assigned merge %s: %i\n",
-        PL_N('request', $selfies), $selfies;
+    if (@selfies) {
+      my $wip = grep {; $_->{title} =~ /^wip:/i } @filed;
+      $string .= sprintf "\N{LOWER LEFT CRAYON} Self-assigned merge %s: %i%s\n",
+        PL_N('request', 0+@selfies), 0+@selfies, $wipstr->(\@selfies);
     }
 
     chomp $string;
