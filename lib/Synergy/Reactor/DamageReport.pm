@@ -125,7 +125,8 @@ sub report ($self, $event) {
 
   # This \u is bogus, we should allow canonical name to be in the report
   # definition. -- rjbs, 2019-03-22
-  my $text  = qq{\u$report_name report for } . $target->username . q{:};
+  my $title = $report->{title} // "\u$report_name report";
+  my $text  = qq{$title for } . $target->username . q{:};
   my $slack = qq{*$text*};
 
   while (my $hunk = shift @hunks) {
