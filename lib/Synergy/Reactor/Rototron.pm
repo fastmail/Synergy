@@ -126,7 +126,12 @@ sub _replan_range ($self, $from_dt, $to_dt) {
   return;
 }
 
-sub _current_triage_officers ($self) {
+# Obviously this is a bit overly specific to my work install.
+# -- rjbs, 2019-03-26
+#
+# We should cache this, but I'd rather be a little slow and correct, for now.
+# -- rjbs, 2019-03-26
+sub current_triage_officers ($self) {
   my $rototron = $self->rototron;
 
   my @tzs = sort {; $a cmp $b }

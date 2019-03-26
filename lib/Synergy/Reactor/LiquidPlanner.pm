@@ -2417,7 +2417,7 @@ sub _inform_triage ($self, $text, $alt = {}) {
   if (my $rototron = $self->_rototron) {
     my $roto_reactor = $self->hub->reactor_named('rototron');
 
-    for my $officer ($roto_reactor->_current_triage_officers) {
+    for my $officer ($roto_reactor->current_triage_officers) {
       $channel->send_message_to_user($officer, $text, $alt);
     }
   }
@@ -3160,15 +3160,7 @@ sub container_report ($self, $who) {
   return unless my $lp_id = $who->lp_id;
 
   my $rototron = $self->_rototron;
-  my $user_is_triage = do {
-    my $duties = $rototron->duties_on(
-      DateTime->now(time_zone => $who->time_zone )
-    );
-
-    !! (grep {; ($_->{keywords}{"rotor:triage_us"} || $_->{keywords}{"rotor:triage_au"})
-         && grep {; 0 == index $_->{email}, ($who->username . q{@}) } values $_->{participants}->%*
-       } @$duties);
-  };
+  my $user_is_triage = $who->is_on_triage;
 
   my $triage_user = $rototron
                   ? $self->hub->user_directory->user_named('triage')

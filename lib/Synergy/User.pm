@@ -177,6 +177,14 @@ sub is_working_now ($self) {
   return $timer->is_business_hours;
 }
 
+sub is_on_triage ($self) {
+  return unless my $roto = $self->directory->hub->reactor_named('rototron');
+
+  my $username = $self->username;
+
+  return grep { $_->username eq $username } $roto->current_triage_officers;
+}
+
 has default_project_shortcut => (is => 'ro', isa => 'Str');
 
 has lp_id    => (is => 'ro', isa => 'Int', predicate => 'has_lp_id');
