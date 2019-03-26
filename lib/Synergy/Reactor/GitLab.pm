@@ -716,7 +716,8 @@ sub mr_report ($self, $who) {
           if grep {; lc $_ eq 'backlogged' } $mr->{labels}->@*;
 
         $mr->{_isSelfAssigned} = 1
-          if $mr->{assignee} && $mr->{assignee}{id} == $user_id;
+          if $mr->{assignee} && $mr->{assignee}{id} == $user_id
+                             && $mr->{author}{id}   == $user_id;
       }
 
       return Future->done($type => $data);
@@ -732,27 +733,33 @@ sub mr_report ($self, $who) {
       );
     }
 
-    # Self assigned MRs count as assigned, but not filed, because you're not
-    # waiting on them. -- rjbs, 2019-03-21
-    my $assigned = grep {; ! $_->{_isBacklogged} } $result{assigned}->@*;
+    my $selfies  = grep {; ! $_->{_isBacklogged} &&   $_->{_isSelfAssigned} }
+                   $result{filed}->@*;
     my $filed    = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
                    $result{filed}->@*;
+    my $assigned = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
+                   $result{assigned}->@*;
 
-    return unless $filed || $assigned;
+    return unless $filed || $assigned || $selfies;
 
     my $string = q{};
 
     if ($filed) {
-      $string .= sprintf "\N{LOWER LEFT CRAYON} Waiting for review on %i merge %s",
-        $filed, PL_N('request', $filed);
-
-      $string .= "\n" if $assigned;
+      $string .= sprintf "\N{LOWER LEFT CRAYON} Merge %s waiting on others: %i\n",
+        PL_N('request', $filed), $filed;
     }
 
     if ($assigned) {
-      $string .= sprintf "\N{LOWER LEFT CRAYON} Responsible for review on %i merge %s",
-        $assigned, PL_N('request', $assigned);
+      $string .= sprintf "\N{LOWER LEFT CRAYON} Merge %s to review: %i\n",
+        PL_N('request', $assigned), $assigned;
     }
+
+    if ($selfies) {
+      $string .= sprintf "\N{LOWER LEFT CRAYON} Self-assigned merge %s: %i\n",
+        PL_N('request', $selfies), $selfies;
+    }
+
+    chomp $string;
 
     return Future->done([ $string, { slack => $string } ]);
   });
