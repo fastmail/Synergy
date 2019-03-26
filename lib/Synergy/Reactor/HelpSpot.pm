@@ -3,7 +3,8 @@ use warnings;
 package Synergy::Reactor::HelpSpot;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::HasPreferences';
 
 use URI;
 use URI::QueryParam;
@@ -15,6 +16,20 @@ use namespace::clean;
 sub listener_specs {
   return;
 }
+
+sub state ($self) {
+  return {
+    preferences => $self->user_preferences,
+  };
+}
+
+after register_with_hub => sub ($self, @) {
+  if (my $state = $self->fetch_state) {
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+  }
+};
 
 has auth_token => (
   is  => 'ro',
@@ -41,8 +56,35 @@ sub _http_get ($self, $param) {
   );
 }
 
-sub helpspot_report ($self, $who) {
-  return Future->done([ "not yet implemented" ]);
+sub ticket_report ($self, $who, $arg = {}) {
+  return unless my $user_id = $self->user_has_preference($who, 'user-id');
+
+  $self->_http_get({
+    method => 'private.request.search',
+    fOpen  => 1,
+    xPersonAssignedTo => $user_id,
+  })->then(sub ($res) {
+    open my $fh, '<', \$res->decoded_content(charset => 'none')
+      or die "error making handle to XML results: $!";
+
+    my $doc = XML::LibXML->load_xml(IO => $fh);
+
+    my @requests = $doc->getElementsByTagName('request');
+
+    my $count = 0;
+    for my $request (@requests) {
+      my ($person) = $request->getElementsByTagName('xPersonAssignedTo');
+      next if $person && $person->textContent;
+      $count++;
+    }
+
+    return Future->done unless $count;
+
+    my $desc = $arg->{description} // "HelpSpot tickets";
+    my $text = sprintf "\N{ADMISSION TICKETS} %s: %s", $desc, $count;
+
+    return Future->done([ $text, { slack => $text } ]);
+  });
 }
 
 sub unassigned_report ($self, $who, $arg = {}) {
@@ -75,5 +117,14 @@ sub unassigned_report ($self, $who, $arg = {}) {
     ]);
   });
 }
+
+__PACKAGE__->add_preference(
+  name      => 'user-id',
+  validator => sub ($self, $value, @) {
+    return $value if $value =~ /\A[0-9]+\z/;
+    return (undef, "Your user-id must be a positive integer.")
+  },
+  default   => undef,
+);
 
 1;
