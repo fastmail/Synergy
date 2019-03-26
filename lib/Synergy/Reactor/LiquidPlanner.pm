@@ -2081,7 +2081,9 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     } @tasks;
   }
 
-  return $event->reply("Nothing matched that search.") unless @tasks;
+  unless (@tasks) {
+    return $event->reply($flag{zero_text} // "Nothing matched that search.");
+  }
 
   # fix and more to live in send-task-list
   my $more  = @tasks > $offset + 11;
