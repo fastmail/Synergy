@@ -57,7 +57,7 @@ sub _http_get ($self, $param) {
 }
 
 sub ticket_report ($self, $who, $arg = {}) {
-  return unless my $user_id = $self->user_has_preference($who, 'user-id');
+  return unless my $user_id = $self->get_user_preference($who, 'user-id');
 
   $self->_http_get({
     method => 'private.request.search',
@@ -69,14 +69,14 @@ sub ticket_report ($self, $who, $arg = {}) {
 
     my $doc = XML::LibXML->load_xml(IO => $fh);
 
-    my @requests = $doc->getElementsByTagName('request');
-
-    my $count = 0;
-    for my $request (@requests) {
-      my ($person) = $request->getElementsByTagName('xPersonAssignedTo');
-      next if $person && $person->textContent;
-      $count++;
-    }
+    # HelpSpot is ludicrous.  If there are 0 requests, you get...
+    # <requests>
+    #   <request />
+    # </requests>
+    # ...instead of just a zero-child <requests>.  What the heck?
+    # -- rjbs, 2019-03-26
+    my $count = grep {; $_->getChildrenByTagName('xRequest') }
+                $doc->getElementsByTagName('request');
 
     return Future->done unless $count;
 
