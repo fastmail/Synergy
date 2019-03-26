@@ -2142,6 +2142,7 @@ sub _handle_triage ($self, $event, $text) {
       $search->{flags}{owner}{ $triage_user->lp_id } = 1;
       $search->{flags}{show}{staleness} = 1;
       $search->{flags}{header} = "$TRIAGE_EMOJI Tasks to triage";
+      $search->{flags}{zero_text} = "Triage zero!  Feelin' fine.";
     },
   )
 }
