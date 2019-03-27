@@ -1521,16 +1521,14 @@ sub _execute_task_plan ($self, $event, $plan, $error) {
 }
 
 sub _start_timer ($self, $user, $task) {
-  my $res = $self->lp_client_for_user($user)
-                 ->start_timer_for_task_id($task->{id});
+  my $f = $self->lp_client_for_user($user)
+               ->start_timer_for_task_id($task->{id});
 
-  return unless $res->is_success;
-
-  # What does this mean?  Copied and pasted. -- rjbs, 2018-06-16
-  return unless $res->payload->{start};
-
-  $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
-  return 1;
+  $f->then(sub ($data) {
+    return Future->fail("new timer was not started") unless $data->{start};
+    $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
+    return Future->done;
+  });
 }
 
 sub upcoming_tasks_for_user ($self, $user, $count) {
@@ -2056,6 +2054,7 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     );
   }
 
+  # XXX LPC
   my $check_res = $self->lp_client_for_user($event->from_user)
                        ->query_items(\%to_query);
 
@@ -2267,6 +2266,7 @@ sub _handle_good ($self, $event, $text) {
   }
 
   if ($stop) {
+    # XXX LPC
     my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
     unless ($timer_res->is_success) {
       $event->mark_handled;
@@ -2430,6 +2430,7 @@ sub _inform_triage ($self, $text, $alt = {}) {
 sub lp_timer_for_user ($self, $user) {
   return unless $self->auth_header_for($user);
 
+  # XXX LPC
   my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
   return unless $timer_res->is_success;
@@ -2484,6 +2485,7 @@ sub _handle_chill ($self, $event, $text) {
     unless $user && $self->auth_header_for($user);
 
   {
+    # XXX LPC
     my $timer_res = $self->lp_client_for_user($user)->my_running_timer;
 
     return $event->reply("You've got a running timer!  You should commit it.")
@@ -3327,6 +3329,7 @@ sub reload_shortcuts ($self, $event) {
 }
 
 sub _build_iteration_summary ($self, $iteration, $user) {
+  # XXX LPC
   my $items_res = $self->lp_client_for_master->query_items({
     in    => $iteration->{package}{id},
     flags => { depth => -1 },
