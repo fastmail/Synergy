@@ -13,7 +13,7 @@ use DateTime::Format::ISO8601;
 use DateTimeX::Format::Ago;
 use Digest::MD5 qw(md5_hex);
 use JSON 2 ();
-use Lingua::EN::Inflect qw(PL_N);
+use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(uniq);
 use MIME::Base64;
 use YAML::XS;
@@ -746,7 +746,9 @@ sub mr_report ($self, $who) {
 
     my $wipstr = sub ($mrs) {
       my $wip = grep {; $_->{title} =~ /^wip:/i } @$mrs;
-      return $wip ? (sprintf ' (of which %i are WIP)', $wip) : '';
+      return $wip
+        ? (sprintf ' (of which %i %s WIP)', $wip, PL_V('is', $wip))
+        : '';
     };
 
     if (@filed) {
