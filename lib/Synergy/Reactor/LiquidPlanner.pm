@@ -435,99 +435,96 @@ sub provide_lp_link ($self, $event) {
   ITEM: for my $item_id (@ids) {
     my $item_res = $lpc->get_item($item_id);
 
-    unless ($item_res->is_success) {
-      $event->reply("Sorry, something went wrong looking for LP$item_id.");
-      next ITEM;
-    }
+    $item_res->then(
+      sub ($item) {
+        my $name = $item->{name};
 
-    my $item;
-    unless ($item = $item_res->payload) {
-      $event->error_reply("I can't find anything for LP$item_id.");
-      next ITEM;
-    }
+        my $reply;
 
-    my $name = $item->{name};
+        if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
+          my $icon = $item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
+                   : $item->{type} eq 'Package' ? "📦"
+                   : $item->{type} eq 'Project' ? "📁"
+                   : $item->{type} eq 'Folder'  ? "🗂"
+                   : $item->{type} eq 'Inbox'   ? "📫"
+                   :                              confess("unreachable");
 
-    my $reply;
+          my $uri = $self->item_uri($item_id);
 
-    if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
-      my $icon = $item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
-               : $item->{type} eq 'Package' ? "📦"
-               : $item->{type} eq 'Project' ? "📁"
-               : $item->{type} eq 'Folder'  ? "🗂"
-               : $item->{type} eq 'Inbox'   ? "📫"
-               :                              confess("unreachable");
+          my $plain = "$icon LP$item_id: $item->{name} ($uri)";
+          my $slack = sprintf '%s %s',
+            $icon,
+            $self->_slack_item_link_with_name($item);
 
-      my $uri = $self->item_uri($item_id);
+          if ($as_cmd) {
+            my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+                        $self->hub->user_directory->users;
 
-      my $plain = "$icon LP$item_id: $item->{name} ($uri)";
-      my $slack = sprintf '%s %s',
-        $icon,
-        $self->_slack_item_link_with_name($item);
+            # The user asked for this directly, so let's give them more detail.
+            $slack .= "\n";
 
-      if ($as_cmd) {
-        my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
-                    $self->hub->user_directory->users;
-
-        # The user asked for this directly, so let's give them more detail.
-        $slack .= "\n";
-
-        if ($item->{parent_crumbs}) {
-          $slack .= "*Parent*: "
-                 .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
-                 .  "\n";
-        }
-
-        if ($item->{package_crumbs}) {
-          $slack .= "*Package*: "
-                 .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
-                 .  "\n";
-        }
-
-        if ($item->{assignments}) {
-          my @assignees = sort uniq
-                          map  {; $by_lp{ $_->{person_id} } // '?' }
-                          grep {; ! $_->{is_done} }
-                          $item->{assignments}->@*;
-
-          if (@assignees) {
-            $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
-          }
-        }
-
-        for my $pair (
-          [ 'Created',      'created_at' ],
-          [ 'Last Updated', 'updated_at' ],
-          [ 'Completed',    'done_on' ],
-        ) {
-          next unless my $date_str = $item->{ $pair->[1] };
-
-          my $dt = DateTime::Format::ISO8601->parse_datetime($date_str);
-
-          my $str = $self->hub->format_friendly_date(
-            $dt,
-            {
-              target_time_zone  => $event->from_user->time_zone,
+            if ($item->{parent_crumbs}) {
+              $slack .= "*Parent*: "
+                     .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
+                     .  "\n";
             }
+
+            if ($item->{package_crumbs}) {
+              $slack .= "*Package*: "
+                     .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
+                     .  "\n";
+            }
+
+            if ($item->{assignments}) {
+              my @assignees = sort uniq
+                              map  {; $by_lp{ $_->{person_id} } // '?' }
+                              grep {; ! $_->{is_done} }
+                              $item->{assignments}->@*;
+
+              if (@assignees) {
+                $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
+              }
+            }
+
+            for my $pair (
+              [ 'Created',      'created_at' ],
+              [ 'Last Updated', 'updated_at' ],
+              [ 'Completed',    'done_on' ],
+            ) {
+              next unless my $date_str = $item->{ $pair->[1] };
+
+              my $dt = DateTime::Format::ISO8601->parse_datetime($date_str);
+
+              my $str = $self->hub->format_friendly_date(
+                $dt,
+                {
+                  target_time_zone  => $event->from_user->time_zone,
+                }
+              );
+
+              $slack .= "*$pair->[0]*: $str\n";
+            }
+
+            if ($flag{description}) {
+              $slack .= "\n>>> $item->{description}\n";
+            }
+          }
+
+          $event->reply(
+            $plain,
+            {
+              slack => $slack,
+            },
           );
-
-          $slack .= "*$pair->[0]*: $str\n";
+        } else {
+          $event->reply("LP$item_id: is a $item->{type}");
         }
-
-        if ($flag{description}) {
-          $slack .= "\n>>> $item->{description}\n";
-        }
-      }
-
-      $event->reply(
-        $plain,
-        {
-          slack => $slack,
-        },
-      );
-    } else {
-      $event->reply("LP$item_id: is a $item->{type}");
-    }
+      },
+      sub {
+        $event->reply("Sorry, something went wrong looking for LP$item_id.");
+        next ITEM;
+      },
+    )->retain;
   }
 }
 
