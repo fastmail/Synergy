@@ -78,6 +78,7 @@ has _last_chatter => (
 sub handle_chatter ($self, $event) {
   return unless $self->has_monitored_channel;
   return unless $self->monitored_channel_name eq $event->from_channel->name;
+  return unless $event->from_user;
 
   my $username = $event->from_user->username;
   $self->record_last_chatter_for($username, {
