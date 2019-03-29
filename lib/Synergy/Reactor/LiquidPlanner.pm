@@ -1700,7 +1700,7 @@ sub _parse_search ($self, $text) {
       next TOKEN;
     }
 
-    if ($text =~ s/^$flagname_re:([0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
+    if ($text =~ s/^$flagname_re:([-0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
       my ($k, $v) = ($1, $2);
       $k = $flag_alias{$k} if $flag_alias{$k};
 
@@ -1891,6 +1891,22 @@ sub _interpret_search ($self, $kvs, $from_user) {
     }
   }
 
+  for my $which (qw( after before )) {
+    if (my $got = delete $kvs->{"created:$which"}) {
+      my (@values) = keys %$got;
+
+      if (@values > 1) {
+        $error{"created:$which"} = "You can only set once '$which' time.";
+      } else {
+        if ($values[0] =~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) {
+          $flag{created}{$which} = $values[0];
+        } else {
+          $error{"created:$which"} = wtf("created:$which");
+        }
+      }
+    }
+  }
+
   # Whatever, if you put debug:anythingtrue in there, we turn it on.
   # Live with it. -- rjbs, 2019-02-07
   $flag{debug} = 1 if delete $kvs->{debug};
@@ -1968,6 +1984,14 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
 
   if (defined $flag{client}) {
     push @filters, [ 'client_id', '=', $flag{client} ];
+  }
+
+  if (my $created = $flag{created}) {
+    for my $op (qw( after before )) {
+      if ($created->{$op}) {
+        push @filters, [ 'created', $op, $created->{$op} ];
+      }
+    }
   }
 
   $flag{page} //= 1;
