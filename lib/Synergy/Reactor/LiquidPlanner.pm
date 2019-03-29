@@ -1641,7 +1641,9 @@ sub _parse_search ($self, $text) {
   state $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
 
   my %flag_alias = (
-    u => 'user',
+    u => 'owner',
+    o => 'owner',
+    user => 'owner',
   );
 
   my %flag_flatten = (
@@ -1829,22 +1831,24 @@ sub _interpret_search ($self, $kvs, $from_user) {
   }
 
   # user:
-  if (my $owners = delete $kvs->{user}) {
-    my %member;
-    my %unknown;
-    for my $who (keys %$owners) {
-      my $target = $self->resolve_name($who, $from_user);
-      my $lp_id  = $target && $target->lp_id;
+  for my $name (qw(owner creator)) {
+    if (my $owners = delete $kvs->{$name}) {
+      my %member;
+      my %unknown;
+      for my $who (keys %$owners) {
+        my $target = $self->resolve_name($who, $from_user);
+        my $lp_id  = $target && $target->lp_id;
 
-      if ($lp_id) { $member{$lp_id}++ }
-      else        { $unknown{$who}++ }
-    }
+        if ($lp_id) { $member{$lp_id}++ }
+        else        { $unknown{$who}++ }
+      }
 
-    if (%unknown) {
-      $error{user} = "I don't know who these users are: "
-                   . join q{, }, sort keys %unknown;
-    } else {
-      $flag{owner}{$_} = 1 for keys %member;
+      if (%unknown) {
+        $error{$name} = "I don't know who these users (given in $name:) are: "
+                      . join q{, }, sort keys %unknown;
+      } else {
+        $flag{$name}{$_} = 1 for keys %member;
+      }
     }
   }
 
@@ -1989,6 +1993,10 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
       # -- rjbs, 2019-02-18
       $limit *= 3;
     }
+  }
+
+  if ($flag{creator} && keys $flag{creator}->%*) {
+    push @filters, map {; [ 'created_by', '=', $_ ] } keys $flag{creator}->%*;
   }
 
   if (defined $flag{phase}) {

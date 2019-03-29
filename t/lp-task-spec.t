@@ -365,18 +365,18 @@ is_deeply(
   'simple search with type:*',
 );
 
-for my $u ("user:bar", "u:bar") {
+for my $u ("user:bar", "u:bar", "o:bar", "owner:bar") {
   is_deeply(
     $synergy->reactor_named('lp')->_parse_search("foo $u"),
     {
       kvs   => {
-        user => { bar => 1 },
+        owner => { bar => 1 },
       },
       words => [
         { op => 'contains', word => 'foo' },
       ],
     },
-    "user specified as '$u'",
+    "owner specified as '$u'",
   );
 }
 
