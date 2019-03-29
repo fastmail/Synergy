@@ -326,6 +326,18 @@ is_deeply(
 );
 
 is_deeply(
+  $synergy->reactor_named('lp')->_parse_search(q{^"Feature \\"requests\\""}),
+  {
+    kvs   => {},
+    words => [
+      { op => 'starts_with', word => 'Feature "requests"' },
+    ],
+  },
+  'search with prefix and qstring',
+);
+
+
+is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo done:1 type:*"),
   {
     kvs   => {
@@ -367,5 +379,18 @@ for my $u ("user:bar", "u:bar") {
     "user specified as '$u'",
   );
 }
+
+is_deeply(
+  $synergy->reactor_named('lp')->_parse_search(q{project:"JR \\"Bob\\" Dobbs" bob}),
+  {
+    kvs   => {
+      project => { q{JR "Bob" Dobbs} => 1 },
+    },
+    words => [
+      { op => 'contains', word => 'bob' },
+    ],
+  },
+  "qstring in flag value",
+);
 
 done_testing;

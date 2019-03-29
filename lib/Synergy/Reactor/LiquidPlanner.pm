@@ -1659,7 +1659,10 @@ sub _parse_search ($self, $text) {
     }
     $last = $text;
 
-    if ($text =~ s/^($prefix_re)"( (?: \\" | [^"] )+ )"\s*//x) {
+    # Even a quoted string can't contain control characters.  Get real.
+    state $qstring = qr{"( (?: \\" | [^\pC"] )+ )"}x;
+
+    if ($text =~ s/^($prefix_re)$qstring\s*//x) {
       my ($prefix, $word) = ($1, $2);
 
       push @words, {
@@ -1679,7 +1682,23 @@ sub _parse_search ($self, $text) {
       next TOKEN;
     }
 
-    if ($text =~ s/^($ident_re):([0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
+    # We're going to allow two-part keys, like "created:on".  It's not great,
+    # but it's simple enough. -- rjbs, 2019-03-29
+    state $flagname_re = qr{($ident_re(?::$ident_re)?)};
+
+    if ($text =~ s/^$flagname_re:$qstring(?: \s | \z)//x) {
+      my $k = $1;
+      my $v = $2 =~ s/\\"/"/gr;
+
+      $k = $flag_alias{$k} if $flag_alias{$k};
+
+      $v = fc $v if $flag_flatten{$k};
+
+      $kvs{$k}{$v}++;
+      next TOKEN;
+    }
+
+    if ($text =~ s/^$flagname_re:([0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
       my ($k, $v) = ($1, $2);
       $k = $flag_alias{$k} if $flag_alias{$k};
 
