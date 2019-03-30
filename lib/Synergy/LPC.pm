@@ -324,7 +324,7 @@ sub iteration_relative_to_current ($self, $delta_n) {
   my $iter  = $helper->iteration_relative_to_current($delta_n);
   my $pkg_f = $helper->package_for_iteration_number($iter->{number});
 
-  return unless $pkg_f->is_success;
+  return unless $pkg_f->await->is_done;
 
   return {
     %$iter,
