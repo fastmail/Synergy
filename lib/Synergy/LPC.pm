@@ -89,12 +89,15 @@ sub http_get ($self, $path, @arg) {
   );
 
   $res_f->then(sub ($res) {
-    $self->log([
-      "error with GET $uri: %s",
-      $res->as_string,
-    ]);
+    unless ($res->is_success) {
+      $self->log([
+        "error with GET $uri: %s",
+        $res->as_string,
+      ]);
 
-    return Future->fail($res) unless $res->is_success;
+      return Future->fail($res);
+    }
+
     return Future->done($JSON->decode($res->decoded_content));
   });
 }
@@ -110,12 +113,15 @@ sub http_post ($self, $path, @arg) {
   );
 
   $res_f->then(sub ($res) {
-    $self->log([
-      "error with GET $uri: %s",
-      $res->as_string,
-    ]);
+    unless ($res->is_success) {
+      $self->log([
+        "error with POST $uri: %s",
+        $res->as_string,
+      ]);
 
-    return Future->fail($res) unless $res->is_success;
+      return Future->fail($res);
+    }
+
     return Future->done($JSON->decode($res->decoded_content));
   });
 }
