@@ -255,7 +255,11 @@ my %KNOWN = (
                     "• `project:PROJECT`, search in this project shortcut",
                     "• `scheduled:{yes,no,both}`, search for scheduled tasks",
                     "• `type:TYPE`, pick what type of thing to find (package, project, task)",
-                    "• `u[ser]:NAME`, tasks owned by the user named NAME",
+                    "• `o[wner]:NAME`, tasks owned by the user named NAME",
+                    "• `creator:NAME`, tasks created by the user named NAME",
+                    "• `created:{before,after}:YYYY-MM-DD`, tasks created in the time range",
+                    "• `lastupdate:{before,after}:YYYY-MM-DD`, tasks last updated in the time range",
+                    "• `force:1`, search even if Synergy says it's too broad",
                     "• `debug:1`, turn on debugging and dump the query to be run",
                   ),
                 ],
@@ -1905,7 +1909,7 @@ sub _compile_search ($self, $conds, $from_user) {
       next COND;
     }
 
-    if ($field eq 'created') {
+    if ($field eq 'created' or $field eq 'lastupdate') {
       error("No operator supplied for $field.") unless defined $op;
       bad_op($field, $op) unless $op eq 'after' or $op eq 'before';
 
@@ -2035,10 +2039,16 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
     push @filters, [ 'client_id', '=', $flag{client} ];
   }
 
-  if (my $created = $flag{created}) {
-    for my $op (qw( after before )) {
-      if ($created->{$op}) {
-        push @filters, [ 'created', $op, $created->{$op} ];
+  {
+    my %datefield = (created => 'created', lastupdate => 'last_updated');
+
+    for my $field (keys %datefield) {
+      if (my $got = $flag{$field}) {
+        for my $op (qw( after before )) {
+          if ($got->{$op}) {
+            push @filters, [ $datefield{$field}, $op, $got->{$op} ];
+          }
+        }
       }
     }
   }
