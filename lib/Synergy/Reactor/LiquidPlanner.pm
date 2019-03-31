@@ -107,18 +107,22 @@ sub _slack_item_link ($self, $item) {
     $item->{id};
 }
 
+my %Showable_Attribute = (
+  shortcuts => 1,
+  phase     => 1,
+  staleness => 0,
+  due       => 1,
+  emoji     => 1,
+  # stuff we could make optional later:
+  #   name
+  #   type icon
+  #   doneness
+  #   urgentness
+);
+
 sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   my %arg = (
-    shortcuts => 1,
-    phase     => 1,
-    staleness => 0,
-    due       => 1,
-    emoji     => 1,
-    # stuff we could make optional later:
-    #   name
-    #   type icon
-    #   doneness
-    #   urgentness
+    %Showable_Attribute,
     ($input_arg ? %$input_arg : ()),
   );
 
@@ -1761,6 +1765,19 @@ sub _compile_search ($self, $conds, $from_user) {
     return 0;
   }
 
+  my sub normalize_bool ($field, $value) {
+    my $to_set  = $value eq 'yes'   ? 1
+                : $value eq 1       ? 1
+                : $value eq 'no'    ? 0
+                : $value eq 0       ? 0
+                : $value eq 'both'  ? undef
+                : $value eq '*'     ? undef
+                :                     -1;
+
+    bad_value($field) if defined $to_set && $to_set == -1;
+    return $to_set;
+  }
+
   COND: for my $cond (@$conds) {
     # field and op are guaranteed to be in fold case.  Value, not.
     my $field = $cond->{field};
@@ -1770,21 +1787,11 @@ sub _compile_search ($self, $conds, $from_user) {
     if (grep {; $field eq $_ } qw(done onhold scheduled)) {
       bad_op($field, $op) unless ($op//'is') eq 'is';
 
-      $value = fc $value;
+      $value = normalize_bool($field, fc $value);
 
-      my $to_set  = $value eq 'yes'   ? 1
-                  : $value eq 1       ? 1
-                  : $value eq 'no'    ? 0
-                  : $value eq 0       ? 0
-                  : $value eq 'both'  ? undef
-                  : $value eq '*'     ? undef
-                  :                     -1;
+      maybe_conflict($field, $value);
 
-      bad_value($field) if defined $to_set && $to_set == -1;
-
-      maybe_conflict($field, $to_set);
-
-      $flag{$field} = $to_set;
+      $flag{$field} = $value;
       next COND;
     }
 
@@ -1903,6 +1910,18 @@ sub _compile_search ($self, $conds, $from_user) {
       bad_op($field, $op) unless $op eq 'after' or $op eq 'before';
 
       bad_value("$field:$op") unless $value =~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+
+      cond_error("You gave conflicting values for `$field:$op`.")
+        if exists $flag{$field}{$op} && differ($flag{$field}{$op}, $value);
+
+      $flag{$field}{$op} = $value;
+      next COND;
+    }
+
+    if ($field eq 'show') {
+      bad_op($field, $op) unless exists $Showable_Attribute{ $op };
+
+      $value = normalize_bool($field, fc $value);
 
       cond_error("You gave conflicting values for `$field:$op`.")
         if exists $flag{$field}{$op} && differ($flag{$field}{$op}, $value);
