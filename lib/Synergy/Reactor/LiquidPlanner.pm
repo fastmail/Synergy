@@ -1919,6 +1919,17 @@ sub _compile_search ($self, $conds, $from_user) {
     }
 
     if ($field eq 'show') {
+      # Silly hack:  "show:X" means "show:X:yes" so when there is no op, we
+      # turn the value into the op and replace the value with "yes".  This is
+      # an abuse of the field/op/value system, but so is "show" itself… almost
+      # makes you wonder if I'm a bad person for putting the abuse into the
+      # code just about 30 minutes after the feature itself.
+      # -- rjbs, 2019-03-31
+      unless (defined $op) {
+        $op = fc $value;
+        $value = 'yes';
+      }
+
       bad_op($field, $op) unless exists $Showable_Attribute{ $op };
 
       $value = normalize_bool($field, fc $value);
