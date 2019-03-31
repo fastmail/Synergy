@@ -113,6 +113,7 @@ my %Showable_Attribute = (
   staleness => 0,
   due       => 1,
   emoji     => 1,
+  assignees => 0,
   # stuff we could make optional later:
   #   name
   #   type icon
@@ -178,6 +179,20 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
 
     $text .= " \N{EN DASH} due $str";
     $text .= " \N{CROSS MARK}" if $item->{promise_by} lt $now->ymd;
+  }
+
+  if ($arg{assignees}) {
+    my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+                $self->hub->user_directory->users;
+
+    my $want_done = $item->{is_done};
+    my @assignees = map  {; $by_lp{ $_->{person_id} } // '?' }
+                    grep {; $want_done || ! $_->{is_done} }
+                    $item->{assignments}->@*;
+
+    $text .= sprintf " \N{EN DASH} %s: %s",
+      PL_N('assignees', 0+@assignees),
+      (join q{, }, @assignees);
   }
 
   if ($arg{staleness}) {
