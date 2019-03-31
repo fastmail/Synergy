@@ -1771,12 +1771,16 @@ sub _compile_search ($self, $conds, $from_user) {
       bad_op($field, $op) unless ($op//'is') eq 'is';
 
       $value = fc $value;
-      bad_value($field) unless $value eq 'yes' || $value eq 'no' || $value eq 'both';
 
       my $to_set  = $value eq 'yes'   ? 1
+                  : $value eq 1       ? 1
                   : $value eq 'no'    ? 0
+                  : $value eq 0       ? 0
                   : $value eq 'both'  ? undef
-                  :                     Carp::confess("impossible");
+                  : $value eq '*'     ? undef
+                  :                     -1;
+
+      bad_value($field) if defined $to_set && $to_set == -1;
 
       maybe_conflict($field, $to_set);
 
