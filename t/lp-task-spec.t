@@ -304,92 +304,67 @@ plan_ok(
 
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo"),
-  {
-    kvs   => {},
-    words => [
-      { op => 'contains', word => 'foo' },
-    ],
-  },
+  [
+    { field => 'name', op => 'contains', value => 'foo' },
+  ],
   'one-word search',
 );
 
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo done:1 bar"),
-  {
-    kvs   => { done => { 1 => 1 } },
-    words => [
-      { op => 'contains', word => 'foo' },
-      { op => 'contains', word => 'bar' },
-    ],
-  },
+  [
+    { field => 'name', op => 'contains', value => 'foo' },
+    { field => 'done',                   value => '1'   },
+    { field => 'name', op => 'contains', value => 'bar' },
+  ],
   'simple search',
 );
 
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search(q{^"Feature \\"requests\\""}),
-  {
-    kvs   => {},
-    words => [
-      { op => 'starts_with', word => 'Feature "requests"' },
-    ],
-  },
+  [
+    { field => 'name', op => 'starts_with', value => 'Feature "requests"' },
+  ],
   'search with prefix and qstring',
 );
 
-
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo done:1 type:*"),
-  {
-    kvs   => {
-      done => { 1 => 1 },
-      type => { '*' => 1 },
-    },
-    words => [
-      { op => 'contains', word => 'foo' },
-    ],
-  },
+  [
+    { field => 'name', op => 'contains', value => 'foo' },
+    { field => 'done',                    value => '1'   },
+    { field => 'type',                    value => '*'   },
+  ],
   'simple search with type:*',
 );
 
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo done:1 in:#tx"),
-  {
-    kvs   => {
-      done => { 1 => 1 },
-      in   => { '#tx' => 1 },
-    },
-    words => [
-      { op => 'contains', word => 'foo' },
-    ],
-  },
+  [
+    { field => 'name',  op => 'contains', value => 'foo' },
+    { field => 'done',                    value => '1'   },
+    { field => 'in',                      value => '#tx' },
+  ],
   'simple search with type:*',
 );
 
 for my $u ("user:bar", "u:bar", "o:bar", "owner:bar") {
   is_deeply(
     $synergy->reactor_named('lp')->_parse_search("foo $u"),
-    {
-      kvs   => {
-        owner => { bar => 1 },
-      },
-      words => [
-        { op => 'contains', word => 'foo' },
-      ],
-    },
+    [
+      { field => 'name',  op => 'contains', value => 'foo' },
+      { field => 'owner',                   value => 'bar' },
+    ],
     "owner specified as '$u'",
   );
 }
 
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search(q{project:"JR \\"Bob\\" Dobbs" bob}),
-  {
-    kvs   => {
-      project => { q{JR "Bob" Dobbs} => 1 },
-    },
-    words => [
-      { op => 'contains', word => 'bob' },
-    ],
-  },
+  [
+    { field => 'project',                   value => q{JR "Bob" Dobbs} },
+    { field => 'name',    op => 'contains', value => 'bob' },
+  ],
   "qstring in flag value",
 );
 

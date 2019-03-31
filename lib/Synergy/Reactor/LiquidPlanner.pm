@@ -242,7 +242,7 @@ my %KNOWN = (
   search    =>  [ \&_handle_search,
                   join("\n",
                     "search SEARCH_TERM: find tasks in LiquidPlanner matching term",
-                    "Additional search flags include:",
+                    "Additional search fields include:",
                     "• `done:{yes,no,both}`, search for completed tasks",
                     "• `in:{inbox,urgent,recurring,LP-ID}`, search for scheduled tasks",
                     "• `onhold:{yes,no,both}`, search for tasks on hold",
@@ -1634,20 +1634,15 @@ sub _handle_tasks ($self, $event, $text) {
 }
 
 sub _parse_search ($self, $text) {
-  my @words;
-  my %kvs = ();
+  my @conds;
 
   state $prefix_re  = qr{!?\^?};
   state $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
 
-  my %flag_alias = (
+  my %field_alias = (
     u => 'owner',
     o => 'owner',
     user => 'owner',
-  );
-
-  my %flag_flatten = (
-    map {; $_ => 1 } qw(done onhold scheduled)
   );
 
   my $last = q{};
@@ -1656,7 +1651,7 @@ sub _parse_search ($self, $text) {
 
     # Abort!  Shouldn't happen. -- rjbs, 2018-06-30
     if ($last eq $text) {
-      $kvs{parse_error} = 1;
+      push @conds, { field => 'parse_error', value => 1 };
       last TOKEN;
     }
     $last = $text;
@@ -1667,46 +1662,49 @@ sub _parse_search ($self, $text) {
     if ($text =~ s/^($prefix_re)$qstring\s*//x) {
       my ($prefix, $word) = ($1, $2);
 
-      push @words, {
-        word => ($word =~ s/\\"/"/gr),
-        op   => ( $prefix eq ""   ? "contains"
-                : $prefix eq "^"  ? "starts_with"
-                : $prefix eq "!^" ? "does_not_start_with"
-                : $prefix eq "!"  ? "does_not_contain" # fake operator
-                :                   undef),
+      push @conds, {
+        field => 'name',
+        value => ($word =~ s/\\"/"/gr),
+        op    => ( $prefix eq ""   ? "contains"
+                 : $prefix eq "^"  ? "starts_with"
+                 : $prefix eq "!^" ? "does_not_start_with"
+                 : $prefix eq "!"  ? "does_not_contain" # fake operator
+                 :                   undef),
       };
 
       next TOKEN;
     }
 
     if ($text =~ s/^\#($ident_re)(?: \s | \z)//x) {
-      $kvs{ project }{$1}++;
+      push @conds, {
+        field => 'project',
+        value => $1,
+      };
+
       next TOKEN;
     }
 
     # We're going to allow two-part keys, like "created:on".  It's not great,
     # but it's simple enough. -- rjbs, 2019-03-29
-    state $flagname_re = qr{($ident_re(?::$ident_re)?)};
+    state $flagname_re = qr{($ident_re)(?::($ident_re))?};
 
     if ($text =~ s/^$flagname_re:$qstring(?: \s | \z)//x) {
-      my $k = $1;
-      my $v = $2 =~ s/\\"/"/gr;
+      push @conds, {
+        field => fc($field_alias{$1} // $1),
+        ($2 ? (op => fc $2) : ()),
+        value => $3 =~ s/\\"/"/gr,
+      };
 
-      $k = $flag_alias{$k} if $flag_alias{$k};
-
-      $v = fc $v if $flag_flatten{$k};
-
-      $kvs{$k}{$v}++;
       next TOKEN;
     }
 
     if ($text =~ s/^$flagname_re:([-0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
-      my ($k, $v) = ($1, $2);
-      $k = $flag_alias{$k} if $flag_alias{$k};
+      push @conds, {
+        field => fc($field_alias{$1} // $1),
+        ($2 ? (op => fc $2) : ()),
+        value => $3,
+      };
 
-      $v = fc $v if $flag_flatten{$k};
-
-      $kvs{$k}{$v}++;
       next TOKEN;
     }
 
@@ -1715,238 +1713,255 @@ sub _parse_search ($self, $text) {
       ((my $token), $text) = split /\s+/, $text, 2;
       $token =~ s/\A($prefix_re)//;
       my $prefix = $1;
-      push @words, {
-        word => $token,
-        op   => ( $prefix eq ""   ? "contains"
-                : $prefix eq "^"  ? "starts_with"
-                : $prefix eq "!^" ? "does_not_start_with"
-                : $prefix eq "!"  ? "does_not_contain" # fake operator
-                :                   undef),
+
+      push @conds, {
+        field => 'name',
+        value => $token,
+        op    => ( $prefix eq ""    ? "contains"
+                 : $prefix eq "^"   ? "starts_with"
+                 : $prefix eq "!^"  ? "does_not_start_with"
+                 : $prefix eq "!"   ? "does_not_contain" # fake operator
+                 :                    undef),
       };
     }
   }
 
-  return {
-    words => \@words,
-    kvs   => \%kvs,
-  }
+  return \@conds;
 }
 
-sub _interpret_search ($self, $kvs, $from_user) {
+sub _compile_search ($self, $conds, $from_user) {
   my %flag;
   my %error;
 
-  my sub wtf ($n) { "I don't understand the value you gave for `$n:`." }
+  my @unknown_fields;
+  my @unknown_users;
 
-  # done: and onhold: and scheduled:
-  for my $name (qw(done onhold scheduled)) {
-    if (my $hunk = delete $kvs->{$name}) {
-      my @values = keys %$hunk;
-
-      if (@values > 1) {
-        $error{$name} = "You specified more than one value for $name:X!";
-      } else {
-        if    ($values[0] eq 'yes')  { $flag{$name} = 1; }
-        elsif ($values[0] eq 'no')   { $flag{$name} = 0; }
-        elsif ($values[0] eq 'both') { $flag{$name} = undef }
-        else                         { $error{$name} = wtf($name) }
-      }
-    }
+  my sub cond_error ($str) {
+    no warnings 'exiting';
+    $error{$str} = 1;
+    next COND;
   }
 
-  # in:
-  if (my $in = delete $kvs->{in}) {
-    my @values = keys %$in;
-    if (@values > 1) {
-      $error{in} = qq{You gave more than one "in" value.};
-    } else {
-      my $in = lc $values[0];
-
-      if    ($in eq 'inbox')  { $flag{in} = $self->inbox_package_id;  }
-      elsif ($in eq 'urgent') { $flag{in} = $self->urgent_package_id; }
-
-      # Will anyone ever use this?
-      elsif ($in eq 'recurring') { $flag{in} = $self->recurring_package_id; }
-
-      elsif ($in =~ /\A#(.+)/) {
-        my ($item, $err) = $self->project_for_shortcut("$1");
-        if ($err) {
-          $error{in} = $err;
-        } else {
-          $flag{in} = $item->{id};
-        }
-      } elsif ($in =~ /\A[0-9]+\z/) {
-        $flag{in} = $in;
-      } else {
-        $error{in} = wtf('in');
-      }
-    }
+  my sub bad_value ($field) {
+    cond_error("I don't understand the value you gave for `$field:`.");
   }
 
-  # project:
-  if (my $proj = delete $kvs->{project}) {
-    my @values = keys %$proj;
-    if (@values > 1) {
-      $error{project} = "You can only limit by one project at a time.";
-    } else {
-      my ($project, $err) = $self->project_for_shortcut($values[0]);
-
-      if ($project) {
-        $flag{project} = $project->{id};
-      } else {
-        $error{project} = $err;
-      }
-    }
+  my sub bad_op ($field, $op) {
+    cond_error("I don't understand the operator you gave in `$field:$op`.");
   }
 
-  # client:
-  if (my $client = delete $kvs->{client}) {
-    my @values = keys %$client;
-    if (@values > 1) {
-      $error{client} = "You can only limit by one client at a time.";
-    } else {
-      if (my $client = $self->client_named(lc $values[0])) {
-        $flag{client} = $client->{id};
-      } else {
-        $error{client} = "I couldn't find a client with the specified name.";
-      }
-    }
+  my sub maybe_conflict ($field, $value) {
+    cond_error("You gave conflicting values for `$field`.")
+      if exists $flag{$field} && differ($flag{$field}, $value);
   }
 
-  # page:
-  if (my $page = delete $kvs->{page}) {
-    my @values = keys %$page;
-    if (@values > 1) {
-      $error{page} = "You asked for more than one distinct page number.";
-    } else {
-      my $value = $values[0];
-      if ($value !~ /\A[1-9][0-9]*\z/) {
-        $error{page} = "You have to pick a positive integer page number.";
-      } elsif ($value > 10) {
-        $error{page} = "Sorry, you can't get a page past the tenth.";
-      } else {
-        $flag{page} = $values[0];
-      }
-    }
+  my sub differ ($x, $y) {
+    return 1 if defined $x xor defined $y;
+    return 1 if defined $x && $x ne $y;
+    return 0;
   }
 
-  # user:
-  for my $name (qw(owner creator)) {
-    if (my $owners = delete $kvs->{$name}) {
-      my %member;
-      my %unknown;
-      for my $who (keys %$owners) {
-        my $target = $self->resolve_name($who, $from_user);
-        my $lp_id  = $target && $target->lp_id;
+  COND: for my $cond (@$conds) {
+    # field and op are guaranteed to be in fold case.  Value, not.
+    my $field = $cond->{field};
+    my $op    = $cond->{op};
+    my $value = $cond->{value};
 
-        if ($lp_id) { $member{$lp_id}++ }
-        else        { $unknown{$who}++ }
-      }
+    if (grep {; $field eq $_ } qw(done onhold scheduled)) {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
 
-      if (%unknown) {
-        $error{$name} = "I don't know who these users (given in $name:) are: "
-                      . join q{, }, sort keys %unknown;
-      } else {
-        $flag{$name}{$_} = 1 for keys %member;
-      }
+      $value = fc $value;
+      bad_value($field) unless $value eq 'yes' || $value eq 'no' || $value eq 'both';
+
+      my $to_set  = $value eq 'yes'   ? 1
+                  : $value eq 'no'    ? 0
+                  : $value eq 'both'  ? undef
+                  :                     Carp::confess("impossible");
+
+      maybe_conflict($field, $to_set);
+
+      $flag{$field} = $to_set;
+      next COND;
     }
-  }
 
-  # type:
-  if (my $type = delete $kvs->{type}) {
-    my (@types) = keys %$type;
-
-    if (@types > 1) {
-      $error{type} = "You can only filter on one type at a time.";
-    } else {
-      my $got_type = lc $types[0];
-      if ($got_type =~ /\A (?: project | task | package | \* ) \z/x) {
-        # * means explicit "no filter"
-        $flag{type} = $got_type unless $got_type eq '*';
-      } else {
-        $error{type} = wtf('type');
-      }
+    if ($field eq 'in') {
+      $field = 'project' if $value =~ /\A#/;
     }
-  }
 
-  # phase:
-  if (my $phase = delete $kvs->{phase}) {
-    my (@values) = keys %$phase;
+    if ($field eq 'in') {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
 
-    if (@values > 1) {
-      $error{phase} = "You can only filter on one project phase at a time.";
-    } else {
-      # TODO: validate phases
+      $value = fc $value;
+      my $to_set = $value eq 'inbox'      ? $self->inbox_package_id
+                 : $value eq 'urgent'     ? $self->urgent_package_id
+                 : $value =~ /\A[0-9]+\z/ ? $value
+                 : undef;
+
+      bad_value($field) unless defined $to_set;
+
+      # We could really allow multiple in: here, if we rejigger things.  But do
+      # we care enough?  I don't, right this second. -- rjbs, 2019-03-30
+      maybe_conflict('in', $to_set);
+
+      $flag{in} = $to_set;
+      next COND;
+    }
+
+    if ($field eq 'project') {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
+
+      $value = fc $value;
+      $value =~ s/\A#//;
+      my ($item, $err) = $self->project_for_shortcut($value);
+
+      cond_error($err) if $err;
+      maybe_conflict('project', $item->{id});
+
+      $flag{project} = $item->{id};
+      next COND;
+    }
+
+    if ($field eq 'client') {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
+
+      $value = fc $value;
+      bad_value('client') unless my $client = $self->client_named($value);
+
+      maybe_conflict('client', $client->{id});
+
+      $flag{client} = $client->{id};
+      next COND;
+    }
+
+    if ($field eq 'page') {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
+
+      maybe_conflict('page', $value);
+
+      cond_error("You have to pick a positive integer page number.")
+        unless $value =~ /\A[1-9][0-9]*\z/;
+
+      cond_error("Sorry, you can't get a page past the tenth.") if $value > 10;
+
+      $flag{page} = $value;
+    }
+
+    if (grep {; $field eq $_ } qw(owner creator)) {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
+
+      my $target = $self->resolve_name($value, $from_user);
+      my $lp_id  = $target && $target->lp_id;
+
+      unless ($lp_id) {
+        push @unknown_users, $value;
+        next COND;
+      }
+
+      $flag{$field}{$lp_id} = 1;
+      next COND;
+    }
+
+    if ($field eq 'type') {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
+
+      $value = fc $value;
+
+      bad_value($field)
+        unless $value =~ /\A (?: project | task | package | \* ) \z/x;
+
+      maybe_conflict('type', $value);
+
+      # * means explicit "no filter"
+      $flag{$field} = $value eq '*' ? undef : $value;
+      next COND;
+    }
+
+    if ($field eq 'phase') {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
+
+      # TODO: get phases from LP definition
       my %Phase = (
         none   => 'none',
         flight => 'In Flight',
         map {; $_ => ucfirst } qw(desired planning waiting circling landing)
       );
 
-      if (my $got = $Phase{ lc $values[0] }) {
-        $flag{phase} = $got;
-      } else {
-        $error{phase} = wtf('phase');
-      }
+      my $to_set = $Phase{ fc $value };
+
+      bad_value($field) unless $to_set;
+
+      $flag{$field} = $to_set;
+      next COND;
     }
+
+    if ($field eq 'created') {
+      error("No operator supplied for $field.") unless defined $op;
+      bad_op($field, $op) unless $op eq 'after' or $op eq 'before';
+
+      bad_value("$field:$op") unless $value =~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+
+      cond_error("You gave conflicting values for `$field:$op`.")
+        if exists $flag{$field}{$op} && differ($flag{$field}{$op}, $value);
+
+      $flag{$field}{$op} = $value;
+      next COND;
+    }
+
+    if ($field eq 'debug' or $field eq 'force') {
+      # Whatever, if you put debug:anythingtrue in there, we turn it on.
+      # Live with it. -- rjbs, 2019-02-07
+      $flag{$field} = 1;
+      next COND;
+    }
+
+    if ($field eq 'name') {
+      # We punt on pretty much any validation here.  So be it.
+      # -- rjbs, 2019-03-30
+      $flag{name} //= [];
+      push $flag{name}->@*, [ $op, $value ];
+      next COND;
+    }
+
+    push @unknown_fields, $field;
   }
 
-  for my $which (qw( after before )) {
-    if (my $got = delete $kvs->{"created:$which"}) {
-      my (@values) = keys %$got;
+  if (@unknown_fields) {
+    my $text = "You used some parameters I don't understand: "
+             . join q{, }, sort uniq @unknown_fields;
 
-      if (@values > 1) {
-        $error{"created:$which"} = "You can only set once '$which' time.";
-      } else {
-        if ($values[0] =~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) {
-          $flag{created}{$which} = $values[0];
-        } else {
-          $error{"created:$which"} = wtf("created:$which");
-        }
-      }
-    }
+    $error{$text} = 1;
   }
 
-  # Whatever, if you put debug:anythingtrue in there, we turn it on.
-  # Live with it. -- rjbs, 2019-02-07
-  $flag{debug} = 1 if delete $kvs->{debug};
-  $flag{force} = 1 if delete $kvs->{force};
+  if (@unknown_users) {
+    my $text = "I don't know who these users are: "
+             . join q{, }, sort uniq @unknown_users;
 
-  if (keys %$kvs) {
-    $error{unknown} = "You used some parameters I don't understand: "
-                    . join q{, }, sort keys %$kvs;
+    $error{$text} = 1;
   }
 
   return (\%flag, (%error ? \%error : undef));
 }
 
 sub _handle_search ($self, $event, $text) {
-  my $search = $self->_parse_search($text);
+  my $conds = $self->_parse_search($text);
 
-  if ($search->{flags}{parse_error}) {
+  # This is stupid. -- rjbs, 2019-03-30
+  if (grep {; $_->{field} eq 'parse_error' } @$conds) {
     return $event->error_reply("Your search blew my mind, and now I am dead.");
   }
 
-  my ($flag_ref, $flag_error) = $self->_interpret_search(
-    $search->{kvs},
+  my ($search, $error) = $self->_compile_search(
+    $conds,
     $event->from_user,
   );
 
-  return $self->_do_search(
-    $event,
-    {
-      words => $search->{words},
-      flags => $flag_ref,
-    },
-    $flag_error // {},
-  );
+  return $self->_do_search($event, $search, $error);
 }
 
-sub _do_search ($self, $event, $search, $orig_error = {}) {
-  my %flag  = $search->{flags} ? $search->{flags}->%* : ();
-  my @words = $search->{words} ? $search->{words}->@* : ();
+sub _do_search ($self, $event, $search, $orig_error = undef) {
+  my %flag  = $search ? %$search : ();
 
-  my %error = %$orig_error;
+  my %error = $orig_error ? %$orig_error : ();
 
   my %qflag = (flat => 1, depth => -1);
   my $q_in;
@@ -2063,34 +2078,41 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
     || ($flag{phase} && (defined $flag{done} && ! $flag{done})
                      && ($flag{phase} ne 'none' || $flag{type} ne 'task'));
 
-  WORD: for my $word (@words) {
-    if ($word->{op} eq 'does_not_contain') {
-      $error{word_dnc} = qq{Annoyingly, there's no "does not contain" }
-                       . qq{query in LiquidPlanner, so you can't use "!" }
-                       . qq{as a prefix.};
-      next WORD;
+  if ($flag{name}) {
+    MATCHER: for my $matcher ($flag{name}->@*) {
+      my ($op, $value) = @$matcher;
+      if ($op eq 'does_not_contain') {
+        state $error = qq{Annoyingly, there's no "does not contain" }
+                     . qq{query in LiquidPlanner, so you can't use "!" }
+                     . qq{as a prefix.};
+
+        $error{$error} = 1;
+        next MATCHER;
+      }
+
+      if (! defined $op) {
+        $error{ q{Something weird happened with your search.} } = 1;
+        next MATCHER;
+      }
+
+      # You need to have some kind of actual search.
+      $has_strong_check++ unless $op eq 'does_not_start_with';
+
+      push @filters, [ 'name', $op, $value ];
     }
-
-    if (! defined $word->{op}) {
-      $error{word_dnc} = qq{Something weird happened with your search.};
-      next WORD;
-    }
-
-    # You need to have some kind of actual search.
-    $has_strong_check++ unless $word->{op} eq 'does_not_start_with';
-
-    push @filters, [ 'name', $word->{op}, $word->{word} ];
   }
 
   unless ($has_strong_check) {
-    $error{strong} = "This search is too broad.  Try adding search terms or "
-                   . "more limiting conditions.  I'm sorry this advice is so "
-                   . "vague, but the existing rules are silly and subject to "
-                   . "change at any time.";
+    state $error = "This search is too broad.  Try adding search terms or "
+                 . "more limiting conditions.  I'm sorry this advice is so "
+                 . "vague, but the existing rules are silly and subject to "
+                 . "change at any time.";
+
+    $error{$error} = 1;
   }
 
   if (%error) {
-    return $event->error_reply(join q{  }, sort values %error);
+    return $event->error_reply(join q{  }, sort keys %error);
   }
 
   my %to_query = (
@@ -2110,7 +2132,7 @@ sub _do_search ($self, $event, $search, $orig_error = {}) {
   my $check_res = $self->lp_client_for_user($event->from_user)
                        ->query_items(\%to_query);
 
-  return $event->reply("Something went wrong when running that search.")
+  return $event->reply_error("Something went wrong when running that search.")
     unless $check_res->is_success;
 
   my %seen;
@@ -2164,13 +2186,13 @@ for my $package (qw(inbox urgent recurring)) {
         $text,
         $package,
         sub ($, $, $search) {
-          $search->{flags}{header} = sprintf '%s tasks for %s',
+          $search->{header} = sprintf '%s tasks for %s',
             ucfirst $package,
             $event->from_user->username;
-          $search->{flags}{owner}{ $event->from_user->lp_id } = 1;
-          $search->{flags}{in} = $self->$pkg_id_method;
+          $search->{owner}{ $event->from_user->lp_id } = 1;
+          $search->{in} = $self->$pkg_id_method;
 
-          $search->{flags}{show}{staleness} = 1
+          $search->{show}{staleness} = 1
             if $package eq 'inbox'
             or $package eq 'urgent';
         },
@@ -2190,10 +2212,10 @@ sub _handle_triage ($self, $event, $text) {
     $text,
     "triage",
     sub ($, $, $search) {
-      $search->{flags}{owner}{ $triage_user->lp_id } = 1;
-      $search->{flags}{show}{staleness} = 1;
-      $search->{flags}{header} = "$TRIAGE_EMOJI Tasks to triage";
-      $search->{flags}{zero_text} = "Triage zero!  Feelin' fine.";
+      $search->{owner}{ $triage_user->lp_id } = 1;
+      $search->{show}{staleness} = 1;
+      $search->{header} = "$TRIAGE_EMOJI Tasks to triage";
+      $search->{zero_text} = "Triage zero!  Feelin' fine.";
     },
   )
 }
@@ -2207,7 +2229,7 @@ sub _handle_quick_search ($self, $event, $text, $cmd, $munger) {
 
   my $page = $1 // 1;
 
-  my %search = (flags => { page => $page });
+  my %search = (page => $page);
   $self->$munger($event, \%search);
 
   $self->_do_search($event, \%search);
