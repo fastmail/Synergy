@@ -1874,6 +1874,7 @@ sub _compile_search ($self, $conds, $from_user) {
       cond_error("Sorry, you can't get a page past the tenth.") if $value > 10;
 
       $flag{page} = $value;
+      next COND;
     }
 
     if (grep {; $field eq $_ } qw(owner creator)) {
