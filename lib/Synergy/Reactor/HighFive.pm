@@ -27,7 +27,13 @@ has highfive_webhook => (
   required => 1,
 );
 
-has highfive_channel => (
+has to_channel => (
+  is  => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
+has to_address => (
   is  => 'ro',
   isa => 'Str',
   required => 1,
@@ -41,6 +47,7 @@ has highfive_dbfile => (
 
 has _highfive_dbh => (
   is  => 'ro',
+  lazy     => 1,
   init_arg => undef,
   default  => sub ($self, @) {
     my $dbf = $self->highfive_dbfile;
@@ -92,39 +99,30 @@ sub http_app ($self, $env) {
   my $who = $param->{user_name};
   my $text = Encode::decode('utf-8', $param->{text}); # XXX decode?!
 
-  my $res;
+  my $synthetic_message = $self->hub->name . q{: } . $text;
 
-  $self->do_highfive(
-    from => $who,
-    text => $text,
+  my $channel = $self->hub->channel_named($self->to_channel);
 
-    # XXX: Surely not correct in direct or group chats. -- rjbs, 2018-11-14
-    chan => "#$param->{channel_name}",
+  my $event = $channel->synergy_event_from_slack_event({
+    channel => $param->{channel_id},
+    user    => $param->{user_id},
+    type    => 'message',
+    text    => $text,
 
-    success => sub {
-      my ($self, $msg) = @_;
-      $msg ||= '';
+    # we'll want to keep something like this when we make a Slack::WebHook
+    # channel?
+    webhook_params => $param,
+  });
 
-      $res = [
-        200,
-        [ 'Content-Type' => 'application/json', ],
-        [ encode_json({ text => "highfive sent! $msg" }) ],
-      ];
-    },
-    failure => sub {
-      my ($self, $err) = @_;
-      $err ||= '';
+  my $ok;
+  $self->highfive($event, { ok_ref => \$ok });
 
-      $res = [
-        200,
-        [ 'Content-Type' => 'application/json', ],
-        [ encode_json({ text => "something went wrong! $err" }) ],
-      ];
-    }
-  );
-
-  return $res;
-};
+  return [
+    200,
+    [ 'Content-Type' => 'application/json', ],
+    [ encode_json({ text => $ok ? "Highfive sent!" : "Something went wrong!" }) ],
+  ];
+}
 
 sub listener_specs {
   return {
@@ -139,41 +137,49 @@ sub listener_specs {
 
 sub start ($self) {}
 
-sub highfive ($self, $event) {
+sub highfive ($self, $event, $arg = {}) {
   $event->mark_handled;
 
+  my $ok_ref = $arg->{ok_ref};
+
   unless ($event->from_user) {
-    $event->reply("Sorry, I don't know who you are.");
+    if ($ok_ref)  { $$ok_ref = 0; }
+    else          { $event->reply("Sorry, I don't know who you are."); }
 
     return;
   }
 
   my $who = $event->from_user->username;
-  my $chan = $event->from_channel->describe_conversation($event);
 
   $self->do_highfive(
+    $event,
+
     from => $who,
     text => $event->text,
-    chan => $chan,
+    chan => $event->conversation_address,
+    chandesc => $event->from_channel->describe_conversation($event),
     success => sub {
       my ($self, $msg) = @_;
       $msg ||= '';
 
-      $event->reply("Highfive sent! $msg");
+      if ($ok_ref) { $$ok_ref = 1 }
+      else         { $event->reply("Highfive sent! $msg"); }
     },
     failure => sub {
       my ($self, $err) = @_;
       $err ||= '';
 
-      $event->reply("Something went wrong! $err");
+      if ($ok_ref) { $$ok_ref = 0 }
+      else         { $event->reply("Something went wrong! $err"); }
     }
   );
 }
 
-sub do_highfive ($self, %arg) {
+sub do_highfive ($self, $event, %arg) {
   my $from = $arg{from};
   my $text = $arg{text};
   my $chan = $arg{chan} || '';
+  my $chandesc = $arg{chandesc} || '';
   my $success = $arg{success} || sub {};
   my $failure = $arg{failure} || sub {};
 
@@ -186,45 +192,49 @@ sub do_highfive ($self, %arg) {
 
   my $target_user = $self->hub->user_directory->user_named($target);
 
-  # Resolve users if possible
-  $target_user = $target_user ? '@' . $target_user->username : $target;
+  # This is the per-channel user id (like the Slack userid) of the targeted
+  # user on the channel on which we send our high fives messages.
+  my $target_user_id = $target_user
+                  && $target_user->identity_for($self->to_channel);
 
   # "for eating pie" -> "eating pie"
   $reason =~ s/\Afor:?\s+//;
 
   my $response_text
     = "highfive to $target"
-    . (length($reason) ? " for: $reason (via $chan)" : " (via $chan)");
+    . (length($reason) ? " for: $reason (via $chandesc)" : " (via $chandesc)");
 
   my $ok = 1;
-
   for my $channel (
-    $self->highfive_channel,
-    $target_user,
-    (    $chan ne $self->highfive_channel
-      && $chan !~ /^@/
-        ? ( $chan ) : ()
-    ),
+    $self->to_address,
+    ($target_user_id ? $target_user_id : ()),
+    (($chan && $chan ne $self->to_address) ? $chan : ()),
   ) {
-    my $http_res = $self->hub->http_post(
-      $self->highfive_webhook,
-      Content_Type => 'application/json',
-      Content      => encode_json({
-        text     => $response_text,
-        channel  => $channel,
-        username => $from,
-      }),
-    );
+    $Logger->log("sending highfive notice to $channel");
 
-    unless ($http_res->is_success) {
-      $ok = 0;
+    if ($channel =~ /^[DG]/) {
+      $event->reply($response_text);
+    } else {
+      my $http_res = $self->hub->http_post(
+        $self->highfive_webhook,
+        Content_Type => 'application/json',
+        Content      => encode_json({
+          text      => $response_text,
+          channel   => $channel,
+          username  => $from,
+        }),
+      );
 
-      $Logger->log([
-        "Failed to contact highfive_webhook: %s",
-         $http_res->as_string,
-      ]);
+      unless ($http_res->is_success) {
+        $ok = 0;
 
-      $failure->($self, "Failed to contact highfive_webhook for $channel");
+        $Logger->log([
+          "Failed to contact highfive_webhook: %s",
+           $http_res->as_string,
+        ]);
+
+        $failure->($self, "Failed to contact highfive_webhook for $channel");
+      }
     }
   }
 
