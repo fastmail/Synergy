@@ -1851,6 +1851,15 @@ sub _compile_search ($self, $conds, $from_user) {
       next COND;
     }
 
+    if ($field eq 'tags') {
+      bad_op($field, $op) unless ($op//'include') eq 'include';
+
+      $value = fc $value;
+
+      $flag{tags}{$value} = 1;
+      next COND;
+    }
+
     if ($field eq 'client') {
       bad_op($field, $op) unless ($op//'is') eq 'is';
 
@@ -2053,6 +2062,10 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
 
   if (defined $flag{client}) {
     push @filters, [ 'client_id', '=', $flag{client} ];
+  }
+
+  if (defined $flag{tags}) {
+    push @filters, [ 'tags', 'include', join q{,}, keys $flag{tags}->%* ];
   }
 
   {
