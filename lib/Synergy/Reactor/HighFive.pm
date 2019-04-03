@@ -190,6 +190,9 @@ sub do_highfive ($self, $event, %arg) {
 
   my ($target, $reason) = split /\s+/, $text, 2;
 
+  # @user -> user or user_named won't resolve
+  $target =~ s/^@//;
+
   my $target_user = $self->hub->user_directory->user_named($target);
 
   # This is the per-channel user id (like the Slack userid) of the targeted
