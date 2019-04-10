@@ -185,8 +185,6 @@ sub is_on_triage ($self) {
   return grep { $_->username eq $username } $roto->current_triage_officers;
 }
 
-has default_project_shortcut => (is => 'ro', isa => 'Str');
-
 has lp_id    => (is => 'ro', isa => 'Int', predicate => 'has_lp_id');
 
 has deleted => ( is => 'ro', isa => 'Bool' );
