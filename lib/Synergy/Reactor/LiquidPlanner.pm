@@ -1206,7 +1206,7 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
   unless ($plan->{project}) {
     my @projects  = uniq
                     grep { defined }
-                    map  {; $_->default_project_shortcut }
+                    map  {; $self->get_user_preference($_, 'default-project-shortcut') }
                     @owners;
 
     if (@projects == 1) {
@@ -3693,6 +3693,19 @@ __PACKAGE__->add_preference(
   name      => 'should-nag',
   validator => sub ($self, $value, @) { return bool_from_text($value) },
   default   => 0,
+);
+
+__PACKAGE__->add_preference(
+  name        => 'default-project-shortcut',
+  validator   => sub ($self, $value, @) {
+    return unless $value && length $value;
+    return unless $value =~ /\A[-a-z]+\z/;
+    $value =~ s/^#//;
+    return $value;
+  },
+  describer   => sub ($value) { return $value // '<undef>' },
+  default     => undef,
+  description => 'the project shortcut to which tasks for this user will default',
 );
 
 # Temporary, presumably. We're assuming here that the values from git are
