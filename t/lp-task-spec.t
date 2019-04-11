@@ -148,6 +148,14 @@ plan_ok(
   {
     name        => "Eat more pie #pies are",
   },
+  "text with a pound sign"
+);
+
+plan_ok(
+  "Eat more pie#pies",
+  {
+    name        => "Eat more pie#pies",
+  },
   "text and a project"
 );
 

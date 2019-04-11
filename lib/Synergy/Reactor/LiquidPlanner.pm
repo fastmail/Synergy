@@ -1083,7 +1083,7 @@ sub _extract_flags_from_task_text ($self, $text) {
 
   while ($text =~ s/\s*\(([!>]+)\)\s*\z//
      ||  $text =~ s/\s*($start_emoji|$urgent_emoji)\s*\z//
-     ||  $text =~ s/\s*(#[a-z0-9]+)\s*\z//i
+     ||  $text =~ s/\s+(#[a-z0-9]+)\s*\z//i
   ) {
     my $hunk = $1;
     if ($hunk =~ s/^#//) {
