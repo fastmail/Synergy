@@ -122,7 +122,8 @@ role {
   };
 
   method get_user_preference => sub ($self, $user, $pref_name) {
-    die 'unknown pref' unless $self->is_known_preference($pref_name);
+    die "unknown pref: $pref_name"
+      unless $self->is_known_preference($pref_name);
 
     my $username = blessed $user ? $user->username : $user;
     return unless $username;
@@ -134,7 +135,8 @@ role {
   };
 
   method set_user_preference => sub ($self, $user, $pref_name, $value) {
-    die 'unknown pref' unless $self->is_known_preference($pref_name);
+    die "unknown pref: $pref_name"
+      unless $self->is_known_preference($pref_name);
 
     my $username = blessed $user ? $user->username : $user;
     my $spec = $pref_specs{ $pref_name };
