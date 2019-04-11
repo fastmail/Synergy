@@ -3699,8 +3699,8 @@ __PACKAGE__->add_preference(
   name        => 'default-project-shortcut',
   validator   => sub ($self, $value, @) {
     return unless $value && length $value;
+    $value =~ s/\A#//;
     return unless $value =~ /\A[-a-z]+\z/;
-    $value =~ s/^#//;
     return $value;
   },
   describer   => sub ($value) { return $value // '<undef>' },
