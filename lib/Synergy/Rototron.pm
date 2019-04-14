@@ -462,7 +462,7 @@ package Synergy::Rototron::AvailabilityChecker {
     default => sub ($self, @) {
       my $path = $self->db_path;
       Carp::confess("db path does not exist") unless -e $path;
-      my $dbh = DBI->connect("dbi:SQLite:$path", undef, undef)
+      my $dbh = DBI->connect("dbi:SQLite:$path", undef, undef, { RaiseError => 1 })
         or die "can't connect to db at $path: $DBI::errstr";
 
       return $dbh;

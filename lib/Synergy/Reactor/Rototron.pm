@@ -29,7 +29,7 @@ sub listener_specs {
       name      => 'unavailable',
       method    => 'handle_set_availability',
       exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^(un)?available\b/in },
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^(?:(\S+)\s+is\s+)?(un)?available\b/in },
     },
   );
 }
@@ -60,14 +60,21 @@ sub handle_set_availability ($self, $event) {
   my ($from, $to);
   my $ymd_re = qr{ [0-9]{4} - [0-9]{2} - [0-9]{2} }x;
 
-  my $adj  = $event->text =~ /\Aun/ ? 'unavailable' : 'available';
-  my $text = $event->text =~ s/\A(un)?available\b//rn;
-  $text =~ s/\A\s+//;
+  my $target = $event->from_user;
+  if ($event->text =~ /^(\S+)\s+is\s+/) {
+    $target = $self->resolve_name($1, $event->from_user);
+    unless ($target) {
+      return $event->error_reply("Sorry, I don't know who you mean.");
+    }
+  }
 
-  if ($text =~ m{\Aon\s+($ymd_re)\z}) {
+  my $text = $event->text;
+  my $adj  = $text =~ /unavailable/ ? 'unavailable' : 'available';
+
+  if ($text =~ m{\bon\s+($ymd_re)\z}) {
     $from = parse_date_for_user("$1", $event->from_user);
     $to   = $from->clone;
-  } elsif ($text =~ m{\Afrom\s+($ymd_re)\s+to\s+($ymd_re)\z}) {
+  } elsif ($text =~ m{\bfrom\s+($ymd_re)\s+to\s+($ymd_re)\z}) {
     my ($d1, $d2) = ($1, $2);
     $from = parse_date_for_user($d1, $event->from_user);
     $to   = parse_date_for_user($d2, $event->from_user);
@@ -92,14 +99,17 @@ sub handle_set_availability ($self, $event) {
 
   my $method = qq{set_user_$adj\_on};
   for my $date (@dates) {
+    my $username = $target->username;
     $self->availability_checker->$method(
-      $event->from_user->username,
+      $target->username,
       $date,
     );
   }
 
   $event->reply(
-    sprintf "I marked you $adj on %s %s.",
+    sprintf "I marked %s %s on %s %s.",
+      $target->them,
+      $adj,
       NUMWORDS(0+@dates),
       PL_N('day', 0+@dates),
   );
