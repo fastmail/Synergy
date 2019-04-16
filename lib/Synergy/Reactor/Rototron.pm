@@ -108,7 +108,9 @@ sub handle_set_availability ($self, $event) {
 
   $event->reply(
     sprintf "I marked %s %s on %s %s.",
-      $target->them,
+      ($target->username eq $event->from_user->username
+        ? 'you'
+        : $target->them),
       $adj,
       NUMWORDS(0+@dates),
       PL_N('day', 0+@dates),
