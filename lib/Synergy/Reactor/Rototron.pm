@@ -69,7 +69,7 @@ sub handle_set_availability ($self, $event) {
   }
 
   my $text = $event->text;
-  my $adj  = $text =~ /unavailable/ ? 'unavailable' : 'available';
+  my $adj  = $text =~ /unavailable/i ? 'unavailable' : 'available';
 
   if ($text =~ m{\bon\s+($ymd_re)\z}) {
     $from = parse_date_for_user("$1", $event->from_user);
