@@ -165,7 +165,7 @@ sub my_running_timer ($self) {
   # Treat as impossible, for now, >1 running timer. -- rjbs, 2018-06-26
   $self->my_timers->then(sub ($data) {
     my ($timer) = grep {; $_->{running} } @$data;
-    return $timer ? Future->done( LPC::Timer->new($timer) )
+    return $timer ? Future->done( LPC_F::Timer->new($timer) )
                   : Future->done;
   });
 }
@@ -291,7 +291,7 @@ sub create_todo_item ($self, $todo) {
 }
 
 sub current_iteration ($self) {
-  my $helper = LPC::IterationHelper->new({ lpc => $self });
+  my $helper = LPC_F::IterationHelper->new({ lpc => $self });
 
   my $iter  = $helper->current_iteration;
   my $pkg_f = $helper->package_for_iteration_number($iter->{number});
@@ -305,7 +305,7 @@ sub current_iteration ($self) {
 }
 
 sub iteration_by_number ($self, $n) {
-  my $helper = LPC::IterationHelper->new({ lpc => $self });
+  my $helper = LPC_F::IterationHelper->new({ lpc => $self });
 
   my $iter  = $helper->iteration_by_number($n);
   my $pkg_f = $helper->package_for_iteration_number($iter->{number});
@@ -319,7 +319,7 @@ sub iteration_by_number ($self, $n) {
 }
 
 sub iteration_relative_to_current ($self, $delta_n) {
-  my $helper = LPC::IterationHelper->new({ lpc => $self });
+  my $helper = LPC_F::IterationHelper->new({ lpc => $self });
 
   my $iter  = $helper->iteration_relative_to_current($delta_n);
   my $pkg_f = $helper->package_for_iteration_number($iter->{number});
@@ -332,7 +332,7 @@ sub iteration_relative_to_current ($self, $delta_n) {
   };
 }
 
-package LPC::Timer {
+package LPC_F::Timer {
   use Moose;
   use namespace::autoclean;
   use experimental qw(signatures lexical_subs);
@@ -372,47 +372,7 @@ package LPC::Timer {
   }
 }
 
-package LPC::Result::Success {
-  use Moose;
-  use MooseX::StrictConstructor;
-  use namespace::autoclean;
-  use experimental qw(signatures lexical_subs);
-
-  sub is_success { 1 };
-
-  has payload => (is => 'ro', predicate => 'has_payload');
-
-  sub is_nil ($self) { ! $self->has_payload }
-
-  sub payload_list ($self) {
-    return () if $self->is_nil;
-
-    my $payload = $self->payload;
-    Carp::confess("payload_list with non-arrayref payload")
-      unless ref $payload and ref $payload eq 'ARRAY';
-
-    return @$payload;
-  }
-
-  __PACKAGE__->meta->make_immutable;
-}
-
-package LPC::Result::Failure {
-  use Moose;
-  use MooseX::StrictConstructor;
-  use namespace::autoclean;
-  use experimental qw(signatures lexical_subs);
-
-  sub is_success { 0 };
-  sub is_nil     { 0 };
-
-  sub payload       { Carp::confess("tried to interpret failure as success") }
-  sub payload_list  { Carp::confess("tried to interpret failure as success") }
-
-  __PACKAGE__->meta->make_immutable;
-}
-
-package LPC::IterationHelper {
+package LPC_F::IterationHelper {
   use Moose;
   use MooseX::StrictConstructor;
   use namespace::autoclean;

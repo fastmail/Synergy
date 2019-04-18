@@ -19,6 +19,7 @@ use Time::Duration;
 use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
 use Synergy::LPC; # LiquidPlanner Client, of course
+use Synergy::LPC_F; # LiquidPlanner Client, with futures, of course
 use Synergy::Timer;
 use Synergy::Util qw(
   parse_time_hunk pick_one bool_from_text
@@ -976,8 +977,8 @@ sub _get_treeitem_shortcuts {
 sub get_project_shortcuts ($self) { $self->_get_treeitem_shortcuts('Project') }
 sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 
-sub lp_client_for_user ($self, $user) {
-  Synergy::LPC->new({
+sub _lp_client_for_user ($self, $class, $user) {
+  $class->new({
     auth_token    => $self->auth_header_for($user),
     workspace_id  => $self->workspace_id,
     logger_callback   => sub { $Logger },
@@ -991,6 +992,14 @@ sub lp_client_for_user ($self, $user) {
       $self->hub->http_post($uri, @arg);
     },
   });
+}
+
+sub lp_client_for_user ($self, $user) {
+  $self->_lp_client_for_user('Synergy::LPC', $user);
+}
+
+sub f_lp_client_for_user ($self, $user) {
+  $self->_lp_client_for_user('Synergy::LPC_F', $user);
 }
 
 sub lp_client_for_master ($self) {
