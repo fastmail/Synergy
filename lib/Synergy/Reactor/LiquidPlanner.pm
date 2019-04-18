@@ -1473,83 +1473,83 @@ sub _execute_task_plan ($self, $event, $plan, $error) {
     return $event->error_reply($errors);
   }
 
-  my $lpc = $self->lp_client_for_user($event->from_user);
-
   my $arg = {};
 
-  my $task = $self->_create_lp_task($event, $plan, $arg);
+  my $task_f = $self->_create_lp_task($event, $plan, $arg);
 
-  unless ($task) {
-    if ($arg->{already_notified}) {
-      return;
-    } else {
-      return $event->reply(
-        "Sorry, something went wrong when I tried to make that task.",
-        $arg,
-      );
+  $task_f->on_fail(sub {
+    $event->reply(
+      "Sorry, something went wrong when I tried to make that task.",
+      $arg,
+    );
+  });
+
+  $task_f = $task_f->then(sub ($task) {
+    my $lpc = $self->lp_client_for_user($event->from_user);
+
+    my $reply_base = "created, assigned to "
+                   . join q{ and }, map {; $_->username } $plan->{owners}->@*;
+
+    if ($plan->{start}) {
+      my $res = $lpc->start_timer_for_task_id($task->{id});
+
+      if ($res->is_success) {
+        $self->set_last_lp_timer_task_id_for_user($event->from_user, $task->{id});
+
+        $reply_base .= q{, timer started};
+      } else {
+        $reply_base .= q{, but the timer couldn't be started};
+      }
     }
-  }
 
-  my $reply_base = "created, assigned to "
-                 . join q{ and }, map {; $_->username } $plan->{owners}->@*;
+    if (my $log_hrs = $plan->{log_hours}) {
+      my $track_ok = $lpc->track_time({
+        task_id => $task->{id},
+        work => $log_hrs,
+        done => $plan->{done},
+        member_id   => $event->from_user->lp_id,
+        activity_id => $task->{activity_id},
+      });
 
-  if ($plan->{start}) {
-    my $res = $lpc->start_timer_for_task_id($task->{id});
+      if ($track_ok) {
+        my $time = sprintf '%0.2fh', $log_hrs;
+        $reply_base .= ".  I logged $time for you";
+        $reply_base .= " and marked your work done" if $plan->{done};
+      } else {
+        $reply_base .= ".  I couldn't log time it";
+      }
+    } elsif ($plan->{done}) {
+      my $track_ok = $lpc->track_time({
+        task_id => $task->{id},
+        work => 0,
+        done => $plan->{done},
+        member_id   => $event->from_user->lp_id,
+        activity_id => $task->{activity_id},
+      });
 
-    if ($res->is_success) {
-      $self->set_last_lp_timer_task_id_for_user($event->from_user, $task->{id});
-
-      $reply_base .= q{, timer started};
-    } else {
-      $reply_base .= q{, but the timer couldn't be started};
+      if ($track_ok) {
+        $reply_base .= ".  I marked your work done";
+      } else {
+        $reply_base .= ".  I couldn't mark your work done";
+      }
     }
-  }
 
-  if (my $log_hrs = $plan->{log_hours}) {
-    my $track_ok = $lpc->track_time({
-      task_id => $task->{id},
-      work => $log_hrs,
-      done => $plan->{done},
-      member_id   => $event->from_user->lp_id,
-      activity_id => $task->{activity_id},
-    });
+    my $item_uri = $self->item_uri($task->{id});
 
-    if ($track_ok) {
-      my $time = sprintf '%0.2fh', $log_hrs;
-      $reply_base .= ".  I logged $time for you";
-      $reply_base .= " and marked your work done" if $plan->{done};
-    } else {
-      $reply_base .= ".  I couldn't log time it";
-    }
-  } elsif ($plan->{done}) {
-    my $track_ok = $lpc->track_time({
-      task_id => $task->{id},
-      work => 0,
-      done => $plan->{done},
-      member_id   => $event->from_user->lp_id,
-      activity_id => $task->{activity_id},
-    });
+    my $plain = join qq{\n},
+      "LP$task->{id} $reply_base.",
+      "\N{LINK SYMBOL} $item_uri",
+      "\N{LOVE LETTER} " . $task->{item_email};
 
-    if ($track_ok) {
-      $reply_base .= ".  I marked your work done";
-    } else {
-      $reply_base .= ".  I couldn't mark your work done";
-    }
-  }
+    my $slack = sprintf "%s %s. (<mailto:%s|email>)",
+      $self->_slack_item_link($task),
+      $reply_base,
+      $task->{item_email};
 
-  my $item_uri = $self->item_uri($task->{id});
+    $event->reply($plain, { slack => $slack });
+  })->retain;
 
-  my $plain = join qq{\n},
-    "LP$task->{id} $reply_base.",
-    "\N{LINK SYMBOL} $item_uri",
-    "\N{LOVE LETTER} " . $task->{item_email};
-
-  my $slack = sprintf "%s %s. (<mailto:%s|email>)",
-    $self->_slack_item_link($task),
-    $reply_base,
-    $task->{item_email};
-
-  $event->reply($plain, { slack => $slack });
+  return;
 }
 
 sub _start_timer ($self, $user, $task) {
@@ -2211,14 +2211,14 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
     );
   }
 
-  my $search = $self
+  my $search_f = $self
     ->f_lp_client_for_user($event->from_user)
     ->query_items(\%to_query)
     ->else(sub {
       $event->reply_error("Something went wrong when running that search.")
     });
 
-  $search->then(sub ($data) {
+  $search_f->then(sub ($data) {
     my %seen;
     my @tasks = grep {; ! $seen{$_->{id}}++ } @$data;
 
@@ -2542,32 +2542,32 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
   };
 
   my $as_user = $my_arg->{user} // $self->master_lp_user;
-  my $lpc = $self->lp_client_for_user($as_user);
+  my $lpc = $self->f_lp_client_for_user($as_user);
 
-  my $res = $lpc->create_task($payload);
+  my $task_f = $lpc->create_task($payload);
 
-  return unless $res->is_success;
+  return $task_f->then(sub ($task) {
+    # If the task is assigned to the triage user, inform them.
+    # -- rjbs, 2019-02-28
+    my $triage_user = $self->hub->user_directory->user_named('triage');
+    if ($triage_user && $triage_user->has_lp_id) {
+      if (grep {; $_->{person_id} eq $triage_user->lp_id } @{ $task->{assignments} }) {
+        my $text = sprintf
+          "$TRIAGE_EMOJI New task created for triage: %s (%s)",
+          $task->{name},
+          $self->item_uri($task->{id});
 
-  # If the task is assigned to the triage user, inform them.
-  # -- rjbs, 2019-02-28
-  my $triage_user = $self->hub->user_directory->user_named('triage');
-  if ($triage_user && $triage_user->has_lp_id) {
-    if (grep {; $_->{person_id} eq $triage_user->lp_id } @{ $res->payload->{assignments} }) {
-      my $text = sprintf
-        "$TRIAGE_EMOJI New task created for triage: %s (%s)",
-        $res->payload->{name},
-        $self->item_uri($res->payload->{id});
+        my $alt = {
+          slack => sprintf "$TRIAGE_EMOJI *New task created for triage:* %s",
+            $self->_slack_item_link_with_name($task)
+        };
 
-      my $alt = {
-        slack => sprintf "$TRIAGE_EMOJI *New task created for triage:* %s",
-          $self->_slack_item_link_with_name($res->payload)
-      };
-
-      $self->_inform_triage($text, $alt);
+        $self->_inform_triage($text, $alt);
+      }
     }
-  }
 
-  return $res->payload;
+    return Future->done($task);
+  });
 }
 
 sub _inform_triage ($self, $text, $alt = {}) {
