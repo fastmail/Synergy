@@ -2211,51 +2211,56 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
     );
   }
 
-  my $check_res = $self->lp_client_for_user($event->from_user)
-                       ->query_items(\%to_query);
+  my $search = $self
+    ->f_lp_client_for_user($event->from_user)
+    ->query_items(\%to_query)
+    ->else(sub {
+      $event->reply_error("Something went wrong when running that search.")
+    });
 
-  return $event->reply_error("Something went wrong when running that search.")
-    unless $check_res->is_success;
+  $search->then(sub ($data) {
+    my %seen;
+    my @tasks = grep {; ! $seen{$_->{id}}++ } @$data;
 
-  my %seen;
-  my @tasks = grep {; ! $seen{$_->{id}}++ } $check_res->payload_list;
+    if ($q_in) {
+      # If you search for the contents of n, you will get n back also.
+      @tasks = grep {; $_->{id} != $q_in } @tasks;
+    }
 
-  if ($q_in) {
-    # If you search for the contents of n, you will get n back also.
-    @tasks = grep {; $_->{id} != $q_in } @tasks;
-  }
+    if ($flag{owner} && keys $flag{owner}->%*
+        && defined $flag{done} && ! $flag{done}
+    ) {
+      @tasks = grep {;
+        keys $flag{owner}->%*
+        ==
+        grep {; ! $_->{is_done} and $flag{owner}{ $_->{person_id} } }
+          $_->{assignments}->@*;
+      } @tasks;
+    }
 
-  if ($flag{owner} && keys $flag{owner}->%*
-      && defined $flag{done} && ! $flag{done}
-  ) {
-    @tasks = grep {;
-      keys $flag{owner}->%*
-      ==
-      grep {; ! $_->{is_done} and $flag{owner}{ $_->{person_id} } }
-        $_->{assignments}->@*;
-    } @tasks;
-  }
+    unless (@tasks) {
+      return $event->reply($flag{zero_text} // "Nothing matched that search.");
+    }
 
-  unless (@tasks) {
-    return $event->reply($flag{zero_text} // "Nothing matched that search.");
-  }
+    # fix and more to live in send-task-list
+    my $more  = @tasks > $offset + 11;
+    @tasks = splice @tasks, $offset, 10;
 
-  # fix and more to live in send-task-list
-  my $more  = @tasks > $offset + 11;
-  @tasks = splice @tasks, $offset, 10;
+    return $event->reply("That's past the last page of results.") unless @tasks;
 
-  return $event->reply("That's past the last page of results.") unless @tasks;
+    $self->_send_task_list(
+      $event,
+      \@tasks,
+      {
+        header  => $flag{header} // "Search results",
+        page    => $flag{page},
+        more    => $more ? 1 : 0,
+        show    => $flag{show},
+      },
+    );
+  })->retain;
 
-  $self->_send_task_list(
-    $event,
-    \@tasks,
-    {
-      header  => $flag{header} // "Search results",
-      page    => $flag{page},
-      more    => $more ? 1 : 0,
-      show    => $flag{show},
-    },
-  );
+  return;
 }
 
 for my $package (qw(inbox urgent recurring)) {
