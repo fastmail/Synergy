@@ -1473,7 +1473,8 @@ sub _execute_task_plan ($self, $event, $plan, $error) {
     return $event->error_reply($errors);
   }
 
-  my $arg = {};
+  my $user = $event->from_user;
+  my $arg  = {};
 
   my $task_f = $self->_create_lp_task($event, $plan, $arg);
 
@@ -1484,69 +1485,77 @@ sub _execute_task_plan ($self, $event, $plan, $error) {
     );
   });
 
-  $task_f = $task_f->then(sub ($task) {
-    my $lpc = $self->lp_client_for_user($event->from_user);
+  $task_f->then(sub ($task) {
+    my %todo;
 
-    my $reply_base = "created, assigned to "
-                   . join q{ and }, map {; $_->username } $plan->{owners}->@*;
+    my $lpc = $self->f_lp_client_for_user($user);
 
     if ($plan->{start}) {
-      my $res = $lpc->start_timer_for_task_id($task->{id});
-
-      if ($res->is_success) {
-        $self->set_last_lp_timer_task_id_for_user($event->from_user, $task->{id});
-
-        $reply_base .= q{, timer started};
-      } else {
-        $reply_base .= q{, but the timer couldn't be started};
-      }
+      $todo{timer} = $lpc->start_timer_for_task_id($task->{id})
+        ->then(sub {
+          $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
+          Future->done;
+        });
     }
 
-    if (my $log_hrs = $plan->{log_hours}) {
-      my $track_ok = $lpc->track_time({
+    if ($plan->{log_hours} || $plan->{done}) {
+      $todo{track} = $lpc->track_time({
         task_id => $task->{id},
-        work => $log_hrs,
-        done => $plan->{done},
-        member_id   => $event->from_user->lp_id,
+        work    => $plan->{log_hours} || 0,
+        done    => $plan->{done},
+        member_id   => $user->lp_id,
         activity_id => $task->{activity_id},
+      })->then(sub {
+        Future->done({
+          work => $plan->{log_hours},
+          done => $plan->{done},
+        });
       });
-
-      if ($track_ok) {
-        my $time = sprintf '%0.2fh', $log_hrs;
-        $reply_base .= ".  I logged $time for you";
-        $reply_base .= " and marked your work done" if $plan->{done};
-      } else {
-        $reply_base .= ".  I couldn't log time it";
-      }
-    } elsif ($plan->{done}) {
-      my $track_ok = $lpc->track_time({
-        task_id => $task->{id},
-        work => 0,
-        done => $plan->{done},
-        member_id   => $event->from_user->lp_id,
-        activity_id => $task->{activity_id},
-      });
-
-      if ($track_ok) {
-        $reply_base .= ".  I marked your work done";
-      } else {
-        $reply_base .= ".  I couldn't mark your work done";
-      }
     }
 
-    my $item_uri = $self->item_uri($task->{id});
+    # So, the callback is passed the same hashref that we pass to wait_named,
+    # which is just \%todo, so why not close over %todo?  I think I am being
+    # helpful to readability here, but maybe I'm being a jerk.  Only time will
+    # tell.  -- rjbs, 2019-04-19
+    $lpc->wait_named(\%todo)->then(sub {
+      my $reply_base
+        = "created, assigned to "
+        . (join q{ and }, map {; $_->username } $plan->{owners}->@*);
 
-    my $plain = join qq{\n},
-      "LP$task->{id} $reply_base.",
-      "\N{LINK SYMBOL} $item_uri",
-      "\N{LOVE LETTER} " . $task->{item_email};
+      if ($todo{track}) {
+        if ($todo{track}->is_done) {
+          my $track = $todo{track}->get;
+          $reply_base .=
+            ($track->{log_hours}  ? sprintf(', logged %0.2fh', $track->{log_hrs}) : q{})
+          . ($track->{done}       ? (($track->{log_hours} ? q{,} : q{})
+                                    . ' and marked it done') : q{});
 
-    my $slack = sprintf "%s %s. (<mailto:%s|email>)",
-      $self->_slack_item_link($task),
-      $reply_base,
-      $task->{item_email};
+        } else {
+          $reply_base .= ', but something went wrong with the time tracking';
+        }
+      }
 
-    $event->reply($plain, { slack => $slack });
+      if ($todo{timer}) {
+        $reply_base .= q{  } .
+          ($todo{timer}->is_done
+          ? "Timer started."
+          : "Something went wrong with starting your timer.");
+      }
+
+      my $item_uri = $self->item_uri($task->{id});
+
+      my $plain = join qq{\n},
+        "LP$task->{id} $reply_base.",
+        "\N{LINK SYMBOL} $item_uri",
+        "\N{LOVE LETTER} " . $task->{item_email};
+
+      my $slack = sprintf "%s %s (<mailto:%s|email>)",
+        $self->_slack_item_link($task),
+        $reply_base,
+        $task->{item_email};
+
+      $event->reply($plain, { slack => $slack });
+    });
   })->retain;
 
   return;

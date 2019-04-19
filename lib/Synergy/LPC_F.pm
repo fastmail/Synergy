@@ -126,6 +126,12 @@ sub http_post ($self, $path, @arg) {
   });
 }
 
+sub wait_named ($self, $href) {
+  Future->wait_all(values %$href)->then(sub {
+    Future->done($href);
+  });
+}
+
 sub get_clients ($self) {
   $self->http_get("/clients");
 }
@@ -193,9 +199,9 @@ sub upcoming_task_groups_for_member_id ($self, $member_id, $limit = 200) {
 
 sub start_timer_for_task_id ($self, $task_id) {
   my $start_res = $self->http_post("/tasks/$task_id/timer/start");
-  $start_res->then_with_f(sub ($f, $data) {
+  $start_res->then(sub ($data) {
     return Future->fail("new timer not running?!") unless $data->{running};
-    return $f;
+    return Future->done($data);
   });
 }
 
