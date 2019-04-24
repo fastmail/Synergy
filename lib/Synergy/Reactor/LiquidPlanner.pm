@@ -2553,6 +2553,7 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
   my $as_user = $my_arg->{user} // $self->master_lp_user;
   my $lpc = $self->f_lp_client_for_user($as_user);
 
+  my $chan_desc = $event->from_channel->describe_conversation($event);
   my $task_f = $lpc->create_task($payload);
 
   return $task_f->then(sub ($task) {
@@ -2562,12 +2563,14 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
     if ($triage_user && $triage_user->has_lp_id) {
       if (grep {; $_->{person_id} eq $triage_user->lp_id } @{ $task->{assignments} }) {
         my $text = sprintf
-          "$TRIAGE_EMOJI New task created for triage: %s (%s)",
+          "$TRIAGE_EMOJI New task created for triage from %s: %s (%s)",
+          $chan_desc,
           $task->{name},
           $self->item_uri($task->{id});
 
         my $alt = {
-          slack => sprintf "$TRIAGE_EMOJI *New task created for triage:* %s",
+          slack => sprintf "$TRIAGE_EMOJI *New task created for triage from %s*: %s",
+            $chan_desc,
             $self->_slack_item_link_with_name($task)
         };
 
