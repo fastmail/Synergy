@@ -111,6 +111,7 @@ sub _slack_item_link ($self, $item) {
 my %Showable_Attribute = (
   shortcuts => 1,
   phase     => 1,
+  age       => 0,
   staleness => 0,
   due       => 1,
   emoji     => 1,
@@ -194,6 +195,11 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     $text .= sprintf " \N{EN DASH} %s: %s",
       PL_N('assignees', 0+@assignees),
       (join q{, }, @assignees);
+  }
+
+  if ($arg{age}) {
+    my $created = parse_lp_datetime($item->{created_at});
+    $text .= " \N{EN DASH} created " .  concise(ago(time - $created->epoch));
   }
 
   if ($arg{staleness}) {
@@ -2309,6 +2315,7 @@ sub _handle_triage ($self, $event, $text) {
     "triage",
     sub ($, $, $search) {
       $search->{owner}{ $triage_user->lp_id } = 1;
+      $search->{show}{age} = 1;
       $search->{show}{staleness} = 1;
       $search->{header} = "$TRIAGE_EMOJI Tasks to triage";
       $search->{zero_text} = "Triage zero!  Feelin' fine.";
