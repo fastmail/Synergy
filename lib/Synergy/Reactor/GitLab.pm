@@ -740,7 +740,7 @@ sub mr_report ($self, $who) {
     my @assigned = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
                    $result{assigned}->@*;
 
-    return unless @filed || @assigned || @selfies;
+    return Future->done unless @filed || @assigned || @selfies;
 
     my $string = q{};
 
