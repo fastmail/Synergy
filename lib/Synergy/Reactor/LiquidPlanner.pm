@@ -1945,8 +1945,9 @@ sub _compile_search ($self, $conds, $from_user) {
 
       # TODO: get phases from LP definition
       my %Phase = (
-        none   => 'none',
-        flight => 'In Flight',
+        none      => 'none',
+        flight    => 'In Flight',
+        longhaul  => 'Long Haul',
         map {; $_ => ucfirst } qw(desired planning waiting circling landing)
       );
 
@@ -3426,8 +3427,9 @@ my %Phase_Pos = (
   'Planning'  => 1,
   'Waiting'   => 2,
   'In Flight' => 3,
-  'Circling'  => 4,
-  'Landing'   => 5,
+  'Long Haul' => 4,
+  'Circling'  => 5,
+  'Landing'   => 6,
 );
 
 sub project_report ($self, $who) {
