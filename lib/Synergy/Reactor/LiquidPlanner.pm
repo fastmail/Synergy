@@ -2884,7 +2884,7 @@ sub _handle_start ($self, $event, $text) {
     return $event->reply("Sorry, something went wrong trying to find that task.")
       unless $task_res->is_success;
 
-    return $event->reply("Sorry, I couldn't find that task.")
+    return $event->error_reply("Sorry, I couldn't find that task.")
       if $task_res->is_nil;
 
     return $self->_handle_start_existing($event, $task_res->payload);
@@ -3319,7 +3319,7 @@ sub _handle_iteration ($self, $event, $rest) {
 
   $event->mark_handled;
 
-  return $event->reply("Sorry, I couldn't find that iteration")
+  return $event->error_reply("Sorry, I couldn't find that iteration")
     unless $iteration;
 
   my $reply = sprintf "Iteration %s: %s to %s",
@@ -3848,7 +3848,7 @@ sub _handle_contents ($self, $event, $rest) {
     ],
   });
 
-  return $event->reply("Sorry, I couldn't get the contents.")
+  return $event->error_reply("Sorry, I couldn't get the contents.")
     unless $res->is_success;
 
   my @items = grep {; $_->{id} != $item->{id} } $res->payload_list;
