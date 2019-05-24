@@ -3465,11 +3465,15 @@ sub project_report ($self, $who) {
     # Nothing to do here, generally..? -- rjbs, 2019-03-22
     next if $phase eq 'Desired' or $phase eq 'Waiting' or $phase eq 'Circling';
 
-    push @lines, sprintf '%s %s • *%s*: %s',
+    my $shortcut = $project->{custom_field_values}{"Synergy Project Shortcut"};
+
+    push @lines, sprintf '%s %s • *%s*: %s%s',
       ($project->{custom_field_values}{Emoji} // "\N{FILE FOLDER}"),
       $self->_slack_item_link($project),
       $phase,
-      ($project->{name} =~ s/^P:\s+//r);
+      ($project->{name} =~ s/^P:\s+//r),
+      ($shortcut ? " *#$shortcut*" : q{})
+      ;
   }
 
   return unless @lines;
