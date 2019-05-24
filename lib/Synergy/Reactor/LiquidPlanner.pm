@@ -1378,6 +1378,45 @@ sub _task_subcmd_log ($self, $rest, $plan) {
   return;
 }
 
+sub _item_from_token ($self, $token) {
+  # MAYBE TODO: Offer a means to only resolve shortcuts of a known type?
+  # -- rjbs, 2019-05-24
+  if ($token =~ s/\A\*//) {
+    return $self->project_for_shortcut($token);
+  }
+
+  if ($token =~ s/\A\#//) {
+    return $self->task_for_shortcut($token);
+  }
+
+  if ($token =~ /\A[0-9]+\z/) {
+    # We build these objects too much. :'(  -- rjbs, 2019-05-24
+    my $lpc = $self->lp_client_for_master;
+    my $task_res = $lpc->get_item($token);
+    return ($task_res->payload, undef) if $task_res->is_success;
+    return (undef, "No item found.");
+  }
+
+  BY_URL: {
+    if (
+      $token =~ m{\A\s*(?:https://app.liquidplanner.com/space/([0-9]+)/.*/)?([0-9]+)P?/?\s*\z}
+    ) {
+      my ($workspace_id, $task_id) = ($1, $2);
+      last BY_URL unless $workspace_id == $self->workspace_id;
+
+      my $lpc = $self->lp_client_for_master;
+      my $task_res = $lpc->get_item($task_id);
+      return ($task_res->payload, undef) if $task_res->is_success;
+      return (undef, "No item found.");
+    }
+  }
+
+  return (
+    undef,
+    qq{I couldn't figure out how to make "$token" into a LiquidPlanner item.},
+  );
+}
+
 sub _handle_update ($self, $event, $text) {
   $event->mark_handled;
 
