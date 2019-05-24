@@ -1420,34 +1420,43 @@ sub _item_from_token ($self, $token) {
 sub _handle_update ($self, $event, $text) {
   $event->mark_handled;
 
-  my $plan  = {};
+  # We want to accept "update lp 123 ..." just like "update lp123", because
+  # we are not monsters. -- rjbs, 2019-05-24
+  $text =~ s/\A(LP)\s+/$1/gi;
 
-  my ($what, $cmds) = split /\s+/, $text, 2;
+  my ($what, $cmdstr) = split /\s+/, $text, 2;
 
-  my $lpc = $self->lp_client_for_user($event->from_user);
-  my $item;
+  my ($item, $error) = $self->_item_from_token($what);
 
-  if ($what =~ /\A\*(.+)/) {
-    ($item, my $err) = $self->task_for_shortcut("$1");
-
-    return $event->reply($err) if $err;
-  } elsif ($what =~ /\A[0-9]+\z/) {
-    my $item_res = $lpc->get_item($what);
-
-    return $event->error_reply("I can't find an item with that id!")
-      unless $item = $item_res->payload;
-
-    return $event->error_reply("You can only update tasks.")
-      unless $item->{type} eq 'Task';
-  } else {
-    return $event->error_reply(q{You can only say "update ID ..." or "update *shortcut ...".});
+  unless ($item) {
+    return $event->error_reply($error);
   }
 
-  my ($ok, $error) = $self->_handle_subcmds([$cmds], $plan);
+  my $method_name = "_handle_update_for\L$item->{type}";
+
+  my $method = $self->can($method_name);
+
+  unless ($method) {
+    return $event->error_reply(
+      "Sorry, I don't know how to update \L$item->{type}\Es."
+    );
+  }
+
+  # parse commands for item type
+  # report error if error
+  # FOR NOW: dump plan
+  # FOR LATER: dump plan if it contains undoable things; do otherwise
+  # FOR LATEST: do everything
+  return $self->$method_name($event, $item, $cmdstr);
+}
+
+sub _handle_update_for_task ($self, $event, $task, $cmdstr) {
+  my $plan  = {};
+  my ($ok, $error) = $self->_handle_subcmds([$cmdstr], $plan);
 
   return $event->error_reply($error) unless $ok;
 
-  return $event->reply( "Update plan for LP$item->{id}: ```"
+  return $event->reply( "Update plan for LP$task->{id}: ```"
                       . JSON->new->canonical->encode($plan)
                       . "```");
 }
