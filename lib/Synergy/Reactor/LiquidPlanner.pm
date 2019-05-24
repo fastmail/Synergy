@@ -199,12 +199,12 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
 
   if ($arg{age}) {
     my $created = parse_lp_datetime($item->{created_at});
-    $text .= " \N{EN DASH} created " .  concise(ago(time - $created->epoch));
+    $text .= " \N{EN DASH} created " .  concise(ago(time - $created->epoch, 1));
   }
 
   if ($arg{staleness}) {
     my $updated = parse_lp_datetime($item->{updated_at});
-    $text .= " \N{EN DASH} updated " .  concise(ago(time - $updated->epoch));
+    $text .= " \N{EN DASH} updated " .  concise(ago(time - $updated->epoch, 1));
   }
 
   return $text;
@@ -3410,7 +3410,7 @@ sub container_report ($self, $who) {
       ucfirst $label,
       $total,
       PL_N('task', $total),
-      concise(duration($avg_age));
+      concise(duration($avg_age, 1));
 
     $summary .= sprintf ", %u unestimated", $unest if $unest;
 
