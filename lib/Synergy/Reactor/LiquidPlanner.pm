@@ -527,7 +527,7 @@ sub provide_lp_link ($self, $event) {
 
         for my $pair (
           [ 'Created',      'created_at' ],
-          [ 'Last Updated', 'updated_at' ],
+          [ 'Last updated', 'updated_at' ],
           [ 'Completed',    'done_on' ],
         ) {
           next unless my $date_str = $item->{ $pair->[1] };
@@ -545,7 +545,26 @@ sub provide_lp_link ($self, $event) {
         }
 
         if ($flag{description}) {
-          $slack .= "\n>>> $item->{description}\n";
+          $slack .= "\n>>> "
+                  . ($item->{description} // "(no description)")
+                  . "\n";
+        }
+
+        if ($item->{comments}) {
+          my ($latest) = sort {; $b->{created_at} cmp $a->{created_at} }
+                         $item->{comments}->@*;
+
+          my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+                      $self->hub->user_directory->users;
+
+          if ($latest) {
+            my $created = parse_lp_datetime($latest->{created_at});
+
+            $slack .= sprintf "\n*Last comment* by %s, %s:\n>>> %s\n",
+              $by_lp{ $latest->{person_id} } // 'somebody',
+              concise(ago(time - $created->epoch, 1)),
+              $latest->{plain_text};
+          }
         }
       }
 

@@ -134,7 +134,11 @@ sub get_clients ($self) {
 }
 
 sub get_item ($self, $item_id) {
-  my $lp_res = $self->http_get("/treeitems/?filter[]=id=$item_id");
+  my $lp_res = $self->http_get(
+    "/treeitems/"
+    . "?filter[]=id=$item_id"
+    . "&include=tags,comments"
+  );
 
   return $lp_res unless $lp_res->is_success;
   return _success($lp_res->payload->[0]);
