@@ -116,6 +116,7 @@ my %Showable_Attribute = (
   due       => 1,
   emoji     => 1,
   assignees => 0,
+  estimates => 0,
   # stuff we could make optional later:
   #   name
   #   type icon
@@ -183,12 +184,22 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     $text .= " \N{CROSS MARK}" if $item->{promise_by} lt $now->ymd;
   }
 
-  if ($arg{assignees}) {
+  if ($arg{assignees} || $arg{estimates}) {
     my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
                 $self->hub->user_directory->users;
 
+    my $str = sub {
+      my $str = $by_lp{ $_[0]{person_id} } // '?';
+      return $str unless $arg{estimates};
+
+      my ($high, $low) = $_[0]->@{ qw(high_effort_remaining low_effort_remaining )};
+      return "$str (no estimate)" unless $high or $low;
+      return sprintf "$str (%0.1fh-%0.1fh)", $low, $high;
+    };
+
+
     my $want_done = $item->{is_done};
-    my @assignees = map  {; $by_lp{ $_->{person_id} } // '?' }
+    my @assignees = map  {; $str->($_) }
                     grep {; $want_done || ! $_->{is_done} }
                     $item->{assignments}->@*;
 
