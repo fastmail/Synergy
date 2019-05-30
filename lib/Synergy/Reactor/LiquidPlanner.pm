@@ -1412,11 +1412,11 @@ sub _item_from_token ($self, $token) {
   # MAYBE TODO: Offer a means to only resolve shortcuts of a known type?
   # -- rjbs, 2019-05-24
   if ($token =~ s/\A\*//) {
-    return $self->project_for_shortcut($token);
+    return $self->task_for_shortcut($token);
   }
 
   if ($token =~ s/\A\#//) {
-    return $self->task_for_shortcut($token);
+    return $self->project_for_shortcut($token);
   }
 
   if ($token =~ /\A[0-9]+\z/) {
@@ -1462,7 +1462,7 @@ sub _handle_update ($self, $event, $text) {
     return $event->error_reply($error);
   }
 
-  my $method_name = "_handle_update_for\L$item->{type}";
+  my $method_name = "_handle_update_for_\L$item->{type}";
 
   my $method = $self->can($method_name);
 
@@ -1482,6 +1482,12 @@ sub _handle_update ($self, $event, $text) {
 
 sub _handle_update_for_task ($self, $event, $task, $cmdstr) {
   my $plan  = {};
+
+  my ($first, $rest) = split /\s+/, $cmdstr, 2;
+  if ($first eq 'comment') {
+    return $self->_handle_item_comment($event, $task, $rest);
+  }
+
   my ($ok, $error) = $self->_handle_subcmds([$cmdstr], $plan);
 
   return $event->error_reply($error) unless $ok;
@@ -1489,6 +1495,40 @@ sub _handle_update_for_task ($self, $event, $task, $cmdstr) {
   return $event->reply( "Update plan for LP$task->{id}: ```"
                       . JSON->new->canonical->encode($plan)
                       . "```");
+}
+
+sub _handle_update_for_project ($self, $event, $project, $cmdstr) {
+  my ($first, $rest) = split /\s+/, $cmdstr, 2;
+  if ($first eq 'comment') {
+    return $self->_handle_item_comment($event, $project, $rest);
+  }
+
+  return $event->error_reply(
+    "Sorry, I don't know how to do much with projects."
+  );
+}
+
+sub _handle_item_comment ($self, $event, $item, $cmdstr) {
+  my $lpc = $self->f_lp_client_for_user($event->from_user);
+
+  my $post = $lpc->http_post("/treeitems/$item->{id}/comments",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({
+      comment => {
+        comment => "$cmdstr",
+        item_id => $item->{id},
+      },
+    }),
+  );
+
+  $post
+    ->then(sub { $event->reply("Comment posted!") })
+    ->else(sub {
+      $event->reply_error("Something went wrong leaving that comment!")
+    })
+    ->retain;
+
+  return;
 }
 
 # One option:
@@ -2382,6 +2422,7 @@ for my $package (qw(inbox urgent recurring)) {
   });
 }
 
+# add triage tag
 sub _handle_triage ($self, $event, $text) {
   my $triage_user = $self->hub->user_directory->user_named('triage');
 
