@@ -431,15 +431,21 @@ sub http_put {
   return shift->http_request('PUT' => @_);
 }
 
+sub http_delete {
+  return shift->http_request('DELETE' => @_);
+}
+
 sub http_request ($self, $method, $url, %args) {
   my $content = delete $args{Content};
   my $content_type = delete $args{Content_Type};
   my $async = delete $args{async};
 
-  my @args = $url;
+  my $uri = URI->new($url);
 
-  if ($method ne 'GET' && $method ne 'HEAD') {
-    push @args, $content // [];
+  my @args = (method => $method, uri => $uri);
+
+  if ($method ne 'GET' && $method ne 'HEAD' && $method ne 'DELETE') {
+    push @args, (content => $content // []);
   }
 
   if ($content_type) {
@@ -447,8 +453,6 @@ sub http_request ($self, $method, $url, %args) {
   }
 
   push @args, headers => \%args;
-
-  my $uri = URI->new($url);
 
   if ($uri->scheme eq 'https') {
     # Work around IO::Async::SSL not handling SNI hosts properly :(
@@ -458,7 +462,7 @@ sub http_request ($self, $method, $url, %args) {
   # The returned future will run the loop for us until we return. This makes
   # it asynchronous as far as the rest of the code is concerned, but
   # sychronous as far as the caller is concerned.
-  my $future = $self->http->$method(
+  my $future = $self->http->do_request(
     @args
   )->on_fail( sub {
     my $failure = shift;
