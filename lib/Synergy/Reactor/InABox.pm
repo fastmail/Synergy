@@ -106,7 +106,7 @@ sub _handle_create ($self, $event, @args) {
 
   my %droplet_create_args = (
     name     => $event->from_user->username.'.fminabox',
-    region   => 'sgp1', # XXX near user
+    region   => $self->_region_for_user($event->from_user),
     size     => 's-4vcpu-8gb',
     image    => $snapshot_id,
     ssh_keys => [$ssh_key_id],
@@ -280,6 +280,17 @@ sub _get_ssh_key ($self) {
       Future->done($ssh_key);
     }
   );
+}
+
+sub _region_for_user ($self, $user) {
+  # this is incredibly stupid, but will do the right thing for the home
+  # location of FM plumbing staff
+  my $tz = $user->time_zone;
+  my ($area) = split '/', $tz;
+  return
+    $area eq 'Australia' ? 'sfo2' :
+    $area eq 'Europe'    ? 'ams3' :
+                           'nyc3';
 }
 
 1;
