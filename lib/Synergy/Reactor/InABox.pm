@@ -199,20 +199,16 @@ sub _handle_destroy ($self, $event, @args) {
 }
 
 sub _handle_vpn ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
-  unless ($droplet) {
-    $event->error_reply("You don't have a box.");
-    return;
-  }
-
   my $template = Text::Template->new(
     TYPE       => 'FILE',
     SOURCE     => $self->vpn_config_file,
     DELIMITERS => [ '{{', '}}' ],
   );
 
+  my $user = $event->from_user;
+
   my $config = $template->fill_in(HASH => {
-    droplet_ip => $droplet->{networks}{v4}[0]{ip_address},
+    droplet_host => $user->username . '.box.' . $self->box_domain,
   });
 
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
