@@ -143,6 +143,16 @@ sub start ($self) {
     return if $self->slack->username($slack_event->{user}) eq 'synergy';
 
     my $event = $self->synergy_event_from_slack_event($slack_event);
+    unless ($event) {
+      $Logger->log([
+        "couldn't convert a %s/%s message to channel %s, dropping it",
+        $slack_event->{type},
+        ($slack_event->{subtype} // '[none]'),
+        $slack_event->{channel},
+      ]);
+      return;
+    }
+
     $self->hub->handle_event($event);
   };
 }
