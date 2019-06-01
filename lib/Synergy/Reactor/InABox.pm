@@ -147,6 +147,8 @@ sub _handle_create ($self, $event, @args) {
     tags     => ['fminabox'],
   );
 
+  $Logger->log([ "Creating droplet: %s", encode_json(\%droplet_create_args) ]);
+
   ($droplet, my $action_id) = $self->hub->http_post(
     $self->_do_endpoint('/droplets'),
     $self->_do_headers,
@@ -203,6 +205,7 @@ sub _handle_create ($self, $event, @args) {
 
   $droplet = $self->_get_droplet_for($event->from_user->username)->get;
   if ($droplet) {
+    $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
     $event->reply("Box created: ".$self->_format_droplet($droplet));
   }
   else {
@@ -225,6 +228,8 @@ sub _handle_destroy ($self, $event, @args) {
     return;
   }
 
+  $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+
   my $destroyed = $self->hub->http_delete(
     $self->_do_endpoint("/droplets/$droplet->{id}"),
     $self->_do_headers,
@@ -244,6 +249,7 @@ sub _handle_destroy ($self, $event, @args) {
     return;
   }
 
+  $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
   $event->reply("Box destroyed.");
 }
 
@@ -309,6 +315,12 @@ sub _get_snapshot ($self) {
         sort { $b->{name} cmp $a->{name} }
         grep { $_->{name} =~ m/^fminabox-/ }
           $data->{snapshots}->@*;
+      if ($snapshot) {
+        $Logger->log([ "Found snapshot: %s (%s)", $snapshot->{id}, $snapshot->{name} ]);
+      }
+      else {
+        $Logger->log([ "fminabox snapshot not found?!" ]);
+      }
       Future->done($snapshot);
     }
   );
@@ -329,6 +341,12 @@ sub _get_ssh_key ($self) {
       my ($ssh_key) =
         grep { $_->{name} eq 'fminabox' }
           $data->{ssh_keys}->@*;
+      if ($ssh_key) {
+        $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->{id}, $ssh_key->{name} ]);
+      }
+      else {
+        $Logger->log([ "fminabox SSH key not found?!" ]);
+      }
       Future->done($ssh_key);
     }
   );
