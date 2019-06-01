@@ -229,11 +229,12 @@ sub _get_droplet_for ($self, $who) {
 
 sub _format_droplet ($self, $droplet) {
   return sprintf
-    "name: %s  image: %s  ip: %s  region: %s",
+    "name: %s  image: %s  ip: %s  region: %s  status: %s",
     $droplet->{name},
     $droplet->{image}{name},
     $droplet->{networks}{v4}[0]{ip_address},
-    "$droplet->{region}{name} ($droplet->{region}{slug})";
+    "$droplet->{region}{name} ($droplet->{region}{slug})",
+    $droplet->{status};
 }
 
 sub _get_snapshot ($self) {
