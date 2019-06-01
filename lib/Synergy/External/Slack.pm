@@ -263,6 +263,34 @@ sub _send_rich_text ($self, $channel, $rich) {
   return $f;
 }
 
+sub send_file ($self, $channel, $filename, $content) {
+  my $post_args = [ # arrayref for form data
+    channels => [$channel],
+    filename => $filename,
+    content  => $content,
+  ];
+
+  my $http_future = Future->wrap($self->hub->http->POST(
+    URI->new($self->_api_url('files.upload')),
+    $post_args,
+    content_type => 'application/x-www-form-urlencoded',
+    headers => [
+      $self->_api_auth_header,
+    ],
+  ));
+
+  my $f = $self->loop->new_future;
+  $http_future->on_done(sub ($http_res) {
+    my $res = decode_json($http_res->decoded_content);
+    $f->done({
+      type => 'slack',
+      transport_data => $res
+    });
+  });
+
+  return $f;
+}
+
 sub _register_slack_rtm ($self, $res) {
   my $json = decode_json($res->content);
 
@@ -298,11 +326,18 @@ sub _register_slack_rtm ($self, $res) {
   );
 }
 
+sub _api_url ($self, $method) {
+  return "https://slack.com/api/$method";
+}
+sub _api_auth_header ($self) {
+  return (Authorization => 'Bearer ' . $self->api_key);
+}
+
 # This returns a Future. If you're just posting or something, you can just let
 # it complete whenever. If you're retrieving data, you probably want to do
 # something like slack_call($method, {})->on_done(sub { do_something }).
-sub api_call ($self, $method, $arg = {}) {
-  my $url = "https://slack.com/api/$method";
+sub api_call ($self, $method, $arg = {}, %extra) {
+  my $url = $self->_api_url($method);
   my $json = encode_json($arg);
 
   return Future->wrap($self->hub->http->POST(
@@ -310,7 +345,7 @@ sub api_call ($self, $method, $arg = {}) {
     $json,
     content_type => 'application/json; charset=utf-8',
     headers => [
-      Authorization => 'Bearer ' . $self->api_key,
+      $self->_api_auth_header,
     ],
   ));
 }
