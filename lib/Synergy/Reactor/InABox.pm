@@ -21,6 +21,9 @@ sub listener_specs {
     predicate => sub ($self, $event) {
       $event->was_targeted && $event->text =~ /\Abox\b/i;
     },
+    help_entries => [
+      { title => 'box', text => 'fminabox management commands. use "box help" for more info' },
+    ],
   };
 }
 
@@ -59,6 +62,7 @@ has box_domain => (
 
 
 my %command_handler = (
+  help    => \&_handle_help,
   status  => \&_handle_status,
   create  => \&_handle_create,
   destroy => \&_handle_destroy,
@@ -90,6 +94,25 @@ sub _handle_status ($self, $event, @args) {
     return;
   }
   $event->reply("Your box: " . $self->_format_droplet($droplet));
+}
+
+sub _handle_help ($self, $event, @args) {
+  $event->reply(<<EOF);
+box is a tool for managing cloud-based fminabox instances
+
+subcommands:
+
+ status: show some info about your box, including IP address, fminabox build
+         it was built from, and its current power status
+
+ create: create a new box. won't let you create more than one (for now)
+
+ destroy: destroy your box. if its powered on, you have to shut it down first
+
+ vpn: get an OpenVPN config file to connect to your box
+
+
+EOF
 }
 
 sub _handle_create ($self, $event, @args) {
