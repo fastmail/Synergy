@@ -51,6 +51,12 @@ has vpn_config_file => (
   required => 1,
 );
 
+has box_domain => (
+  is       => 'ro',
+  isa      => 'Str',
+  required => 1,
+);
+
 
 my %command_handler = (
   status  => \&_handle_status,
@@ -160,6 +166,8 @@ sub _handle_create ($self, $event, @args) {
 
   $droplet = $self->_get_droplet_for($event->from_user->username)->get;
   $event->reply("Box created: ".$self->_format_droplet($droplet));
+
+  $self->_update_dns_for_user($event->from_user, $droplet->{networks}{v4}[0]{ip_address});
 }
 
 sub _handle_destroy ($self, $event, @args) {
@@ -291,6 +299,63 @@ sub _region_for_user ($self, $user) {
     $area eq 'Australia' ? 'sfo2' :
     $area eq 'Europe'    ? 'ams3' :
                            'nyc3';
+}
+
+sub _update_dns_for_user ($self, $user, $ip) {
+  my $username = $user->username;
+
+  my $record = $self->hub->http_get(
+    $self->_do_endpoint('/domains/' . $self->box_domain . '/records?per_page=200'),
+    $self->_do_headers,
+    async => 1,
+  )->then(
+    sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log(["error getting DNS record list: %s", $res->as_string]);
+        return Future->done;
+      }
+      my $data = decode_json($res->content);
+      my ($record) =
+        grep { $_->{name} eq "$username.box" }
+          $data->{domain_records}->@*;
+      Future->done($record);
+    }
+  )->get;
+
+  my $update_f;
+  if ($record) {
+    $update_f = $self->hub->http_put(
+      $self->_do_endpoint('/domains/' . $self->box_domain . "/records/$record->{id}"),
+      $self->_do_headers,
+      async        => 1,
+      Content_Type => 'application/json',
+      Content      => encode_json({ data => $ip }),
+    );
+  }
+  else {
+    my $record = {
+      type => 'A',
+      name => "$username.box",
+      data => $ip,
+      ttl  => 30,
+    };
+    $update_f = $self->hub->http_post(
+      $self->_do_endpoint('/domains/' . $self->box_domain . '/records'),
+      $self->_do_headers,
+      async        => 1,
+      Content_Type => 'application/json',
+      Content      => encode_json($record),
+    );
+  }
+
+  $update_f->then(
+    sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log(["error creating/update DNS record: %s", $res->as_string]);
+      }
+      return Future->done;
+    }
+  )->get;
 }
 
 1;
