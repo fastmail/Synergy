@@ -168,6 +168,10 @@ sub _handle_destroy ($self, $event, @args) {
     $event->error_reply("You don't have a box.");
     return;
   }
+  if ($droplet->{status} eq 'active' && !grep { m{^/force$} } @args) {
+    $event->error_reply("Your box is powered on. Shut it down first, or use /force to destroy it anyway.");
+    return;
+  }
 
   $self->hub->http_delete(
     $self->_do_endpoint("/droplets/$droplet->{id}"),
