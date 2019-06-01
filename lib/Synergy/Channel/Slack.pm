@@ -143,6 +143,8 @@ sub start ($self) {
     return if $self->slack->username($slack_event->{user}) eq 'synergy';
 
     my $event = $self->synergy_event_from_slack_event($slack_event);
+    return unless $event;
+
     $self->hub->handle_event($event);
   };
 }
