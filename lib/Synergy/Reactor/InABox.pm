@@ -133,6 +133,11 @@ sub _handle_create ($self, $event, @args) {
     }
   )->get;
 
+  unless ($snapshot_id && $ssh_key_id) {
+    $event->error_reply("Couldn't find snapshot or SSH key, can't create box. Try again.");
+    return;
+  }
+
   my %droplet_create_args = (
     name     => $event->from_user->username.'.fminabox',
     region   => $self->_region_for_user($event->from_user),
@@ -159,6 +164,11 @@ sub _handle_create ($self, $event, @args) {
     }
   )->get;
 
+  unless ($droplet) {
+    $event->error_reply("There was an error creating the box. Try again.");
+    return;
+  }
+
   my $status_f = repeat {
     $self->hub->http_get(
       $self->_do_endpoint("/actions/$action_id"),
@@ -182,14 +192,25 @@ sub _handle_create ($self, $event, @args) {
   };
   my $status = $status_f->get;
 
-  if ($status ne 'completed') {
-    $event->error_reply("Something went wrong while creating the box, check the DigitalOcean console and maybe try again.");
-    return;
+  # action status checks have been seen to time out or crash but the droplet
+  # still turns up fine, so only consider it if we got a real response
+  if ($status) {
+    if ($status ne 'completed') {
+      $event->error_reply("Something went wrong while creating the box, check the DigitalOcean console and maybe try again.");
+      return;
+    }
   }
 
   $droplet = $self->_get_droplet_for($event->from_user->username)->get;
-  $event->reply("Box created: ".$self->_format_droplet($droplet));
+  if ($droplet) {
+    $event->reply("Box created: ".$self->_format_droplet($droplet));
+  }
+  else {
+    $event->error_reply("Box was created, but now I can't find it! Check the DigitalOcean console and maybe try again.");
+  }
 
+  # we're assuming this succeeds. if not, well, the DNS is out of date. what
+  # else can we do?
   $self->_update_dns_for_user($event->from_user, $droplet->{networks}{v4}[0]{ip_address});
 }
 
@@ -204,7 +225,7 @@ sub _handle_destroy ($self, $event, @args) {
     return;
   }
 
-  $self->hub->http_delete(
+  my $destroyed = $self->hub->http_delete(
     $self->_do_endpoint("/droplets/$droplet->{id}"),
     $self->_do_headers,
     async => 1,
@@ -214,9 +235,14 @@ sub _handle_destroy ($self, $event, @args) {
         $Logger->log(["error deleting droplet %s", $res->as_string]);
         return Future->done;
       }
-      return Future->done;
+      return Future->done(1);
     }
   )->get;
+
+  unless ($destroyed) {
+    $event->error_reply("There was an error destroying the box. Try again.");
+    return;
+  }
 
   $event->reply("Box destroyed.");
 }
@@ -251,7 +277,6 @@ sub _get_droplet_for ($self, $who) {
         return Future->done;
       }
       my $data = decode_json($res->content);
-      #my ($droplet) = $data->{droplets}->@*;
       my ($droplet) = grep { $_->{name} eq "$who.fminabox" } $data->{droplets}->@*;
       Future->done($droplet);
     }
