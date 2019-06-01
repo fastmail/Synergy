@@ -11,6 +11,7 @@ use namespace::clean;
 use Synergy::Logger '$Logger';
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
+use Text::Template;
 
 sub listener_specs {
   return {
@@ -44,10 +45,18 @@ sub _do_headers ($self) {
   );
 }
 
+has vpn_config_file => (
+  is       => 'ro',
+  isa      => 'Str',
+  required => 1,
+);
+
+
 my %command_handler = (
   status  => \&_handle_status,
   create  => \&_handle_create,
   destroy => \&_handle_destroy,
+  vpn     => \&_handle_vpn,
 );
 
 sub handle_box ($self, $event) {
@@ -175,6 +184,28 @@ sub _handle_destroy ($self, $event, @args) {
   )->get;
 
   $event->reply("Box destroyed.");
+}
+
+sub _handle_vpn ($self, $event, @args) {
+  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  unless ($droplet) {
+    $event->error_reply("You don't have a box.");
+    return;
+  }
+
+  my $template = Text::Template->new(
+    TYPE       => 'FILE',
+    SOURCE     => $self->vpn_config_file,
+    DELIMITERS => [ '{{', '}}' ],
+  );
+
+  my $config = $template->fill_in(HASH => {
+    droplet_ip => $droplet->{networks}{v4}[0]{ip_address},
+  });
+
+  $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
+
+  $event->reply("I sent you a VPN config in a direct message. Download it and import it into your OpenVPN client.");
 }
 
 sub _get_droplet_for ($self, $who) {
