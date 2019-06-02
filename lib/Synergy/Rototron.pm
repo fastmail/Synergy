@@ -538,13 +538,13 @@ package Synergy::Rototron::AvailabilityChecker {
                   keys $event->{keywords}->%*;
 
       unless (@who) {
-        warn "skipping event with no usernames\n";
+        warn "skipping event with no usernames ($event->{id} - $event->{start} - $event->{title})\n";
         next EVENT;
       }
 
       my ($days) = ($event->{duration} // '') =~ /\AP([0-9]+)D\z/;
       unless ($days) {
-        warn "skipping event with wonky duration\n";
+        warn "skipping event with wonky duration ($event->{id} - $event->{start} - $event->{title} - $event->{duration})\n";
         next EVENT;
       }
 
