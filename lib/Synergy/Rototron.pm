@@ -542,7 +542,14 @@ package Synergy::Rototron::AvailabilityChecker {
         next EVENT;
       }
 
-      my ($days) = ($event->{duration} // '') =~ /\AP([0-9]+)D\z/;
+      my $days;
+
+      if (($event->{duration} // '') =~ /\AP([0-9]+)D\z/) {
+        $days = $1;
+      } elsif (($event->{duration} // '') =~ /\AP([0-9]+)W\z/) {
+        $days = 7 * $1;
+      }
+
       unless ($days) {
         warn "skipping event with wonky duration ($event->{id} - $event->{start} - $event->{title} - $event->{duration})\n";
         next EVENT;
