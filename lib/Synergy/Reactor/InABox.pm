@@ -239,23 +239,11 @@ sub _handle_shutdown ($self, $event, @args) {
 
   $Logger->log([ "Shutting down droplet: %s", $droplet->{id} ]);
 
-  my ($action) = $self->hub->http_post(
-    $self->_do_endpoint("/droplets/$droplet->{id}/actions"),
-    $self->_do_headers,
-    async        => 1,
-    Content_Type => 'application/json',
-    Content      => encode_json({ type => 'shutdown' }),
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error shutting down droplet: %s", $res->as_string]);
-        return Future->done;
-      }
-      my $data = decode_json($res->content);
-      return Future->done($data->{action});
-    }
-  )->get;
-
+  my $action = $self->_do_droplet_action_f($droplet->{id}, 'shutdown');
+  unless ($action) {
+    $event->error_reply('There was an error shutting down the box. Try again.');
+    return;
+  }
   my $status = $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$action->{id}")->get;
 
   # action status checks have been seen to time out or crash but the droplet
@@ -286,6 +274,25 @@ sub _handle_vpn ($self, $event, @args) {
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
 
   $event->reply("I sent you a VPN config in a direct message. Download it and import it into your OpenVPN client.");
+}
+
+sub _do_droplet_action_f ($self, $droplet_id, $type) {
+  $self->hub->http_post(
+    $self->_do_endpoint("/droplets/$droplet_id/actions"),
+    $self->_do_headers,
+    async        => 1,
+    Content_Type => 'application/json',
+    Content      => encode_json({ type => $type }),
+  )->then(
+    sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log(["error taking '%s' action on droplet %s: %s", $type, $droplet_id, $res->as_string]);
+        return Future->done;
+      }
+      my $data = decode_json($res->content);
+      return Future->done($data->{action});
+    }
+  )->get;
 }
 
 sub _do_action_status_f ($self, $actionurl) {
