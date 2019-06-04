@@ -92,7 +92,7 @@ sub handle_box ($self, $event) {
 
   my $handler = $command_handler{$cmd};
   unless ($handler) {
-    return $event->error_reply("usage: box <subcommand>");
+    return $event->error_reply("usage: box [status|create|destroy|vpn]");
   }
 
   $handler->($self, $event, @args);
