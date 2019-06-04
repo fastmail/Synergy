@@ -297,7 +297,17 @@ sub _register_slack_rtm ($self, $res) {
   die "Could not connect to Slack RTM: $json->{error}"
     unless $json->{ok};
 
-  $self->_set_own_name($json->{self}->{name});
+  # This is a dumb hack: when I converted synergy to a Slack app, I gave her
+  # perms to add a user with the name "synergee" because I thought "synergy"
+  # would conflict. So now "synergee ++ do a thing" works, which is not ideal,
+  # since we use often that as a way of joking about making tasks we'd never
+  # do. I *think* that reinstalling the app to our workspace would fix this,
+  # but I'm not entirely sure and I don't want to make everyone open yet
+  # another DM with synergy, so here we are. -- michael, 2019-06-03
+  my $our_name = $json->{self}->{name};
+  $our_name = 'synergy' if $our_name eq 'synergee';
+
+  $self->_set_own_name($our_name);
   $self->_set_own_id($json->{self}->{id});
   $self->_set_team_data($json->{team});
 
@@ -432,9 +442,15 @@ sub load_users ($self) {
     presence => 0,
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
-    $self->_set_users({
-      map { $_->{id} => $_ } $res->{members}->@*
-    });
+    my %users = map { $_->{id} => $_ } $res->{members}->@*;
+
+    # See comment in _register_slack_rtm: here, we coerce our username to be
+    # our ->own_name, because decode_slack_formatting converts @U12345 into
+    # usernames. -- michael, 2019-06-04
+    my $me = $users{ $self->own_id };
+    $me->{name} = $self->own_name;
+
+    $self->_set_users(\%users);
     $Logger->log("Users loaded");
 
     $self->loaded_users(1);
