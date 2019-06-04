@@ -34,6 +34,8 @@ subcommands:
 • create: create a new box. won't let you create more than one (for now)
 • destroy: destroy your box. if its powered on, you have to shut it down first
 • shutdown: gracefully shut down and power off your box
+• poweroff: forcibly shut down and power off your box (like pulling the power)
+• poweron: start up your box
 • vpn: get an OpenVPN config file to connect to your box
 END
       },
@@ -79,6 +81,8 @@ my %command_handler = (
   create   => \&_handle_create,
   destroy  => \&_handle_destroy,
   shutdown => \&_handle_shutdown,
+  poweroff => \&_handle_poweroff,
+  poweron  => \&_handle_poweron,
   vpn      => \&_handle_vpn,
 );
 
@@ -94,7 +98,7 @@ sub handle_box ($self, $event) {
 
   my $handler = $command_handler{$cmd};
   unless ($handler) {
-    return $event->error_reply("usage: box [status|create|destroy|shutdown|vpn]");
+    return $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
   }
 
   $handler->($self, $event, @args);
@@ -256,6 +260,70 @@ sub _handle_shutdown ($self, $event, @args) {
   }
 
   $event->reply("Your box has been shut down.");
+}
+
+sub _handle_poweroff ($self, $event, @args) {
+  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  unless ($droplet) {
+    $event->error_reply("You don't have a box.");
+    return;
+  }
+  if ($droplet->{status} ne 'active') {
+    $event->error_reply("Your box is already powered off!");
+    return;
+  }
+
+  $Logger->log([ "Powering off droplet: %s", $droplet->{id} ]);
+
+  my $action = $self->_do_droplet_action_f($droplet->{id}, 'power_off');
+  unless ($action) {
+    $event->error_reply('There was an error powering off the box. Try again.');
+    return;
+  }
+  my $status = $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$action->{id}")->get;
+
+  # action status checks have been seen to time out or crash but the droplet
+  # still turns up fine, so only consider it if we got a real response
+  if ($status) {
+    if ($status ne 'completed') {
+      $event->error_reply("Something went wrong while powering off the box, check the DigitalOcean console and maybe try again.");
+      return;
+    }
+  }
+
+  $event->reply("Your box has been powered off.");
+}
+
+sub _handle_poweron ($self, $event, @args) {
+  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  unless ($droplet) {
+    $event->error_reply("You don't have a box.");
+    return;
+  }
+  if ($droplet->{status} eq 'active') {
+    $event->error_reply("Your box is already powered on!");
+    return;
+  }
+
+  $Logger->log([ "Powering on droplet: %s", $droplet->{id} ]);
+
+  my $action = $self->_do_droplet_action_f($droplet->{id}, 'power_on');
+  unless ($action) {
+    $event->error_reply('There was an error powering on the box. Try again.');
+    return;
+  }
+  my $status = $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$action->{id}")->get;
+
+  # action status checks have been seen to time out or crash but the droplet
+  # still turns up fine, so only consider it if we got a real response
+  if ($status) {
+    if ($status ne 'completed') {
+      $event->error_reply("Something went wrong while powering on box, check the DigitalOcean console and maybe try again.");
+      return;
+    }
+  }
+
+  $event->reply("Your box has been powered on.");
 }
 
 sub _handle_vpn ($self, $event, @args) {
