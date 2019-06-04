@@ -165,28 +165,7 @@ sub _handle_create ($self, $event, @args) {
     return;
   }
 
-  my $status_f = repeat {
-    $self->hub->http_get(
-      $self->_do_endpoint("/actions/$action_id"),
-      $self->_do_headers,
-      async => 1,
-    )->then(
-      sub ($res) {
-        unless ($res->is_success) {
-          $Logger->log(["error getting action: %s", $res->as_string]);
-          return Future->done;
-        }
-        my $data = decode_json($res->content);
-        my $status = $data->{action}{status};
-        return $status eq 'in-progress' ?
-          $self->hub->loop->delay_future(after => 5)->then_done($status) :
-          Future->done($status);
-      }
-    )
-  } until => sub ($f) {
-    $f->get ne 'in-progress';
-  };
-  my $status = $status_f->get;
+  my $status = _do_action_status_f("/actions/$action_id")->get;
 
   # action status checks have been seen to time out or crash but the droplet
   # still turns up fine, so only consider it if we got a real response
@@ -277,28 +256,7 @@ sub _handle_shutdown ($self, $event, @args) {
     }
   )->get;
 
-  my $status_f = repeat {
-    $self->hub->http_get(
-      $self->_do_endpoint("/droplets/$droplet->{id}/actions/$action->{id}"),
-      $self->_do_headers,
-      async => 1,
-    )->then(
-      sub ($res) {
-        unless ($res->is_success) {
-          $Logger->log(["error getting action: %s", $res->as_string]);
-          return Future->done;
-        }
-        my $data = decode_json($res->content);
-        my $status = $data->{action}{status};
-        return $status eq 'in-progress' ?
-          $self->hub->loop->delay_future(after => 5)->then_done($status) :
-          Future->done($status);
-      }
-    )
-  } until => sub ($f) {
-    $f->get ne 'in-progress';
-  };
-  my $status = $status_f->get;
+  my $status = $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$action->{id}")->get;
 
   # action status checks have been seen to time out or crash but the droplet
   # still turns up fine, so only consider it if we got a real response
@@ -328,6 +286,30 @@ sub _handle_vpn ($self, $event, @args) {
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
 
   $event->reply("I sent you a VPN config in a direct message. Download it and import it into your OpenVPN client.");
+}
+
+sub _do_action_status_f ($self, $actionurl) {
+  repeat {
+    $self->hub->http_get(
+      $self->_do_endpoint($actionurl),
+      $self->_do_headers,
+      async => 1,
+    )->then(
+      sub ($res) {
+        unless ($res->is_success) {
+          $Logger->log(["error getting action: %s: %s", $actionurl, $res->as_string]);
+          return Future->done;
+        }
+        my $data = decode_json($res->content);
+        my $status = $data->{action}{status};
+        return $status eq 'in-progress' ?
+          $self->hub->loop->delay_future(after => 5)->then_done($status) :
+          Future->done($status);
+      }
+    )
+  } until => sub ($f) {
+    $f->get ne 'in-progress';
+  };
 }
 
 sub _get_droplet_for ($self, $who) {
