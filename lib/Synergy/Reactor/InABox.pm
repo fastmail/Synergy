@@ -33,6 +33,7 @@ subcommands:
 • status: show some info about your box, including IP address, fminabox build it was built from, and its current power status
 • create: create a new box. won't let you create more than one (for now)
 • destroy: destroy your box. if its powered on, you have to shut it down first
+• shutdown: gracefully shut down and power off your box
 • vpn: get an OpenVPN config file to connect to your box
 END
       },
@@ -74,10 +75,11 @@ has box_domain => (
 );
 
 my %command_handler = (
-  status  => \&_handle_status,
-  create  => \&_handle_create,
-  destroy => \&_handle_destroy,
-  vpn     => \&_handle_vpn,
+  status   => \&_handle_status,
+  create   => \&_handle_create,
+  destroy  => \&_handle_destroy,
+  shutdown => \&_handle_shutdown,
+  vpn      => \&_handle_vpn,
 );
 
 sub handle_box ($self, $event) {
@@ -92,7 +94,7 @@ sub handle_box ($self, $event) {
 
   my $handler = $command_handler{$cmd};
   unless ($handler) {
-    return $event->error_reply("usage: box [status|create|destroy|vpn]");
+    return $event->error_reply("usage: box [status|create|destroy|shutdown|vpn]");
   }
 
   $handler->($self, $event, @args);
@@ -243,6 +245,71 @@ sub _handle_destroy ($self, $event, @args) {
 
   $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
   $event->reply("Box destroyed.");
+}
+
+sub _handle_shutdown ($self, $event, @args) {
+  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  unless ($droplet) {
+    $event->error_reply("You don't have a box.");
+    return;
+  }
+  if ($droplet->{status} ne 'active') {
+    $event->error_reply("Your box is already powered off!");
+    return;
+  }
+
+  $Logger->log([ "Shutting down droplet: %s", $droplet->{id} ]);
+
+  my ($action) = $self->hub->http_post(
+    $self->_do_endpoint("/droplets/$droplet->{id}/actions"),
+    $self->_do_headers,
+    async        => 1,
+    Content_Type => 'application/json',
+    Content      => encode_json({ type => 'shutdown' }),
+  )->then(
+    sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log(["error shutting down droplet: %s", $res->as_string]);
+        return Future->done;
+      }
+      my $data = decode_json($res->content);
+      return Future->done($data->{action});
+    }
+  )->get;
+
+  my $status_f = repeat {
+    $self->hub->http_get(
+      $self->_do_endpoint("/droplets/$droplet->{id}/actions/$action->{id}"),
+      $self->_do_headers,
+      async => 1,
+    )->then(
+      sub ($res) {
+        unless ($res->is_success) {
+          $Logger->log(["error getting action: %s", $res->as_string]);
+          return Future->done;
+        }
+        my $data = decode_json($res->content);
+        my $status = $data->{action}{status};
+        return $status eq 'in-progress' ?
+          $self->hub->loop->delay_future(after => 5)->then_done($status) :
+          Future->done($status);
+      }
+    )
+  } until => sub ($f) {
+    $f->get ne 'in-progress';
+  };
+  my $status = $status_f->get;
+
+  # action status checks have been seen to time out or crash but the droplet
+  # still turns up fine, so only consider it if we got a real response
+  if ($status) {
+    if ($status ne 'completed') {
+      $event->error_reply("Something went wrong while shutting down the box, check the DigitalOcean console and maybe try again.");
+      return;
+    }
+  }
+
+  $event->reply("Your box has been shut down.");
 }
 
 sub _handle_vpn ($self, $event, @args) {
