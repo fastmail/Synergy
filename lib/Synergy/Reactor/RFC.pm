@@ -17,7 +17,7 @@ sub listener_specs {
     name      => 'rfc-mention',
     method    => 'handle_rfc',
     predicate => sub ($self, $e) {
-      return unless $e->text =~ /RFC\s*[0-9]+/i; },
+      return unless $e->text =~ /(^|\s)RFC\s*[0-9]+/in; },
   };
 }
 
