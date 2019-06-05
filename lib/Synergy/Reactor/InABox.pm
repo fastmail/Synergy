@@ -242,9 +242,28 @@ sub _handle_shutdown ($self, $event, @args) {
   }
 
   $Logger->log([ "Shutting down droplet: %s", $droplet->{id} ]);
+  $event->reply(
+    "I'm pulling the levers, it'll be just a moment",
+    {
+      slack_reaction => {
+        event => $event,
+        reaction => 'vertical_traffic_light',
+      }
+    },
+  );
+
+  my $remove_reactji = sub ($alt_text) {
+    $event->private_reply($alt_text, {
+      slack_reaction => {
+        event => $event,
+        reaction => '-vertical_traffic_light',
+      },
+    });
+  };
 
   my $action = $self->_do_droplet_action_f($droplet->{id}, 'shutdown');
   unless ($action) {
+    $remove_reactji->('Error!');
     $event->error_reply('There was an error shutting down the box. Try again.');
     return;
   }
@@ -254,11 +273,13 @@ sub _handle_shutdown ($self, $event, @args) {
   # still turns up fine, so only consider it if we got a real response
   if ($status) {
     if ($status ne 'completed') {
+      $remove_reactji->('Error!');
       $event->error_reply("Something went wrong while shutting down the box, check the DigitalOcean console and maybe try again.");
       return;
     }
   }
 
+  $remove_reactji->('Shut down!');
   $event->reply("Your box has been shut down.");
 }
 
@@ -274,9 +295,28 @@ sub _handle_poweroff ($self, $event, @args) {
   }
 
   $Logger->log([ "Powering off droplet: %s", $droplet->{id} ]);
+  $event->reply(
+    "I'm pulling the levers, it'll be just a moment",
+    {
+      slack_reaction => {
+        event => $event,
+        reaction => 'vertical_traffic_light',
+      }
+    },
+  );
+
+  my $remove_reactji = sub ($alt_text) {
+    $event->private_reply($alt_text, {
+      slack_reaction => {
+        event => $event,
+        reaction => '-vertical_traffic_light',
+      },
+    });
+  };
 
   my $action = $self->_do_droplet_action_f($droplet->{id}, 'power_off');
   unless ($action) {
+    $remove_reactji->('Error!');
     $event->error_reply('There was an error powering off the box. Try again.');
     return;
   }
@@ -286,11 +326,13 @@ sub _handle_poweroff ($self, $event, @args) {
   # still turns up fine, so only consider it if we got a real response
   if ($status) {
     if ($status ne 'completed') {
+      $remove_reactji->('Error!');
       $event->error_reply("Something went wrong while powering off the box, check the DigitalOcean console and maybe try again.");
       return;
     }
   }
 
+  $remove_reactji->('Powered off!');
   $event->reply("Your box has been powered off.");
 }
 
@@ -306,9 +348,28 @@ sub _handle_poweron ($self, $event, @args) {
   }
 
   $Logger->log([ "Powering on droplet: %s", $droplet->{id} ]);
+  $event->reply(
+    "I'm pulling the levers, it'll be just a moment",
+    {
+      slack_reaction => {
+        event => $event,
+        reaction => 'vertical_traffic_light',
+      }
+    },
+  );
+
+  my $remove_reactji = sub ($alt_text) {
+    $event->private_reply($alt_text, {
+      slack_reaction => {
+        event => $event,
+        reaction => '-vertical_traffic_light',
+      },
+    });
+  };
 
   my $action = $self->_do_droplet_action_f($droplet->{id}, 'power_on');
   unless ($action) {
+    $remove_reactji->('Error!');
     $event->error_reply('There was an error powering on the box. Try again.');
     return;
   }
@@ -318,11 +379,13 @@ sub _handle_poweron ($self, $event, @args) {
   # still turns up fine, so only consider it if we got a real response
   if ($status) {
     if ($status ne 'completed') {
+      $remove_reactji->('Error!');
       $event->error_reply("Something went wrong while powering on box, check the DigitalOcean console and maybe try again.");
       return;
     }
   }
 
+  $remove_reactji->('Powered on!');
   $event->reply("Your box has been powered on.");
 }
 
