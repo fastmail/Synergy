@@ -1557,7 +1557,7 @@ sub task_plan_from_spec ($self, $event, $spec) {
   $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
   $self->_check_plan_package($event, \%plan, \%error)   if $plan{package};
 
-  $error{name} = "That task name is just too long!  Consider putting more of it in the long description."
+  $error{name} = "That task name is just too long!  Consider putting more of it in the long description.  You can do that by separating the name and long description with `---` (and spaces around that)."
     if length $plan{name} > 200;
 
   return (undef, \%error) if %error;
