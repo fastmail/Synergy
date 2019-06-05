@@ -169,7 +169,7 @@ sub _handle_create ($self, $event, @args) {
     return;
   }
 
-  my $status = _do_action_status_f("/actions/$action_id")->get;
+  my $status = $self->_do_action_status_f("/actions/$action_id")->get;
 
   # action status checks have been seen to time out or crash but the droplet
   # still turns up fine, so only consider it if we got a real response
