@@ -96,7 +96,7 @@ sub handle_box ($self, $event) {
 
   my ($box, $cmd, @args) = split /\s+/, $event->text;
 
-  my $handler = $command_handler{$cmd};
+  my $handler = $cmd ? $command_handler{$cmd} : undef;
   unless ($handler) {
     return $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
   }
