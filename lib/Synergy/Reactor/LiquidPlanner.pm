@@ -1863,7 +1863,7 @@ sub _parse_search ($self, $text) {
       next TOKEN;
     }
 
-    if ($text =~ s/^$flagname_re:([-0-9]+|\*|\#?$ident_re)(?: \s | \z)//x) {
+    if ($text =~ s/^$flagname_re:([-0-9]+|~|\*|\#?$ident_re)(?: \s | \z)//x) {
       push @conds, {
         field => fc($field_alias{$1} // $1),
         ($2 ? (op => fc $2) : ()),
@@ -2011,6 +2011,16 @@ sub _compile_search ($self, $conds, $from_user) {
       maybe_conflict('client', $client->{id});
 
       $flag{client} = $client->{id};
+      next COND;
+    }
+
+    if ($field eq 'shortcut') {
+      bad_op($field, $op) unless ($op//'is') eq 'is';
+
+      cond_error(q{The only valid value for `shortcut` is `~`, meaning "no shortcut defined.})
+        unless $value eq '~';
+
+      $flag{shortcut} = undef;
       next COND;
     }
 
@@ -2284,6 +2294,22 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
     my $triage_user = $self->hub->user_directory->user_named('triage');
     if ($triage_user && grep {; $_ == $triage_user->lp_id } keys $flag{owner}->%*) {
       $has_strong_check = 1;
+    }
+  }
+
+  if (exists $flag{shortcut}) {
+    if (defined $flag{shortcut}) {
+      $error{"Illegal value found for `shortcut` in search."} = 1;
+    } elsif (
+      ! $flag{type}
+      or ($flag{type} ne 'task' && $flag{type} ne 'project')
+    ) {
+      $error{"You can't search by missing shortcuts unless you specify a `type` of project or task."} = 1;
+    } else {
+      push @filters, [
+        "custom_field:'Synergy \u$flag{type} Shortcut'",
+        'is_not_set',
+      ];
     }
   }
 
