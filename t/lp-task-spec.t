@@ -393,4 +393,24 @@ is_deeply(
   "qstring in flag value",
 );
 
+is_deeply(
+  $synergy->reactor_named('lp')->_parse_search(q{bar created:after:2019-01-01 foo}),
+  [
+    { field => 'name',    op => 'contains', value => 'bar' },
+    { field => 'created', op => 'after',    value => '2019-01-01' },
+    { field => 'name',    op => 'contains', value => 'foo' },
+  ],
+  "field:op:value for created:after:YYYY-MM-DD",
+);
+
+is_deeply(
+  $synergy->reactor_named('lp')->_parse_search(q{bar created:after:"2019-02-02" foo}),
+  [
+    { field => 'name',    op => 'contains', value => 'bar' },
+    { field => 'created', op => 'after',    value => '2019-02-02' },
+    { field => 'name',    op => 'contains', value => 'foo' },
+  ],
+  "field:op:value with qstring value",
+);
+
 done_testing;

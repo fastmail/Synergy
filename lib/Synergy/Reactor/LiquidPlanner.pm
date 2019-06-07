@@ -2168,6 +2168,15 @@ sub _handle_search ($self, $event, $text) {
     return $event->error_reply("Your search blew my mind, and now I am dead.");
   }
 
+  # This is very stupid. -- rjbs, 2019-06-06
+  if (grep {; $_->{field} eq 'debug' and $_->{value} == 255 } @$conds) {
+    return $event->reply(
+      "The search compiled as follows: ```"
+      . JSON->new->pretty->canonical->encode($conds)
+      . "```"
+    );
+  }
+
   my ($search, $error) = $self->_compile_search(
     $conds,
     $event->from_user,
