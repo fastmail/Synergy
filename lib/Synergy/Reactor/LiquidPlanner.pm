@@ -276,26 +276,28 @@ my %KNOWN = (
                   "resume timer: start the last time you had running up again",
                 ],
 
-  search    =>  [ \&_handle_search,
-                  join("\n",
-                    "search SEARCH_TERM: find tasks in LiquidPlanner matching term",
-                    "Additional search fields include:",
-                    "• `done:{yes,no,both}`, search for completed tasks",
-                    "• `in:{inbox,urgent,recurring,LP-ID}`, search for scheduled tasks",
-                    "• `onhold:{yes,no,both}`, search for tasks on hold",
-                    "• `page:N`, get the Nth page of 10 results",
-                    "• `phase:P`, only find work in projects in phase P",
-                    "• `project:PROJECT`, search in this project shortcut",
-                    "• `scheduled:{yes,no,both}`, search for scheduled tasks",
-                    "• `type:TYPE`, pick what type of thing to find (package, project, task)",
-                    "• `o[wner]:NAME`, tasks owned by the user named NAME",
-                    "• `creator:NAME`, tasks created by the user named NAME",
-                    "• `created:{before,after}:YYYY-MM-DD`, tasks created in the time range",
-                    "• `lastupdate:{before,after}:YYYY-MM-DD`, tasks last updated in the time range",
-                    "• `force:1`, search even if Synergy says it's too broad",
-                    "• `debug:1`, turn on debugging and dump the query to be run",
-                  ),
-                ],
+  search    =>  [
+    \&_handle_search,
+    join("\n",
+      "search SEARCH_TERM: find tasks in LiquidPlanner matching term",
+      "Additional search fields include:",
+      "• `done:{yes,no,both}`, search for completed tasks",
+      "• `in:{inbox,urgent,recurring,LP-ID}`, search for scheduled tasks",
+      "• `onhold:{yes,no,both}`, search for tasks on hold",
+      "• `page:N`, get the Nth page of 10 results",
+      "• `phase:P`, only find work in projects in phase P",
+      "• `project:PROJECT`, search in this project shortcut",
+      "• `scheduled:{yes,no,both}`, search for scheduled tasks",
+      "• `type:TYPE`, pick what type of thing to find (package, project, task)",
+      "• `o[wner]:NAME`, tasks owned by the user named NAME",
+      "• `creator:NAME`, tasks created by the user named NAME",
+      "• `created:{before,after}:YYYY-MM-DD`, tasks created in the time range",
+      "• `lastupdated:{before,after}:YYYY-MM-DD`, tasks last updated in the time range",
+      "• `shortcut:~`, items without shortcuts (must also use `type`)",
+      "• `force:1`, search even if Synergy says it's too broad",
+      "• `debug:1`, turn on debugging and dump the query to be run",
+    ),
+  ],
 
   shows     =>  [ \&_handle_shows,       ],
   "show's"  =>  [ \&_handle_shows,       ],
@@ -2087,7 +2089,7 @@ sub _compile_search ($self, $conds, $from_user) {
       next COND;
     }
 
-    if ($field eq 'created' or $field eq 'lastupdate') {
+    if ($field eq 'created' or $field eq 'lastupdated') {
       error("No operator supplied for $field.") unless defined $op;
       bad_op($field, $op) unless $op eq 'after' or $op eq 'before';
 
@@ -2222,7 +2224,7 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
   }
 
   {
-    my %datefield = (created => 'created', lastupdate => 'last_updated');
+    my %datefield = (created => 'created', lastupdated => 'last_updated');
 
     for my $field (keys %datefield) {
       if (my $got = $flag{$field}) {
