@@ -1823,15 +1823,18 @@ sub _parse_search ($self, $text) {
     }
     $last = $text;
 
+    # “ - U+0201C - LEFT DOUBLE QUOTATION MARK
+    # ” - U+0201D - RIGHT DOUBLE QUOTATION MARK
+
     # Even a quoted string can't contain control characters.  Get real.
-    state $qstring = qr{"( (?: \\" | [^\pC"] )+ )"}x;
+    state $qstring = qr{[“"]( (?: \\["“”] | [^\pC"“”] )+ )[”"]}x;
 
     if ($text =~ s/^($prefix_re)$qstring\s*//x) {
       my ($prefix, $word) = ($1, $2);
 
       push @conds, {
         field => 'name',
-        value => ($word =~ s/\\"/"/gr),
+        value => ($word =~ s/\\(["“”])/$1/gr),
         op    => ( $prefix eq ""   ? "contains"
                  : $prefix eq "^"  ? "starts_with"
                  : $prefix eq "!^" ? "does_not_start_with"
@@ -1859,7 +1862,7 @@ sub _parse_search ($self, $text) {
       push @conds, {
         field => fc($field_alias{$1} // $1),
         ($2 ? (op => fc $2) : ()),
-        value => $3 =~ s/\\"/"/gr,
+        value => $3 =~ s/\\(["“”])/$1/gr,
       };
 
       next TOKEN;
