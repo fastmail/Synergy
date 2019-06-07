@@ -294,6 +294,7 @@ my %KNOWN = (
       "• `created:{before,after}:YYYY-MM-DD`, tasks created in the time range",
       "• `lastupdated:{before,after}:YYYY-MM-DD`, tasks last updated in the time range",
       "• `shortcut:~`, items without shortcuts (must also use `type`)",
+      "• `shortcut:*`, items with shortcuts (must also use `type`)",
       "• `force:1`, search even if Synergy says it's too broad",
       "• `debug:1`, turn on debugging and dump the query to be run",
     ),
@@ -2022,10 +2023,10 @@ sub _compile_search ($self, $conds, $from_user) {
     if ($field eq 'shortcut') {
       bad_op($field, $op) unless ($op//'is') eq 'is';
 
-      cond_error(q{The only valid value for `shortcut` is `~`, meaning "no shortcut defined.})
-        unless $value eq '~';
+      cond_error(q{The only valid values for `shortcut` are `*` and `~`, meaning "shortcut defined" and "no shortcut defined", respectively.})
+        unless $value eq '~' or $value eq '*';
 
-      $flag{shortcut} = undef;
+      $flag{shortcut} = $value;
       next COND;
     }
 
@@ -2322,7 +2323,9 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
     } else {
       push @filters, [
         "custom_field:'Synergy \u$flag{type} Shortcut'",
-        'is_not_set',
+        ( $flag{shortcut} eq '~' ? 'is_not_set'
+        : $flag{shortcut} eq '*' ? 'is_set'
+        :                           'designed_to_fail'), # no -r
       ];
     }
   }
