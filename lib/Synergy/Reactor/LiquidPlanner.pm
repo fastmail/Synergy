@@ -3495,7 +3495,7 @@ sub _handle_iteration ($self, $event, $rest) {
   );
 }
 
-sub container_report ($self, $who) {
+sub container_report ($self, $who, $arg = {}) {
   return unless my $lp_id = $who->lp_id;
 
   my $rototron = $self->_rototron;
@@ -3509,9 +3509,12 @@ sub container_report ($self, $who) {
     [ inbox  => "📫" => $self->inbox_package_id   ],
 
     (($user_is_triage && $triage_user && $triage_user->has_lp_id)
-      ?  [ triage => "⛑" => undef,  $triage_user->lp_id ]
+      ? [ triage => "⛑" => undef,  $triage_user->lp_id ]
       : ()),
-    [ urgent => "🔥" => $self->urgent_package_id  ],
+
+    (! $arg->{exclude}{urgent}
+      ? [ urgent => "🔥" => $self->urgent_package_id  ]
+      : ()),
   );
 
   my @summaries;
