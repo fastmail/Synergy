@@ -1715,35 +1715,39 @@ sub upcoming_tasks_for_user ($self, $user, $count) {
   return \@tasks;
 }
 
-sub _send_task_list ($self, $event, $tasks, $arg = {}) {
+sub _send_item_list ($self, $event, $itemlist, $arg = {}) {
   my $reply = q{};
   my $slack = q{};
 
-  for my $task (@$tasks) {
-    my $uri = $self->item_uri($task->{id});
-    $reply .= "$task->{name} ($uri)\n";
+  unless ($itemlist->{items}->@*) {
+    return $event->reply($arg->{zero_text} // "Nothing matched that search.");
+  }
 
-    my $icon = $task->{type} eq 'Task'    ? "🌀"
-             : $task->{type} eq 'Package' ? "📦"
-             : $task->{type} eq 'Project' ? "📁"
-             : $task->{type} eq 'Folder'  ? "🗂"
-             : $task->{type} eq 'Inbox'   ? "📫"
+  for my $item ($itemlist->{items}->@*) {
+    my $uri = $self->item_uri($item->{id});
+    $reply .= "$item->{name} ($uri)\n";
+
+    my $icon = $item->{type} eq 'Task'    ? "🌀"
+             : $item->{type} eq 'Package' ? "📦"
+             : $item->{type} eq 'Project' ? "📁"
+             : $item->{type} eq 'Folder'  ? "🗂"
+             : $item->{type} eq 'Inbox'   ? "📫"
              :                              "❓";
 
     $slack .= "$icon "
-           .  $self->_slack_item_link_with_name($task, $arg->{show})
+           .  $self->_slack_item_link_with_name($item, $arg->{show})
            .  "\n";
   }
 
-  if ($arg->{header} or $arg->{page}) {
-    my $header = $arg->{header} && $arg->{page} ? "$arg->{header}, page "
-               : $arg->{header}                 ? $arg->{header}
-               : $arg->{page}                   ? "Page "
+  if ($arg->{header} or $itemlist->{page}) {
+    my $header = $arg->{header} && $itemlist->{page}  ? "$arg->{header}, page "
+               : $arg->{header}                       ? $arg->{header}
+               : $itemlist->{page}                    ? "Page "
                : Carp::confess("unreachable code");
 
-    $header .= $arg->{page} if $arg->{page};
-    $header .= " of " . ($arg->{more} ? "$arg->{page}+n" : $arg->{page})
-                if defined $arg->{more};
+    $header .= $itemlist->{page} if $itemlist->{page};
+    $header .= " of " . ($itemlist->{more} ? "$itemlist->{page}+n" : $itemlist->{page})
+                if defined $itemlist->{more};
 
     $slack = "*$header*\n$slack";
     $reply = "$header\n$reply";
@@ -1790,14 +1794,16 @@ sub _handle_tasks ($self, $event, $text) {
   return $event->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
 
-  $self->_send_task_list(
+  $self->_send_item_list(
     $event,
-    \@task_page,
     {
-      header  => sprintf("Upcoming tasks for %s", $user->username),
+      items   => \@task_page,
       more    => (@$lp_tasks > 0 ? 1 : 0),
       page    => $page,
-    }
+    },
+    {
+      header  => sprintf("Upcoming tasks for %s", $user->username),
+    },
   );
 }
 
@@ -1902,6 +1908,7 @@ sub _parse_search ($self, $text) {
 
 sub _compile_search ($self, $conds, $from_user) {
   my %flag;
+  my %display;
   my %error;
 
   my @unknown_fields;
@@ -2161,32 +2168,305 @@ sub _compile_search ($self, $conds, $from_user) {
     $error{$text} = 1;
   }
 
-  return (\%flag, (%error ? \%error : undef));
+  if (my $show = delete $flag{show}) {
+    $display{show} = $show;
+  }
+
+  return (\%flag, \%display, (%error ? \%error : undef));
 }
 
 sub _handle_search ($self, $event, $text) {
-  my $conds = $self->_parse_search($text);
+  my $instructions = $self->_parse_search($text);
 
   # This is stupid. -- rjbs, 2019-03-30
-  if (grep {; $_->{field} eq 'parse_error' } @$conds) {
+  if (grep {; $_->{field} eq 'parse_error' } @$instructions) {
     return $event->error_reply("Your search blew my mind, and now I am dead.");
   }
 
   # This is very stupid. -- rjbs, 2019-06-06
-  if (grep {; $_->{field} eq 'debug' and $_->{value} == 255 } @$conds) {
+  if (grep {; $_->{field} eq 'debug' and $_->{value} == 255 } @$instructions) {
     return $event->reply(
       "The search compiled as follows: ```"
-      . JSON->new->pretty->canonical->encode($conds)
+      . JSON->new->pretty->canonical->encode($instructions)
       . "```"
     );
   }
 
-  my ($search, $error) = $self->_compile_search(
-    $conds,
+  my ($search, $display, $error) = $self->_compile_search(
+    $instructions,
     $event->from_user,
   );
 
-  return $self->_do_search($event, $search, $error);
+  my $lpc = $self->f_lp_client_for_user($event->from_user);
+  my $future = $self->_execute_search($lpc, $search, $error);
+  $self->_send_search_result($event, $future, $display);
+}
+
+sub _send_search_result ($self, $event, $result, $display) {
+  $result
+    ->else(sub {
+      $event->error_reply("Something went wrong with that search.");
+      return Future->done;
+    })
+    ->then(sub ($action, @rest) {
+      if    ($action eq 'reply')    { $event->reply(@rest) }
+      elsif ($action eq 'error')    { $event->error_reply(@rest) }
+      elsif ($action eq 'itemlist') {
+        my ($itemlist) = @rest;
+        $self->_send_item_list($event, $itemlist, $display);
+      } else {
+        $Logger->log("got unexpected search execution result: $action");
+        $event->error_reply("Woah, something weird happened with that search.");
+      }
+      return Future->done;
+    })->retain;
+}
+
+sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
+  my %flag  = $search ? %$search : ();
+
+  my %error = $orig_error ? %$orig_error : ();
+
+  my %qflag = (flat => 1, depth => -1, order => 'earliest_start');
+  my $q_in;
+  my @filters;
+
+  my $has_strong_check = 0;
+
+  # We start with a limit higher than one page because there are reasons we
+  # need to overshoot.  One common reason: if we've got an "in" filter, the
+  # container may be removed, and we want to drop it.  We'll crank the limit up
+  # more, later, if we're filtering by user on un-done tasks, because the
+  # LiquidPlanner behavior on owner filtering is less than ideal.
+  # -- rjbs, 2019-02-18
+  my $page_size = 10;
+  my ($limit, $offset) = ($page_size + 5, 0);
+
+  $flag{done} = 0 unless exists $flag{done};
+  if (defined $flag{done}) {
+    push @filters, [ 'is_done', 'is', ($flag{done} ? 'true' : 'false') ];
+  }
+
+  if (defined $flag{onhold}) {
+    push @filters, [ 'is_on_hold', 'is', ($flag{onhold} ? 'true' : 'false') ];
+  }
+
+  if (defined $flag{scheduled}) {
+    push @filters, $flag{scheduled}
+      ? [ 'earliest_start', 'after', '2001-01-01' ]
+      : [ 'earliest_start', 'never' ];
+  }
+
+  if (defined $flag{project}) {
+    push @filters, [ 'project_id', '=', $flag{project} ];
+  }
+
+  if (defined $flag{client}) {
+    push @filters, [ 'client_id', '=', $flag{client} ];
+  }
+
+  if (defined $flag{tags}) {
+    push @filters, [ 'tags', 'include', join q{,}, keys $flag{tags}->%* ];
+  }
+
+  {
+    my %datefield = (created => 'created', lastupdated => 'last_updated');
+
+    for my $field (keys %datefield) {
+      if (my $got = $flag{$field}) {
+        for my $op (qw( after before )) {
+          if ($got->{$op}) {
+            push @filters, [ $datefield{$field}, $op, $got->{$op} ];
+          }
+        }
+      }
+    }
+  }
+
+  $flag{page} //= 1;
+  if ($flag{page}) {
+    $offset = ($flag{page} - 1) * 10;
+    $limit += $offset;
+  }
+
+  if ($flag{owner} && keys $flag{owner}->%*) {
+    # So, this is really $!%@# annoying.  The owner_id filter finds tasks that
+    # have an assignment for the given owner, but they don't care whether the
+    # assignment is done or not.  So, if you're looking for tasks that are
+    # undone for a given user, you need to do filtering in the application
+    # layer, because LiquidPlanner does not have your back.
+    # -- rjbs, 2019-02-18
+    push @filters, map {; [ 'owner_id', '=', $_ ] } keys $flag{owner}->%*;
+
+    if (defined $flag{done} && ! $flag{done}) {
+      # So, if we're looking for specific users, and we want non-done tasks,
+      # let's only find ones where those users' assignments are not done.
+      # We'll have to do that filtering at this end, so we need to over-select.
+      # I have no idea what to guess, so I picked 3x, just because.
+      # -- rjbs, 2019-02-18
+      $limit *= 3;
+    }
+  }
+
+  if ($flag{creator} && keys $flag{creator}->%*) {
+    push @filters, map {; [ 'created_by', '=', $_ ] } keys $flag{creator}->%*;
+  }
+
+  if (defined $flag{phase}) {
+    # If you're asking for something by phase, you probably want a project.
+    # You can override this if you want with "phase:planning type:task" but
+    # it's a little weird. -- rjbs, 2019-02-07
+    $flag{type} //= 'project';
+
+    push @filters,
+      $flag{phase} eq 'none'
+      ? [ "custom_field:'Project Phase'", 'is_not_set' ]
+      : [ "custom_field:'Project Phase'", '=', "'$flag{phase}'" ];
+  }
+
+  if ($flag{type}) {
+    push @filters, [ 'item_type', 'is', ucfirst $flag{type} ];
+  }
+
+  if (defined $flag{in}) {
+    $q_in = $flag{in};
+  }
+
+  if (defined $flag{done} and ! $flag{done}) {
+    # If we're only looking at open tasks in one container, we'll assume it's a
+    # small enough set to just search. -- rjbs, 2019-02-07
+    $has_strong_check = 1 if $flag{in};
+
+    # If we're looking for only open triage tasks, that should be small, too.
+    # -- rjbs, 2019-02-08
+    my $triage_user = $self->hub->user_directory->user_named('triage');
+    if ($triage_user && grep {; $_ == $triage_user->lp_id } keys $flag{owner}->%*) {
+      $has_strong_check = 1;
+    }
+  }
+
+  if (exists $flag{shortcut}) {
+    if (defined $flag{shortcut}) {
+      $error{"Illegal value found for `shortcut` in search."} = 1;
+    } elsif (
+      ! $flag{type}
+      or ($flag{type} ne 'task' && $flag{type} ne 'project')
+    ) {
+      $error{"You can't search by missing shortcuts unless you specify a `type` of project or task."} = 1;
+    } else {
+      push @filters, [
+        "custom_field:'Synergy \u$flag{type} Shortcut'",
+        ( $flag{shortcut} eq '~' ? 'is_not_set'
+        : $flag{shortcut} eq '*' ? 'is_set'
+        :                           'designed_to_fail'), # no -r
+      ];
+    }
+  }
+
+  $has_strong_check = 1
+    if ($flag{project} || $flag{in})
+    || ($flag{debug} || $flag{force})
+    || ($flag{type} && $flag{type} ne 'task')
+    || ($flag{phase} && (defined $flag{done} && ! $flag{done})
+                     && ($flag{phase} ne 'none' || $flag{type} ne 'task'));
+
+  if ($flag{name}) {
+    MATCHER: for my $matcher ($flag{name}->@*) {
+      my ($op, $value) = @$matcher;
+      if ($op eq 'does_not_contain') {
+        state $error = qq{Annoyingly, there's no "does not contain" }
+                     . qq{query in LiquidPlanner, so you can't use "!" }
+                     . qq{as a prefix.};
+
+        $error{$error} = 1;
+        next MATCHER;
+      }
+
+      if (! defined $op) {
+        $error{ q{Something weird happened with your search.} } = 1;
+        next MATCHER;
+      }
+
+      # You need to have some kind of actual search.
+      $has_strong_check++ unless $op eq 'does_not_start_with';
+
+      push @filters, [ 'name', $op, $value ];
+    }
+  }
+
+  unless ($has_strong_check) {
+    state $error = "This search is too broad.  Try adding search terms or "
+                 . "more limiting conditions.  I'm sorry this advice is so "
+                 . "vague, but the existing rules are silly and subject to "
+                 . "change at any time.";
+
+    $error{$error} = 1;
+  }
+
+  if (%error) {
+    return Future->done(reply_error => join q{  }, sort keys %error);
+  }
+
+  my %to_query = (
+    in      => $q_in,
+    flags   => \%qflag,
+    filters => \@filters,
+  );
+
+  if ($flag{debug}) {
+    return Future->done(
+      reply => "I'm going to run this query: ```"
+             . JSON->new->pretty->canonical->encode(\%to_query)
+             . "```"
+    );
+  }
+
+  my $search_f = $lpc
+    ->query_items(\%to_query)
+    ->else(sub {
+      Future->done(reply_error => "Something went wrong when running that search.");
+    });
+
+  $search_f->then(sub ($data) {
+    my %seen;
+    my @tasks = grep {; ! $seen{$_->{id}}++ } @$data;
+
+    if ($q_in) {
+      # If you search for the contents of n, you will get n back also.
+      @tasks = grep {; $_->{id} != $q_in } @tasks;
+    }
+
+    if ($flag{owner} && keys $flag{owner}->%*
+        && defined $flag{done} && ! $flag{done}
+    ) {
+      @tasks = grep {;
+        keys $flag{owner}->%*
+        ==
+        grep {; ! $_->{is_done} and $flag{owner}{ $_->{person_id} } }
+          $_->{assignments}->@*;
+      } @tasks;
+    }
+
+    unless (@tasks) {
+      return Future->done(itemlist => {
+        items => [],
+        more  => 0,
+        page  => $flag{page},
+      });
+    }
+
+    my $more  = @tasks > $offset + 11;
+    @tasks = splice @tasks, $offset, 10;
+
+    return Future->done(reply => "That's past the last page of results.")
+      unless @tasks;
+
+    return Future->done(itemlist => {
+      items => \@tasks,
+      more  => $more ? 1 : 0,
+      page  => $flag{page},
+    });
+  });
 }
 
 sub _do_search ($self, $event, $search, $orig_error = undef) {
@@ -2425,14 +2705,16 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
 
     return $event->reply("That's past the last page of results.") unless @tasks;
 
-    $self->_send_task_list(
+    $self->_send_item_list(
       $event,
       \@tasks,
       {
-        header  => $flag{header} // "Search results",
         page    => $flag{page},
         more    => $more ? 1 : 0,
         show    => $flag{show},
+      },
+      {
+        header  => $flag{header} // "Search results",
       },
     );
   })->retain;
@@ -2449,14 +2731,14 @@ for my $package (qw(inbox urgent recurring)) {
         $event,
         $text,
         $package,
-        sub ($, $, $search) {
-          $search->{header} = sprintf '%s tasks for %s',
-            ucfirst $package,
-            $event->from_user->username;
+        sub ($, $, $search, $display) {
           $search->{owner}{ $event->from_user->lp_id } = 1;
           $search->{in} = $self->$pkg_id_method;
 
-          $search->{show}{staleness} = 1
+          $display->{header} = sprintf '%s tasks for %s',
+            ucfirst $package,
+            $event->from_user->username;
+          $display->{show}{staleness} = 1
             if $package eq 'inbox'
             or $package eq 'urgent';
         },
@@ -2476,12 +2758,12 @@ sub _handle_triage ($self, $event, $text) {
     $event,
     $text,
     "triage",
-    sub ($, $, $search) {
+    sub ($, $, $search, $display) {
       $search->{owner}{ $triage_user->lp_id } = 1;
-      $search->{show}{age} = 1;
-      $search->{show}{staleness} = 1;
-      $search->{header} = "$TRIAGE_EMOJI Tasks to triage";
-      $search->{zero_text} = "Triage zero!  Feelin' fine.";
+      $display->{show}{age} = 1;
+      $display->{show}{staleness} = 1;
+      $display->{header} = "$TRIAGE_EMOJI Tasks to triage";
+      $display->{zero_text} = "Triage zero!  Feelin' fine.";
     },
   )
 }
@@ -2493,12 +2775,15 @@ sub _handle_quick_search ($self, $event, $text, $cmd, $munger) {
     );
   }
 
-  my $page = $1 // 1;
+  my %display = ();
+  my %search  = (page => $1 // 1);
 
-  my %search = (page => $page);
-  $self->$munger($event, \%search);
+  $self->$munger($event, \%search, \%display);
 
-  $self->_do_search($event, \%search);
+  my $lpc     = $self->f_lp_client_for_user($event->from_user);
+  my $future  = $self->_execute_search($lpc, \%search, {});
+
+  $self->_send_search_result($event, $future, \%display);
 }
 
 sub _handle_plus_plus ($self, $event, $text) {
