@@ -2194,7 +2194,7 @@ sub _do_search ($self, $event, $search, $orig_error = undef) {
 
   my %error = $orig_error ? %$orig_error : ();
 
-  my %qflag = (flat => 1, depth => -1);
+  my %qflag = (flat => 1, depth => -1, order => 'earliest_start');
   my $q_in;
   my @filters;
 
