@@ -1715,12 +1715,12 @@ sub upcoming_tasks_for_user ($self, $user, $count) {
   return \@tasks;
 }
 
-sub _send_item_list ($self, $event, $itemlist, $arg = {}) {
+sub _format_item_list ($self, $itemlist, $display) {
   my $reply = q{};
   my $slack = q{};
 
   unless ($itemlist->{items}->@*) {
-    return $event->reply($arg->{zero_text} // "Nothing matched that search.");
+    return($display->{zero_text} // "Nothing matched that search.");
   }
 
   for my $item ($itemlist->{items}->@*) {
@@ -1735,14 +1735,14 @@ sub _send_item_list ($self, $event, $itemlist, $arg = {}) {
              :                              "❓";
 
     $slack .= "$icon "
-           .  $self->_slack_item_link_with_name($item, $arg->{show})
+           .  $self->_slack_item_link_with_name($item, $display->{show})
            .  "\n";
   }
 
-  if ($arg->{header} or $itemlist->{page}) {
-    my $header = $arg->{header} && $itemlist->{page}  ? "$arg->{header}, page "
-               : $arg->{header}                       ? $arg->{header}
-               : $itemlist->{page}                    ? "Page "
+  if ($display->{header} or $itemlist->{page}) {
+    my $header = $display->{header} && $itemlist->{page}  ? "$display->{header}, page "
+               : $display->{header}                       ? $display->{header}
+               : $itemlist->{page}                        ? "Page "
                : Carp::confess("unreachable code");
 
     $header .= $itemlist->{page} if $itemlist->{page};
@@ -1756,7 +1756,7 @@ sub _send_item_list ($self, $event, $itemlist, $arg = {}) {
   chomp $reply;
   chomp $slack;
 
-  $event->reply($reply, { slack => $slack });
+  return ($reply, { slack => $slack });
 }
 
 sub _handle_tasks ($self, $event, $text) {
@@ -1794,16 +1794,17 @@ sub _handle_tasks ($self, $event, $text) {
   return $event->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
 
-  $self->_send_item_list(
-    $event,
-    {
-      items   => \@task_page,
-      more    => (@$lp_tasks > 0 ? 1 : 0),
-      page    => $page,
-    },
-    {
-      header  => sprintf("Upcoming tasks for %s", $user->username),
-    },
+  $event->reply(
+    $self->_format_item_list(
+      {
+        items   => \@task_page,
+        more    => (@$lp_tasks > 0 ? 1 : 0),
+        page    => $page,
+      },
+      {
+        header  => sprintf("Upcoming tasks for %s", $user->username),
+      },
+    ),
   );
 }
 
@@ -2213,7 +2214,7 @@ sub _send_search_result ($self, $event, $result, $display) {
       elsif ($action eq 'error')    { $event->error_reply(@rest) }
       elsif ($action eq 'itemlist') {
         my ($itemlist) = @rest;
-        $self->_send_item_list($event, $itemlist, $display);
+        $event->reply( $self->_format_item_list($itemlist, $display) );
       } else {
         $Logger->log("got unexpected search execution result: $action");
         $event->error_reply("Woah, something weird happened with that search.");
@@ -2467,259 +2468,6 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
       page  => $flag{page},
     });
   });
-}
-
-sub _do_search ($self, $event, $search, $orig_error = undef) {
-  my %flag  = $search ? %$search : ();
-
-  my %error = $orig_error ? %$orig_error : ();
-
-  my %qflag = (flat => 1, depth => -1, order => 'earliest_start');
-  my $q_in;
-  my @filters;
-
-  my $has_strong_check = 0;
-
-  # We start with a limit higher than one page because there are reasons we
-  # need to overshoot.  One common reason: if we've got an "in" filter, the
-  # container may be removed, and we want to drop it.  We'll crank the limit up
-  # more, later, if we're filtering by user on un-done tasks, because the
-  # LiquidPlanner behavior on owner filtering is less than ideal.
-  # -- rjbs, 2019-02-18
-  my $page_size = 10;
-  my ($limit, $offset) = ($page_size + 5, 0);
-
-  $flag{done} = 0 unless exists $flag{done};
-  if (defined $flag{done}) {
-    push @filters, [ 'is_done', 'is', ($flag{done} ? 'true' : 'false') ];
-  }
-
-  if (defined $flag{onhold}) {
-    push @filters, [ 'is_on_hold', 'is', ($flag{onhold} ? 'true' : 'false') ];
-  }
-
-  if (defined $flag{scheduled}) {
-    push @filters, $flag{scheduled}
-      ? [ 'earliest_start', 'after', '2001-01-01' ]
-      : [ 'earliest_start', 'never' ];
-  }
-
-  if (defined $flag{project}) {
-    push @filters, [ 'project_id', '=', $flag{project} ];
-  }
-
-  if (defined $flag{client}) {
-    push @filters, [ 'client_id', '=', $flag{client} ];
-  }
-
-  if (defined $flag{tags}) {
-    push @filters, [ 'tags', 'include', join q{,}, keys $flag{tags}->%* ];
-  }
-
-  {
-    my %datefield = (created => 'created', lastupdated => 'last_updated');
-
-    for my $field (keys %datefield) {
-      if (my $got = $flag{$field}) {
-        for my $op (qw( after before )) {
-          if ($got->{$op}) {
-            push @filters, [ $datefield{$field}, $op, $got->{$op} ];
-          }
-        }
-      }
-    }
-  }
-
-  $flag{page} //= 1;
-  if ($flag{page}) {
-    $offset = ($flag{page} - 1) * 10;
-    $limit += $offset;
-  }
-
-  if ($flag{owner} && keys $flag{owner}->%*) {
-    # So, this is really $!%@# annoying.  The owner_id filter finds tasks that
-    # have an assignment for the given owner, but they don't care whether the
-    # assignment is done or not.  So, if you're looking for tasks that are
-    # undone for a given user, you need to do filtering in the application
-    # layer, because LiquidPlanner does not have your back.
-    # -- rjbs, 2019-02-18
-    push @filters, map {; [ 'owner_id', '=', $_ ] } keys $flag{owner}->%*;
-
-    if (defined $flag{done} && ! $flag{done}) {
-      # So, if we're looking for specific users, and we want non-done tasks,
-      # let's only find ones where those users' assignments are not done.
-      # We'll have to do that filtering at this end, so we need to over-select.
-      # I have no idea what to guess, so I picked 3x, just because.
-      # -- rjbs, 2019-02-18
-      $limit *= 3;
-    }
-  }
-
-  if ($flag{creator} && keys $flag{creator}->%*) {
-    push @filters, map {; [ 'created_by', '=', $_ ] } keys $flag{creator}->%*;
-  }
-
-  if (defined $flag{phase}) {
-    # If you're asking for something by phase, you probably want a project.
-    # You can override this if you want with "phase:planning type:task" but
-    # it's a little weird. -- rjbs, 2019-02-07
-    $flag{type} //= 'project';
-
-    push @filters,
-      $flag{phase} eq 'none'
-      ? [ "custom_field:'Project Phase'", 'is_not_set' ]
-      : [ "custom_field:'Project Phase'", '=', "'$flag{phase}'" ];
-  }
-
-  if ($flag{type}) {
-    push @filters, [ 'item_type', 'is', ucfirst $flag{type} ];
-  }
-
-  if (defined $flag{in}) {
-    $q_in = $flag{in};
-  }
-
-  if (defined $flag{done} and ! $flag{done}) {
-    # If we're only looking at open tasks in one container, we'll assume it's a
-    # small enough set to just search. -- rjbs, 2019-02-07
-    $has_strong_check = 1 if $flag{in};
-
-    # If we're looking for only open triage tasks, that should be small, too.
-    # -- rjbs, 2019-02-08
-    my $triage_user = $self->hub->user_directory->user_named('triage');
-    if ($triage_user && grep {; $_ == $triage_user->lp_id } keys $flag{owner}->%*) {
-      $has_strong_check = 1;
-    }
-  }
-
-  if (exists $flag{shortcut}) {
-    if (defined $flag{shortcut}) {
-      $error{"Illegal value found for `shortcut` in search."} = 1;
-    } elsif (
-      ! $flag{type}
-      or ($flag{type} ne 'task' && $flag{type} ne 'project')
-    ) {
-      $error{"You can't search by missing shortcuts unless you specify a `type` of project or task."} = 1;
-    } else {
-      push @filters, [
-        "custom_field:'Synergy \u$flag{type} Shortcut'",
-        ( $flag{shortcut} eq '~' ? 'is_not_set'
-        : $flag{shortcut} eq '*' ? 'is_set'
-        :                           'designed_to_fail'), # no -r
-      ];
-    }
-  }
-
-  $has_strong_check = 1
-    if ($flag{project} || $flag{in})
-    || ($flag{debug} || $flag{force})
-    || ($flag{type} && $flag{type} ne 'task')
-    || ($flag{phase} && (defined $flag{done} && ! $flag{done})
-                     && ($flag{phase} ne 'none' || $flag{type} ne 'task'));
-
-  if ($flag{name}) {
-    MATCHER: for my $matcher ($flag{name}->@*) {
-      my ($op, $value) = @$matcher;
-      if ($op eq 'does_not_contain') {
-        state $error = qq{Annoyingly, there's no "does not contain" }
-                     . qq{query in LiquidPlanner, so you can't use "!" }
-                     . qq{as a prefix.};
-
-        $error{$error} = 1;
-        next MATCHER;
-      }
-
-      if (! defined $op) {
-        $error{ q{Something weird happened with your search.} } = 1;
-        next MATCHER;
-      }
-
-      # You need to have some kind of actual search.
-      $has_strong_check++ unless $op eq 'does_not_start_with';
-
-      push @filters, [ 'name', $op, $value ];
-    }
-  }
-
-  unless ($has_strong_check) {
-    state $error = "This search is too broad.  Try adding search terms or "
-                 . "more limiting conditions.  I'm sorry this advice is so "
-                 . "vague, but the existing rules are silly and subject to "
-                 . "change at any time.";
-
-    $error{$error} = 1;
-  }
-
-  if (%error) {
-    return $event->error_reply(join q{  }, sort keys %error);
-  }
-
-  my %to_query = (
-    in      => $q_in,
-    flags   => \%qflag,
-    filters => \@filters,
-  );
-
-  if ($flag{debug}) {
-    $event->reply(
-      "I'm going to run this query: ```"
-      . JSON->new->pretty->canonical->encode(\%to_query)
-      . "```"
-    );
-  }
-
-  my $search_f = $self
-    ->f_lp_client_for_user($event->from_user)
-    ->query_items(\%to_query)
-    ->else(sub {
-      $event->reply_error("Something went wrong when running that search.")
-    });
-
-  $search_f->then(sub ($data) {
-    my %seen;
-    my @tasks = grep {; ! $seen{$_->{id}}++ } @$data;
-
-    if ($q_in) {
-      # If you search for the contents of n, you will get n back also.
-      @tasks = grep {; $_->{id} != $q_in } @tasks;
-    }
-
-    if ($flag{owner} && keys $flag{owner}->%*
-        && defined $flag{done} && ! $flag{done}
-    ) {
-      @tasks = grep {;
-        keys $flag{owner}->%*
-        ==
-        grep {; ! $_->{is_done} and $flag{owner}{ $_->{person_id} } }
-          $_->{assignments}->@*;
-      } @tasks;
-    }
-
-    unless (@tasks) {
-      return $event->reply($flag{zero_text} // "Nothing matched that search.");
-    }
-
-    # fix and more to live in send-task-list
-    my $more  = @tasks > $offset + 11;
-    @tasks = splice @tasks, $offset, 10;
-
-    return $event->reply("That's past the last page of results.") unless @tasks;
-
-    $self->_send_item_list(
-      $event,
-      \@tasks,
-      {
-        page    => $flag{page},
-        more    => $more ? 1 : 0,
-        show    => $flag{show},
-      },
-      {
-        header  => $flag{header} // "Search results",
-      },
-    );
-  })->retain;
-
-  return;
 }
 
 for my $package (qw(inbox urgent recurring)) {
