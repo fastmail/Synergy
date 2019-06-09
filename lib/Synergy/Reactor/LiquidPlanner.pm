@@ -988,7 +988,7 @@ sub nag ($self, $timer, @) {
 sub _get_treeitem_shortcuts {
   my ($self, $type) = @_;
 
-  my $lpc = $self->lp_client_for_master;
+  my $lpc = $self->f_lp_client_for_master;
   my $res = $lpc->query_items({
     filters => [
       [ item_type => '='  => $type    ],
@@ -997,12 +997,12 @@ sub _get_treeitem_shortcuts {
     ],
   });
 
-  return {} unless $res->is_success;
+  return {} unless $res->block_until_ready->is_done;
 
   my %dict;
   my %seen;
 
-  for my $item ($res->payload_list) {
+  for my $item ($res->get->@*) {
     # Impossible, right?
     next unless my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
 
@@ -1066,6 +1066,14 @@ sub lp_client_for_master ($self) {
   Carp::confess("No master users configured") unless $master;
 
   $self->lp_client_for_user($master);
+}
+
+sub f_lp_client_for_master ($self) {
+  my ($master) = $self->hub->user_directory->master_users;
+
+  Carp::confess("No master users configured") unless $master;
+
+  $self->f_lp_client_for_user($master);
 }
 
 sub _handle_last ($self, $event, $text) {
