@@ -1737,7 +1737,13 @@ sub _format_item_list ($self, $itemlist, $display) {
              :                              "❓";
 
     $slack .= "$icon "
-           .  $self->_slack_item_link_with_name($item, $display->{show})
+           .  $self->_slack_item_link_with_name(
+                $item,
+                {
+                  urgency => 0,
+                  ($display->{show} ? $display->{show}->%* : ()),
+                }
+              )
            .  "\n";
   }
 
@@ -2488,6 +2494,8 @@ for my $package (qw(inbox urgent recurring)) {
           $display->{header} = sprintf '%s tasks for %s',
             ucfirst $package,
             $event->from_user->username;
+          $display->{show}{urgency} = 0
+            if $package eq 'urgent';
           $display->{show}{staleness} = 1
             if $package eq 'inbox'
             or $package eq 'urgent';
