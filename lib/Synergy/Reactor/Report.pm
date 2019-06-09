@@ -32,7 +32,7 @@ sub listener_specs {
 has default_report => (
   is  => 'ro',
   isa => 'Str',
-  required => 1,
+  predicate => 'has_default_report',
 );
 
 has reports => (
@@ -62,7 +62,15 @@ sub report ($self, $event) {
     $report_name = $+{which};
   }
 
-  $report_name //= $self->default_report;
+  if (not defined $report_name) {
+    if ($self->has_default_report) {
+      $report_name = $self->default_report;
+    } else {
+      my $names = join q{, }, $self->report_names;
+      return $event->error_reply("Which report?  I know these: $names.");
+    }
+  }
+
   $who_name //= $event->from_user->username;
 
   $report_name = fc $report_name;
