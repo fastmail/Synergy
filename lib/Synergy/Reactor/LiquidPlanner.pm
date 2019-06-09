@@ -1817,10 +1817,14 @@ sub _handle_tasks ($self, $event, $text) {
   my %seen;
   my @lp_tasks  = grep {; ! $seen{$_->{id}}++ }
                   $self->upcoming_tasks_for_user($user, $count + 10)->@*;
-  my @task_page = splice @lp_tasks, $start, $per_page;
+
+  splice @lp_tasks, 0, $start;
+  my @task_page = splice @lp_tasks, 0, $per_page;
 
   return $event->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
+
+  $Logger->log([ "WTF: <@lp_tasks> <@task_page>" ]);
 
   $event->reply(
     $self->_format_item_list(
