@@ -3531,6 +3531,39 @@ sub _handle_iteration ($self, $event, $rest) {
   );
 }
 
+sub search_report ($self, $who, $arg = {}) {
+  my $lpc = $self->f_lp_client_for_user($who);
+
+  # We copy it so we can edit things.  It's stupid, but it works.
+  # -- rjbs, 2019-06-08
+  my @search = map {;
+    my $new = { %$_ };
+    $new->{value} = $who->lp_id if $new->{value} && $new->{value} eq '$TARGET';
+    $new;
+  } $arg->{search}->@*;
+
+  my ($search, $display, $error) = $self->_compile_search(\@search, $who);
+
+  if ($error && %$error) {
+    # This is jank. -- rjbs, 2019-06-08
+    $Logger->log([ "search report failed: %s", $error ]);
+    return Future->done([ "[ search report failed! ]" ]);
+  }
+
+  my $future = $self->_execute_search($lpc, $search, {});
+  $future->then(sub ($action, $itemlist) {
+    unless ($action eq 'itemlist') {
+      return Future->done([
+        "Something weird happened building the search report."
+      ]);
+    }
+
+    return Future->done([
+      $self->_format_item_list($itemlist, $display)
+    ]);
+  });
+}
+
 sub container_report ($self, $who, $arg = {}) {
   return unless my $lp_id = $who->lp_id;
 
