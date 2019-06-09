@@ -17,7 +17,7 @@ sub listener_specs {
     predicate => sub ($, $e) {
       return unless $e->was_targeted;
       return unless $e->text =~ /^\s*([a-z]+\s+)?report(\s+for\s+([a-z]+))?\s*$/i;
-      return if $1 eq 'help'; # "help report" should be help on report cmd!
+      return if ($1//'') eq 'help'; # "help report" should be help on report cmd!
       return 1;
     },
     help_entries => [
