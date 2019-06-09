@@ -3568,6 +3568,8 @@ sub search_report ($self, $who, $arg = {}) {
       ]);
     }
 
+    return Future->done unless $itemlist->{items}->@*;
+
     return Future->done([
       $self->_format_item_list($itemlist, $display)
     ]);
