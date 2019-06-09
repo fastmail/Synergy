@@ -117,12 +117,18 @@ my %Showable_Attribute = (
   emoji     => 1,
   assignees => 0,
   estimates => 0,
+  urgency   => 1,
   # stuff we could make optional later:
   #   name
   #   type icon
   #   doneness
-  #   urgentness
 );
+
+sub _is_urgent ($self, $item) {
+  my $urgent = $self->urgent_package_id;
+  scalar grep {; $_ == $urgent }
+    ($item->{parent_ids}->@*, $item->{package_ids}->@*)
+}
 
 sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   my %arg = (
@@ -139,22 +145,17 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
   }
 
-  my $is_urgent = sub () {
-    my $urgent = $self->urgent_package_id;
-    scalar grep {; $_ == $urgent }
-      ($item->{parent_ids}->@*, $item->{package_ids}->@*)
-  };
-
   if ($arg{phase} && (my $pstatus = $item->{custom_field_values}{"Project Phase"})) {
     $title =~ s/^(P:\s+)//n;
     $title = "*$pstatus:* $title";
   }
 
   my $emoji   = $item->{custom_field_values}{Emoji};
-  my $bullet  = $item->{is_done}      ? "✓"
-              : $is_urgent->()        ? "\N{FIRE}"
-              : $arg{emoji} && $emoji ? $emoji
-              :                         "•";
+  my $bullet  = $item->{is_done}                                    ? "✓"
+              : $arg{emoji} && $emoji                               ? $emoji
+              : ($arg{urgency} && $item->{type} eq 'Task'
+                               && $self->_is_urgent($item))         ? "🔥"
+              :                                                       "•";
 
   my $text = sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
     $self->item_uri($item->{id}),
@@ -1727,7 +1728,8 @@ sub _format_item_list ($self, $itemlist, $display) {
     my $uri = $self->item_uri($item->{id});
     $reply .= "$item->{name} ($uri)\n";
 
-    my $icon = $item->{type} eq 'Task'    ? "🌀"
+    my $icon = $item->{type} eq 'Task'    ? ($self->_is_urgent($item) ? "🔥"
+                                                                      : "🌀")
              : $item->{type} eq 'Package' ? "📦"
              : $item->{type} eq 'Project' ? "📁"
              : $item->{type} eq 'Folder'  ? "🗂"
