@@ -1756,7 +1756,7 @@ sub _format_item_list ($self, $itemlist, $display) {
            .  "\n";
   }
 
-  if ($display->{header} or $itemlist->{page}) {
+  if (defined $display->{header}) {
     my $header = $display->{header} && $itemlist->{page}  ? "$display->{header}, page "
                : $display->{header}                       ? $display->{header}
                : $itemlist->{page}                        ? "Page "
@@ -2214,6 +2214,8 @@ sub _handle_search ($self, $event, $text) {
     $instructions,
     $event->from_user,
   );
+
+  $display->{header} //= 'Search results';
 
   my $lpc = $self->f_lp_client_for_user($event->from_user);
   my $future = $self->_execute_search($lpc, $search, $error);
