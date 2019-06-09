@@ -109,16 +109,17 @@ sub _slack_item_link ($self, $item) {
 }
 
 my %Showable_Attribute = (
-  shortcuts => 1,
-  phase     => 1,
-  project   => 0,
-  age       => 0,
-  staleness => 0,
-  due       => 1,
-  emoji     => 1,
-  assignees => 0,
-  estimates => 0,
-  urgency   => 1,
+  shortcuts   => 1,
+  phase       => 1,
+  project     => 0,
+  age         => 0,
+  staleness   => 0,
+  due         => 1,
+  emoji       => 1,
+  assignees   => 0,
+  estimates   => 0,
+  urgency     => 1,
+  lastcomment => 0,
   # stuff we could make optional later:
   #   name
   #   type icon
@@ -235,6 +236,11 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   if ($arg{staleness}) {
     my $updated = parse_lp_datetime($item->{updated_at});
     $text .= " \N{EN DASH} updated " .  concise(ago(time - $updated->epoch, 1));
+  }
+
+  if ($arg{lastcomment}) {
+    my $ago = $self->_last_comment_ago($item);
+    $text .= " \N{EN DASH} " . ($ago ? "last comment $ago" : "no comments ever");
   }
 
   return $text;
