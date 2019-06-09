@@ -2421,7 +2421,7 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   }
 
   if (%error) {
-    return Future->done(reply_error => join q{  }, sort keys %error);
+    return Future->done(error => join q{  }, sort keys %error);
   }
 
   my %to_query = (
@@ -2441,7 +2441,7 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   my $search_f = $lpc
     ->query_items(\%to_query)
     ->else(sub {
-      Future->done(reply_error => "Something went wrong when running that search.");
+      Future->done(error => "Something went wrong when running that search.");
     });
 
   $search_f->then(sub ($data) {
