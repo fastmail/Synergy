@@ -150,7 +150,8 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     && $item->{project_id}
     && (grep {; $_ == $self->project_portfolio_id } $item->{parent_ids}->@*)
   ) {
-    $title = "*[$item->{parent_crumbs}[1]]* $title";
+    my $project = $item->{parent_crumbs}[-1] =~ s/^P: //r;
+    $title = "*[$project]* $title";
   }
 
   if ($arg{phase} && (my $pstatus = $item->{custom_field_values}{"Project Phase"})) {
