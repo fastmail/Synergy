@@ -111,6 +111,7 @@ sub _slack_item_link ($self, $item) {
 my %Showable_Attribute = (
   shortcuts => 1,
   phase     => 1,
+  project   => 0,
   age       => 0,
   staleness => 0,
   due       => 1,
@@ -143,6 +144,13 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     state $shortcut_prefix = { Task => '*', Project => '#' };
     my $shortcut = $item->{custom_field_values}{"Synergy $type Shortcut"};
     $title .= " *\x{0200B}$shortcut_prefix->{$type}$shortcut*" if $shortcut;
+  }
+
+  if ( $arg{project}
+    && $item->{project_id}
+    && (grep {; $_ == $self->project_portfolio_id } $item->{parent_ids}->@*)
+  ) {
+    $title = "*[$item->{parent_crumbs}[1]]* $title";
   }
 
   if ($arg{phase} && (my $pstatus = $item->{custom_field_values}{"Project Phase"})) {
@@ -2224,7 +2232,7 @@ sub _send_search_result ($self, $event, $result, $display) {
         my ($itemlist) = @rest;
         $event->reply( $self->_format_item_list($itemlist, $display) );
       } else {
-        $Logger->log("got unexpected search execution result: $action");
+        $Logger->log([ "got unexpected search execution result: %s", [ $action, @rest ] ]);
         $event->error_reply("Woah, something weird happened with that search.");
       }
       return Future->done;
