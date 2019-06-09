@@ -16,14 +16,13 @@ sub listener_specs {
     exclusive => 1,
     predicate => sub ($, $e) {
       return unless $e->was_targeted;
-      return unless $e->text =~ /^\s*([a-z]+\s+)?report(\s+for\s+([a-z]+))?\s*$/i;
-      return if ($1//'') eq 'help'; # "help report" should be help on report cmd!
+      return unless $e->text =~ /^\s*report(\s+[a-z]+)?(\s+for\s+([a-z]+))?\s*$/i;
       return 1;
     },
     help_entries => [
       {
         title => "report",
-        text => "report [for USER]: show the user's current workload",
+        text => "report [which] [for USER]: show reports for a user",
       }
     ],
   };
@@ -52,8 +51,8 @@ sub report ($self, $event) {
   if (
     $event->text =~ /\A
       \s*
-      ((?<which>[a-z]+) \s+ )?
       report
+      ( \s+ (?<which>[a-z]+) )?
       ( \s+ for \s+ (?<who> [a-z]+ ) )?
       \s*
     \z/nix
