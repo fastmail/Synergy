@@ -137,7 +137,7 @@ sub get_item ($self, $item_id) {
   my $lp_res = $self->http_get(
     "/treeitems/"
     . "?filter[]=id=$item_id"
-    . "&include=tags,comments"
+    . "&include=comments,links,tags"
   );
 
   return $lp_res unless $lp_res->is_success;
@@ -184,6 +184,7 @@ sub my_running_timer ($self) {
 sub query_items ($self, $arg) {
   my $query = URI->new("/treeitems" . ($arg->{in} ? "/$arg->{in}" : q{}));
 
+  $query->query_param(include => 'comments,links,tags');
   for my $flag (keys $arg->{flags}->%*) {
     $query->query_param($flag => $arg->{flags}{$flag});
   }

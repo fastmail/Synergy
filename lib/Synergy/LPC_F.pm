@@ -137,7 +137,7 @@ sub get_clients ($self) {
 }
 
 sub get_item ($self, $item_id) {
-  $self->http_get("/treeitems/?filter[]=id=$item_id")
+  $self->http_get("/treeitems/?include=comments,links,tags&filter[]=id=$item_id")
        ->then(sub ($data) { $data->[0] });
 }
 
@@ -179,6 +179,7 @@ sub my_running_timer ($self) {
 sub query_items ($self, $arg) {
   my $query = URI->new("/treeitems" . ($arg->{in} ? "/$arg->{in}" : q{}));
 
+  $query->query_param(include => 'comments,links,tags');
   for my $flag (keys $arg->{flags}->%*) {
     $query->query_param($flag => $arg->{flags}{$flag});
   }
