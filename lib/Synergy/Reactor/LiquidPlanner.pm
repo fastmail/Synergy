@@ -2949,6 +2949,18 @@ sub _handle_triple_zed ($self, $event, $text) {
 }
 
 sub _handle_commit ($self, $event, $comment) {
+  # commit                  | just commit the timer
+  #
+  # *** We'll call these "all caps" trailing words "meta" words.
+  # commit DONE             | commit the timer, mark done
+  # commit STOP             | commit the timer, stop it
+  # commit STOP DONE        | commit the timer, stop it, mark it done
+  # commit CHILL            | commit the timer, stop it, chill until active
+  #
+  # commit $comment         | commit the timer, leave a comment
+  # commit $comment META... | commit the timer, leave a comment, do meta action
+  #
+  # commit that             | treat the last thing user said as the argument(s)
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
@@ -2964,9 +2976,17 @@ sub _handle_commit ($self, $event, $comment) {
     $comment = $last;
   }
 
+  my $timer_override;
+  my $time_re = qr{TIME ([0-9]+(?:\.[0-9]+))([hm]?)};
+
   my %meta;
-  while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL)\s*\z//) {
-    $meta{$1}++;
+  while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL|$time_re)\s*\z//) {
+    my $got = $1;
+    if ($got =~ $time_re) {
+      $timer_override = $1 * (($2 || 'h') eq 'h' ? 1 : 60);
+    } else {
+      $meta{$got}++;
+    }
   }
 
   $meta{DONE} = 1 if $comment =~ /\Adone\z/i;
@@ -3002,9 +3022,12 @@ sub _handle_commit ($self, $event, $comment) {
 
   my $task_base = "/tasks/$task_id";
 
+  my $work_to_commit = $timer_override // $lp_timer->real_total_time;
+  my $work_duration  = concise( duration( $work_to_commit * 3600 ) );
+
   my $commit_res = $lpc->track_time({
     task_id => $task_id,
-    work    => $lp_timer->real_total_time,
+    work    => $work_to_commit,
     done    => $meta{DONE},
     comment => $comment,
     member_id   => $user->lp_id,
@@ -3045,8 +3068,6 @@ sub _handle_commit ($self, $event, $comment) {
           .  join q{ and }, @errors;
   }
 
-  my $time = $lp_timer->real_total_time_duration;
-
   my $uri = $self->item_uri($lp_timer->item_id);
 
   my $task_res = $lpc->get_item($task_id);
@@ -3060,7 +3081,7 @@ sub _handle_commit ($self, $event, $comment) {
 
   my $task = $task_res->payload;
 
-  my $base  = "Okay, I've committed $time of work$also.  The task was:";
+  my $base  = "Okay, I've committed $work_duration of work$also.  The task was:";
   my $text  = "$base $task->{name} ($uri)";
   my $slack = sprintf '%s  %s',
     $base, $self->_slack_item_link_with_name($task);
