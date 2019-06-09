@@ -1814,8 +1814,10 @@ sub _handle_tasks ($self, $event, $text) {
   my $count = $per_page * $page;
   my $start = $per_page * ($page - 1);
 
-  my $lp_tasks = $self->upcoming_tasks_for_user($user, $count + 10);
-  my @task_page = splice @$lp_tasks, $start, $per_page;
+  my %seen;
+  my @lp_tasks  = grep {; ! $seen{$_->{id}}++ }
+                  $self->upcoming_tasks_for_user($user, $count + 10)->@*;
+  my @task_page = splice @lp_tasks, $start, $per_page;
 
   return $event->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
@@ -1824,7 +1826,7 @@ sub _handle_tasks ($self, $event, $text) {
     $self->_format_item_list(
       {
         items   => \@task_page,
-        more    => (@$lp_tasks > 0 ? 1 : 0),
+        more    => (@lp_tasks > 0 ? 1 : 0),
         page    => $page,
       },
       {
