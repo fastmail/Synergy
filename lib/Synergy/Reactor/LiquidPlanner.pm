@@ -1788,7 +1788,6 @@ sub _format_item_list ($self, $itemlist, $display) {
 sub _handle_tasks ($self, $event, $text) {
   my $user = $event->from_user;
 
-  my $per_page = 10;
   my $page = 1;
   if (length $text) {
     if ($text =~ /\A\s*([1-9][0-9]*)\s*\z/) {
@@ -1811,6 +1810,7 @@ sub _handle_tasks ($self, $event, $text) {
   #   takes callback for filter,
   #   returns (set-of-items, has-more)
 
+  my $per_page = 10;
   my $count = $per_page * $page;
   my $start = $per_page * ($page - 1);
 
@@ -3659,7 +3659,9 @@ sub container_report ($self, $who, $arg = {}) {
 
     my $now = time;
 
+    my %seen;
     for my $item ($check_res->payload_list) {
+      next if $seen{$item->{id}}++; # Stupid duplicates! -- rjbs, 2019-06-08
       next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
       my ($assign) = grep {; $_->{person_id} == $want_lp_id }
                      $item->{assignments}->@*;
