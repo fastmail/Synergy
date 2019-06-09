@@ -3607,6 +3607,14 @@ sub container_report ($self, $who, $arg = {}) {
     (! $arg->{exclude}{urgent}
       ? [ urgent => "🔥" => $self->urgent_package_id  ]
       : ()),
+
+    (! $arg->{exclude}{scheduled}
+      ? [ scheduled => "📉" => undef, undef,
+          [ [ 'earliest_start', 'after', '2001-01-01' ],
+            [ 'parent_id',  '!=', $self->urgent_package_id ],
+            [ 'package_id', '!=', $self->urgent_package_id ],
+          ] ]
+      : ()),
   );
 
   my @summaries;
@@ -3614,7 +3622,7 @@ sub container_report ($self, $who, $arg = {}) {
   my $lpc = $self->lp_client_for_user($who);
 
   CHK: for my $check (@to_check) {
-    my ($label, $icon, $package_id, $want_lp_id) = @$check;
+    my ($label, $icon, $package_id, $want_lp_id, $more_filters) = @$check;
     $want_lp_id //= $lp_id;
 
     my $check_res = $lpc->query_items({
@@ -3626,6 +3634,7 @@ sub container_report ($self, $who, $arg = {}) {
       filters => [
         [ is_done   => 'is',  'false' ],
         [ owner_id  => '=',   $want_lp_id  ],
+        ($more_filters ? @$more_filters : ()),
       ],
     });
 
