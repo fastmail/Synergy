@@ -138,7 +138,7 @@ sub get_clients ($self) {
 
 sub get_item ($self, $item_id) {
   $self->http_get("/treeitems/?include=comments,links,tags&filter[]=id=$item_id")
-       ->then(sub ($data) { $data->[0] });
+       ->then(sub ($data) { Future->done($data->[0]) });
 }
 
 has single_activity_id => (

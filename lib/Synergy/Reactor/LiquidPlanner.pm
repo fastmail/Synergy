@@ -459,7 +459,7 @@ sub provide_lp_link ($self, $event) {
   my $workspace_id  = $self->workspace_id;
   my $lp_url_re     = qr{\b(?:\Qhttps://app.liquidplanner.com/space/$workspace_id\E/.*/)([0-9]+)P?/?\b};
 
-  my $lpc = $self->lp_client_for_user($user);
+  my $lpc = $self->f_lp_client_for_user($user);
   my $item_id;
 
   my $as_cmd;
@@ -496,120 +496,120 @@ sub provide_lp_link ($self, $event) {
   return unless @ids;
 
   ITEM: for my $item_id (@ids) {
-    my $item_res = $lpc->get_item($item_id);
-
-    unless ($item_res->is_success) {
-      $event->reply("Sorry, something went wrong looking for LP$item_id.");
-      next ITEM;
-    }
-
-    my $item;
-    unless ($item = $item_res->payload) {
-      $event->error_reply("I can't find anything for LP$item_id.");
-      next ITEM;
-    }
-
-    my $name = $item->{name};
-
-    my $reply;
-
-    if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
-      my $icon = $item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
-               : $item->{type} eq 'Package' ? "📦"
-               : $item->{type} eq 'Project' ? "📁"
-               : $item->{type} eq 'Folder'  ? "🗂"
-               : $item->{type} eq 'Inbox'   ? "📫"
-               :                              confess("unreachable");
-
-      my $uri = $self->item_uri($item_id);
-
-      my $plain = "$icon LP$item_id: $item->{name} ($uri)";
-      my $slack = sprintf '%s %s',
-        $icon,
-        $self->_slack_item_link_with_name($item);
-
-      if ($as_cmd) {
-        my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
-                    $self->hub->user_directory->users;
-
-        # The user asked for this directly, so let's give them more detail.
-        $slack .= "\n";
-
-        if ($item->{parent_crumbs}) {
-          $slack .= "*Parent*: "
-                 .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
-                 .  "\n";
+    $lpc
+      ->get_item($item_id)
+      ->else(sub {
+        $event->reply("Sorry, something went wrong looking for LP$item_id.");
+        return Future->done;
+      })
+      ->then(sub ($item) {
+        unless ($item) {
+          $event->error_reply("I can't find anything for LP$item_id.");
+          return Future->done;
         }
 
-        if ($item->{package_crumbs}) {
-          $slack .= "*Package*: "
-                 .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
-                 .  "\n";
-        }
+        my $name = $item->{name};
 
-        if ($item->{assignments}) {
-          my @assignees = sort uniq
-                          map  {; $by_lp{ $_->{person_id} } // '?' }
-                          grep {; ! $_->{is_done} }
-                          $item->{assignments}->@*;
+        my $reply;
 
-          if (@assignees) {
-            $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
-          }
-        }
+        if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
+          my $icon = $item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
+                   : $item->{type} eq 'Package' ? "📦"
+                   : $item->{type} eq 'Project' ? "📁"
+                   : $item->{type} eq 'Folder'  ? "🗂"
+                   : $item->{type} eq 'Inbox'   ? "📫"
+                   :                              confess("unreachable");
 
-        for my $pair (
-          [ 'Created',      'created_at' ],
-          [ 'Last updated', 'updated_at' ],
-          [ 'Completed',    'done_on' ],
-        ) {
-          next unless my $date_str = $item->{ $pair->[1] };
+          my $uri = $self->item_uri($item_id);
 
-          my $dt = DateTime::Format::ISO8601->parse_datetime($date_str);
+          my $plain = "$icon LP$item_id: $item->{name} ($uri)";
+          my $slack = sprintf '%s %s',
+            $icon,
+            $self->_slack_item_link_with_name($item);
 
-          my $str = $self->hub->format_friendly_date(
-            $dt,
-            {
-              target_time_zone  => $event->from_user->time_zone,
+          if ($as_cmd) {
+            my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+                        $self->hub->user_directory->users;
+
+            # The user asked for this directly, so let's give them more detail.
+            $slack .= "\n";
+
+            if ($item->{parent_crumbs}) {
+              $slack .= "*Parent*: "
+                     .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
+                     .  "\n";
             }
-          );
 
-          $slack .= "*$pair->[0]*: $str\n";
-        }
+            if ($item->{package_crumbs}) {
+              $slack .= "*Package*: "
+                     .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
+                     .  "\n";
+            }
 
-        if ($flag{description}) {
-          $slack .= "\n>>> "
-                  . ($item->{description} // "(no description)")
-                  . "\n";
-        }
+            if ($item->{assignments}) {
+              my @assignees = sort uniq
+                              map  {; $by_lp{ $_->{person_id} } // '?' }
+                              grep {; ! $_->{is_done} }
+                              $item->{assignments}->@*;
 
-        if ($item->{comments}) {
-          my ($latest) = sort {; $b->{created_at} cmp $a->{created_at} }
-                         $item->{comments}->@*;
+              if (@assignees) {
+                $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
+              }
+            }
 
-          my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
-                      $self->hub->user_directory->users;
+            for my $pair (
+              [ 'Created',      'created_at' ],
+              [ 'Last updated', 'updated_at' ],
+              [ 'Completed',    'done_on' ],
+            ) {
+              next unless my $date_str = $item->{ $pair->[1] };
 
-          if ($latest) {
-            my $created = parse_lp_datetime($latest->{created_at});
+              my $dt = DateTime::Format::ISO8601->parse_datetime($date_str);
 
-            $slack .= sprintf "\n*Last comment* by %s, %s:\n>>> %s\n",
-              $by_lp{ $latest->{person_id} } // 'somebody',
-              concise(ago(time - $created->epoch, 1)),
-              $latest->{plain_text};
+              my $str = $self->hub->format_friendly_date(
+                $dt,
+                {
+                  target_time_zone  => $event->from_user->time_zone,
+                }
+              );
+
+              $slack .= "*$pair->[0]*: $str\n";
+            }
+
+            if ($flag{description}) {
+              $slack .= "\n>>> "
+                      . ($item->{description} // "(no description)")
+                      . "\n";
+            }
+
+            if ($item->{comments}) {
+              my ($latest) = sort {; $b->{created_at} cmp $a->{created_at} }
+                             $item->{comments}->@*;
+
+              my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+                          $self->hub->user_directory->users;
+
+              if ($latest) {
+                my $created = parse_lp_datetime($latest->{created_at});
+
+                $slack .= sprintf "\n*Last comment* by %s, %s:\n>>> %s\n",
+                  $by_lp{ $latest->{person_id} } // 'somebody',
+                  concise(ago(time - $created->epoch, 1)),
+                  $latest->{plain_text};
+              }
+            }
           }
-        }
-      }
 
-      $event->reply(
-        $plain,
-        {
-          slack => $slack,
-        },
-      );
-    } else {
-      $event->reply("LP$item_id: is a $item->{type}");
-    }
+          return $event->reply(
+            $plain,
+            {
+              slack => $slack,
+            },
+          );
+        } else {
+          $event->reply("LP$item_id: is a $item->{type}");
+        }
+      })->retain;
   }
 }
 
