@@ -1,6 +1,6 @@
 use v5.24.0;
 use warnings;
-package Synergy::Reactor::DamageReport;
+package Synergy::Reactor::Report;
 
 use Moose;
 use DateTime;
