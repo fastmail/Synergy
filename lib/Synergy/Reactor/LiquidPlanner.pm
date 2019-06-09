@@ -131,6 +131,15 @@ sub _is_urgent ($self, $item) {
     ($item->{parent_ids}->@*, $item->{package_ids}->@*)
 }
 
+sub _last_comment_ago ($self, $item) {
+  return unless $item->{comments} && $item->{comments}->@*;
+  my ($latest) = sort { $a->{created_at} cmp $b->{created_at} }
+                 $item->{comments}->@*;
+
+  my $updated = parse_lp_datetime($item->{updated_at});
+  return concise(ago(time - $updated->epoch, 1));
+}
+
 sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   my %arg = (
     %Showable_Attribute,
@@ -3730,12 +3739,15 @@ sub project_report ($self, $who) {
 
     my $shortcut = $project->{custom_field_values}{"Synergy Project Shortcut"};
 
-    push @lines, sprintf '%s %s • *%s*: %s%s',
+    my $last_comment_ago = $self->_last_comment_ago($project);
+
+    push @lines, sprintf '%s %s • *%s*: %s%s — %s',
       ($project->{custom_field_values}{Emoji} // "\N{FILE FOLDER}"),
       $self->_slack_item_link($project),
       $phase,
       ($project->{name} =~ s/^P:\s+//r),
-      ($shortcut ? " *#$shortcut*" : q{})
+      ($shortcut ? " *#$shortcut*" : q{}),
+      ($last_comment_ago ? "last comment $last_comment_ago" : "no comments ever")
       ;
   }
 
