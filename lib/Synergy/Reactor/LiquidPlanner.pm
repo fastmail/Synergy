@@ -2148,7 +2148,7 @@ sub _compile_search ($self, $conds, $from_user) {
     }
 
     if ($field eq 'created' or $field eq 'lastupdated') {
-      error("No operator supplied for $field.") unless defined $op;
+      cond_error("No operator supplied for $field.") unless defined $op;
       bad_op($field, $op) unless $op eq 'after' or $op eq 'before';
 
       bad_value("$field:$op") unless $value =~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
