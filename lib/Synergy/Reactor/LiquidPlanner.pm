@@ -3648,15 +3648,15 @@ sub container_report ($self, $who, $arg = {}) {
                   : undef;
 
   my @to_check = (
-    [ inbox  => "📫" => $self->inbox_package_id   ],
+    (! $arg->{exclude}{urgent}
+      ? [ urgent => "🔥" => $self->urgent_package_id  ]
+      : ()),
 
     (($user_is_triage && $triage_user && $triage_user->has_lp_id)
       ? [ triage => "⛑" => undef,  $triage_user->lp_id ]
       : ()),
 
-    (! $arg->{exclude}{urgent}
-      ? [ urgent => "🔥" => $self->urgent_package_id  ]
-      : ()),
+    [ inbox  => "📫" => $self->inbox_package_id   ],
 
     (! $arg->{exclude}{scheduled}
       ? [ scheduled => "📉" => undef, undef,
