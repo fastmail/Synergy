@@ -6,7 +6,6 @@ use Moose;
 use experimental qw(signatures);
 use JSON::MaybeXS;
 
-use Synergy::External::Slack;
 use Synergy::Event;
 use Synergy::Logger '$Logger';
 
