@@ -492,78 +492,77 @@ package Synergy::Rototron::AvailabilityChecker {
 
     my @calendars = $self->calendars;
 
-    die "only one calendar for now" if @calendars > 1;
-    return [] unless @calendars;
-
-    my $res = eval {
-      my $res = $self->jmap_client->request({
-        using       => [ 'urn:ietf:params:jmap:mail' ],
-        methodCalls => [
-          [
-            'CalendarEvent/query' => {
-              accountId   => $calendars[0]{accountId},
-              filter => {
-                inCalendars => [ $calendars[0]{calendarId} ],
-                after       => DateTime->now->ymd . "T00:00:00Z", # endAfter
-              },
-            },
-            'a',
-          ],
-          [
-            'CalendarEvent/get' => {
-              accountId   => $calendars[0]{accountId},
-              '#ids' => {
-                resultOf => 'a',
-                name => 'CalendarEvent/query',
-                path => '/ids',
-              }
-            }
-          ],
-        ]
-      });
-
-      $res;
-    };
-
-    # Error condition. -- rjbs, 2019-01-31
-    return undef unless $res;
-
-    my @events = $res->sentence_named('CalendarEvent/get')
-                     ->as_stripped_pair->[1]{list}->@*;
-
     my %leave_days;
 
-    EVENT: for my $event (@events) {
-      my (@who) = map {; /^username:(\S+)\z/ ? $1 : () }
-                  keys $event->{keywords}->%*;
+    CALENDAR: for my $calendar ($self->calendars) {
+      my $res = eval {
+        my $res = $self->jmap_client->request({
+          using       => [ 'urn:ietf:params:jmap:mail' ],
+          methodCalls => [
+            [
+              'CalendarEvent/query' => {
+                accountId   => $calendars[0]{accountId},
+                filter => {
+                  inCalendars => [ $calendars[0]{calendarId} ],
+                  after       => DateTime->now->ymd . "T00:00:00Z", # endAfter
+                },
+              },
+              'a',
+            ],
+            [
+              'CalendarEvent/get' => {
+                accountId   => $calendars[0]{accountId},
+                '#ids' => {
+                  resultOf => 'a',
+                  name => 'CalendarEvent/query',
+                  path => '/ids',
+                }
+              }
+            ],
+          ]
+        });
 
-      unless (@who) {
-        warn "skipping event with no usernames ($event->{id} - $event->{start} - $event->{title})\n";
-        next EVENT;
-      }
+        $res;
+      };
 
-      my $days;
+      # Error condition. -- rjbs, 2019-01-31
+      next CALENDAR unless $res;
 
-      if (($event->{duration} // '') =~ /\AP([0-9]+)D\z/) {
-        $days = $1;
-      } elsif (($event->{duration} // '') =~ /\AP([0-9]+)W\z/) {
-        $days = 7 * $1;
-      }
+      my @events = $res->sentence_named('CalendarEvent/get')
+                       ->as_stripped_pair->[1]{list}->@*;
 
-      unless ($days) {
-        warn "skipping event with wonky duration ($event->{id} - $event->{start} - $event->{title} - $event->{duration})\n";
-        next EVENT;
-      }
+      EVENT: for my $event (@events) {
+        my (@who) = map {; /^username:(\S+)\z/ ? $1 : () }
+                    keys $event->{keywords}->%*;
 
-      $days-- if $days;
+        unless (@who) {
+          warn "skipping event with no usernames ($event->{id} - $event->{start} - $event->{title})\n";
+          next EVENT;
+        }
 
-      my ($start) = split /T/, $event->{start};
-      my ($y, $m, $d) = split /-/, $start;
-      my $curr = DateTime->new(year => $y, month => $m, day => $d);
+        my $days;
 
-      for (0 .. $days) {
-        $leave_days{ $_ }{ $curr->ymd } = 1 for @who;
-        $curr->add(days => 1);
+        if (($event->{duration} // '') =~ /\AP([0-9]+)D\z/) {
+          $days = $1;
+        } elsif (($event->{duration} // '') =~ /\AP([0-9]+)W\z/) {
+          $days = 7 * $1;
+        }
+
+        unless ($days) {
+          warn "skipping event with wonky duration ($event->{id} - $event->{start} - $event->{title} - $event->{duration})\n";
+          next EVENT;
+        }
+
+        $days-- if $days;
+
+        my ($start) = split /T/, $event->{start};
+        my ($y, $m, $d) = split /-/, $start;
+        my $curr = DateTime->new(year => $y, month => $m, day => $d);
+
+        for (0 .. $days) {
+          $leave_days{ $_ }{ $curr->ymd } = 1 for @who;
+          $curr->add(days => 1);
+        }
       }
     }
 
