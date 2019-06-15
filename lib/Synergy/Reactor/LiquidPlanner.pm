@@ -2113,21 +2113,27 @@ sub _compile_search ($self, $conds, $from_user) {
       next COND;
     }
 
-    if (grep {; $field eq $_ } qw(m mgr manager)) {
-      # Manager isn't a LiquidPlanner thing, we made it up, so it stores
-      # canonical username, not a member id.  We'll have some sanity check that
-      # makes sure we don't have ones with garbage.  Also, we use "contains"
-      bad_op($field, $op) unless ($op//'is') eq 'is';
+    for my $pair (
+      [ manager      => [ qw(m mgr manager managers) ] ],
+      [ stakeholders => [ qw(stake stakeholder stakeholders) ] ],
+    ) {
+      if (grep {; $field eq $_ } $pair->[1]->@*) {
+        # These aren't a LiquidPlanner thing, we made them up, so they store
+        # canonical usernames, not a member id.  We'll have some sanity check
+        # that makes sure we don't have ones with garbage.  Also, we use
+        # "contains" because they're comma lists.
+        bad_op($field, $op) unless ($op//'is') eq 'is';
 
-      my $target = $self->resolve_name($value, $from_user);
+        my $target = $self->resolve_name($value, $from_user);
 
-      unless ($target) {
-        push @unknown_users, $value;
+        unless ($target) {
+          push @unknown_users, $value;
+          next COND;
+        }
+
+        $flag{$pair->[0]}{$target->username} = 1;
         next COND;
       }
-
-      $flag{manager}{$target->username} = 1;
-      next COND;
     }
 
     if ($field eq 'type') {
@@ -2378,10 +2384,12 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
     push @filters, map {; [ 'created_by', '=', $_ ] } keys $flag{creator}->%*;
   }
 
-  if ($flag{manager} && keys $flag{manager}->%*) {
-    push @filters, map {;
-      [ 'custom_field:Manager', 'contains', $_ ]
-    } keys $flag{manager}->%*;
+  for my $field (qw( manager stakeholders )) {
+    if ($flag{$field} && keys $flag{$field}->%*) {
+      push @filters, map {;
+        [ "custom_field:\u$field", 'contains', $_ ]
+      } keys $flag{$field}->%*;
+    }
   }
 
   if (defined $flag{phase}) {
