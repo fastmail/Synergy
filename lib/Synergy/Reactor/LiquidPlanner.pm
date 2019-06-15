@@ -1871,67 +1871,6 @@ sub _handle_tasks ($self, $event, $text) {
   );
 }
 
-state $prefix_re  = qr{!?\^?};
-state $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
-
-# We're going to allow two-part keys, like "created:on".  It's not great,
-# but it's simple enough. -- rjbs, 2019-03-29
-state $flagname_re = qr{($ident_re)(?::($ident_re))?};
-
-# Even a quoted string can't contain control characters.  Get real.
-state $qstring    = qr{[“"]( (?: \\["“”] | [^\pC"“”] )+ )[”"]}x;
-
-sub _parse_search_generic ($self, $text, $arg) {
-  my %alias = $arg->{aliases} ? $arg->{aliases}->%* : ();
-
-  my @conds;
-
-  my $last = q{};
-  TOKEN: while (length $text) {
-    $text =~ s/^\s+//;
-
-    # Abort!  Shouldn't happen. -- rjbs, 2018-06-30
-    if ($last eq $text) {
-      push @conds, { field => 'parse_error', value => 1 };
-      last TOKEN;
-    }
-    $last = $text;
-
-    if ($text =~ s/^\#($ident_re)(?: \s | \z)//x) {
-      push @conds, {
-        field => 'project',
-        value => $1,
-      };
-
-      next TOKEN;
-    }
-
-    if ($text =~ s/^$flagname_re:$qstring(?: \s | \z)//x) {
-      push @conds, {
-        field => fc($alias{$1} // $1),
-        ($2 ? (op => fc $2) : ()),
-        value => $3 =~ s/\\(["“”])/$1/gr,
-      };
-
-      next TOKEN;
-    }
-
-    if ($text =~ s/^$flagname_re:([-0-9]+|~|\*|\#?$ident_re)(?: \s | \z)//x) {
-      push @conds, {
-        field => fc($alias{$1} // $1),
-        ($2 ? (op => fc $2) : ()),
-        value => $3,
-      };
-
-      next TOKEN;
-    }
-
-    push @conds, $arg->{fallback}->(\$text) if $arg->{fallback};
-  }
-
-  return \@conds;
-}
-
 sub _parse_search ($self, $text) {
   my %aliases = (
     u => 'owner',
@@ -1939,8 +1878,10 @@ sub _parse_search ($self, $text) {
     user => 'owner',
   );
 
+  state $prefix_re  = qr{!?\^?};
+
   my $fallback = sub ($text_ref) {
-    if ($$text_ref =~ s/^($prefix_re)$qstring\s*//x) {
+    if ($$text_ref =~ s/^($prefix_re)$Synergy::Util::qstring\s*//x) {
       my ($prefix, $word) = ($1, $2);
 
       return {
@@ -1970,7 +1911,7 @@ sub _parse_search ($self, $text) {
     };
   };
 
-  return $self->_parse_search_generic($text, {
+  return Synergy::Util::parse_attrs($text, {
     aliases   => \%aliases,
     fallback  => $fallback,
   })

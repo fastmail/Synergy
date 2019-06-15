@@ -21,6 +21,8 @@ use Sub::Exporter -setup => [ qw(
   parse_switches
   canonicalize_switches
 
+  parse_attrs
+
   known_alphabets
   transliterate
 ) ];
@@ -147,6 +149,69 @@ sub canonicalize_switches ($switches, $aliases = {}) {
   $aliases->{$_->[0]} && ($_->[0] = $aliases->{$_->[0]}) for @$switches;
   return;
 }
+
+our $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
+
+# We're going to allow two-part keys, like "created:on".  It's not great,
+# but it's simple enough. -- rjbs, 2019-03-29
+our $flagname_re = qr{($ident_re)(?::($ident_re))?};
+
+# Even a quoted string can't contain control characters.  Get real.
+our $qstring    = qr{[“"]( (?: \\["“”] | [^\pC"“”] )+ )[”"]}x;
+
+sub parse_attrs ($text, $arg) {
+  my %alias = $arg->{aliases} ? $arg->{aliases}->%* : ();
+
+  my @attrs;
+
+  my $last = q{};
+  TOKEN: while (length $text) {
+    $text =~ s/^\s+//;
+
+    # Abort!  Shouldn't happen. -- rjbs, 2018-06-30
+    if ($last eq $text) {
+      push @attrs, { field => 'parse_error', value => 1 };
+      last TOKEN;
+    }
+    $last = $text;
+
+    if ($text =~ s/^\#($ident_re)(?: \s | \z)//x) {
+      push @attrs, {
+        field => 'project',
+        value => $1,
+      };
+
+      next TOKEN;
+    }
+
+    if ($text =~ s/^$flagname_re:$qstring(?: \s | \z)//x) {
+      push @attrs, {
+        field => fc($alias{$1} // $1),
+        ($2 ? (op => fc $2) : ()),
+        value => $3 =~ s/\\(["“”])/$1/gr,
+      };
+
+      next TOKEN;
+    }
+
+    if ($text =~ s/^$flagname_re:([-0-9]+|~|\*|\#?$ident_re)(?: \s | \z)//x) {
+      push @attrs, {
+        field => fc($alias{$1} // $1),
+        ($2 ? (op => fc $2) : ()),
+        value => $3,
+      };
+
+      next TOKEN;
+    }
+
+    push @attrs, $arg->{fallback}->(\$text) if $arg->{fallback};
+  }
+
+  return \@attrs;
+}
+
+
+
 
 my %Trans = (
   latin => sub ($s) { $s },
