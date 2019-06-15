@@ -1871,17 +1871,20 @@ sub _handle_tasks ($self, $event, $text) {
   );
 }
 
-sub _parse_search ($self, $text) {
+state $prefix_re  = qr{!?\^?};
+state $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
+
+# We're going to allow two-part keys, like "created:on".  It's not great,
+# but it's simple enough. -- rjbs, 2019-03-29
+state $flagname_re = qr{($ident_re)(?::($ident_re))?};
+
+# Even a quoted string can't contain control characters.  Get real.
+state $qstring    = qr{[“"]( (?: \\["“”] | [^\pC"“”] )+ )[”"]}x;
+
+sub _parse_search_generic ($self, $text, $arg) {
+  my %alias = $arg->{aliases} ? $arg->{aliases}->%* : ();
+
   my @conds;
-
-  state $prefix_re  = qr{!?\^?};
-  state $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
-
-  my %field_alias = (
-    u => 'owner',
-    o => 'owner',
-    user => 'owner',
-  );
 
   my $last = q{};
   TOKEN: while (length $text) {
@@ -1894,28 +1897,6 @@ sub _parse_search ($self, $text) {
     }
     $last = $text;
 
-    # “ - U+0201C - LEFT DOUBLE QUOTATION MARK
-    # ” - U+0201D - RIGHT DOUBLE QUOTATION MARK
-
-    # Even a quoted string can't contain control characters.  Get real.
-    state $qstring = qr{[“"]( (?: \\["“”] | [^\pC"“”] )+ )[”"]}x;
-
-    if ($text =~ s/^($prefix_re)$qstring\s*//x) {
-      my ($prefix, $word) = ($1, $2);
-
-      push @conds, {
-        field => 'name',
-        value => ($word =~ s/\\(["“”])/$1/gr),
-        op    => ( $prefix eq ""   ? "contains"
-                 : $prefix eq "^"  ? "starts_with"
-                 : $prefix eq "!^" ? "does_not_start_with"
-                 : $prefix eq "!"  ? "does_not_contain" # fake operator
-                 :                   undef),
-      };
-
-      next TOKEN;
-    }
-
     if ($text =~ s/^\#($ident_re)(?: \s | \z)//x) {
       push @conds, {
         field => 'project',
@@ -1925,13 +1906,9 @@ sub _parse_search ($self, $text) {
       next TOKEN;
     }
 
-    # We're going to allow two-part keys, like "created:on".  It's not great,
-    # but it's simple enough. -- rjbs, 2019-03-29
-    state $flagname_re = qr{($ident_re)(?::($ident_re))?};
-
     if ($text =~ s/^$flagname_re:$qstring(?: \s | \z)//x) {
       push @conds, {
-        field => fc($field_alias{$1} // $1),
+        field => fc($alias{$1} // $1),
         ($2 ? (op => fc $2) : ()),
         value => $3 =~ s/\\(["“”])/$1/gr,
       };
@@ -1941,7 +1918,7 @@ sub _parse_search ($self, $text) {
 
     if ($text =~ s/^$flagname_re:([-0-9]+|~|\*|\#?$ident_re)(?: \s | \z)//x) {
       push @conds, {
-        field => fc($field_alias{$1} // $1),
+        field => fc($alias{$1} // $1),
         ($2 ? (op => fc $2) : ()),
         value => $3,
       };
@@ -1949,25 +1926,54 @@ sub _parse_search ($self, $text) {
       next TOKEN;
     }
 
-    {
-      # Just a word.
-      ((my $token), $text) = split /\s+/, $text, 2;
-      $token =~ s/\A($prefix_re)//;
-      my $prefix = $1;
-
-      push @conds, {
-        field => 'name',
-        value => $token,
-        op    => ( $prefix eq ""    ? "contains"
-                 : $prefix eq "^"   ? "starts_with"
-                 : $prefix eq "!^"  ? "does_not_start_with"
-                 : $prefix eq "!"   ? "does_not_contain" # fake operator
-                 :                    undef),
-      };
-    }
+    push @conds, $arg->{fallback}->(\$text) if $arg->{fallback};
   }
 
   return \@conds;
+}
+
+sub _parse_search ($self, $text) {
+  my %aliases = (
+    u => 'owner',
+    o => 'owner',
+    user => 'owner',
+  );
+
+  my $fallback = sub ($text_ref) {
+    if ($$text_ref =~ s/^($prefix_re)$qstring\s*//x) {
+      my ($prefix, $word) = ($1, $2);
+
+      return {
+        field => 'name',
+        value => ($word =~ s/\\(["“”])/$1/gr),
+        op    => ( $prefix eq ""   ? "contains"
+                 : $prefix eq "^"  ? "starts_with"
+                 : $prefix eq "!^" ? "does_not_start_with"
+                 : $prefix eq "!"  ? "does_not_contain" # fake operator
+                 :                   undef),
+      };
+    }
+
+    # Just a word.
+    ((my $token), $$text_ref) = split /\s+/, $$text_ref, 2;
+    $token =~ s/\A($prefix_re)//;
+    my $prefix = $1;
+
+    return {
+      field => 'name',
+      value => $token,
+      op    => ( $prefix eq ""    ? "contains"
+               : $prefix eq "^"   ? "starts_with"
+               : $prefix eq "!^"  ? "does_not_start_with"
+               : $prefix eq "!"   ? "does_not_contain" # fake operator
+               :                    undef),
+    };
+  };
+
+  return $self->_parse_search_generic($text, {
+    aliases   => \%aliases,
+    fallback  => $fallback,
+  })
 }
 
 sub _compile_search ($self, $conds, $from_user) {
