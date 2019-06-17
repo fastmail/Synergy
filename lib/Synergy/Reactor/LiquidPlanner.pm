@@ -574,15 +574,30 @@ sub provide_lp_link ($self, $event) {
                      .  "\n";
             }
 
+            if ($item->{custom_field_values}{Manager}) {
+              $slack .= "*Manager*: $item->{custom_field_values}{Manager}\n";
+            }
+
             if ($item->{assignments}) {
               my @assignees = sort uniq
                               map  {; $by_lp{ $_->{person_id} } // '?' }
                               grep {; ! $_->{is_done} }
                               $item->{assignments}->@*;
 
+              if (@assignees && $item->{type} eq 'Project') {
+                $slack .= "*Project Lead*: " . shift(@assignees) . "\n";
+              }
+
               if (@assignees) {
                 $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
               }
+            }
+
+            if ($item->{custom_field_values}{Stakeholders}) {
+              $slack .= sprintf "*Stakeholders*: %s\n",
+                join q{, },
+                sort
+                split /\s*,\s*/, $item->{custom_field_values}{Stakeholders};
             }
 
             for my $pair (
