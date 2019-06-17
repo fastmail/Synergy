@@ -2829,14 +2829,18 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
     my $triage_user = $self->hub->user_directory->user_named('triage');
     if ($triage_user && $triage_user->has_lp_id) {
       if (grep {; $_->{person_id} eq $triage_user->lp_id } @{ $task->{assignments} }) {
+        my $who = $my_arg->{user} ? $my_arg->{user}->username : "some weirdo";
+
         my $text = sprintf
-          "$TRIAGE_EMOJI New task created for triage from %s: %s (%s)",
+          "$TRIAGE_EMOJI New task created for triage by %s in %s: %s (%s)",
+          $who,
           $chan_desc,
           $task->{name},
           $self->item_uri($task->{id});
 
         my $alt = {
-          slack => sprintf "$TRIAGE_EMOJI *New task created for triage from %s*: %s",
+          slack => sprintf "$TRIAGE_EMOJI *New task created for triage by %s in %s*: %s",
+            $who,
             $chan_desc,
             $self->_slack_item_link_with_name($task)
         };
