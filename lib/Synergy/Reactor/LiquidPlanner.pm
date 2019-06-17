@@ -342,6 +342,11 @@ my %KNOWN = (
     ),
   ],
 
+  psearch    =>  [
+    \&_handle_psearch,
+    "just like search, but with an implicit `type:project`",
+  ],
+
   shows     =>  [ \&_handle_shows,       ],
   "show's"  =>  [ \&_handle_shows,       ],
   showtime  =>  [ \&_handle_showtime,    ],
@@ -2210,7 +2215,21 @@ sub _compile_search ($self, $conds, $from_user) {
 }
 
 sub _handle_search ($self, $event, $text) {
+  return $self->_do_search($event, $text);
+}
+
+sub _handle_psearch ($self, $event, $text) {
+  return $self->_do_search($event, $text, {
+    prepend_instructions => [
+      { field => 'type', op => 'is', value => 'project' }
+    ],
+  });
+}
+
+sub _do_search ($self, $event, $text, $arg = {}) {
   my $instructions = $self->_parse_search($text);
+  unshift @$instructions, $arg->{prepend_instructions}->@*
+    if $arg->{prepend_instructions};
 
   # This is stupid. -- rjbs, 2019-03-30
   if (grep {; $_->{field} eq 'parse_error' } @$instructions) {
