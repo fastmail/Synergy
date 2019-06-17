@@ -541,19 +541,20 @@ sub provide_lp_link ($self, $event) {
         my $reply;
 
         if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
-          my $icon = $item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
-                   : $item->{type} eq 'Package' ? "📦"
-                   : $item->{type} eq 'Project' ? "📁"
-                   : $item->{type} eq 'Folder'  ? "🗂"
-                   : $item->{type} eq 'Inbox'   ? "📫"
-                   :                              confess("unreachable");
+          my $icon = $item->{custom_field_values}{Emoji}
+                  // ($item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
+                    : $item->{type} eq 'Package' ? "📦"
+                    : $item->{type} eq 'Project' ? "📁"
+                    : $item->{type} eq 'Folder'  ? "🗂"
+                    : $item->{type} eq 'Inbox'   ? "📫"
+                    :                              confess("unreachable"));
 
           my $uri = $self->item_uri($item_id);
 
           my $plain = "$icon LP$item_id: $item->{name} ($uri)";
           my $slack = sprintf '%s %s',
             $icon,
-            $self->_slack_item_link_with_name($item);
+            $self->_slack_item_link_with_name($item, { emoji => 0 });
 
           if ($as_cmd) {
             my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
