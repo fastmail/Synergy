@@ -137,7 +137,7 @@ sub _last_comment_ago ($self, $item) {
   my ($latest) = sort { $a->{created_at} cmp $b->{created_at} }
                  $item->{comments}->@*;
 
-  my $updated = parse_lp_datetime($item->{updated_at});
+  my $updated = parse_lp_datetime($latest->{updated_at});
   return concise(ago(time - $updated->epoch, 1));
 }
 
