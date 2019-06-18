@@ -2110,12 +2110,8 @@ sub _compile_search ($self, $conds, $from_user) {
         bad_op($field, $op) unless ($op//'is') eq 'is';
 
         if ($value eq '~') {
-          if ($pair->[0] eq 'manager') {
-            $flag{manager}{'~'} = 1;
-            next COND;
-          }
-
-          cond_error("You can only specify `~` for manager, not $pair->[0].");
+          $flag{$pair->[0]}{'~'} = 1;
+          next COND;
         }
 
         my $target = $self->resolve_name($value, $from_user);
