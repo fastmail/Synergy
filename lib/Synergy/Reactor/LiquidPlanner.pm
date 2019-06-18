@@ -320,7 +320,7 @@ my %KNOWN = (
       "• `created:{before,after}:YYYY-MM-DD`, items created in the time range",
       "• `lastupdated:{before,after}:YYYY-MM-DD`, items last updated in the time range",
       "• `client:NAME`, find items with the given client",
-      "• `manager:NAME`, items managed by the user named NAME",
+      "• `manager:NAME`, items managed by the user named NAME (`~` for unset)",
       "• `stakeholder:NAME`, items where user named NAME is a stakeholder",
       "• `shortcut:~`, items without shortcuts (must also use `type`)",
       "• `shortcut:*`, items with shortcuts (must also use `type`)",
@@ -2109,6 +2109,15 @@ sub _compile_search ($self, $conds, $from_user) {
         # "contains" because they're comma lists.
         bad_op($field, $op) unless ($op//'is') eq 'is';
 
+        if ($value eq '~') {
+          if ($pair->[0] eq 'manager') {
+            $flag{manager}{'~'} = 1;
+            next COND;
+          }
+
+          cond_error("You can only specify `~` for manager, not $pair->[0].");
+        }
+
         my $target = $self->resolve_name($value, $from_user);
 
         unless ($target) {
@@ -2386,7 +2395,10 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   for my $field (qw( manager stakeholders )) {
     if ($flag{$field} && keys $flag{$field}->%*) {
       push @filters, map {;
-        [ "custom_field:\u$field", 'contains', $_ ]
+        [
+          "custom_field:\u$field",
+          ($_ eq '~' ? 'is_not_set' : ('contains', $_)),
+        ]
       } keys $flag{$field}->%*;
     }
   }
