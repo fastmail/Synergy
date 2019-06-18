@@ -3840,7 +3840,7 @@ sub project_report ($self, $who) {
 
   return unless @lines;
 
-  my $text = join qq{\n}, "*—[ Managed Projects ]—*", @lines;
+  my $text = join qq{\n}, "*—[ Project Lead ]—*", @lines;
 
   return Future->done([ $text, { slack => $text } ]);
 }
