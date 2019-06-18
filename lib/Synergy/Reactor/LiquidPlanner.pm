@@ -120,6 +120,9 @@ my %Showable_Attribute = (
   estimates   => 0,
   urgency     => 1,
   lastcomment => 0,
+
+  manager       => 0,
+  stakeholders  => 0,
   # stuff we could make optional later:
   #   name
   #   type icon
@@ -202,6 +205,12 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
 
     $text .= " \N{EN DASH} due $str";
     $text .= " \N{CROSS MARK}" if $item->{promise_by} lt $now->ymd;
+  }
+
+  for my $field (qw(manager stakeholders)) {
+    if ($arg{$field} && (my $value = $item->{custom_field_values}{"\u$field"})) {
+      $text .= " \N{EN DASH} $field: $value";
+    }
   }
 
   if ($arg{assignees} || $arg{estimates}) {
