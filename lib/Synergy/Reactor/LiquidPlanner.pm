@@ -3818,14 +3818,12 @@ sub project_report ($self, $who) {
 
     my $last_comment_ago = $self->_last_comment_ago($project);
 
-    push @lines, sprintf '%s %s • *%s*: %s%s — %s',
+    push @lines, join q{ },
       ($project->{custom_field_values}{Emoji} // "\N{FILE FOLDER}"),
-      $self->_slack_item_link($project),
-      $phase,
-      ($project->{name} =~ s/^P:\s+//r),
-      ($shortcut ? " *#$shortcut*" : q{}),
-      ($last_comment_ago ? "last comment $last_comment_ago" : "no comments ever")
-      ;
+      $self->_slack_item_link_with_name($project, {
+        emoji => 0,
+        lastcomment => 1,
+      });
   }
 
   return unless @lines;
