@@ -2433,9 +2433,7 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   }
 
   if (exists $flag{shortcut}) {
-    if (defined $flag{shortcut}) {
-      $error{"Illegal value found for `shortcut` in search."} = 1;
-    } elsif (
+    if (
       ! $flag{type}
       or ($flag{type} ne 'task' && $flag{type} ne 'project')
     ) {
