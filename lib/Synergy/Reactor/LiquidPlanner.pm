@@ -1218,12 +1218,12 @@ sub _extract_flags_from_task_text ($self, $text) {
       $flag{project}{$hunk} = 1;
       next;
     } elsif ($hunk =~ /[!>]/) {
-      $flag{start} ++           if $hunk =~ />/;
-      $flag{package}{urgent} ++ if $hunk =~ /!/;
+      $flag{start} ++                               if $hunk =~ />/;
+      $flag{package}{ $self->urgent_package_id } ++ if $hunk =~ /!/;
       next;
     } else {
-      $flag{start} ++           if $hunk =~ $start_emoji;
-      $flag{package}{urgent} ++ if $urgent_emoji;
+      $flag{start} ++                               if $hunk =~ $start_emoji;
+      $flag{package}{ $self->urgent_package_id } ++ if $urgent_emoji;
       next;
     }
   }
@@ -1264,14 +1264,7 @@ sub _check_plan_package ($self, $event, $plan, $error) {
     return;
   }
 
-  my ($package_name) = keys %$package;
-
-  if (fc $package_name eq 'urgent') {
-    $plan->{package_id} = $self->urgent_package_id;
-    return;
-  }
-
-  $error->{package} = qq{I don't know what the package "$package_name" is.};
+  ($plan->{package_id}) = keys %$package;
 
   return;
 }
@@ -1429,7 +1422,13 @@ sub _handle_subcmds ($self, $cmd_lines, $plan) {
 
 sub _task_subcmd_urgent ($self, $rest, $plan) {
   return "The /urgent command takes no arguments." if $rest;
-  $plan->{package}{urgent} = 1;
+
+  my $urgent = $self->urgent_package_id;
+
+  return "You can't assign to urgent and some other package."
+    if $plan->{package} && grep {; $_ !=  $urgent } keys $plan->{package}->%*;
+
+  $plan->{package}{ $self->urgent_package_id } = 1;
   return;
 }
 
