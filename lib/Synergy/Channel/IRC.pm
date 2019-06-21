@@ -70,7 +70,7 @@ sub start ($channel) {
   )->then(sub {
     # This doesn't work yet.  I think it's because I don't understand how
     # send_message works properly. -- rjbs, 2019-06-12
-    $client->send_message(join => { target_name => '#synergy' });
+    $client->send_message(JOIN => { target_name => '#synergy' });
   })->then(sub {
     $Logger->log("connected"); Future->done
   })->get;
