@@ -121,36 +121,23 @@ sub parse_switches ($string) {
 
   my @switches;
 
-  my $curr_cmd;
-  my $acc_str;
-
   while (my $token = shift @tokens) {
     if ($token->[0] eq 'badcmd') {
       Carp::confess("unreachable code");
     }
 
     if ($token->[0] eq 'cmd') {
-      if ($curr_cmd) {
-        push @switches, [ $curr_cmd, $acc_str ];
-      }
-
-      $curr_cmd = $token->[1];
-      undef $acc_str;
+      push @switches, [ $token->[1] ];
       next;
     }
 
     if ($token->[0] eq 'lit') {
-      return (undef, "text with no switch") unless $curr_cmd;
-
-      $acc_str = length($acc_str) ? "$acc_str $token->[1]" : $token->[1];
+      return (undef, "text with no switch") unless @switches;
+      push $switches[-1]->@*, $token->[1];
       next;
     }
 
     Carp::confess("unreachable code");
-  }
-
-  if ($curr_cmd) {
-    push @switches, [ $curr_cmd, $acc_str ];
   }
 
   return (\@switches, undef);

@@ -1350,9 +1350,10 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
   if ($rest) {
     my @lines = _split_lines($rest);
     push @cmd_lines, shift @lines while @lines && $lines[0] =~ m{\A/};
+    my $cmd_line = join q{ }, @cmd_lines;
     $rest = join qq{\n}, @lines;
 
-    my ($ok, $subcmd_error) = $self->_handle_subcmds(\@cmd_lines, $plan);
+    my ($ok, $subcmd_error) = $self->_handle_subcmds('create', $cmd_line, $plan);
 
     unless ($ok) {
       $error->{rest} = $subcmd_error // "Error with subcommands.";
@@ -1370,7 +1371,7 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     $uri ? "\n\n$uri" : "";
 }
 
-sub _handle_subcmds ($self, $cmd_lines, $plan) {
+sub _handle_subcmds ($self, $phase, $cmd_line, $plan) {
   # TODO: make this less slapdash -- rjbs, 2018-06-08
   my @errors;
   my @bad_cmds;
@@ -1386,108 +1387,111 @@ sub _handle_subcmds ($self, $cmd_lines, $plan) {
     u   => 'urgent',
   );
 
-  for my $cmd_line (@$cmd_lines) {
-    my ($switches, $error) = parse_switches($cmd_line);
-    push @errors, $error if $error and ! grep {; $_ eq $error } @errors;
+  my %error;
 
-    canonicalize_switches($switches, \%alias);
+  my ($switches, $error) = parse_switches($cmd_line);
+  push @errors, $error if $error and ! grep {; $_ eq $error } @errors;
 
-    CMDSTR: for my $switch (@$switches) {
-      my ($cmd, $arg) = @$switch;
+  canonicalize_switches($switches, \%alias);
 
-      my $method = $self->can("_task_subcmd_$cmd");
-      unless ($method) {
-        push @bad_cmds, $cmd;
-        next CMDSTR;
-      }
-
-      if (my $error = $self->$method($arg, $plan)) {
-        push @errors, $error;
-      }
-    }
+  my sub cmd_error ($str) {
+    no warnings 'exiting';
+    $error{$str} = 1;
+    next CMD;
   }
 
-  if (@errors or @bad_cmds) {
-    my $error = @errors ? (join q{  }, @errors) : q{};
-    if (@bad_cmds) {
-      $error .= "  " if $error;
-      $error .= "Bogus commands: " . join q{ -- }, sort @bad_cmds;
+  CMD: for my $switch (@$switches) {
+    # So far, all switches take a list of strings to concatenate.  That won't
+    # always be the case, and we'll refactor when we get there.
+    # -- rjbs, 2019-06-21
+    my ($cmd, @args) = @$switch;
+
+    if ($cmd eq 'urgent') {
+      cmd_error("The /urgent command takes no arguments.") if @args;
+
+      my $urgent = $self->urgent_package_id;
+
+      cmd_error("You can't assign to urgent and some other package.")
+        if $plan->{package}
+        && grep {; $_ !=  $urgent } keys $plan->{package}->%*;
+
+      $plan->{package}{ $self->urgent_package_id } = 1;
+      next CMD;
     }
 
-    return (0, $error);
+    if ($cmd eq 'start') {
+      cmd_error("The /start command takes no arguments.") if @args;
+      $plan->{start} = 1;
+      next CMD;
+    }
+
+    if ($cmd eq 'estimate') {
+      # This handling of args is silly. -- rjbs, 2019-06-21
+      my ($low, $high) = split /\s*-\s*/, (join q{ }, @args), 2;
+      $high //= $low;
+      s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $low, $high;
+      my $low_s  = eval { parse_duration($low); };
+      my $high_s = eval { parse_duration($high); };
+
+      cmd_error(qq{I couldn't understand the /assign estimate "@args".})
+        unless defined $low_s && defined $high_s;
+
+      $plan->{estimate} = { low => $low_s / 3600, high => $high_s / 3600 };
+      next CMD;
+    }
+
+    if ($cmd eq 'project') {
+      cmd_error("You used /project without a project shortcut.")
+        unless @args;
+
+      cmd_error("You used /project with more than one argument.")
+        if @args > 1;
+
+      $plan->{project}{$args[0]} = 1;
+      next CMD;
+    }
+
+    if ($cmd eq 'assign') {
+      cmd_error("You used /assign without any usernames.") unless @args;
+      push $plan->{usernames}->@*, @args;
+      next CMD;
+    }
+
+    if ($cmd eq 'done') {
+      cmd_error("The /done command takes no arguments.") if @args;
+      $plan->{done} = 1;
+      next CMD;
+    };
+
+    if ($cmd eq 'log') {
+      my $dur = join q{ }, @args;
+
+      s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $dur;
+      my $secs = eval { parse_duration($dur) };
+
+      cmd_error(qq{I couldn't understand the /log duration "$dur".})
+        unless defined $secs;
+
+      if ($secs > 12 * 86_400) {
+        my $dur_restr = duration($secs);
+        cmd_error(
+            qq{You said to spend "$dur" which I read as $dur_restr.  }
+          . qq{That's too long!}
+        );
+      }
+
+      $plan->{log_hours} = $secs / 3600;
+      next CMD;
+    }
+
+    cmd_error("There's no /$cmd command.");
+  }
+
+  if (%error) {
+    return (0, (join q{  }, sort keys %error));
   }
 
   return (1, undef);
-}
-
-sub _task_subcmd_urgent ($self, $rest, $plan) {
-  return "The /urgent command takes no arguments." if $rest;
-
-  my $urgent = $self->urgent_package_id;
-
-  return "You can't assign to urgent and some other package."
-    if $plan->{package} && grep {; $_ !=  $urgent } keys $plan->{package}->%*;
-
-  $plan->{package}{ $self->urgent_package_id } = 1;
-  return;
-}
-
-sub _task_subcmd_start ($self, $rest, $plan) {
-  return "The /start command takes no arguments." if $rest;
-  $plan->{start} = 1;
-  return;
-}
-
-sub _task_subcmd_estimate ($self, $rest, $plan) {
-  my ($low, $high) = split /\s*-\s*/, $rest, 2;
-  $high //= $low;
-  s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $low, $high;
-  my $low_s  = eval { parse_duration($low); };
-  my $high_s = eval { parse_duration($high); };
-
-  if (defined $low_s && defined $high_s) {
-    $plan->{estimate} = { low => $low_s / 3600, high => $high_s / 3600 };
-    return;
-  }
-
-  return qq{I couldn't understand the /assign estimate "$rest".}
-}
-
-sub _task_subcmd_project ($self, $rest, $plan) {
-  return qq{You used /project without a project shortcut.} unless $rest;
-  $plan->{project}{$rest} = 1;
-  return;
-}
-
-sub _task_subcmd_assign ($self, $rest, $plan) {
-  return qq{You used /assign without any usernames.} unless $rest;
-  push $plan->{usernames}->@*, split /\s+/, $rest;
-  return;
-}
-
-sub _task_subcmd_done ($self, $rest, $plan) {
-  return qq{The /done command takes no arguments.} if $rest;
-  $plan->{done} = 1;
-  return;
-}
-
-sub _task_subcmd_log ($self, $rest, $plan) {
-  my $dur = $rest;
-
-  s/^\s+//, s/\s+$//, s/^\./0./, s/([0-9])$/$1h/ for $dur;
-  my $secs = eval { parse_duration($dur) };
-
-  return qq{I couldn't understand the /log duration "$rest".}
-    unless defined $secs;
-
-  if ($secs > 12 * 86_400) {
-    my $dur_restr = duration($secs);
-    return qq{You said to spend "$rest" which I read as $dur_restr.  }
-         . qq{That's too long!};
-  }
-
-  $plan->{log_hours} = $secs / 3600;
-  return;
 }
 
 sub _item_from_token ($self, $token) {
@@ -1562,15 +1566,15 @@ sub _handle_update ($self, $event, $text) {
   return $self->$method_name($event, $item, $cmdstr);
 }
 
-sub _handle_update_for_task ($self, $event, $task, $cmdstr) {
+sub _handle_update_for_task ($self, $event, $task, $cmd_line) {
   my $plan  = {};
 
-  my ($first, $rest) = split /\s+/, $cmdstr, 2;
+  my ($first, $rest) = split /\s+/, $cmd_line, 2;
   if ($first eq 'comment') {
     return $self->_handle_item_comment($event, $task, $rest);
   }
 
-  my ($ok, $error) = $self->_handle_subcmds([$cmdstr], $plan);
+  my ($ok, $error) = $self->_handle_subcmds('update', $cmd_line, $plan);
 
   return $event->error_reply($error) unless $ok;
 
@@ -1579,8 +1583,8 @@ sub _handle_update_for_task ($self, $event, $task, $cmdstr) {
                       . "```");
 }
 
-sub _handle_update_for_project ($self, $event, $project, $cmdstr) {
-  my ($first, $rest) = split /\s+/, $cmdstr, 2;
+sub _handle_update_for_project ($self, $event, $project, $cmd_line) {
+  my ($first, $rest) = split /\s+/, $cmd_line, 2;
   if ($first eq 'comment') {
     return $self->_handle_item_comment($event, $project, $rest);
   }
@@ -1590,14 +1594,14 @@ sub _handle_update_for_project ($self, $event, $project, $cmdstr) {
   );
 }
 
-sub _handle_item_comment ($self, $event, $item, $cmdstr) {
+sub _handle_item_comment ($self, $event, $item, $comment) {
   my $lpc = $self->f_lp_client_for_user($event->from_user);
 
   my $post = $lpc->http_post("/treeitems/$item->{id}/comments",
     Content_Type => 'application/json',
     Content => $JSON->encode({
       comment => {
-        comment => "$cmdstr",
+        comment => "$comment",
         item_id => $item->{id},
       },
     }),

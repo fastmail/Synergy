@@ -13,7 +13,7 @@ use Test::More;
 use Synergy::Logger::Test '$Logger';
 use Synergy::Util qw(parse_switches canonicalize_switches);
 
-sub switches_ok ($input, $want) {
+sub switches_ok ($input, $want, $desc = undef) {
   local $Test::Builder::Level = $Test::Builder::Level + 1;
 
   my @rv = parse_switches($input);
@@ -21,7 +21,7 @@ sub switches_ok ($input, $want) {
   my $ok = is_deeply(
     \@rv,
     [ $want, undef ],
-    "$input -> OK",
+    $desc // "$input -> OK",
   );
 
   diag explain [ @rv ] unless $ok;
@@ -44,8 +44,8 @@ switches_ok(
   "/foo bar /baz /buz",
   [
     [ foo => 'bar' ],
-    [ baz => undef ],
-    [ buz => undef ],
+    [ baz =>       ],
+    [ buz =>       ],
   ],
 );
 
@@ -53,8 +53,8 @@ switches_ok(
   "/foo bar /foo /foo /foo baz",
   [
     [ foo => 'bar' ],
-    [ foo => undef ],
-    [ foo => undef ],
+    [ foo =>       ],
+    [ foo =>       ],
     [ foo => 'baz' ],
   ],
 );
@@ -62,24 +62,30 @@ switches_ok(
 switches_ok(
   qq{/foo one two /buz},
   [
-    [ foo => "one two" ],
-    [ buz => undef ],
+    [ foo => "one", "two" ],
+    [ buz =>       ],
   ],
 );
 
 switches_ok(
   qq{/foo one   two  /buz    },
   [
-    [ foo => "one two" ],
-    [ buz => undef ],
+    [ foo => "one", "two" ],
+    [ buz =>       ],
   ],
+);
+
+switches_ok(
+  qq{},
+  [ ],
+  "you can parse an empty string as switches",
 );
 
 switches_ok(
   qq{/foo "hunter/killer" program /buz},
   [
-    [ foo => "hunter/killer program" ],
-    [ buz => undef ],
+    [ foo => "hunter/killer", "program" ],
+    [ buz =>       ],
   ],
 );
 
@@ -95,7 +101,7 @@ switches_ok(
   qq{/foo "bar $B"baz" /buz},
   [
     [ foo => q{bar "baz} ],
-    [ buz => undef ],
+    [ buz =>       ],
   ],
 );
 
@@ -121,8 +127,8 @@ switches_fail(
     [
       [ foo => 'b' ],
       [ bar => 'f' ],
-      [ foo => undef ],
-      [ bar => undef ],
+      [ foo =>       ],
+      [ bar =>       ],
       [ foo => 'bar' ],
     ],
     "switch aliases and canonicalization",
