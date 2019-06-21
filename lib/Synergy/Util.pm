@@ -78,6 +78,9 @@ sub pick_one ($opts) {
   return $opts->[ rand @$opts ];
 }
 
+# Even a quoted string can't contain control characters.  Get real.
+our $qstring    = qr{[“"]( (?: \\["“”] | [^\pC"“”] )+ )[”"]}x;
+
 sub parse_switches ($string) {
   my @tokens;
 
@@ -100,8 +103,16 @@ sub parse_switches ($string) {
       return (undef, "bogus /command: /$1");
       # push @tokens, [ badcmd => $1 ];
       # next;
-    } elsif ($string =~ s{ \A ( [^/]+ ) (\s+/ | $) }{$2}x) {
-      push @tokens, [ lit => $1 ];
+    } elsif ($string =~ s{ \A $qstring (\s* | $)}{}x) {
+      push @tokens, [ lit => $1 =~ s/\\(["“”])/$1/gr ];
+      next;
+    } elsif ($string =~ s{ \A (\S+) (\s* | $) }{}x) {
+      my $token = $1;
+
+      return (undef, "unquoted arguments may not contain slash")
+        if $token =~ m{/};
+
+      push @tokens, [ lit => $token ];
       next;
     }
 
@@ -131,7 +142,7 @@ sub parse_switches ($string) {
     if ($token->[0] eq 'lit') {
       return (undef, "text with no switch") unless $curr_cmd;
 
-      $acc_str = ($acc_str // q{}) . $token->[1];
+      $acc_str = length($acc_str) ? "$acc_str $token->[1]" : $token->[1];
       next;
     }
 
@@ -155,9 +166,6 @@ our $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
 # We're going to allow two-part keys, like "created:on".  It's not great,
 # but it's simple enough. -- rjbs, 2019-03-29
 our $flagname_re = qr{($ident_re)(?::($ident_re))?};
-
-# Even a quoted string can't contain control characters.  Get real.
-our $qstring    = qr{[“"]( (?: \\["“”] | [^\pC"“”] )+ )[”"]}x;
 
 sub parse_attrs ($text, $arg) {
   my %alias = $arg->{aliases} ? $arg->{aliases}->%* : ();

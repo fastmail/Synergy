@@ -31,11 +31,12 @@ sub switches_ok ($input, $want) {
 sub switches_fail ($input, $want) {
   local $Test::Builder::Level = $Test::Builder::Level + 1;
 
+  my $have = [ parse_switches($input) ];
   is_deeply(
-    [ parse_switches($input) ],
+    $have,
     [ undef, $want ],
     "$input -> $want",
-  );
+  ) or diag explain($have);
 }
 
 switches_ok(
@@ -57,6 +58,22 @@ switches_ok(
   ],
 );
 
+switches_ok(
+  qq{/foo one two /buz},
+  [
+    [ foo => "one two" ],
+    [ buz => undef ],
+  ],
+);
+
+switches_ok(
+  qq{/foo "hunter/killer" program /buz},
+  [
+    [ foo => "hunter/killer program" ],
+    [ buz => undef ],
+  ],
+);
+
 switches_fail(
   "foo /bar /baz /buz",
   "text with no switch",
@@ -65,16 +82,19 @@ switches_fail(
 my $B = "\N{REVERSE SOLIDUS}";
 
 # Later, we will add support for qstrings. -- rjbs, 2019-02-04
-switches_fail(
-  qq{/foo "bar $B/baz" /buz},
-  "incomprehensible input",
+switches_ok(
+  qq{/foo "bar $B"baz" /buz},
+  [
+    [ foo => q{bar "baz} ],
+    [ buz => undef ],
+  ],
 );
 
 # Later, qstrings will allow embedded slashes, and maybe we'll allow them
 # anyway if they're inside words.  For now, ban them. -- rjbs, 2019-02-04
 switches_fail(
   qq{/foo hunter/killer program /buz},
-  "incomprehensible input",
+  "unquoted arguments may not contain slash",
 );
 
 {
@@ -90,6 +110,7 @@ switches_fail(
       [ bar => undef ],
       [ foo => 'bar' ],
     ],
+    "switch aliases and canonicalization",
   );
 }
 
