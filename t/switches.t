@@ -7,6 +7,7 @@ use experimental qw( signatures );
 
 use lib 'lib';
 
+use Test::Deep ':v1';
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';
@@ -28,14 +29,14 @@ sub switches_ok ($input, $want) {
   return $ok;
 }
 
-sub switches_fail ($input, $want) {
+sub switches_fail ($input, $want, $desc = undef) {
   local $Test::Builder::Level = $Test::Builder::Level + 1;
 
   my $have = [ parse_switches($input) ];
-  is_deeply(
+  cmp_deeply(
     $have,
     [ undef, $want ],
-    "$input -> $want",
+    $desc // "$input -> $want",
   ) or diag explain($have);
 }
 
@@ -60,6 +61,14 @@ switches_ok(
 
 switches_ok(
   qq{/foo one two /buz},
+  [
+    [ foo => "one two" ],
+    [ buz => undef ],
+  ],
+);
+
+switches_ok(
+  qq{/foo one   two  /buz    },
   [
     [ foo => "one two" ],
     [ buz => undef ],
@@ -95,6 +104,12 @@ switches_ok(
 switches_fail(
   qq{/foo hunter/killer program /buz},
   "unquoted arguments may not contain slash",
+);
+
+switches_fail(
+  qq{/foo one two /buz /},
+  "bogus input: / with no command!",
+  "we can't end with a bare slash",
 );
 
 {
