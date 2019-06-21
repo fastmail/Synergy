@@ -1670,10 +1670,10 @@ sub _handle_task ($self, $event, $text) {
     },
   );
 
-  $self->_execute_task_plan($event, $plan, $error);
+  $self->_execute_task_creation_plan($event, $plan, $error);
 }
 
-sub _execute_task_plan ($self, $event, $plan, $error) {
+sub _execute_task_creation_plan ($self, $event, $plan, $error) {
   if ($error) {
     my $errors = join q{  }, values %$error;
     return $event->error_reply($errors);
@@ -3470,7 +3470,7 @@ sub _handle_spent ($self, $event, $text) {
 
   $plan->{log_hours} = $duration / 3600;
 
-  $self->_execute_task_plan($event, $plan, $error);
+  $self->_execute_task_creation_plan($event, $plan, $error);
 }
 
 sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
