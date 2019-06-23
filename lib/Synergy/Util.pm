@@ -21,7 +21,7 @@ use Sub::Exporter -setup => [ qw(
   parse_switches
   canonicalize_switches
 
-  parse_attrs
+  parse_colonstrings
 
   known_alphabets
   transliterate
@@ -150,10 +150,8 @@ sub canonicalize_switches ($switches, $aliases = {}) {
 
 our $ident_re = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
 
-sub parse_attrs ($text, $arg) {
-  my %alias = $arg->{aliases} ? $arg->{aliases}->%* : ();
-
-  my @attrs;
+sub parse_colonstrings ($text, $arg) {
+  my @hunks;
 
   state $switch_re = qr{
     \A
@@ -169,10 +167,8 @@ sub parse_attrs ($text, $arg) {
     $text =~ s/^\s+//;
 
     # Abort!  Shouldn't happen. -- rjbs, 2018-06-30
-    if ($last eq $text) {
-      push @attrs, { field => 'parse_error', value => 1 };
-      last TOKEN;
-    }
+    return undef if $last eq $text;
+
     $last = $text;
 
     if ($text =~ s/$switch_re//) {
@@ -183,20 +179,15 @@ sub parse_attrs ($text, $arg) {
         push @hunk, length $1 ? ($1 =~ s/\\(["“”])/$1/gr) : $2;
       }
 
-      # Temporary shim:
-      push @attrs, {
-        field => $alias{$hunk[0]} // $hunk[0],
-        (@hunk > 2) ? (op => $hunk[1], value => $hunk[2])
-                    : (                value => $hunk[1]),
-      };
+      push @hunks, \@hunk;
 
       next TOKEN;
     }
 
-    push @attrs, $arg->{fallback}->(\$text) if $arg->{fallback};
+    push @hunks, $arg->{fallback}->(\$text) if $arg->{fallback};
   }
 
-  return \@attrs;
+  return \@hunks;
 }
 
 my %Trans = (

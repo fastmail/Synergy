@@ -1915,24 +1915,21 @@ sub _parse_search ($self, $text) {
 
   my $fallback = sub ($text_ref) {
     if ($text =~ s/^\#($Synergy::Util::ident_re)(?: \s | \z)//x) {
-      return {
-        field => 'project',
-        value => $1,
-      };
+      return [ project => $1 ],
     }
 
     if ($$text_ref =~ s/^($prefix_re)$Synergy::Util::qstring\s*//x) {
       my ($prefix, $word) = ($1, $2);
 
-      return {
-        field => 'name',
-        value => ($word =~ s/\\(["“”])/$1/gr),
-        op    => ( $prefix eq ""   ? "contains"
-                 : $prefix eq "^"  ? "starts_with"
-                 : $prefix eq "!^" ? "does_not_start_with"
-                 : $prefix eq "!"  ? "does_not_contain" # fake operator
-                 :                   undef),
-      };
+      return [
+        'name',
+        ( $prefix eq ""   ? "contains"
+        : $prefix eq "^"  ? "starts_with"
+        : $prefix eq "!^" ? "does_not_start_with"
+        : $prefix eq "!"  ? "does_not_contain" # fake operator
+        :                   ()),
+        ($word =~ s/\\(["“”])/$1/gr)
+      ]
     }
 
     # Just a word.
@@ -1940,21 +1937,34 @@ sub _parse_search ($self, $text) {
     $token =~ s/\A($prefix_re)//;
     my $prefix = $1;
 
-    return {
-      field => 'name',
-      value => $token,
-      op    => ( $prefix eq ""    ? "contains"
-               : $prefix eq "^"   ? "starts_with"
-               : $prefix eq "!^"  ? "does_not_start_with"
-               : $prefix eq "!"   ? "does_not_contain" # fake operator
-               :                    undef),
-    };
+    return [
+      'name',
+      ( $prefix eq ""    ? "contains"
+      : $prefix eq "^"   ? "starts_with"
+      : $prefix eq "!^"  ? "does_not_start_with"
+      : $prefix eq "!"   ? "does_not_contain" # fake operator
+      :                    undef),
+      $token,
+    ];
   };
 
-  return Synergy::Util::parse_attrs($text, {
-    aliases   => \%aliases,
-    fallback  => $fallback,
-  })
+  my $hunks = Synergy::Util::parse_colonstrings($text, { fallback => $fallback });
+
+  # XXX This is garbage, we want a "real" error.
+  # The valid forms are [ name => value ] and [ name => op => value ]
+  # so [ name => x = y => z... ] is too many and we barf.
+  # -- rjbs, 2019-06-23
+  return undef if grep {; @$_ > 3 } @$hunks;
+
+  return [
+    map {;
+      +{
+        field => $aliases{fc $_->[0]} // fc $_->[0],
+        (@$_ > 2) ? (op => $_->[1], value => $_->[2])
+                  : (               value => $_->[1]),
+      }
+    } @$hunks
+  ];
 }
 
 sub _compile_search ($self, $conds, $from_user) {
@@ -2268,13 +2278,14 @@ sub _handle_psearch ($self, $event, $text) {
 
 sub _do_search ($self, $event, $text, $arg = {}) {
   my $instructions = $self->_parse_search($text);
-  unshift @$instructions, $arg->{prepend_instructions}->@*
-    if $arg->{prepend_instructions};
 
   # This is stupid. -- rjbs, 2019-03-30
-  if (grep {; $_->{field} eq 'parse_error' } @$instructions) {
+  unless (defined $instructions) {
     return $event->error_reply("Your search blew my mind, and now I am dead.");
   }
+
+  unshift @$instructions, $arg->{prepend_instructions}->@*
+    if $arg->{prepend_instructions};
 
   # This is very stupid. -- rjbs, 2019-06-06
   if (grep {; $_->{field} eq 'debug' and $_->{value} == 255 } @$instructions) {
