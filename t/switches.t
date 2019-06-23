@@ -11,7 +11,7 @@ use Test::Deep ':v1';
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';
-use Synergy::Util qw(parse_switches canonicalize_switches);
+use Synergy::Util qw(parse_switches canonicalize_names);
 
 sub switches_ok ($input, $want, $desc = undef) {
   local $Test::Builder::Level = $Test::Builder::Level + 1;
@@ -120,7 +120,7 @@ switches_fail(
 
 {
   my ($switches, $error) = parse_switches("/f b /b f /foo /bar /foo bar");
-  canonicalize_switches($switches, { f => 'foo', b => 'bar' });
+  canonicalize_names($switches, { f => 'foo', b => 'bar' });
 
   is_deeply(
     $switches,

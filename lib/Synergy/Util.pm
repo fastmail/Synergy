@@ -19,7 +19,7 @@ use Sub::Exporter -setup => [ qw(
   pick_one
 
   parse_switches
-  canonicalize_switches
+  canonicalize_names
 
   parse_colonstrings
 
@@ -143,8 +143,8 @@ sub parse_switches ($string) {
   return (\@switches, undef);
 }
 
-sub canonicalize_switches ($switches, $aliases = {}) {
-  $aliases->{$_->[0]} && ($_->[0] = $aliases->{$_->[0]}) for @$switches;
+sub canonicalize_names ($hunks, $aliases = {}) {
+  $_->[0] = $aliases->{ fc $_->[0] } // fc $_->[0] for @$hunks;
   return;
 }
 

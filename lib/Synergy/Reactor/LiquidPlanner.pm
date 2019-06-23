@@ -23,7 +23,8 @@ use Synergy::LPC_F; # LiquidPlanner Client, with futures, of course
 use Synergy::Timer;
 use Synergy::Util qw(
   parse_time_hunk pick_one bool_from_text
-  canonicalize_switches parse_switches
+  parse_switches
+  canonicalize_names
 );
 use DateTime;
 use DateTime::Format::ISO8601;
@@ -1392,7 +1393,7 @@ sub _handle_subcmds ($self, $phase, $cmd_line, $plan) {
   my ($switches, $error) = parse_switches($cmd_line);
   push @errors, $error if $error and ! grep {; $_ eq $error } @errors;
 
-  canonicalize_switches($switches, \%alias);
+  canonicalize_names($switches, \%alias);
 
   my sub cmd_error ($str) {
     no warnings 'exiting';
@@ -1950,6 +1951,8 @@ sub _parse_search ($self, $text) {
 
   my $hunks = Synergy::Util::parse_colonstrings($text, { fallback => $fallback });
 
+  canonicalize_names($hunks, \%aliases);
+
   # XXX This is garbage, we want a "real" error.
   # The valid forms are [ name => value ] and [ name => op => value ]
   # so [ name => x = y => z... ] is too many and we barf.
@@ -1959,7 +1962,7 @@ sub _parse_search ($self, $text) {
   return [
     map {;
       +{
-        field => $aliases{fc $_->[0]} // fc $_->[0],
+        field => $_->[0],
         (@$_ > 2) ? (op => $_->[1], value => $_->[2])
                   : (               value => $_->[1]),
       }
