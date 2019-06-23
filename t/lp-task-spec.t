@@ -423,4 +423,14 @@ is_deeply(
   "field:op:value with qstring value with smart quotes (good grief)",
 );
 
+is_deeply(
+  $synergy->reactor_named('lp')->_parse_search(q{bar created:"after":"2019-02-02" foo}),
+  [
+    { field => 'name',    op => 'contains', value => 'bar' },
+    { field => 'created', op => 'after',    value => '2019-02-02' },
+    { field => 'name',    op => 'contains', value => 'foo' },
+  ],
+  "field:op:value with qstring value and qstring op",
+);
+
 done_testing;

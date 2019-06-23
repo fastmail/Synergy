@@ -148,16 +148,21 @@ sub canonicalize_switches ($switches, $aliases = {}) {
   return;
 }
 
-our $ident_re   = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
-
-# We're going to allow two-part keys, like "created:on".  It's not great,
-# but it's simple enough. -- rjbs, 2019-03-29
-our $flagname_re = qr{($ident_re)(?::($ident_re))?};
+our $ident_re = qr{[-a-zA-Z][-_a-zA-Z0-9]*};
 
 sub parse_attrs ($text, $arg) {
   my %alias = $arg->{aliases} ? $arg->{aliases}->%* : ();
 
   my @attrs;
+
+  state $switch_re = qr{
+    \A
+    ($ident_re)
+    (
+      (?: : (?: $qstring | [^\s:"“”]+ ))+
+    )
+    (?: \s | \z )
+  }x;
 
   my $last = q{};
   TOKEN: while (length $text) {
@@ -170,21 +175,19 @@ sub parse_attrs ($text, $arg) {
     }
     $last = $text;
 
-    if ($text =~ s/^$flagname_re:$qstring(?: \s | \z)//x) {
-      push @attrs, {
-        field => fc($alias{$1} // $1),
-        ($2 ? (op => fc $2) : ()),
-        value => $3 =~ s/\\(["“”])/$1/gr,
-      };
+    if ($text =~ s/$switch_re//) {
+      my @hunk = ($1);
+      my $rest = $2;
 
-      next TOKEN;
-    }
+      while ($rest =~ s{\A : (?: $qstring | ([^\s:"“”]+) ) }{}x) {
+        push @hunk, length $1 ? ($1 =~ s/\\(["“”])/$1/gr) : $2;
+      }
 
-    if ($text =~ s/^$flagname_re:([^\s:]+)(?: \s | \z)//x) {
+      # Temporary shim:
       push @attrs, {
-        field => fc($alias{$1} // $1),
-        ($2 ? (op => fc $2) : ()),
-        value => $3,
+        field => $alias{$hunk[0]} // $hunk[0],
+        (@hunk > 2) ? (op => $hunk[1], value => $hunk[2])
+                    : (                value => $hunk[1]),
       };
 
       next TOKEN;
