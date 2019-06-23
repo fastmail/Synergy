@@ -1914,6 +1914,13 @@ sub _parse_search ($self, $text) {
   state $prefix_re  = qr{!?\^?};
 
   my $fallback = sub ($text_ref) {
+    if ($text =~ s/^\#($Synergy::Util::ident_re)(?: \s | \z)//x) {
+      return {
+        field => 'project',
+        value => $1,
+      };
+    }
+
     if ($$text_ref =~ s/^($prefix_re)$Synergy::Util::qstring\s*//x) {
       my ($prefix, $word) = ($1, $2);
 

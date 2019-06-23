@@ -170,15 +170,6 @@ sub parse_attrs ($text, $arg) {
     }
     $last = $text;
 
-    if ($text =~ s/^\#($ident_re)(?: \s | \z)//x) {
-      push @attrs, {
-        field => 'project',
-        value => $1,
-      };
-
-      next TOKEN;
-    }
-
     if ($text =~ s/^$flagname_re:$qstring(?: \s | \z)//x) {
       push @attrs, {
         field => fc($alias{$1} // $1),
