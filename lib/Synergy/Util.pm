@@ -196,9 +196,6 @@ sub parse_attrs ($text, $arg) {
   return \@attrs;
 }
 
-
-
-
 my %Trans = (
   latin => sub ($s) { $s },
   rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
