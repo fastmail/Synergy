@@ -180,7 +180,7 @@ sub parse_attrs ($text, $arg) {
       next TOKEN;
     }
 
-    if ($text =~ s/^$flagname_re:([-0-9]+|~|\*|\#?$ident_re)(?: \s | \z)//x) {
+    if ($text =~ s/^$flagname_re:([^\s:]+)(?: \s | \z)//x) {
       push @attrs, {
         field => fc($alias{$1} // $1),
         ($2 ? (op => fc $2) : ()),
