@@ -122,7 +122,7 @@ my %Showable_Attribute = (
   urgency     => 1,
   lastcomment => 0,
 
-  manager       => 0,
+  escalation    => 0,
   stakeholders  => 0,
   # stuff we could make optional later:
   #   name
@@ -208,7 +208,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     $text .= " \N{CROSS MARK}" if $item->{promise_by} lt $now->ymd;
   }
 
-  for my $field (qw(manager stakeholders)) {
+  for my $field (qw(escalation stakeholders)) {
     if ($arg{$field} && (my $value = $item->{custom_field_values}{"\u$field"})) {
       $text .= " \N{EN DASH} $field: $value";
     }
@@ -330,7 +330,7 @@ my %KNOWN = (
       "• `created:{before,after}:YYYY-MM-DD`, items created in the time range",
       "• `lastupdated:{before,after}:YYYY-MM-DD`, items last updated in the time range",
       "• `client:NAME`, find items with the given client",
-      "• `manager:NAME`, items managed by the user named NAME (`~` for unset)",
+      "• `escalation:NAME`, items with the user NAME as escalation point (`~` for unset)",
       "• `stakeholder:NAME`, items where user named NAME is a stakeholder",
       "• `shortcut:~`, items without shortcuts (must also use `type`)",
       "• `shortcut:*`, items with shortcuts (must also use `type`)",
@@ -585,8 +585,8 @@ sub provide_lp_link ($self, $event) {
                      .  "\n";
             }
 
-            if ($item->{custom_field_values}{Manager}) {
-              $slack .= "*Manager*: $item->{custom_field_values}{Manager}\n";
+            if ($item->{custom_field_values}{Escalation}) {
+              $slack .= "*Escalation Point*: $item->{custom_field_values}{Escalation}\n";
             }
 
             if ($item->{assignments}) {
@@ -2131,7 +2131,7 @@ sub _compile_search ($self, $conds, $from_user) {
     }
 
     for my $pair (
-      [ manager      => [ qw(m mgr manager managers) ] ],
+      [ escalation   => [ qw(e esc escalation) ] ],
       [ stakeholders => [ qw(stake stakeholder stakeholders) ] ],
     ) {
       if (grep {; $field eq $_ } $pair->[1]->@*) {
@@ -2421,7 +2421,7 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
     push @filters, map {; [ 'created_by', '=', $_ ] } keys $flag{creator}->%*;
   }
 
-  for my $field (qw( manager stakeholders )) {
+  for my $field (qw( escalation stakeholders )) {
     if ($flag{$field} && keys $flag{$field}->%*) {
       push @filters, map {;
         [
