@@ -3213,6 +3213,9 @@ sub _handle_start ($self, $event, $text) {
     my ($task, $error) = $self->task_for_shortcut($1);
     return $event->error_reply($error) unless $task;
 
+    return $event->error_reply("You can only start timers on tasks, but that item is a \l$task->{type}.")
+      unless $task->{type} eq 'Task';
+
     return $self->_handle_start_existing($event, $task);
   }
 
@@ -3226,7 +3229,11 @@ sub _handle_start ($self, $event, $text) {
     return $event->error_reply("Sorry, I couldn't find that task.")
       if $task_res->is_nil;
 
-    return $self->_handle_start_existing($event, $task_res->payload);
+    my $item = $task_res->payload;
+    return $event->error_reply("You can only start timers on tasks, but that item is a \l$item->{type}.")
+      unless $item->{type} eq 'Task';
+
+    return $self->_handle_start_existing($event, $item);
   }
 
   if ($text eq 'next') {
