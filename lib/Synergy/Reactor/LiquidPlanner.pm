@@ -2600,6 +2600,11 @@ for my $package (qw(inbox urgent recurring)) {
           $search->{owner}{ $event->from_user->lp_id } = 1;
           $search->{in} = $self->$pkg_id_method;
 
+          # Later, we'll want to futz more when we can combine quick-searches
+          # and search parameters. -- rjbs, 2019-06-27
+          $display->{zero_text} = "Inbox hero!"
+            if $package eq 'inbox';
+
           $display->{header} = sprintf '%s tasks for %s',
             ucfirst $package,
             $event->from_user->username;
