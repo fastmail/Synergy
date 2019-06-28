@@ -278,6 +278,10 @@ my %KNOWN = (
                   "commit [COMMENT]: commit your LiquidPlanner timer, with optional comment",
                 ],
 
+  comment   =>  [ \&_handle_comment,
+                  "comment on THING: comment on a LiquidPlanner task, project, or whatever",
+                ],
+
   contents  =>  [ \&_handle_contents,
                   "contents CONTAINER: show what's in a package or project",
                 ],
@@ -1534,6 +1538,27 @@ sub _item_from_token ($self, $token) {
   );
 }
 
+sub _handle_comment ($self, $event, $text) {
+  $event->mark_handled;
+
+  return $self->error_reply("Sorry, I didn't understand your comment command.")
+    unless $text =~ s/\Aon\s+//;
+
+  # We want to accept "update lp 123 ..." just like "update lp123", because
+  # we are not monsters. -- rjbs, 2019-05-24
+  $text =~ s/\A(LP)\s+/$1/gi;
+
+  my ($what, $comment) = split /(?<!^https)[\s:]\s*/, $text, 2;
+
+  my ($item, $error) = $self->_item_from_token($what);
+
+  unless ($item) {
+    return $event->error_reply($error);
+  }
+
+  return $self->_handle_item_comment($event, $item, $comment);
+}
+
 sub _handle_update ($self, $event, $text) {
   $event->mark_handled;
 
@@ -1570,11 +1595,6 @@ sub _handle_update ($self, $event, $text) {
 sub _handle_update_for_task ($self, $event, $task, $cmd_line) {
   my $plan  = {};
 
-  my ($first, $rest) = split /\s+/, $cmd_line, 2;
-  if ($first eq 'comment') {
-    return $self->_handle_item_comment($event, $task, $rest);
-  }
-
   my ($ok, $error) = $self->_handle_subcmds('update', $cmd_line, $plan);
 
   return $event->error_reply($error) unless $ok;
@@ -1586,9 +1606,6 @@ sub _handle_update_for_task ($self, $event, $task, $cmd_line) {
 
 sub _handle_update_for_project ($self, $event, $project, $cmd_line) {
   my ($first, $rest) = split /\s+/, $cmd_line, 2;
-  if ($first eq 'comment') {
-    return $self->_handle_item_comment($event, $project, $rest);
-  }
 
   return $event->error_reply(
     "Sorry, I don't know how to do much with projects."
