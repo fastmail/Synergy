@@ -1502,18 +1502,19 @@ sub _handle_subcmds ($self, $phase, $cmd_line, $plan) {
 sub _item_from_token ($self, $token) {
   # MAYBE TODO: Offer a means to only resolve shortcuts of a known type?
   # -- rjbs, 2019-05-24
-  if ($token =~ s/\A\*//) {
+  if ($token =~ s/\A(?:LP)?\*//i) {
     return $self->task_for_shortcut($token);
   }
 
-  if ($token =~ s/\A\#//) {
+  if ($token =~ s/\A(?:LP)?\#//i) {
     return $self->project_for_shortcut($token);
   }
 
-  if ($token =~ /\A[0-9]+\z/) {
+  if ($token =~ /\A(?:LP)?([0-9]+)\z/i) {
     # We build these objects too much. :'(  -- rjbs, 2019-05-24
+    my $id  = $1;
     my $lpc = $self->lp_client_for_master;
-    my $task_res = $lpc->get_item($token);
+    my $task_res = $lpc->get_item($id);
     return ($task_res->payload, undef) if $task_res->is_success;
     return (undef, "No item found.");
   }
@@ -1556,7 +1557,31 @@ sub _handle_comment ($self, $event, $text) {
     return $event->error_reply($error);
   }
 
-  return $self->_handle_item_comment($event, $item, $comment);
+  my $lpc = $self->f_lp_client_for_user($event->from_user);
+
+  my $post = $lpc->http_post("/treeitems/$item->{id}/comments",
+    Content_Type => 'application/json',
+    Content => $JSON->encode({
+      comment => {
+        comment => "$comment",
+        item_id => $item->{id},
+      },
+    }),
+  );
+
+  my $uri   = $self->item_uri($item->{id});
+  my $plain = "Commented on \l$item->{type}: $item->{name} ($uri)";
+  my $slack = sprintf "Commented on \l$item->{type} %s.",
+    $self->_slack_item_link_with_name($item);
+
+  $post
+    ->then(sub { return $event->reply($plain, { slack => $slack }); })
+    ->else(sub {
+      $event->reply_error("Something went wrong leaving that comment!")
+    })
+    ->retain;
+
+  return;
 }
 
 sub _handle_update ($self, $event, $text) {
@@ -1610,29 +1635,6 @@ sub _handle_update_for_project ($self, $event, $project, $cmd_line) {
   return $event->error_reply(
     "Sorry, I don't know how to do much with projects."
   );
-}
-
-sub _handle_item_comment ($self, $event, $item, $comment) {
-  my $lpc = $self->f_lp_client_for_user($event->from_user);
-
-  my $post = $lpc->http_post("/treeitems/$item->{id}/comments",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({
-      comment => {
-        comment => "$comment",
-        item_id => $item->{id},
-      },
-    }),
-  );
-
-  $post
-    ->then(sub { $event->reply("Comment posted!") })
-    ->else(sub {
-      $event->reply_error("Something went wrong leaving that comment!")
-    })
-    ->retain;
-
-  return;
 }
 
 # One option:
