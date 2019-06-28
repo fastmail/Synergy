@@ -361,6 +361,12 @@ my %KNOWN = (
     "just like search, but with an implicit `type:project`",
   ],
 
+  tsearch    =>  [
+    \&_handle_tsearch,
+    "just like search, but with an implicit `type:task`",
+  ],
+
+
   shows     =>  [ \&_handle_shows,       ],
   "show's"  =>  [ \&_handle_shows,       ],
   showtime  =>  [ \&_handle_showtime,    ],
@@ -2297,6 +2303,15 @@ sub _handle_psearch ($self, $event, $text) {
     ],
   });
 }
+
+sub _handle_tsearch ($self, $event, $text) {
+  return $self->_do_search($event, $text, {
+    prepend_instructions => [
+      { field => 'type', op => 'is', value => 'task' }
+    ],
+  });
+}
+
 
 sub _do_search ($self, $event, $text, $arg = {}) {
   my $instructions = $self->_parse_search($text);
