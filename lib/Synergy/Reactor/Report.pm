@@ -22,7 +22,7 @@ sub listener_specs {
     help_entries => [
       {
         title => "report",
-        text => "report [which] [for USER]: show reports for a user",
+        text => q{report [which] [for USER]: show reports for a user; "report list" for a list of reports},
       }
     ],
   };
@@ -41,8 +41,21 @@ has reports => (
   handles   => {
     report_names => 'keys',
     report_named => 'get',
+    _create_report_named => 'set',
   },
 );
+
+after register_with_hub => sub ($self, @) {
+  Carp::confess("the report name 'list' is reserved")
+    if $self->report_named('list');
+
+  $self->_create_report_named(list => {
+    title     => "Available Reports",
+    sections  => [
+      [ $self->name, 'report_report' ],
+    ]
+  });
+};
 
 sub report ($self, $event) {
   my $report_name;
@@ -159,6 +172,19 @@ sub report ($self, $event) {
       slack => $slack,
     },
   );
+}
+
+sub report_report ($self, $who, $arg = {}) {
+  my $text  = q{};
+  my $slack = q{};
+
+  for my $name (sort $self->report_names) {
+    my $report = $self->report_named($name);
+    $text   .= "$name: "   . ($report->{description} // "the $name report") . "\n";
+    $slack  .= "*$name*: " . ($report->{description} // "the $name report") . "\n";
+  }
+
+  return Future->done([ $text, { slack => $slack } ]);
 }
 
 1;
