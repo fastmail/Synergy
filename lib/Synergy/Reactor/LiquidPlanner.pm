@@ -264,10 +264,10 @@ has [ qw( inbox_package_id urgent_package_id project_portfolio_id recurring_pack
 
 my %KNOWN = (
   '++'      =>  [ \&_handle_plus_plus,
-                  "++ TASK-SPEC: add a task for yourself" ],
-  '<<'      =>  [ \&_handle_angle_angle ],
+                  "++ TASK: short for `task for me: TASK`, so see `help task`"],
+  '<<'      =>  [ \&_handle_angle_angle ], # To Neil, with love.
   '>>'      =>  [ \&_handle_angle_angle,
-                  ">> USER TASK-SPEC: add a task for someone else "],
+                  ">> PERSON REST: short for `task for PERSON: REST`, so see `help task`"],
   abort     =>  [ \&_handle_abort,
                   "abort timer: throw your LiquidPlanner timer away" ],
   chill     =>  [ \&_handle_chill,
@@ -366,7 +366,6 @@ my %KNOWN = (
     "just like search, but with an implicit `type:task`",
   ],
 
-
   shows     =>  [ \&_handle_shows,       ],
   "show's"  =>  [ \&_handle_shows,       ],
   showtime  =>  [ \&_handle_showtime,    ],
@@ -379,7 +378,30 @@ my %KNOWN = (
   stop      =>  [ \&_handle_stop,
                   "stop timer: stop your timer, but keep the time on it",
                 ],
-  task      =>  [ \&_handle_task,        ],
+
+  task      =>  [
+    \&_handle_task,
+    <<'EOH' =~ s/\b\n\b/ /rg
+task for WHO: NAME: create a new task in LiquidPlanner
+
+In the simplest form, this creates a new task with the given name, assigned to
+the given user.  (You can also give multiple users, separated by commas, for
+the `WHO`.)  More information can be provided on new lines, or split up by
+triple dashes (`---`).  Every new line that start with a `/` is taken as a
+series of slash commands, documented below.  After those slash command lines,
+the rest of the lines are taken as the long description for the task.
+
+The slash commands understood are:
+* `/assign WHO`: assign one or more users to the task
+* `/done`: mark the task done immediately on creation
+* `/estimate X-Y`: give all assignments on the task an estimate of X-Y
+* `/log TIME`: log the given amount of time spent (by you) on the task
+* `/project`: create the task in the named project (see `projects`)
+* `/start`: start your timer running on this task
+* `/urgent`: mark this task as urgent
+EOH
+  ],
+
   tasks     =>  [ \&_handle_tasks,
                   "tasks [PAGE-NUMBER]: list your scheduled work",
                 ],
