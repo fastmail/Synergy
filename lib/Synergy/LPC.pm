@@ -8,7 +8,6 @@ use experimental qw(signatures lexical_subs);
 use namespace::clean;
 use JSON 2 ();
 use Synergy::Logger '$Logger';
-use Synergy::LPC; # LiquidPlanner Client, of course
 use DateTime;
 use utf8;
 use URI::Find;
@@ -153,16 +152,6 @@ has single_activity_id => (
 sub get_activity_id ($self, $task_or_id, $member_id = undef) {
   return _success($self->single_activity_id) if $self->has_single_activity_id;
   return _failure("get_activity_id not really implemented");
-
-  # my $task_res = $lpc->get_item($lp_timer->{item_id});
-
-  # unless ($task_res->is_success) {
-  #   return $event->reply("I couldn't log the work because I couldn't find the current task's activity id.");
-  # }
-
-  # my $task = $task_res->payload;
-  # my $activity_id = $task->{activity_id};
-
 }
 
 sub my_timers ($self) {

@@ -3136,6 +3136,13 @@ sub _handle_commit ($self, $event, $comment) {
 
   my $task_id = $lp_timer->item_id;
 
+  my $item_res = $lpc->get_item($task_id);
+  unless ($item_res->is_success) {
+    return $event->error_reply("I couldn't find the item you're talking about.");
+  }
+
+  my $item = $item_res->payload;
+
   my $activity_res = $lpc->get_activity_id($task_id, $user->lp_id);
 
   unless ($activity_res->is_success) {
@@ -3158,6 +3165,12 @@ sub _handle_commit ($self, $event, $comment) {
 
   my $work_to_commit = $timer_override // $lp_timer->real_total_time;
   my $work_duration  = concise( duration( $work_to_commit * 3600 ) );
+
+  my $cancel_done;
+  if ($meta{DONE} && $item->{custom_field_values}{"Synergy Task Shortcut"}) {
+    $meta{DONE} = 0;
+    $cancel_done = 1;
+  }
 
   my $commit_res = $lpc->track_time({
     task_id => $task_id,
@@ -3195,6 +3208,7 @@ sub _handle_commit ($self, $event, $comment) {
   my @errors = (
     ($meta{CLEARFAIL} ? ("I couldn't clear the timer's old value")  : ()),
     ($meta{STARTFAIL} ? ("I couldn't restart the timer")            : ()),
+    ($cancel_done     ? ("I left it undone, because it has a shortcut") : ()),
   );
 
   if (@errors) {
@@ -3208,7 +3222,7 @@ sub _handle_commit ($self, $event, $comment) {
   unless ($task_res->is_success) {
     return $event->reply(
       "I logged that time, but something went wrong trying to describe it!"
-      . (@errors ? ("  I had other trouble, too: " . join q{ and }, @errors)
+      . (@errors ? ("  I had other trouble, too: " . join q{; }, @errors)
                  : q{}),
     );
   }
