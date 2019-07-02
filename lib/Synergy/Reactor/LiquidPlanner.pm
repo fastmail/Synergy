@@ -1687,12 +1687,8 @@ sub _execute_item_update_plan ($self, $event, $item, $plan) {
     );
   });
 
-  $update_f->then(sub ($data) {
-    $event->reply(
-      "Updated! ```\n"
-      . JSON->new->pretty->canonical->encode($data)
-      . "```"
-    );
+  $update_f->then(sub ($item) {
+    $event->reply("Updated " . $self->_slack_item_link_with_name);
   })->retain;
 
   return;
