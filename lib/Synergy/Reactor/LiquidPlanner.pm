@@ -3010,7 +3010,7 @@ sub _handle_showtime ($self, $event, $text) {
 
 sub _handle_shows ($self, $event, $text) {
   return $self->_handle_chill($event, 'until tomorrow')
-    if $text =~ /\s*over\s*[+!.]*\s*/i;
+    if $text =~ /\s*over\s*[+!.]*\s*\z/i;
 
   $event->mark_unhandled;
 
