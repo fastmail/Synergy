@@ -271,32 +271,24 @@ my %KNOWN = (
                   ">> PERSON REST: short for `task for PERSON: REST`, so see `help task`"],
 
   # TIMER COMMANDS
-  abort     =>  [ \&_handle_abort,
-                  "abort timer: throw your LiquidPlanner timer away" ],
-  commit    =>  [ \&_handle_commit,
-                  "commit [COMMENT]: commit your LiquidPlanner timer, with optional comment",
-                ],
-  done      =>  [ \&_handle_done,
-                  "done: commit your LiquidPlanner task and mark your work done",
-                ],
-
-  reset     =>  [ \&_handle_reset,
-                  "reset timer: set your timer back to zero, but leave it running",
-                ],
-  restart   =>  [ \&_handle_resume ],
-  resume    =>  [ \&_handle_resume,
-                  "resume timer: start the last time you had running up again",
-                ],
-  start     =>  [ \&_handle_start,
-                  "start TASK-ID: start your timer on the given task",
-                ],
-  stop      =>  [ \&_handle_stop,
-                  "stop timer: stop your timer, but keep the time on it",
-                ],
   timer     =>  [ \&_handle_timer,
                   "timer: show your current LiquidPlanner timer (if any)",
+                  "timer abort: throw your LiquidPlanner timer away",
+                  "timer commit [COMMENT]: commit your LiquidPlanner timer, with optional comment",
+                  "timer done: commit your timer and mark your work done",
+                  "timer reset: set your timer back to zero, but leave it running",
+                  "timer resume: restart the last timer you had running again",
+                  "timer start TASK: start your timer on the given task",
+                  "timer stop: stop your timer, but keep the time on it",
                 ],
-
+  abort     =>  [ \&_handle_timer_abort  ],
+  commit    =>  [ \&_handle_timer_commit ],
+  done      =>  [ \&_handle_timer_done   ],
+  reset     =>  [ \&_handle_timer_reset  ],
+  restart   =>  [ \&_handle_timer_resume ],
+  resume    =>  [ \&_handle_timer_resume ],
+  start     =>  [ \&_handle_timer_start  ],
+  stop      =>  [ \&_handle_timer_stop   ],
 
   # AVAILABILITY COMMANDS
   chill     =>  [ \&_handle_chill,
@@ -1195,56 +1187,6 @@ sub _handle_last ($self, $event, $text) {
   } else {
     $event->reply("You haven't said anything here yet that I've seen (ignoring 'last')");
   }
-}
-
-sub _handle_timer ($self, $event, $text) {
-  my $user = $event->from_user;
-
-  return $event->error_reply($ERR_NO_LP)
-    unless $user && $self->auth_header_for($user);
-
-  my $lpc = $self->lp_client_for_user($user);
-  my $timer_res = $lpc->my_running_timer;
-
-  return $event->reply("Sorry, something went wrong getting your timer.")
-    unless $timer_res->is_success;
-
-  my $timer = $timer_res->payload;
-  my $sy_timer = $self->timer_for_user($user);
-
-  unless ($timer) {
-    my $nag = $sy_timer->last_relevant_nag;
-    my $msg;
-    if (! $nag) {
-      $msg = "You don't have a running timer.";
-    } elsif ($nag->{level} == 0) {
-      $msg = "Like I said, you don't have a running timer.";
-    } else {
-      $msg = "Like I keep telling you, you don't have a running timer!";
-    }
-
-    return $event->reply($msg);
-  }
-
-  my $time = $timer->real_total_time_duration;
-
-  my $task_res = $lpc->get_item($timer->item_id);
-
-  my $task = ($task_res->is_success && $task_res->payload)
-          || { id => $timer->item_id, name => '??' };
-
-  my $url = $self->item_uri($task->{id});
-
-  my $base  = "Your timer has been running for $time, work on";
-  my $slack = sprintf '%s: %s',
-    $base, $self->_slack_item_link_with_name($task);
-
-  return $event->reply(
-    "$base: $task->{name} ($url)",
-    {
-      slack => $slack,
-    },
-  );
 }
 
 sub _extract_flags_from_task_text ($self, $text) {
@@ -3098,7 +3040,93 @@ sub _handle_triple_zed ($self, $event, $text) {
   $self->_handle_chill($event, "");
 }
 
-sub _handle_commit ($self, $event, $comment) {
+sub _handle_timer ($self, $event, $text) {
+  my $user = $event->from_user;
+
+  return $event->error_reply($ERR_NO_LP)
+    unless $user && $self->auth_header_for($user);
+
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
+
+  return $event->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
+
+  my $timer = $timer_res->payload;
+  my $sy_timer = $self->timer_for_user($user);
+
+  unless ($timer) {
+    my $nag = $sy_timer->last_relevant_nag;
+    my $msg;
+    if (! $nag) {
+      $msg = "You don't have a running timer.";
+    } elsif ($nag->{level} == 0) {
+      $msg = "Like I said, you don't have a running timer.";
+    } else {
+      $msg = "Like I keep telling you, you don't have a running timer!";
+    }
+
+    return $event->reply($msg);
+  }
+
+  my $time = $timer->real_total_time_duration;
+
+  my $task_res = $lpc->get_item($timer->item_id);
+
+  my $task = ($task_res->is_success && $task_res->payload)
+          || { id => $timer->item_id, name => '??' };
+
+  my $url = $self->item_uri($task->{id});
+
+  my $base  = "Your timer has been running for $time, work on";
+  my $slack = sprintf '%s: %s',
+    $base, $self->_slack_item_link_with_name($task);
+
+  return $event->reply(
+    "$base: $task->{name} ($url)",
+    {
+      slack => $slack,
+    },
+  );
+}
+
+sub _handle_timer_abort ($self, $event, $text) {
+  return $event->error_reply("I didn't understand your abort request.")
+    unless $text =~ /^timer\b/i;
+
+  my $user = $event->from_user;
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
+
+  my $lpc = $self->lp_client_for_user($user);
+  my $timer_res = $lpc->my_running_timer;
+
+  return $event->reply("Sorry, something went wrong getting your timer.")
+    unless $timer_res->is_success;
+
+  return $event->reply("You don't have a running timer to abort.")
+    unless my $timer = $timer_res->payload;
+
+  my $stop_res = $lpc->stop_timer_for_task_id($timer->item_id);
+  my $clr_res  = $lpc->clear_timer_for_task_id($timer->item_id);
+
+  my $task_was = '';
+
+  my $task_res = $lpc->get_item($timer->item_id);
+
+  if ($task_res->is_success) {
+    my $uri = $self->item_uri($timer->item_id);
+    $task_was = " The task was: " . $task_res->payload->{name} . " ($uri)";
+  }
+
+  if ($stop_res->is_success and $clr_res->is_success) {
+    $self->timer_for_user($user)->clear_last_nag;
+    $event->reply("Okay, I stopped and cleared your timer.$task_was");
+  } else {
+    $event->reply("Something went wrong aborting your timer.");
+  }
+}
+
+sub _handle_timer_commit ($self, $event, $comment) {
   # commit                  | just commit the timer
   #
   # *** We'll call these "all caps" trailing words "meta" words.
@@ -3258,43 +3286,114 @@ sub _handle_commit ($self, $event, $comment) {
   );
 }
 
-sub _handle_abort ($self, $event, $text) {
-  return $event->error_reply("I didn't understand your abort request.")
-    unless $text =~ /^timer\b/i;
+sub _handle_timer_done ($self, $event, $text) {
+  my $user = $event->from_user;
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
+  my $next;
+  my $chill;
+  if ($text) {
+    my @things = split /\s*,\s*/, $text;
+    for (@things) {
+      if ($_ eq 'next')  { $next  = 1; next }
+      if ($_ eq 'chill') { $chill = 1; next }
+
+      return -1;
+    }
+
+    return $event->error_reply("No, it's nonsense to chill /and/ start a new task!")
+      if $chill && $next;
+  }
+
+  $self->_handle_timer_commit($event, 'DONE');
+  $self->_handle_timer_start($event, 'next') if $next;
+  $self->_handle_chill($event, "until I'm back") if $chill;
+  return;
+}
+
+sub _handle_timer_reset ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
+
+  return $event->error_reply("I didn't understand your reset request. (try 'reset timer')")
+    unless ($text // 'timer') eq 'timer';
+
   my $timer_res = $lpc->my_running_timer;
 
   return $event->reply("Sorry, something went wrong getting your timer.")
     unless $timer_res->is_success;
 
-  return $event->reply("You don't have a running timer to abort.")
+  return $event->reply("You don't have a running timer to reset.")
     unless my $timer = $timer_res->payload;
 
-  my $stop_res = $lpc->stop_timer_for_task_id($timer->item_id);
-  my $clr_res  = $lpc->clear_timer_for_task_id($timer->item_id);
+  my $task_id = $timer->item_id;
+  my $clr_res = $lpc->clear_timer_for_task_id($task_id);
 
-  my $task_was = '';
+  return $event->reply("Something went wrong resetting your timer.")
+    unless $clr_res->is_success;
 
-  my $task_res = $lpc->get_item($timer->item_id);
+  $self->timer_for_user($user)->clear_last_nag;
 
-  if ($task_res->is_success) {
-    my $uri = $self->item_uri($timer->item_id);
-    $task_was = " The task was: " . $task_res->payload->{name} . " ($uri)";
-  }
+  my $start_res = $lpc->stop_timer_for_task_id($task_id);
 
-  if ($stop_res->is_success and $clr_res->is_success) {
-    $self->timer_for_user($user)->clear_last_nag;
-    $event->reply("Okay, I stopped and cleared your timer.$task_was");
+  if ($start_res->is_success) {
+    $self->set_last_lp_timer_task_id_for_user($user, $task_id);
+    $event->reply("Okay, I cleared your timer and left it running.");
   } else {
-    $event->reply("Something went wrong aborting your timer.");
+    $event->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
   }
 }
 
-sub _handle_start ($self, $event, $text) {
+sub _handle_timer_resume ($self, $event, $text) {
+  my $user = $event->from_user;
+  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
+
+  my $lpc = $self->lp_client_for_user($user);
+
+  my $lp_timer = $self->lp_timer_for_user($user);
+
+  if ($lp_timer && ref $lp_timer) {
+    my $task_res = $lpc->get_item($lp_timer->item_id);
+
+    unless ($task_res->is_success) {
+      return $event->reply("You already have a running timer (but I couldn't figure out its task…)");
+    }
+
+    my $task = $task_res->payload;
+    return $event->reply("You already have a running timer ($task->{name})");
+  }
+
+  my $task_id = $self->last_lp_timer_task_id_for_user($user);
+
+  unless ($task_id) {
+    return $event->reply("I'm not aware of any previous timer you had running. Sorry!");
+  }
+
+  my $task_res = $lpc->get_item($task_id);
+
+  unless ($task_res->is_success) {
+    return $event->reply("I found your timer but I couldn't figure out its task…");
+  }
+
+  my $task = $task_res->payload;
+  my $res  = $lpc->start_timer_for_task_id($task->{id});
+
+  unless ($res->is_success) {
+    return $event->reply("I failed to resume the timer for $task->{name}, sorry!");
+  }
+
+  return $event->reply(
+    "Timer resumed. Task is: $task->{name}",
+    {
+      slack => sprintf("Timer resumed on %s",
+        $self->_slack_item_link_with_name($task)),
+    },
+  );
+}
+
+sub _handle_timer_start ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
@@ -3357,7 +3456,7 @@ sub _handle_start ($self, $event, $text) {
   return $event->error_reply(q{You can either say "start LP-TASK-ID" or "start next".});
 }
 
-sub _handle_start_existing ($self, $event, $task) {
+sub _handle_timer_start_existing ($self, $event, $task) {
   # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
   # TODO: print the description of the task instead of its number -- rjbs,
   # 2016-01-25
@@ -3382,54 +3481,7 @@ sub _handle_start_existing ($self, $event, $task) {
   }
 }
 
-sub _handle_resume ($self, $event, $text) {
-  my $user = $event->from_user;
-  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
-
-  my $lpc = $self->lp_client_for_user($user);
-
-  my $lp_timer = $self->lp_timer_for_user($user);
-
-  if ($lp_timer && ref $lp_timer) {
-    my $task_res = $lpc->get_item($lp_timer->item_id);
-
-    unless ($task_res->is_success) {
-      return $event->reply("You already have a running timer (but I couldn't figure out its task…)");
-    }
-
-    my $task = $task_res->payload;
-    return $event->reply("You already have a running timer ($task->{name})");
-  }
-
-  my $task_id = $self->last_lp_timer_task_id_for_user($user);
-
-  unless ($task_id) {
-    return $event->reply("I'm not aware of any previous timer you had running. Sorry!");
-  }
-
-  my $task_res = $lpc->get_item($task_id);
-
-  unless ($task_res->is_success) {
-    return $event->reply("I found your timer but I couldn't figure out its task…");
-  }
-
-  my $task = $task_res->payload;
-  my $res  = $lpc->start_timer_for_task_id($task->{id});
-
-  unless ($res->is_success) {
-    return $event->reply("I failed to resume the timer for $task->{name}, sorry!");
-  }
-
-  return $event->reply(
-    "Timer resumed. Task is: $task->{name}",
-    {
-      slack => sprintf("Timer resumed on %s",
-        $self->_slack_item_link_with_name($task)),
-    },
-  );
-}
-
-sub _handle_stop ($self, $event, $text) {
+sub _handle_timer_stop ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
@@ -3464,66 +3516,6 @@ sub _handle_stop ($self, $event, $text) {
 
   $self->timer_for_user($user)->clear_last_nag;
   return $event->reply("Okay, I stopped your timer.$task_was");
-}
-
-sub _handle_done ($self, $event, $text) {
-  my $user = $event->from_user;
-  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
-
-  my $next;
-  my $chill;
-  if ($text) {
-    my @things = split /\s*,\s*/, $text;
-    for (@things) {
-      if ($_ eq 'next')  { $next  = 1; next }
-      if ($_ eq 'chill') { $chill = 1; next }
-
-      return -1;
-    }
-
-    return $event->error_reply("No, it's nonsense to chill /and/ start a new task!")
-      if $chill && $next;
-  }
-
-  $self->_handle_commit($event, 'DONE');
-  $self->_handle_start($event, 'next') if $next;
-  $self->_handle_chill($event, "until I'm back") if $chill;
-  return;
-}
-
-sub _handle_reset ($self, $event, $text) {
-  my $user = $event->from_user;
-  return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
-
-  my $lpc = $self->lp_client_for_user($user);
-
-  return $event->error_reply("I didn't understand your reset request. (try 'reset timer')")
-    unless ($text // 'timer') eq 'timer';
-
-  my $timer_res = $lpc->my_running_timer;
-
-  return $event->reply("Sorry, something went wrong getting your timer.")
-    unless $timer_res->is_success;
-
-  return $event->reply("You don't have a running timer to reset.")
-    unless my $timer = $timer_res->payload;
-
-  my $task_id = $timer->item_id;
-  my $clr_res = $lpc->clear_timer_for_task_id($task_id);
-
-  return $event->reply("Something went wrong resetting your timer.")
-    unless $clr_res->is_success;
-
-  $self->timer_for_user($user)->clear_last_nag;
-
-  my $start_res = $lpc->stop_timer_for_task_id($task_id);
-
-  if ($start_res->is_success) {
-    $self->set_last_lp_timer_task_id_for_user($user, $task_id);
-    $event->reply("Okay, I cleared your timer and left it running.");
-  } else {
-    $event->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
-  }
 }
 
 sub _handle_spent ($self, $event, $text) {
