@@ -3057,6 +3057,9 @@ sub _handle_timer ($self, $event, $text) {
     return $event->error_reply("Sorry, I don't understand your timer command.")
       unless my $name = $TIMER_COMMAND{$next};
 
+    # ...because later we will error unless: ($rest//'timer') eq 'timer'
+    undef $rest unless length $rest;
+
     my $method = "_handle_timer_$name";
 
     return $self->$method($event, $rest);
@@ -3111,7 +3114,7 @@ sub _handle_timer ($self, $event, $text) {
 
 sub _handle_timer_abort ($self, $event, $text) {
   return $event->error_reply("I didn't understand your abort request.")
-    unless $text =~ /^timer\b/i;
+    unless ($text // 'timer') eq 'timer';
 
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
@@ -3336,7 +3339,7 @@ sub _handle_timer_reset ($self, $event, $text) {
 
   my $lpc = $self->lp_client_for_user($user);
 
-  return $event->error_reply("I didn't understand your reset request. (try 'reset timer')")
+  return $event->error_reply("I didn't understand your timer reset request.")
     unless ($text // 'timer') eq 'timer';
 
   my $timer_res = $lpc->my_running_timer;
@@ -3367,6 +3370,10 @@ sub _handle_timer_reset ($self, $event, $text) {
 
 sub _handle_timer_resume ($self, $event, $text) {
   my $user = $event->from_user;
+
+  return $event->error_reply("I didn't understand your timer resume request.")
+    unless ($text // 'timer') eq 'timer';
+
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->lp_client_for_user($user);
@@ -3472,7 +3479,7 @@ sub _handle_timer_start ($self, $event, $text) {
     }
   }
 
-  return $event->error_reply(q{You can either say "start LP-TASK-ID" or "start next".});
+  return $event->error_reply(q{You can either say "timer start TASK" or "timer start next".});
 }
 
 sub _handle_timer_start_existing ($self, $event, $task) {
@@ -3507,8 +3514,8 @@ sub _handle_timer_stop ($self, $event, $text) {
   return $event->reply("Quit it!  I'm telling mom!")
     if $text =~ /\Ahitting yourself[.!]*\z/;
 
-  return $event->error_reply("I didn't understand your stop request.")
-    unless $text eq 'timer';
+  return $event->error_reply("I didn't understand your timer stop request.")
+    unless ($text // 'timer') eq 'timer';
 
   my $lpc = $self->lp_client_for_user($user);
   my $timer_res = $lpc->my_running_timer;
