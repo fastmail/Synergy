@@ -174,7 +174,7 @@ sub get_item ($self, $item_id) {
 
 sub update_item ($self, $item_id, $payload) {
   return $self->http_put(
-    "/treeitems/$item_id",
+    "/tasks/$item_id",
     Content_Type => 'application/json',
     Content => $JSON->encode($payload),
   );

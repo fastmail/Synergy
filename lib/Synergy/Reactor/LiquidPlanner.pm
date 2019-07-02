@@ -1440,6 +1440,11 @@ sub _handle_subcmds ($self, $phase, $cmd_line, $plan) {
       next CMD;
     }
 
+    if ($cmd eq 'name') {
+      $plan->{name} = join q{ }, @args;
+      next CMD;
+    }
+
     if ($cmd eq 'estimate') {
       # This handling of args is silly. -- rjbs, 2019-06-21
       my ($low, $high) = split /\s*-\s*/, (join q{ }, @args), 2;
@@ -1635,9 +1640,22 @@ sub _handle_update_for_task ($self, $event, $task, $cmd_line) {
 
   return $event->error_reply($error) unless $ok;
 
-  return $event->reply( "Update plan for LP$task->{id}: ```"
-                      . JSON->new->canonical->encode($plan)
-                      . "```");
+# $self->_check_plan_rest($event, \%plan, \%error);
+# $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
+# $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
+# $self->_check_plan_package($event, \%plan, \%error)   if $plan{package};
+#
+#  $error{name} = "That task name is just too long!  Consider putting more of it in the long description.  You can do that by separating the name and long description with `---` (and spaces around that)."
+#    if length $plan{name} > 200;
+#
+#  return (undef, \%error) if %error;
+#  return (\%plan, undef);
+
+  $event->reply( "Update plan for LP$task->{id}: ```"
+               . JSON->new->canonical->encode($plan)
+               . "```");
+
+  return $self->_execute_item_update_plan($event, $task, $plan);
 }
 
 sub _handle_update_for_project ($self, $event, $project, $cmd_line) {
@@ -1646,6 +1664,38 @@ sub _handle_update_for_project ($self, $event, $project, $cmd_line) {
   return $event->error_reply(
     "Sorry, I don't know how to do much with projects."
   );
+}
+
+sub _execute_item_update_plan ($self, $event, $item, $plan) {
+  my $user = $event->from_user;
+  my $arg  = {};
+
+  my %UPDATE_FIELD = map {; $_ => 1 } qw(name);
+  if (my @unknown = grep {; ! $UPDATE_FIELD{$_} } keys %$plan) {
+    return $event->error_reply(
+      "You wanted to update things but I don't know how: "
+      . join(q{, }, sort uniq @unknown)
+    );
+  }
+
+  my $lpc = $self->f_lp_client_for_user($user);
+  my $update_f = $lpc->update_item($item->{id}, { lc $item->{type} => $plan });
+
+  $update_f->on_fail(sub {
+    $event->reply(
+      "Sorry, something went wrong when I tried to update that \l$item->{type}.",
+    );
+  });
+
+  $update_f->then(sub ($data) {
+    $event->reply(
+      "Updated! ```\n"
+      . JSON->new->pretty->canonical->encode($data)
+      . "```"
+    );
+  })->retain;
+
+  return;
 }
 
 # One option:
