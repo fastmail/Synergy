@@ -273,27 +273,27 @@ my %KNOWN = (
   # TIMER COMMANDS
   timer     =>  [ \&_handle_timer,
     <<'EOH' =~ s/\b\n([^\s•])/ $1/rg
-The `timer` command lets you manage your LiquidPlanner timer.  With no further
+The *timer* command lets you manage your LiquidPlanner timer.  With no further
 arguments, it just tells you whether you've got a timer and, if so, the timer's
 task and running time.
 
 These further commands exist for controlling your timer:
 
-• `timer abort`: throw your timer away
-• `timer commit [COMMENT]`: commit your timer, with optional comment
-• `timer done`: commit your timer and mark your work done
-• `timer reset`: set your timer back to zero, but leave it running
-• `timer resume`: restart the last timer you had running again
-• `timer start TASK`: start your timer on the given task
-• `timer stop`: stop your timer, but keep the time on it
+• *timer abort*: throw your timer away
+• *timer commit `COMMENT`*: commit your timer, with optional comment
+• *timer done*: commit your timer and mark your work done
+• *timer reset*: set your timer back to zero, but leave it running
+• *timer resume*: restart the last timer you had running again
+• *timer start `TASK`*: start your timer on the given task
+• *timer stop*: stop your timer, but keep the time on it
 
-`timer commit` is notable because you can end your comment with a few magic
+*timer commit* is notable because you can end your comment with a few magic
 words to take extra actions, like:
 
-• `DONE`: mark your work on this task done
-• `STOP`: stop the timer when committing; by default, it will keep running
-• `CHILL`: stop the timer and don't nag until you're active again
-• `TIME Xh`: override the time on the timer, and commit X h(ours) or m(inutes) instead
+• *DONE*: mark your work on this task done
+• *STOP*: stop the timer when committing; by default, it will keep running
+• *CHILL*: stop the timer and don't nag until you're active again
+• *TIME `Xh`*: override the time on the timer, and commit X h(ours) or m(inutes) instead
 EOH
                 ],
   abort     =>  [ \&_handle_timer_abort  ],
@@ -332,52 +332,54 @@ EOH
   search    =>  [
     \&_handle_search,
     join("\n",
-      "search SEARCH_TERM: find items in LiquidPlanner matching term",
+      "*search `SEARCH`*: find items in LiquidPlanner matching term",
       "Additional search fields include:",
-      "• `done:{yes,no,both}`, search for completed items",
-      "• `in:{inbox,urgent,recurring,LP-ID}`, search for scheduled items",
-      "• `onhold:{yes,no,both}`, search for items on hold",
-      "• `page:N`, get the Nth page of 10 results",
-      "• `phase:P`, only find work in projects in phase P",
-      "• `project:PROJECT`, search in this project shortcut",
-      "• `scheduled:{yes,no,both}`, search for scheduled items",
-      "• `type:TYPE`, pick what type of items to find (package, project, task)",
-      "• `tags:TAG`, find items with the given tag",
-      "• `o[wner]:NAME`, items owned by the user named NAME",
-      "• `creator:NAME`, items created by the user named NAME",
-      "• `created:{before,after}:YYYY-MM-DD`, items created in the time range",
-      "• `lastupdated:{before,after}:YYYY-MM-DD`, items last updated in the time range",
-      "• `client:NAME`, find items with the given client",
-      "• `escalation:NAME`, items with the user NAME as escalation point (`~` for unset)",
-      "• `stakeholder:NAME`, items where user named NAME is a stakeholder",
-      "• `shortcut:~`, items without shortcuts (must also use `type`)",
-      "• `shortcut:*`, items with shortcuts (must also use `type`)",
-      "• `force:1`, search even if Synergy says it's too broad",
-      "• `debug:1`, turn on debugging and dump the query to be run",
+      "• *done:`{yes,no,both}`*, search for completed items",
+      "• *in:`{inbox,urgent,recurring,LP-ID}`*, search for scheduled items",
+      "• *onhold:`{yes,no,both}`*, search for items on hold",
+      "• *page:`N`*, get the Nth page of 10 results",
+      "• *phase:`P`*, only find work in projects in phase P",
+      "• *project:`PROJECT`*, search in this project shortcut",
+      "• *scheduled:`{yes,no,both}`*, search for scheduled items",
+      "• *type:`TYPE`*, pick what type of items to find (package, project, task)",
+      "• *tags:`TAG`*, find items with the given tag",
+      "• *o[wner]:`USER`*, items owned by the named user",
+      "• *creator:`USER`*, items created by the named user",
+      "• *created:`{before,after}`:`YYYY-MM-DD`*, items created in the time range",
+      "• *lastupdated:`{before,after}`:`YYYY-MM-DD`*, items last updated in the time range",
+      "• *client:`NAME`*, find items with the given client",
+      "• *escalation:`USER`*, items with the user NAME as escalation point (*~* for unset)",
+      "• *stakeholder:`USER`*, items where named user is a stakeholder",
+      "• *shortcut:`~`*, items without shortcuts (must also use *type*)",
+      "• *shortcut:`*`*, items with shortcuts (must also use *type*)",
+      "• *force:`1`*, search even if Synergy says it's too broad",
+      "• *debug:`1`*, turn on debugging and dump the query to be run",
       "",
-      "You can also say `show:FIELD` or `show:FIELD:{yes,no}` to toggle what fields are displayed.  They include:",
-      "• `age`: how long ago the item was created",
-      "• `assignees`: who has undone assignments on the item",
-      "• `due`: when the item is expected to be complete",
-      "• `emoji`: the custom emoji for projects that have one",
-      "• `estimates`: the estimates on undone assignments",
-      "• `lastcomment`: how long since the last comment on the item",
-      "• `phase`: the project phase on projects",
-      "• `project`: show an item's containing project",
-      "• `shortcuts`: item shortcuts, if defined",
-      "• `staleness`: how long since the last update to the item",
-      "• `urgency`: note when items are urgent",
+      "You can also say *show:`FIELD`* or *show:`FIELD`:`{yes,no}`* to toggle what fields are displayed.",
+      "The available fields include:",
+      "",
+      "• *age*: how long ago the item was created",
+      "• *assignees*: who has undone assignments on the item",
+      "• *due*: when the item is expected to be complete",
+      "• *emoji*: the custom emoji for projects that have one",
+      "• *estimates*: the estimates on undone assignments",
+      "• *lastcomment*: how long since the last comment on the item",
+      "• *phase*: the project phase on projects",
+      "• *project*: show an item's containing project",
+      "• *shortcuts*: item shortcuts, if defined",
+      "• *staleness*: how long since the last update to the item",
+      "• *urgency*: note when items are urgent",
     ),
   ],
 
   psearch    =>  [
     \&_handle_psearch,
-    "just like search, but with an implicit `type:project`",
+    "just like search, but with an implicit *type:project*",
   ],
 
   tsearch    =>  [
     \&_handle_tsearch,
-    "just like search, but with an implicit `type:task`",
+    "just like search, but with an implicit *type:task*",
   ],
 
   inbox     =>  [ \&_handle_inbox,
@@ -412,23 +414,23 @@ EOH
   task      =>  [
     \&_handle_task,
     <<'EOH' =~ s/\b\n\b/ /rg
-task for WHO: NAME: create a new task in LiquidPlanner
+*task for `USER`: `NAME`*: create a new task in LiquidPlanner
 
 In the simplest form, this creates a new task with the given name, assigned to
 the given user.  (You can also give multiple users, separated by commas, for
-the `WHO`.)  More information can be provided on new lines, or split up by
+the `USER`.)  More information can be provided on new lines, or split up by
 triple dashes (`---`).  Every new line that start with a `/` is taken as a
 series of slash commands, documented below.  After those slash command lines,
 the rest of the lines are taken as the long description for the task.
 
 The slash commands understood are:
-* `/assign WHO`: assign one or more users to the task
-* `/done`: mark the task done immediately on creation
-* `/estimate X-Y`: give all assignments on the task an estimate of X-Y
-* `/log TIME`: log the given amount of time spent (by you) on the task
-* `/project`: create the task in the named project (see `projects`)
-* `/start`: start your timer running on this task
-* `/urgent`: mark this task as urgent
+* */assign `USER`*: assign one or more users to the task
+* */done*: mark the task done immediately on creation
+* */estimate `X`-`Y`*: give all assignments on the task an estimate of X-Y
+* */log `TIME`*: log the given amount of time spent (by you) on the task
+* */project*: create the task in the named project (see *projects*)
+* */start*: start your timer running on this task
+* */urgent*: mark this task as urgent
 EOH
   ],
 
@@ -1682,7 +1684,7 @@ sub _handle_task ($self, $event, $text) {
   my ($target, $spec_text) = $what =~ /\s*for\s+@?(.+?)\s*:\s+((?s:.+))\z/;
 
   unless ($target and $spec_text) {
-    return $event->error_reply("Does not compute.  Usage:  task for TARGET: TASK");
+    return $event->error_reply("Does not compute.  Usage:  *task for `WHO`: `NAME`*");
   }
 
   my @target_names = split /(?:\s*,\s*|\s+and\s+)/, $target;
