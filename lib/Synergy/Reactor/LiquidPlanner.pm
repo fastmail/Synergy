@@ -519,8 +519,9 @@ sub dispatch_event ($self, $event) {
 
   # existing hacks for massaging text
   my $text = $event->text;
-  $text = "show's over" if $text =~ /\A\s*show’s\s+over\z/i;    # curly quote
-  $text = "good day_au" if $text =~ /\A\s*g'day(?:,?\s+mate)?[1!.?]*\z/i;
+
+  $text =~ s/\Ashow’s\b/show's/i; # curly quote
+  $text = "good day_au" if $text =~ /\A\s*g['’]day(?:,?\s+mate)?[1!.?]*\z/i;
   $text = "good day_de" if $text =~ /\Agruß gott[1!.]?\z/i;
   $text =~ s/\Ago{3,}d(?=\s)/good/;
   $text =~  s/^done, /done /;   # ugh
@@ -538,7 +539,10 @@ sub dispatch_event ($self, $event) {
   }
 
   $event->mark_handled;
-  return $KNOWN{$what}[0]->($self, $event, $rest)
+  my $handler = $KNOWN{$what}[0];
+  $Logger->log("IMPOSSIBLE: no handler for $what?") unless $handler;
+
+  return $self->$handler($event, $rest)
 }
 
 sub provide_lp_link ($self, $event) {
