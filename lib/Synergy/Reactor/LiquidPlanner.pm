@@ -272,14 +272,29 @@ my %KNOWN = (
 
   # TIMER COMMANDS
   timer     =>  [ \&_handle_timer,
-                  "timer: show your current LiquidPlanner timer (if any)",
-                  "timer abort: throw your LiquidPlanner timer away",
-                  "timer commit [COMMENT]: commit your LiquidPlanner timer, with optional comment",
-                  "timer done: commit your timer and mark your work done",
-                  "timer reset: set your timer back to zero, but leave it running",
-                  "timer resume: restart the last timer you had running again",
-                  "timer start TASK: start your timer on the given task",
-                  "timer stop: stop your timer, but keep the time on it",
+    <<'EOH' =~ s/\b\n([^\s•])/ $1/rg
+The `timer` command lets you manage your LiquidPlanner timer.  With no further
+arguments, it just tells you whether you've got a timer and, if so, the timer's
+task and running time.
+
+These further commands exist for controlling your timer:
+
+• `timer abort`: throw your timer away
+• `timer commit [COMMENT]`: commit your timer, with optional comment
+• `timer done`: commit your timer and mark your work done
+• `timer reset`: set your timer back to zero, but leave it running
+• `timer resume`: restart the last timer you had running again
+• `timer start TASK`: start your timer on the given task
+• `timer stop`: stop your timer, but keep the time on it
+
+`timer commit` is notable because you can end your comment with a few magic
+words to take extra actions, like:
+
+• `DONE`: mark your work on this task done
+• `STOP`: stop the timer when committing; by default, it will keep running
+• `CHILL`: stop the timer and don't nag until you're active again
+• `TIME Xh`: override the time on the timer, and commit X h(ours) or m(inutes) instead
+EOH
                 ],
   abort     =>  [ \&_handle_timer_abort  ],
   commit    =>  [ \&_handle_timer_commit ],
