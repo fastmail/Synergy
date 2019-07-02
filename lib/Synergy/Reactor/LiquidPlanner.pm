@@ -3040,8 +3040,27 @@ sub _handle_triple_zed ($self, $event, $text) {
   $self->_handle_chill($event, "");
 }
 
+my %TIMER_COMMAND = map {; $_ => $_ } qw(
+  abort commit done reset resume start stop
+);
+
+$TIMER_COMMAND{restart} = 'resume';
+
 sub _handle_timer ($self, $event, $text) {
   my $user = $event->from_user;
+
+  if (length $text) {
+    $text =~ s/^\s*//;
+    $text =~ s/\s*$//;
+    my ($next, $rest) = split /\s+/, $text, 2;
+
+    return $event->error_reply("Sorry, I don't understand your timer command.")
+      unless my $name = $TIMER_COMMAND{$next};
+
+    my $method = "_handle_timer_$name";
+
+    return $self->$method($event, $rest);
+  }
 
   return $event->error_reply($ERR_NO_LP)
     unless $user && $self->auth_header_for($user);
@@ -3406,7 +3425,7 @@ sub _handle_timer_start ($self, $event, $text) {
     return $event->error_reply("You can only start timers on tasks, but that item is a \l$task->{type}.")
       unless $task->{type} eq 'Task';
 
-    return $self->_handle_start_existing($event, $task);
+    return $self->_handle_timer_start_existing($event, $task);
   }
 
   if ($text =~ /\A[0-9]+\z/) {
@@ -3423,7 +3442,7 @@ sub _handle_timer_start ($self, $event, $text) {
     return $event->error_reply("You can only start timers on tasks, but that item is a \l$item->{type}.")
       unless $item->{type} eq 'Task';
 
-    return $self->_handle_start_existing($event, $item);
+    return $self->_handle_timer_start_existing($event, $item);
   }
 
   if ($text eq 'next') {
