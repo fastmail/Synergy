@@ -77,6 +77,14 @@ has http_post_callback => (
   handles  => { 'http_post_raw' => 'execute_method' },
 );
 
+has http_put_callback => (
+  is  => 'ro',
+  isa => 'CodeRef',
+  traits => [ 'Code' ],
+  required => 1,
+  handles  => { 'http_put_raw' => 'execute_method' },
+);
+
 sub http_get ($self, $path, @arg) {
   my $uri = $self->_lp_base_uri . $path;
 
@@ -125,6 +133,30 @@ sub http_post ($self, $path, @arg) {
   });
 }
 
+sub http_put ($self, $path, @arg) {
+  my $uri = $self->_lp_base_uri . $path;
+
+  my $res_f = $self->http_put_raw(
+    $uri,
+    @arg,
+    async => 1,
+    Authorization => $self->auth_token,
+  );
+
+  $res_f->then(sub ($res) {
+    unless ($res->is_success) {
+      $self->log([
+        "error with PUT $uri: %s",
+        $res->as_string,
+      ]);
+
+      return Future->fail($res);
+    }
+
+    return Future->done($JSON->decode($res->decoded_content));
+  });
+}
+
 sub wait_named ($self, $href) {
   Future->wait_all(values %$href)->then(sub {
     Future->done($href);
@@ -138,6 +170,14 @@ sub get_clients ($self) {
 sub get_item ($self, $item_id) {
   $self->http_get("/treeitems/?include=comments,links,tags&filter[]=id=$item_id")
        ->then(sub ($data) { Future->done($data->[0]) });
+}
+
+sub update_item ($self, $item_id, $payload) {
+  return $self->http_put(
+    "/treeitems/$item_id",
+    Content_Type => 'application/json',
+    Content => $JSON->encode($payload),
+  );
 }
 
 has single_activity_id => (

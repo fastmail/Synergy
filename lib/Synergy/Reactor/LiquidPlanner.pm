@@ -1164,6 +1164,9 @@ sub _lp_client_for_user ($self, $class, $user) {
     http_post_callback => sub ($, $uri, @arg) {
       $self->hub->http_post($uri, @arg);
     },
+    http_put_callback => sub ($, $uri, @arg) {
+      $self->hub->http_put($uri, @arg);
+    },
   });
 }
 

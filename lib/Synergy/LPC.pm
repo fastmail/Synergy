@@ -95,6 +95,14 @@ has http_post_callback => (
   handles  => { 'http_post_raw' => 'execute_method' },
 );
 
+has http_put_callback => (
+  is  => 'ro',
+  isa => 'CodeRef',
+  traits => [ 'Code' ],
+  required => 1,
+  handles  => { 'http_put_raw' => 'execute_method' },
+);
+
 sub http_get ($self, $path, @arg) {
   my $uri = $self->_lp_base_uri . $path;
 
