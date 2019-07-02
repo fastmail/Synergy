@@ -66,7 +66,8 @@ has was_handled => (
   default => 0,
   traits  => ['Bool'],
   handles => {
-    mark_handled => 'set',
+    mark_handled   => 'set',
+    mark_unhandled => 'unset',
   },
 );
 
