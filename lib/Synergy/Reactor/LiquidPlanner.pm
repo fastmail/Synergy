@@ -1612,7 +1612,8 @@ sub _handle_update ($self, $event, $text) {
 
   unless ($method) {
     return $event->error_reply(
-      "Sorry, I don't know how to update \L$item->{type}\Es."
+      sprintf "Sorry, I don't know how to update %ss.",
+        PL_N(lc $item->{type}, 2),
     );
   }
 
