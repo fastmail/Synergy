@@ -460,7 +460,7 @@ sub listener_specs {
         return unless $event->type eq 'message';
         return unless $event->was_targeted;
 
-        my ($what) = $event->text =~ /^([^\s]+)\s?/;
+        my ($what) = $event->text =~ /^(\S+)(?: \z | \s)/x;
         $what &&= lc $what;
 
         return 1 if $KNOWN{$what};
