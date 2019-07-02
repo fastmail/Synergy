@@ -241,8 +241,6 @@ sub track_time ($self, $arg) {
 
   my $task = $res->payload;
 
-  $self->log([ "response from track_time: %s", $res->payload ]);
-
   my ($assignment) = grep {; $_->{person_id} == $arg->{member_id} }
                      $task->{assignments}->@*;
 

@@ -234,8 +234,6 @@ sub track_time ($self, $arg) {
   );
 
   $res_f->then_with_f(sub ($f, $task) {
-    $self->log([ "response from track_time: %s", $task ]);
-
     my ($assignment) = grep {; $_->{person_id} == $arg->{member_id} }
                        $task->{assignments}->@*;
 
