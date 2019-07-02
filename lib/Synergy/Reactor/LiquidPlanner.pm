@@ -263,50 +263,23 @@ has [ qw( inbox_package_id urgent_package_id project_portfolio_id recurring_pack
 );
 
 my %KNOWN = (
+  # SHORTCUTS
   '++'      =>  [ \&_handle_plus_plus,
                   "++ TASK: short for `task for me: TASK`, so see `help task`"],
   '<<'      =>  [ \&_handle_angle_angle ], # To Neil, with love.
   '>>'      =>  [ \&_handle_angle_angle,
                   ">> PERSON REST: short for `task for PERSON: REST`, so see `help task`"],
+
+  # TIMER COMMANDS
   abort     =>  [ \&_handle_abort,
                   "abort timer: throw your LiquidPlanner timer away" ],
-  chill     =>  [ \&_handle_chill,
-                  "chill: do not nag about a timer until you say something new",
-                  "chill until WHEN: do not nag until the designated time",
-                  ],
   commit    =>  [ \&_handle_commit,
                   "commit [COMMENT]: commit your LiquidPlanner timer, with optional comment",
                 ],
-
-  comment   =>  [ \&_handle_comment,
-                  "comment on THING: comment on a LiquidPlanner task, project, or whatever",
-                ],
-
-  contents  =>  [ \&_handle_contents,
-                  "contents CONTAINER: show what's in a package or project",
-                ],
-
   done      =>  [ \&_handle_done,
                   "done: commit your LiquidPlanner task and mark your work done",
                 ],
-  expand    =>  [ \&_handle_expand ],
-  good      =>  [ \&_handle_good   ],
-  gruß      =>  [ \&_handle_good   ],
-  inbox     =>  [ \&_handle_inbox,
-                  "inbox [PAGE-NUMBER]: list the tasks in your inbox",
-                ],
-  iteration =>  [ \&_handle_iteration,
-                  "iteration: show details of the current iteration",
-                  "iteration ±N: show the iteration N before or after this one",
-                  "iteration N: show the iteration numbered N",
-                ],
-  last      =>  [ \&_handle_last   ],
-  projects  =>  [ \&_handle_projects,
-                  "projects: list all known project shortcuts",
-                ],
-  recurring =>  [ \&_handle_recurring,
-                  "recurring [PAGE-NUMBER]: list your tasks in Recurring Tasks",
-                ],
+
   reset     =>  [ \&_handle_reset,
                   "reset timer: set your timer back to zero, but leave it running",
                 ],
@@ -314,7 +287,41 @@ my %KNOWN = (
   resume    =>  [ \&_handle_resume,
                   "resume timer: start the last time you had running up again",
                 ],
+  start     =>  [ \&_handle_start,
+                  "start TASK-ID: start your timer on the given task",
+                ],
+  stop      =>  [ \&_handle_stop,
+                  "stop timer: stop your timer, but keep the time on it",
+                ],
+  timer     =>  [ \&_handle_timer,
+                  "timer: show your current LiquidPlanner timer (if any)",
+                ],
 
+
+  # AVAILABILITY COMMANDS
+  chill     =>  [ \&_handle_chill,
+                  "chill: do not nag about a timer until you say something new",
+                  "chill until WHEN: do not nag until the designated time",
+                  ],
+  expand    =>  [ \&_handle_expand ],
+  shows     =>  [ \&_handle_shows,       ],
+  "show's"  =>  [ \&_handle_shows,       ],
+  showtime  =>  [ \&_handle_showtime,    ],
+  zzz       =>  [ \&_handle_triple_zed,  ],
+
+  # SILLY NONSENSE
+  good      =>  [ \&_handle_good   ],
+  gruß      =>  [ \&_handle_good   ],
+
+  # MISCELLANEOUS STUFF
+  iteration =>  [ \&_handle_iteration,
+                  "iteration: show details of the current iteration",
+                  "iteration ±N: show the iteration N before or after this one",
+                  "iteration N: show the iteration numbered N",
+                ],
+  last      =>  [ \&_handle_last   ],
+
+  # SEARCH AND REPORT COMMANDS
   search    =>  [
     \&_handle_search,
     join("\n",
@@ -366,17 +373,33 @@ my %KNOWN = (
     "just like search, but with an implicit `type:task`",
   ],
 
-  shows     =>  [ \&_handle_shows,       ],
-  "show's"  =>  [ \&_handle_shows,       ],
-  showtime  =>  [ \&_handle_showtime,    ],
+  inbox     =>  [ \&_handle_inbox,
+                  "inbox [PAGE-NUMBER]: list the tasks in your inbox",
+                ],
+
+  projects  =>  [ \&_handle_projects,
+                  "projects: list all known project shortcuts",
+                ],
+  recurring =>  [ \&_handle_recurring,
+                  "recurring [PAGE-NUMBER]: list your tasks in Recurring Tasks",
+                ],
+  triage    =>  [ \&_handle_triage,
+                  "triage [PAGE-NUMBER]: list the tasks awaiting triage",
+                ],
+  urgent    =>  [ \&_handle_urgent,
+                  "urgent [PAGE-NUMBER]: list your urgent tasks",
+                ],
+  tasks     =>  [ \&_handle_tasks,
+                  "tasks [PAGE-NUMBER]: list your scheduled work",
+                ],
+
+  # TODO LISTS -- Can we remove this? -- rjbs, 2019-07-02
+  todo      =>  [ \&_handle_todo,        ],
+  todos     =>  [ \&_handle_todos,       ],
+
+  # TASK CREATION AND MANAGEMENT
   spent     =>  [ \&_handle_spent,
                   "spent TIME on THING: log time against a task (either TASK-SPEC or TASK-ID)",
-                ],
-  start     =>  [ \&_handle_start,
-                  "start TASK-ID: start your timer on the given task",
-                ],
-  stop      =>  [ \&_handle_stop,
-                  "stop timer: stop your timer, but keep the time on it",
                 ],
 
   task      =>  [
@@ -402,22 +425,15 @@ The slash commands understood are:
 EOH
   ],
 
-  tasks     =>  [ \&_handle_tasks,
-                  "tasks [PAGE-NUMBER]: list your scheduled work",
+  comment   =>  [ \&_handle_comment,
+                  "comment on THING: comment on a LiquidPlanner task, project, or whatever",
                 ],
-  timer     =>  [ \&_handle_timer,
-                  "timer: show your current LiquidPlanner timer (if any)",
+
+  contents  =>  [ \&_handle_contents,
+                  "contents CONTAINER: show what's in a package or project",
                 ],
-  todo      =>  [ \&_handle_todo,        ],
-  todos     =>  [ \&_handle_todos,       ],
-  triage    =>  [ \&_handle_triage,
-                  "triage [PAGE-NUMBER]: list the tasks awaiting triage",
-                ],
+
   update    =>  [ \&_handle_update,      ],
-  urgent    =>  [ \&_handle_urgent,
-                  "urgent [PAGE-NUMBER]: list your urgent tasks",
-                ],
-  zzz       =>  [ \&_handle_triple_zed,  ],
 );
 
 sub listener_specs {
