@@ -3008,6 +3008,8 @@ sub _handle_shows ($self, $event, $text) {
   return $self->_handle_chill($event, 'until tomorrow')
     if $text =~ /\s*over\s*[+!.]*\s*/i;
 
+  $event->mark_unhandled;
+
   return;
 }
 
