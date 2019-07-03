@@ -9,16 +9,35 @@ with 'Synergy::Role::Reactor';
 use experimental qw(signatures);
 use namespace::clean;
 
+use utf8;
+
 use DBI;
 use JSON ();
+use Synergy::Logger '$Logger';
+
+sub _slink {
+  sprintf '<%s%u|RFC %u>', 'https://tools.ietf.org/html/rfc', (0 + $_[0]) x 2
+}
 
 sub listener_specs {
-  return {
-    name      => 'rfc-mention',
-    method    => 'handle_rfc',
-    predicate => sub ($self, $e) {
-      return unless $e->text =~ /(^|\s)RFC\s*[0-9]+/in; },
-  };
+  return (
+    {
+      name      => 'rfc-search',
+      method    => 'handle_rfc_search',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text =~ /\Arfcs\s+author:[“”"][^"]+[“”"]\z/;
+        return 1;
+      },
+    },
+    {
+      name      => 'rfc-mention',
+      method    => 'handle_rfc',
+      predicate => sub ($self, $e) {
+        return unless $e->text =~ /(^|\s)RFC\s*[0-9]+/in; },
+    },
+  );
 }
 
 has rfc_index_file => (
@@ -46,6 +65,42 @@ sub rfc_entry_for ($self, $number) {
 
   return unless $json;
   return JSON->new->decode($json);
+}
+
+sub handle_rfc_search ($self, $event) {
+  my ($author) = $event->text =~ /\Arfcs\s+author:[“”"]([^"]+)[“”"]\z/;
+
+  my $rows = $self->_dbh->selectall_arrayref(
+    "SELECT * FROM rfcs WHERE instr(metadata, ?) > 0 ORDER BY rfc_number",
+    { Slice => {} },
+    $author,
+  );
+
+  my @results;
+  for my $row (@$rows) {
+    my $data = JSON->new->decode($row->{metadata});
+    next unless grep {; $_ eq $author } $data->{authors}->@*;
+    push @results, $data;
+  }
+
+  return $event->reply("No RFCs found!") unless @results;
+
+  my $text = join qq{\n}, map {;
+    sprintf 'RFC %s - %s, by %s',
+      $_->{number},
+      $_->{title},
+      (join q{, }, $_->{authors}->@*);
+  } @results;
+
+  my $slack = join qq{\n}, map {;
+    sprintf '%s - %s, by %s',
+      _slink($_->{number}),
+      $_->{title},
+      (join q{, }, $_->{authors}->@*);
+  } @results;
+
+  $event->mark_handled;
+  $event->reply($text, { slack => $slack });
 }
 
 sub handle_rfc ($self, $event) {
@@ -76,10 +131,6 @@ sub handle_rfc ($self, $event) {
 
   my $title = $entry->{title};
 
-  my $slink = sub {
-    sprintf '<%s%u|RFC %u>', 'https://tools.ietf.org/html/rfc', (0 + $_[0]) x 2
-  };
-
   my $slack = sprintf('<%s|RFC %u>', $link, $num) . ($title ? ": $title" : q{});
 
   if ($solo_cmd) {
@@ -94,13 +145,13 @@ sub handle_rfc ($self, $event) {
 
     if ($entry->{obsoletes}->@*) {
       $slack .= "*Obsoletes:* "
-             .  (join q{, }, map {; $slink->($_) } $entry->{obsoletes}->@*)
+             .  (join q{, }, map {; slink($_) } $entry->{obsoletes}->@*)
              .  "\n";
     }
 
     if ($entry->{obsoleted_by}->@*) {
       $slack .= "*Obsoleted by:* "
-             .  (join q{, }, map {; $slink->($_) } $entry->{obsoleted_by}->@*)
+             .  (join q{, }, map {; slink($_) } $entry->{obsoleted_by}->@*)
              .  "\n";
     }
 
