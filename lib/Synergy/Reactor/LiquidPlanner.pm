@@ -1329,7 +1329,7 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
   }
 
   if ($plan->{package}{ $self->urgent_package_id }) {
-    if (my @virtuals = grep {; $_->is_virtual } @owners) {
+    if (my @virtuals = grep {; $_->is_virtual && $_->username ne 'triage' } @owners) {
       my $names = join q{, }, sort map {; $_->username } @virtuals;
       $error->{usernames}
         = "Sorry, you can't make urgent tasks for non-humans."
