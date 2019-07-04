@@ -1328,7 +1328,7 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
     return;
   }
 
-  if ($plan->{package}{urgent}) {
+  if ($plan->{package}{ $self->urgent_package_id }) {
     if (my @virtuals = grep {; $_->is_virtual } @owners) {
       my $names = join q{, }, sort map {; $_->username } @virtuals;
       $error->{usernames}
