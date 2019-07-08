@@ -272,7 +272,7 @@ my %KNOWN = (
 
   # TIMER COMMANDS
   timer     =>  [ \&_handle_timer,
-    <<'EOH' =~ s/\b\n([^\s•])/ $1/rg
+    <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg
 The *timer* command lets you manage your LiquidPlanner timer.  With no further
 arguments, it just tells you whether you've got a timer and, if so, the timer's
 task and running time.
@@ -413,7 +413,7 @@ EOH
 
   task      =>  [
     \&_handle_task,
-    <<'EOH' =~ s/\b\n\b/ /rg
+    <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg
 *task for `USER`: `NAME`*: create a new task in LiquidPlanner
 
 In the simplest form, this creates a new task with the given name, assigned to
@@ -424,13 +424,13 @@ series of slash commands, documented below.  After those slash command lines,
 the rest of the lines are taken as the long description for the task.
 
 The slash commands understood are:
-* */assign `USER`*: assign one or more users to the task
-* */done*: mark the task done immediately on creation
-* */estimate `X`-`Y`*: give all assignments on the task an estimate of X-Y
-* */log `TIME`*: log the given amount of time spent (by you) on the task
-* */project*: create the task in the named project (see *projects*)
-* */start*: start your timer running on this task
-* */urgent*: mark this task as urgent
+• */assign `USER`*: assign one or more users to the task
+• */done*: mark the task done immediately on creation
+• */estimate `X`-`Y`*: give all assignments on the task an estimate of X-Y
+• */log `TIME`*: log the given amount of time spent (by you) on the task
+• */project*: create the task in the named project (see *projects*)
+• */start*: start your timer running on this task
+• */urgent*: mark this task as urgent
 EOH
   ],
 
