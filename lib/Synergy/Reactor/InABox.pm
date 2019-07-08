@@ -77,6 +77,7 @@ has box_domain => (
 );
 
 my %command_handler = (
+  info     => \&_handle_status,
   status   => \&_handle_status,
   create   => \&_handle_create,
   destroy  => \&_handle_destroy,
