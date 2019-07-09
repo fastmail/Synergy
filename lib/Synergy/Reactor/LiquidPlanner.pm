@@ -3262,7 +3262,7 @@ sub _handle_timer_commit ($self, $event, $comment) {
     }
   }
 
-  $meta{DONE} = 1 if $comment =~ /\Adone\z/i;
+  $meta{DONE} = 1 if $comment =~ s/\Adone\z//i;
   $meta{STOP} = 1 if $meta{DONE} or $meta{CHILL} or $meta{SOTP};
 
   my $lp_timer = $self->lp_timer_for_user($user);
