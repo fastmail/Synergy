@@ -672,13 +672,8 @@ sub provide_lp_link ($self, $event) {
                 split /\s*,\s*/, $item->{custom_field_values}{Stakeholders};
             }
 
-            for my $pair (
-              [ 'Created',      'created_at' ],
-              [ 'Last updated', 'updated_at' ],
-              [ 'Completed',    'done_on' ],
-            ) {
-              next unless my $date_str = $item->{ $pair->[1] };
-
+            my sub fmt_date_field ($field) {
+              return undef unless my $date_str = $item->{ $field };
               my $dt = DateTime::Format::ISO8601->parse_datetime($date_str);
 
               my $str = $self->hub->format_friendly_date(
@@ -688,7 +683,22 @@ sub provide_lp_link ($self, $event) {
                 }
               );
 
-              $slack .= "*$pair->[0]*: $str\n";
+              return $str;
+            }
+
+            if (my $str = fmt_date_field('created_at')) {
+              my $creator_id = $item->{created_by};
+              $slack .= sprintf "*Created*: by %s at %s\n",
+                $by_lp{ $creator_id } // 'somebody',
+                $str;
+            }
+
+            if (my $str = fmt_date_field('updated_at')) {
+              $slack .= "*Last updated*: $str\n";
+            }
+
+            if (my $str = fmt_date_field('done_on')) {
+              $slack .= "*Completed*: $str\n";
             }
 
             if ($flag{description}) {
