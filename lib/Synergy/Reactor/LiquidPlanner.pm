@@ -634,15 +634,20 @@ sub provide_lp_link ($self, $event) {
             # The user asked for this directly, so let's give them more detail.
             $slack .= "\n";
 
-            if ($item->{parent_crumbs}) {
-              $slack .= "*Parent*: "
+            if ($item->{package_crumbs}->@*) {
+              # Item is packaged, so parent means project and package means
+              # package.
+              $slack .= "*Project*: "
                      .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
-                     .  "\n";
-            }
-
-            if ($item->{package_crumbs}) {
-              $slack .= "*Package*: "
+                     .  "\n"
+                     .  "*Package*: "
                      .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
+                     .  "\n";
+            } else {
+              # Item is unpackaged, so parent means package and there is no
+              # project.
+              $slack .= "*Package*: "
+                     .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
                      .  "\n";
             }
 
