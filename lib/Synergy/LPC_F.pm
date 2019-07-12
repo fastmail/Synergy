@@ -40,27 +40,6 @@ sub _lp_base_uri ($self) {
   return "https://app.liquidplanner.com/api/workspaces/" . $self->workspace_id;
 }
 
-my $CONFIG;  # XXX use real config
-
-$CONFIG = {
-  liquidplanner => {
-    package => {
-      inbox     => 6268529,
-      urgent    => 11388082,
-      recurring => 27659967,
-    },
-    project => {
-      comms    => 39452359,
-      cyrus    => 38805977,
-      fastmail => 36611517,
-      listbox  => 274080,
-      plumbing => 39452373,
-      pobox    => 274077,
-      topicbox => 27495364,
-    },
-  },
-};
-
 has http_get_callback => (
   is  => 'ro',
   isa => 'CodeRef',
