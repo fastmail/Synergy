@@ -7,7 +7,6 @@ use Moose;
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
 use JSON 2 ();
-use Synergy::Logger '$Logger';
 use DateTime;
 use utf8;
 use URI::Find;
