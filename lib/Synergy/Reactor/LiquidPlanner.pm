@@ -634,7 +634,7 @@ sub provide_lp_link ($self, $event) {
             # The user asked for this directly, so let's give them more detail.
             $slack .= "\n";
 
-            if ($item->{package_crumbs}->@*) {
+            if ($item->{package_crumbs} && $item->{package_crumbs}->@*) {
               # Item is packaged, so parent means project and package means
               # package.
               $slack .= "*Project*: "
@@ -739,8 +739,9 @@ sub provide_lp_link ($self, $event) {
         } else {
           return $event->reply("LP$item_id: is a $item->{type}");
         }
-      })->else(sub ($error) { $Logger->log("error: $error"); return
-      Future->done })->retain;
+      })->else(
+        sub ($error) { $Logger->log("error: $error"); return Future->done;
+      })->retain;
   }
 }
 
