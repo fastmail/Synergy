@@ -11,6 +11,7 @@ with 'Synergy::Role::Reactor',
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
 use Lingua::EN::Inflect qw(PL_N);
+use LiquidPlanner::Client;
 use List::Util qw(first sum0 uniq);
 use Net::Async::HTTP;
 use POSIX qw(ceil);
@@ -18,8 +19,7 @@ use JSON 2 ();
 use Time::Duration;
 use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
-use Synergy::LPC; # LiquidPlanner Client, of course
-use Synergy::LPC_F; # LiquidPlanner Client, with futures, of course
+use Synergy::LPC; # LiquidPlanner Client, the old synchronous one
 use Synergy::Timer;
 use Synergy::Util qw(
   parse_time_hunk pick_one bool_from_text
@@ -1188,7 +1188,7 @@ sub lp_client_for_user ($self, $user) {
 }
 
 sub f_lp_client_for_user ($self, $user) {
-  Synergy::LPC_F->new({
+  LiquidPlanner::Client->new({
     auth_token    => $self->auth_header_for($user),
     workspace_id  => $self->workspace_id,
 
