@@ -404,7 +404,7 @@ sub synergize_file {
   );
 }
 
-has http => (
+has http_client => (
   is => 'ro',
   isa => 'Net::Async::HTTP',
   lazy => 1,
@@ -462,7 +462,7 @@ sub http_request ($self, $method, $url, %args) {
   # The returned future will run the loop for us until we return. This makes
   # it asynchronous as far as the rest of the code is concerned, but
   # sychronous as far as the caller is concerned.
-  my $future = $self->http->do_request(
+  my $future = $self->http_client->do_request(
     @args
   )->on_fail( sub {
     my $failure = shift;

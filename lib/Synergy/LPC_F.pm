@@ -39,76 +39,25 @@ sub _lp_base_uri ($self) {
   return "https://app.liquidplanner.com/api/workspaces/" . $self->workspace_id;
 }
 
-has http_request_callback => (
-  is  => 'ro',
-  isa => 'CodeRef',
-  traits => [ 'Code' ],
+has http_client => (
+  is => 'ro',
   required => 1,
-  handles  => { 'http_request' => 'execute_method' },
 );
 
-sub http_get ($self, $path, @arg) {
+sub http_request ($self, $method, $path, $json = undef) {
   my $uri = $self->_lp_base_uri . $path;
 
-  my $res_f = $self->http_request(
-    GET => $uri,
-    @arg,
-    async => 1,
-    Authorization => $self->auth_token,
+  my $res_f = $self->http_client->do_request(
+    method => $method,
+    uri    => $uri,
+    headers => [ Authorization => $self->auth_token ],
+    ($json ? (content => $json, content_type => 'application/json') : ()),
   );
 
   $res_f->then(sub ($res) {
     unless ($res->is_success) {
       $self->log([
         "error with GET $uri: %s",
-        $res->as_string,
-      ]);
-
-      return Future->fail($res);
-    }
-
-    return Future->done($JSON->decode($res->decoded_content));
-  });
-}
-
-sub http_post ($self, $path, @arg) {
-  my $uri = $self->_lp_base_uri . $path;
-
-  my $res_f = $self->http_request(
-    POST => $uri,
-    @arg,
-    async => 1,
-    Authorization => $self->auth_token,
-  );
-
-  $res_f->then(sub ($res) {
-    unless ($res->is_success) {
-      $self->log([
-        "error with POST $uri: %s",
-        $res->as_string,
-      ]);
-
-      return Future->fail($res);
-    }
-
-    return Future->done($JSON->decode($res->decoded_content));
-  });
-}
-
-sub http_put ($self, $path, @arg) {
-  my $uri = $self->_lp_base_uri . $path;
-
-  my $res_f = $self->http_request(
-    PUT => $uri,
-    @arg,
-    async => 1,
-    Authorization => $self->auth_token,
-  );
-
-  $res_f->then(sub ($res) {
-    unless ($res->is_success) {
-      $self->log([
-        "error with PUT $uri: %s",
         $res->as_string,
       ]);
 
@@ -126,19 +75,19 @@ sub wait_named ($self, $href) {
 }
 
 sub get_clients ($self) {
-  $self->http_get("/clients");
+  $self->http_request(GET => "/clients");
 }
 
 sub get_item ($self, $item_id) {
-  $self->http_get("/treeitems/?include=comments,links,tags&filter[]=id=$item_id")
+  $self->http_request(GET => "/treeitems/?include=comments,links,tags&filter[]=id=$item_id")
        ->then(sub ($data) { Future->done($data->[0]) });
 }
 
 sub update_item ($self, $item_id, $payload) {
   return $self->http_put(
     "/tasks/$item_id",
-    Content_Type => 'application/json',
-    Content => $JSON->encode($payload),
+    content_type => 'application/json',
+    content => $JSON->encode($payload),
   );
 }
 
@@ -155,7 +104,7 @@ sub get_activity_id ($self, $task_or_id, $member_id = undef) {
 }
 
 sub my_timers ($self) {
-  return $self->http_get("/my_timers");
+  return $self->http_request(GET => "/my_timers");
 }
 
 sub my_running_timer ($self) {
@@ -180,17 +129,16 @@ sub query_items ($self, $arg) {
     $query->query_param_append('filter[]' => $string);
   }
 
-  return $self->http_get("$query");
+  return $self->http_request(GET => "$query");
 }
 
 sub upcoming_task_groups_for_member_id ($self, $member_id, $limit = 200) {
-  return $self->http_get(
-    "/upcoming_tasks?limit=$limit&member_id=$member_id",
+  return $self->http_request(GET => "/upcoming_tasks?limit=$limit&member_id=$member_id",
   );
 }
 
 sub start_timer_for_task_id ($self, $task_id) {
-  my $start_res = $self->http_post("/tasks/$task_id/timer/start");
+  my $start_res = $self->http_request(POST => "/tasks/$task_id/timer/start");
   $start_res->then(sub ($data) {
     return Future->fail("new timer not running?!") unless $data->{running};
     return Future->done($data);
@@ -198,11 +146,11 @@ sub start_timer_for_task_id ($self, $task_id) {
 }
 
 sub stop_timer_for_task_id ($self, $task_id) {
-  return $self->http_post("/tasks/$task_id/timer/stop");
+  return $self->http_request(POST => "/tasks/$task_id/timer/stop");
 }
 
 sub clear_timer_for_task_id ($self, $task_id) {
-  return $self->http_post("/tasks/$task_id/timer/clear");
+  return $self->http_request(POST => "/tasks/$task_id/timer/clear");
 }
 
 sub track_time ($self, $arg) {
@@ -222,10 +170,9 @@ sub track_time ($self, $arg) {
     $finder->find(\$comment);
   }
 
-  my $res_f = $self->http_post(
-    "/tasks/$arg->{task_id}/track_time",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({
+  my $res_f = $self->http_request(
+    POST => "/tasks/$arg->{task_id}/track_time",
+    $JSON->encode({
       activity_id => $arg->{activity_id},
       member_id => $arg->{member_id},
       work      => $arg->{work},
@@ -243,10 +190,9 @@ sub track_time ($self, $arg) {
 
     if ($arg->{done} xor $assignment->{is_done}) {
       $f = $f->then(sub {
-        return $self->http_post(
-          "/tasks/$arg->{task_id}/update_assignment",
-          Content_Type => 'application/json',
-          Content => $JSON->encode({
+        return $self->http_request(
+          POST => "/tasks/$arg->{task_id}/update_assignment",
+          $JSON->encode({
             assignment_id => $assignment->{id},
             is_done       => ($arg->{done} ? \1 : \0),
           }),
@@ -265,24 +211,22 @@ sub track_time ($self, $arg) {
 }
 
 sub create_task ($self, $task) {
-  return $self->http_post(
-    "/tasks",
-    Content_Type => 'application/json',
-    Content => $JSON->encode($task),
+  return $self->http_request(
+    POST => "/tasks",
+    $JSON->encode($task),
   );
 }
 
 # get current iteration data
 
 sub todo_items ($self) {
-  return $self->http_get("/todo_items");
+  return $self->http_request(GET => "/todo_items");
 }
 
 sub create_todo_item ($self, $todo) {
-  return $self->http_post(
-    "/todo_items",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({ todo_item => $todo }),
+  return $self->http_request(
+    POST => "/todo_items",
+    $JSON->encode({ todo_item => $todo }),
   );
 }
 

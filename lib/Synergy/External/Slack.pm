@@ -116,7 +116,7 @@ has pending_timeouts => (
 sub connect ($self) {
   $self->connected(0);
 
-  $self->hub->http
+  $self->hub->http_client
             ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
             ->on_done(sub ($res) { $self->_register_slack_rtm($res) })
             ->on_fail(sub ($err) { die "couldn't start RTM API: $err" })
@@ -270,7 +270,7 @@ sub send_file ($self, $channel, $filename, $content) {
     content  => $content,
   ];
 
-  my $http_future = Future->wrap($self->hub->http->POST(
+  my $http_future = Future->wrap($self->hub->http_client->POST(
     URI->new($self->_api_url('files.upload')),
     $post_args,
     content_type => 'application/x-www-form-urlencoded',
@@ -350,7 +350,7 @@ sub api_call ($self, $method, $arg = {}, %extra) {
   my $url = $self->_api_url($method);
   my $json = encode_json($arg);
 
-  return Future->wrap($self->hub->http->POST(
+  return Future->wrap($self->hub->http_client->POST(
     URI->new($url),
     $json,
     content_type => 'application/json; charset=utf-8',

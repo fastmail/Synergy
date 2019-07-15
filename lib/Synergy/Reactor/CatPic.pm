@@ -232,7 +232,7 @@ sub handle_cat_pic ($self, $event) {
   my (undef, $fmt) = split /\s+/, lc $event->text, 2;
   $fmt = q{jpg,gif,png} if $fmt eq 'pic';
 
-  my $http_future = $self->hub->http->GET(
+  my $http_future = $self->hub->http_client->GET(
     "http://thecatapi.com/api/images/get?format=src&type=$fmt",
     max_redirects => 0,
   );

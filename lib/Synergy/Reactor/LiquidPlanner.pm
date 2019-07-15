@@ -1189,13 +1189,11 @@ sub f_lp_client_for_user ($self, $user) {
   Synergy::LPC_F->new({
     auth_token    => $self->auth_header_for($user),
     workspace_id  => $self->workspace_id,
-    logger_callback   => sub { $Logger },
 
     ($self->activity_id ? (single_activity_id => $self->activity_id) : ()),
 
-    http_request_callback => sub ($, $uri, @arg) {
-      $self->hub->http_request($uri, @arg);
-    },
+    http_client     => $self->hub->http_client,
+    logger_callback => sub { $Logger },
   });
 }
 
