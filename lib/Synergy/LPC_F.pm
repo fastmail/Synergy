@@ -134,9 +134,28 @@ sub query_items ($self, $arg) {
     $query->query_param($flag => $arg->{flags}{$flag});
   }
 
+  my %type;
   for my $filter ($arg->{filters}->@*) {
     my $string = join q{ }, @$filter;
-    $query->query_param_append('filter[]' => $string);
+
+    # This is utter horsecrap.
+    # /treeitems?filter[]=is_done+is+false&filter[]=item_type+is+Task <- slower
+    #     /tasks?filter[]=is_done+is+false&filter[]=item_type+is+Task <- slower
+    #     /tasks?filter[]=is_done+is+false                            <- faster
+    if (@$filter == 3 && $filter->[0] eq 'item_type' && $filter->[1] eq 'is') {
+      $type{$filter->[2]} = 1;
+    } else {
+      $query->query_param_append('filter[]' => $string);
+    }
+  }
+
+  my ($type, $nok) = keys %type;
+  if ($type && ! $nok && ($type eq 'Project' or $type eq 'Task')) {
+    $query =~ s[\A/treeitems][/\l${type}s];
+  } elsif ($type) {
+    for my $key (keys %type) {
+      $query->query_param_append('filter[]' => "item_type is $key");
+    }
   }
 
   return $self->http_request(GET => "$query");
