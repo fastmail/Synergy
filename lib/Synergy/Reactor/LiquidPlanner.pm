@@ -2709,6 +2709,9 @@ for my $package (qw(inbox urgent recurring)) {
           $display->{zero_text} = "Inbox hero!"
             if $package eq 'inbox';
 
+          $display->{zero_text} = "There's nothing urgent, so take it easy."
+            if $package eq 'urgent';
+
           $display->{header} = sprintf '%s tasks for %s',
             ucfirst $package,
             $event->from_user->username;
