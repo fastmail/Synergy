@@ -77,12 +77,28 @@ sub wait_named ($self, $href) {
   });
 }
 
+my %DEFAULT_INCLUDE = (comments => 1, links => 1, tags => 1);
+
+my sub _includify ($query, $include) {
+  my %include = (
+    %DEFAULT_INCLUDE,
+    ($include ? %$include : ()),
+  );
+
+  my @include = sort grep {; $include{$_} } keys %include;
+  $query->query_param(include => join q{,}, @include) if @include;
+  return;
+}
+
 sub get_clients ($self) {
   $self->http_request(GET => "/clients");
 }
 
-sub get_item ($self, $item_id) {
-  $self->http_request(GET => "/treeitems/?include=comments,links,tags&filter[]=id=$item_id")
+sub get_item ($self, $item_id, $arg = {}) {
+  my $query = URI->new("/treeitems/?filter[]=id=$item_id");
+  _includify($query, $arg->{include});
+
+  $self->http_request(GET => $query)
        ->then(sub ($data) { Future->done($data->[0]) });
 }
 
@@ -123,13 +139,7 @@ my %DEFAULT_INCLUDE = (comments => 1, links => 1, tags => 1);
 sub query_items ($self, $arg) {
   my $query = URI->new("/treeitems" . ($arg->{in} ? "/$arg->{in}" : q{}));
 
-  my %include = (
-    %DEFAULT_INCLUDE,
-    ($arg->{include} ? $arg->{include}->%* : ()),
-  );
-
-  my @include = sort grep {; $include{$_} } keys %include;
-  $query->query_param(include => join q{,}, @include) if @include;
+  _includify($query, $arg->{include});
 
   for my $flag (keys $arg->{flags}->%*) {
     $query->query_param($flag => $arg->{flags}{$flag});
