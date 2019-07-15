@@ -57,7 +57,9 @@ sub http_request ($self, $method, $path, $json = undef) {
   $res_f->then(sub ($res) {
     unless ($res->is_success) {
       $self->log([
-        "error with GET $uri: %s",
+        "error with %s %s: %s",
+        $method,
+        $uri,
         $res->as_string,
       ]);
 
@@ -116,10 +118,18 @@ sub my_running_timer ($self) {
   });
 }
 
+my %DEFAULT_INCLUDE = (comments => 1, links => 1, tags => 1);
 sub query_items ($self, $arg) {
   my $query = URI->new("/treeitems" . ($arg->{in} ? "/$arg->{in}" : q{}));
 
-  $query->query_param(include => 'comments,links,tags');
+  my %include = (
+    %DEFAULT_INCLUDE,
+    ($arg->{include} ? $arg->{include}->%* : ()),
+  );
+
+  my @include = sort grep {; $include{$_} } keys %include;
+  $query->query_param(include => join q{,}, @include) if @include;
+
   for my $flag (keys $arg->{flags}->%*) {
     $query->query_param($flag => $arg->{flags}{$flag});
   }
