@@ -39,35 +39,19 @@ sub _lp_base_uri ($self) {
   return "https://app.liquidplanner.com/api/workspaces/" . $self->workspace_id;
 }
 
-has http_get_callback => (
+has http_request_callback => (
   is  => 'ro',
   isa => 'CodeRef',
   traits => [ 'Code' ],
   required => 1,
-  handles  => { 'http_get_raw' => 'execute_method' },
-);
-
-has http_post_callback => (
-  is  => 'ro',
-  isa => 'CodeRef',
-  traits => [ 'Code' ],
-  required => 1,
-  handles  => { 'http_post_raw' => 'execute_method' },
-);
-
-has http_put_callback => (
-  is  => 'ro',
-  isa => 'CodeRef',
-  traits => [ 'Code' ],
-  required => 1,
-  handles  => { 'http_put_raw' => 'execute_method' },
+  handles  => { 'http_request' => 'execute_method' },
 );
 
 sub http_get ($self, $path, @arg) {
   my $uri = $self->_lp_base_uri . $path;
 
-  my $res_f = $self->http_get_raw(
-    $uri,
+  my $res_f = $self->http_request(
+    GET => $uri,
     @arg,
     async => 1,
     Authorization => $self->auth_token,
@@ -90,8 +74,8 @@ sub http_get ($self, $path, @arg) {
 sub http_post ($self, $path, @arg) {
   my $uri = $self->_lp_base_uri . $path;
 
-  my $res_f = $self->http_post_raw(
-    $uri,
+  my $res_f = $self->http_request(
+    POST => $uri,
     @arg,
     async => 1,
     Authorization => $self->auth_token,
@@ -114,8 +98,8 @@ sub http_post ($self, $path, @arg) {
 sub http_put ($self, $path, @arg) {
   my $uri = $self->_lp_base_uri . $path;
 
-  my $res_f = $self->http_put_raw(
-    $uri,
+  my $res_f = $self->http_request(
+    PUT => $uri,
     @arg,
     async => 1,
     Authorization => $self->auth_token,
