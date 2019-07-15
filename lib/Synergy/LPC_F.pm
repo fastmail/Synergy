@@ -3,15 +3,16 @@ use warnings;
 package Synergy::LPC_F;
 
 use Moose;
+use utf8;
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
-use JSON 2 ();
+use JSON::MaybeXS;
 use DateTime;
-use utf8;
 use URI::Find;
+use URI::QueryParam;
 
-my $JSON = JSON->new->utf8;
+my $JSON = JSON::MaybeXS->new->utf8;
 
 has workspace_id => (
   is  => 'ro',
@@ -450,4 +451,6 @@ package LPC_F::IterationHelper {
   }
 }
 
+no Moose;
+__PACKAGE__->meta->make_immutable;
 1;
