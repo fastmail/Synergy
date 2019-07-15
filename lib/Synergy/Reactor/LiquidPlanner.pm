@@ -1595,9 +1595,9 @@ sub _handle_comment ($self, $event, $text) {
 
   my $lpc = $self->f_lp_client_for_user($event->from_user);
 
-  my $post = $lpc->http_post("/treeitems/$item->{id}/comments",
-    Content_Type => 'application/json',
-    Content => $JSON->encode({
+  my $post = $lpc->http_request(
+    POST => "/treeitems/$item->{id}/comments",
+    $JSON->encode({
       comment => {
         comment => "$comment",
         item_id => $item->{id},
