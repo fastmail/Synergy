@@ -860,12 +860,12 @@ sub see_if_back ($self, $event) {
 
   my $timer = $self->timer_for_user($event->from_user) || return;
 
-  my $lpc = $self->lp_client_for_user($event->from_user);
-  my $timer_res = $lpc->my_running_timer;
+  return unless $timer->chill_until_active
+            and $event->text !~ /\bzzz\b/i;
 
-  if ($timer->chill_until_active
-    and $event->text !~ /\bzzz\b/i
-  ) {
+  my $lpc = $self->f_lp_client_for_user($event->from_user);
+
+  $lpc->my_running_timer->then(sub ($lp_timer) {
     $Logger->log([
       '%s is back; ending chill_until_active',
       $event->from_user->username,
@@ -874,8 +874,8 @@ sub see_if_back ($self, $event) {
     $timer->clear_chilltill;
     $self->save_state;
     $event->ephemeral_reply("You're back!  No longer chilling.")
-      if $timer->is_business_hours and $timer_res->is_nil;
-  }
+      if $timer->is_business_hours && ! defined $lp_timer;
+  })->retain;
 }
 
 has projects => (
