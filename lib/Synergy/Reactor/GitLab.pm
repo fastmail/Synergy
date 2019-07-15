@@ -543,6 +543,16 @@ sub handle_merge_request ($self, $event) {
         }
       }
 
+      if ($data->{upvotes} || $data->{downvotes}) {
+        push @fields, {
+          title => "Review status",
+          value => sprintf('%s %s, %s %s',
+            $data->{upvotes}, PL_N('upvote', $data->{upvotes}),
+            $data->{downvotes}, PL_N('downvote', $data->{downvotes})),
+          short => \1
+        };
+      }
+
       my $slack = {
         text        => "",
         attachments => [{
