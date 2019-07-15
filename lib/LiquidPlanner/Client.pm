@@ -1,6 +1,6 @@
 use v5.24.0;
 use warnings;
-package Synergy::LPC_F;
+package LiquidPlanner::Client;
 
 use Moose;
 use utf8;
@@ -130,12 +130,11 @@ sub my_running_timer ($self) {
   # Treat as impossible, for now, >1 running timer. -- rjbs, 2018-06-26
   $self->my_timers->then(sub ($data) {
     my ($timer) = grep {; $_->{running} } @$data;
-    return $timer ? Future->done( LPC_F::Timer->new($timer) )
+    return $timer ? Future->done( LiquidPlanner::Client::Timer->new($timer) )
                   : Future->done;
   });
 }
 
-my %DEFAULT_INCLUDE = (comments => 1, links => 1, tags => 1);
 sub query_items ($self, $arg) {
   my $query = URI->new("/treeitems" . ($arg->{in} ? "/$arg->{in}" : q{}));
 
@@ -271,7 +270,7 @@ sub create_todo_item ($self, $todo) {
 }
 
 sub current_iteration ($self) {
-  my $helper = LPC_F::IterationHelper->new({ lpc => $self });
+  my $helper = LiquidPlanner::Client::IterationHelper->new({ lpc => $self });
 
   my $iter  = $helper->current_iteration;
   my $pkg_f = $helper->package_for_iteration_number($iter->{number});
@@ -285,7 +284,7 @@ sub current_iteration ($self) {
 }
 
 sub iteration_by_number ($self, $n) {
-  my $helper = LPC_F::IterationHelper->new({ lpc => $self });
+  my $helper = LiquidPlanner::Client::IterationHelper->new({ lpc => $self });
 
   my $iter  = $helper->iteration_by_number($n);
   my $pkg_f = $helper->package_for_iteration_number($iter->{number});
@@ -299,7 +298,7 @@ sub iteration_by_number ($self, $n) {
 }
 
 sub iteration_relative_to_current ($self, $delta_n) {
-  my $helper = LPC_F::IterationHelper->new({ lpc => $self });
+  my $helper = LiquidPlanner::Client::IterationHelper->new({ lpc => $self });
 
   my $iter  = $helper->iteration_relative_to_current($delta_n);
   my $pkg_f = $helper->package_for_iteration_number($iter->{number});
@@ -312,7 +311,7 @@ sub iteration_relative_to_current ($self, $delta_n) {
   };
 }
 
-package LPC_F::Timer {
+package LiquidPlanner::Client::Timer {
   use Moose;
   use namespace::autoclean;
   use experimental qw(signatures lexical_subs);
@@ -352,7 +351,7 @@ package LPC_F::Timer {
   }
 }
 
-package LPC_F::IterationHelper {
+package LiquidPlanner::Client::IterationHelper {
   use Moose;
   use MooseX::StrictConstructor;
   use namespace::autoclean;
