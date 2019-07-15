@@ -737,9 +737,10 @@ sub provide_lp_link ($self, $event) {
             },
           );
         } else {
-          $event->reply("LP$item_id: is a $item->{type}");
+          return $event->reply("LP$item_id: is a $item->{type}");
         }
-      })->retain;
+      })->else(sub ($error) { $Logger->log("error: $error"); return
+      Future->done })->retain;
   }
 }
 
