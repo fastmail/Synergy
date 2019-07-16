@@ -1864,7 +1864,7 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
 
       $event->reply($plain, { slack => $slack });
     });
-  })->retain;
+  })->else(sub (@wtf) { $Logger->log("error with task creation: @wtf") })->retain;
 
   return;
 }
