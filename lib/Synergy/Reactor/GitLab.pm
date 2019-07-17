@@ -466,10 +466,7 @@ sub _parse_search ($self, $text) {
 
   my $hunks = Synergy::Util::parse_colonstrings($text, { fallback => $fallback });
 
-  my $error = grep {; @$_ > 2
-                  || (   $_->[0] ne 'search'
-                      && $_->[0] ne 'author'
-                      && $_->[0] ne 'assignee') } @$hunks;
+  my $error = grep {; @$_ > 2 } @$hunks;
 
   return if $error;
 
@@ -519,9 +516,26 @@ sub handle_mr_search ($self, $event) {
 
         $value = $user_id;
       }
+
+      $uri->query_param_append($name, $value);
+      next COND;
     }
 
-    $uri->query_param_append($name, $value);
+    if ($name eq 'search') {
+      $uri->query_param_append($name, $value);
+      next COND;
+    }
+
+    if ($name eq 'wip') {
+      next COND if $value eq 'both';
+      return $event->error_reply("The value for `wip:` must be yes, no, or both.")
+        unless $value eq 'yes' or $value eq 'no';
+
+      $uri->query_param_append($name, $value);
+      next COND;
+    }
+
+    return $event->error_reply("Unknown query token: $name");
   }
 
   $page //= 1;
