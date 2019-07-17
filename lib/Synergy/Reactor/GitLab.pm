@@ -508,13 +508,17 @@ sub handle_mr_search ($self, $event) {
     if ($name eq 'author' or $name eq 'assignee') {
       $name = "$name\_id";
 
-      return $event->error_reply("I don't know who $value is.")
-        unless my $who = $self->resolve_name($value, $event->from_user);
+      if ($value eq '*' or $value eq '~') {
+        $value = $value eq '*' ? 'Any' : 'None';
+      } else {
+        return $event->error_reply("I don't know who $value is.")
+          unless my $who = $self->resolve_name($value, $event->from_user);
 
-      return $event->error_reply("I don't know who the GitLab user id for " .  $who->username . ".")
-        unless my $user_id = $self->get_user_preference($who, 'user-id');
+        return $event->error_reply("I don't know who the GitLab user id for " .  $who->username . ".")
+          unless my $user_id = $self->get_user_preference($who, 'user-id');
 
-      $value = $user_id;
+        $value = $user_id;
+      }
     }
 
     $uri->query_param_append($name, $value);
