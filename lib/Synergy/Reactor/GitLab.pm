@@ -567,11 +567,15 @@ sub handle_mr_search ($self, $event) {
     my $pages = ceil(@$data / 10);
     my @page  = grep {; $_ } $data->@[ $zero .. $zero+9 ];
 
-    my $text  = "Results (page $page/$pages):\n";
-    my $slack = "Results (page $page/$pages):\n";
+    my $text  = sprintf "Results, page %s (items %s .. %s):",
+      $page,
+      $zero + 1,
+      $zero + 10;
+
+    my $slack = "*$text*";
     for my $mr (@page) {
-      $text  .= "* $mr->{title}\n";
-      $slack .= sprintf "<%s|MR> %s [ by %s ]\n",
+      $text  .= "\n* $mr->{title}";
+      $slack .= sprintf "\n<%s|MR> %s [ by %s ]",
         $mr->{web_url},
         $mr->{title},
         $mr->{author}{username};
