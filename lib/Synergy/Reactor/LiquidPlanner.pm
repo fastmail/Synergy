@@ -1869,19 +1869,6 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
   return;
 }
 
-sub _start_timer ($self, $user, $task) {
-  my $res = $self->lp_client_for_user($user)
-                 ->start_timer_for_task_id($task->{id});
-
-  return unless $res->is_success;
-
-  # What does this mean?  Copied and pasted. -- rjbs, 2018-06-16
-  return unless $res->payload->{start};
-
-  $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
-  return 1;
-}
-
 sub upcoming_tasks_for_user ($self, $user, $count) {
   my $lpc = $self->lp_client_for_user($user);
 

@@ -12,14 +12,15 @@ use namespace::clean;
 use DateTime::Format::ISO8601;
 use DateTimeX::Format::Ago;
 use Digest::MD5 qw(md5_hex);
+use Future 0.36;  # for ->retain
 use JSON 2 ();
 use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(uniq);
 use MIME::Base64;
-use YAML::XS;
+use POSIX qw(ceil);
 use Synergy::Logger '$Logger';
 use URI::Escape;
-use Future 0.36;  # for ->retain
+use YAML::XS;
 
 my $JSON = JSON->new->utf8->canonical;
 
@@ -203,6 +204,15 @@ sub listener_specs {
       predicate => sub ($self, $e) {
         $e->was_targeted &&
         $e->text =~ /^reload\s+(?!shortcuts)/in;
+      },
+    },
+    {
+      name      => 'mr-search',
+      method    => 'handle_mr_search',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        $e->was_targeted &&
+        $e->text =~ /^mrsearch\s+/i;
       },
     },
     {
@@ -445,6 +455,113 @@ sub _key_for_gitlab_data ($self, $event, $data) {
     $event->from_channel->name,
     $event->conversation_address
   );
+}
+
+sub _parse_search ($self, $text) {
+  my $fallback = sub ($text_ref) {
+    ((my $token), $$text_ref) = split /\s+/, $$text_ref, 2;
+
+    return [ search => $token ];
+  };
+
+  my $hunks = Synergy::Util::parse_colonstrings($text, { fallback => $fallback });
+
+  my $error = grep {; @$_ > 2
+                  || (   $_->[0] ne 'search'
+                      && $_->[0] ne 'author'
+                      && $_->[0] ne 'assignee') } @$hunks;
+
+  return if $error;
+
+  return $hunks;
+}
+
+sub handle_mr_search ($self, $event) {
+  $event->mark_handled;
+  my $rest = $event->text =~ s/\Amrsearch\s+//ir;
+
+  my $conds = $self->_parse_search($rest);
+
+  unless ($conds) {
+    return $event->error_reply("I didn't understand your search.");
+  }
+
+  my $uri = URI->new(sprintf("%s/v4/merge_requests/?sort=asc&scope=all&state=opened", $self->api_uri));
+
+  my $page;
+
+  COND: for my $hunk (@$conds) {
+    my ($name, $value) = @$hunk;
+
+    if ($name eq 'page') {
+      return $event->error_reply("You gave more than one `page:` condition.")
+        if defined $page;
+
+      return $event->error_reply("The `page:` condition has to be a positive integer.")
+        unless $value =~ /\A[0-9]+\z/ && $value > 0;
+
+      $page = $value;
+
+      next COND;
+    }
+
+    if ($name eq 'author' or $name eq 'assignee') {
+      $name = "$name\_id";
+
+      return $event->error_reply("I don't know who $value is.")
+        unless my $who = $self->resolve_name($value, $event->from_user);
+
+      return $event->error_reply("I don't know who the GitLab user id for " .  $who->username . ".")
+        unless my $user_id = $self->get_user_preference($who, 'user-id');
+
+      $value = $user_id;
+    }
+
+    $uri->query_param_append($name, $value);
+  }
+
+  $page //= 1;
+
+  $Logger->log("GitLab GET: $uri");
+
+  my $http_future = $self->hub->http_get(
+    $uri,
+    'PRIVATE-TOKEN' => $self->api_token,
+    async => 1,
+  );
+
+  $http_future->on_done(sub ($res) {
+    unless ($res->is_success) {
+      $Logger->log([ "Error: %s", $res->as_string ]);
+      return;
+    }
+
+    my $data = $JSON->decode($res->decoded_content);
+
+    return $event->error_reply("No results!")
+      if ! @$data;
+
+    my $zero = ($page-1) * 10;
+
+    return $event->error_reply("You've gone past the last page!")
+      if $zero > $#$data;
+
+    my $pages = ceil(@$data / 10);
+    my @page  = grep {; $_ } $data->@[ $zero .. $zero+9 ];
+
+    my $text  = "Results (page $page/$pages):\n";
+    my $slack = "Results (page $page/$pages):\n";
+    for my $mr (@page) {
+      $text  .= "* $mr->{title}\n";
+      $slack .= sprintf "<%s|MR> %s [ by %s ]\n",
+        $mr->{web_url},
+        $mr->{title},
+        $mr->{author}{username};
+    }
+
+    $event->reply($text, { slack => $slack });
+    return;
+  })->retain;
 }
 
 sub handle_merge_request ($self, $event) {
