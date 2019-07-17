@@ -13,7 +13,7 @@ use DateTime::Format::ISO8601;
 use DateTimeX::Format::Ago;
 use Digest::MD5 qw(md5_hex);
 use Future 0.36;  # for ->retain
-use JSON 2 ();
+use JSON::MaybeXS;
 use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(uniq);
 use MIME::Base64;
@@ -22,7 +22,7 @@ use Synergy::Logger '$Logger';
 use URI::Escape;
 use YAML::XS;
 
-my $JSON = JSON->new->utf8->canonical;
+my $JSON = JSON::MaybeXS->new->utf8->canonical;
 
 has api_token => (
   is => 'ro',
@@ -575,10 +575,11 @@ sub handle_mr_search ($self, $event) {
     my $slack = "*$text*";
     for my $mr (@page) {
       $text  .= "\n* $mr->{title}";
-      $slack .= sprintf "\n<%s|MR> %s [ by %s ]",
+      $slack .= sprintf "\n<%s|MR> %s — _by %s_ — _%s_",
         $mr->{web_url},
         $mr->{title},
-        $mr->{author}{username};
+        $mr->{author}{username},
+        $mr->{assignee} ? "assigned to $mr->{assignee}" : "unassigned";
     }
 
     $event->reply($text, { slack => $slack });
