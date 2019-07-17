@@ -78,6 +78,12 @@ has triage_address => (
   isa => 'Str',
 );
 
+has ptn_expansion_format => (
+  is => 'ro',
+  isa => 'Str',
+  predicate => 'has_ptn_expansion_format',
+);
+
 my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
 
 sub _lp_base_uri ($self) {
@@ -1397,9 +1403,6 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     }
   }
 
-  # make ticket nums easier to copy
-  $rest =~ s/\b(ptn)([0-9]+)\b/$1 $2/gi if $rest;
-
   $plan->{description} = sprintf '%screated by %s in response to %s%s',
     ($rest ? "$rest\n\n" : ""),
     $self->hub->name,
@@ -1734,12 +1737,21 @@ sub task_plan_from_spec ($self, $event, $spec) {
   $plan{name} = $leader;
   $plan{user} = $event->from_user;
 
-  $plan{name} =~ s/\b(ptn)([0-9]+)\b/$1 $2/gi;  # make ticket nums easier to copy
-
   $self->_check_plan_rest($event, \%plan, \%error);
   $self->_check_plan_usernames($event, \%plan, \%error) if $plan{usernames};
   $self->_check_plan_project($event, \%plan, \%error)   if $plan{project};
   $self->_check_plan_package($event, \%plan, \%error)   if $plan{package};
+
+  # make ticket numbers easier to copy
+  my %ptn;
+  for (qw(name description)) {
+    $ptn{$2}++ if $plan{$_} =~ s/\b(ptn)\s*([0-9]+)\b/\U$1 $2/gi;
+  }
+
+  if (%ptn and $self->has_ptn_expansion_format) {
+    $plan{description} .= "\n\n" . sprintf $self->ptn_expansion_format, $_
+      for keys %ptn;
+  }
 
   $error{name} = "That task name is just too long!  Consider putting more of it in the long description.  You can do that by separating the name and long description with `---` (and spaces around that)."
     if length $plan{name} > 200;
