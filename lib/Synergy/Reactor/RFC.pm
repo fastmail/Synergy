@@ -145,13 +145,13 @@ sub handle_rfc ($self, $event) {
 
     if ($entry->{obsoletes}->@*) {
       $slack .= "*Obsoletes:* "
-             .  (join q{, }, map {; slink($_) } $entry->{obsoletes}->@*)
+             .  (join q{, }, map {; _slink($_) } $entry->{obsoletes}->@*)
              .  "\n";
     }
 
     if ($entry->{obsoleted_by}->@*) {
       $slack .= "*Obsoleted by:* "
-             .  (join q{, }, map {; slink($_) } $entry->{obsoleted_by}->@*)
+             .  (join q{, }, map {; _slink($_) } $entry->{obsoleted_by}->@*)
              .  "\n";
     }
 
