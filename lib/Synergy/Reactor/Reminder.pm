@@ -20,6 +20,12 @@ sub listener_specs {
     method    => 'handle_remind',
     exclusive => 1,
     predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /^remind /i },
+    help_entries => [
+      {
+        title => 'remind',
+        text  => "remind `[USER]` `{in, at, on}` `{TIME or DURATION}`: `[REMINDER TEXT]`",
+      }
+    ],
   };
 }
 
