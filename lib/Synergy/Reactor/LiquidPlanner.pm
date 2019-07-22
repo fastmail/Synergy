@@ -311,6 +311,8 @@ EOH
   start     =>  [ \&_handle_timer_start  ],
   stop      =>  [ \&_handle_timer_stop   ],
 
+  timesheet =>  [ \&_handle_timesheet    ],
+
   # AVAILABILITY COMMANDS
   chill     =>  [ \&_handle_chill,
                   "chill: do not nag about a timer until you say something new",
@@ -3767,6 +3769,41 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
       slack => $slack_base,
     }
   );
+}
+
+sub _handle_timesheet ($self, $event, $text) {
+  return $event->error_reply("The timesheet command doesn't take any arguments… yet.")
+    if length $text;
+
+  my $who = $event->from_user;
+  my $lpc = $self->f_lp_client_for_user($who);
+
+  # XXX: doesn't work with LiquidPlanner::Client !?
+  my $iteration = $self->lp_client_for_master->current_iteration;
+
+  $lpc->timesheet_entries({
+    member_ids  => [ $who->lp_id ],
+    start_date  => $iteration->{start},
+    end_date    => $iteration->{end},
+  })->else(sub (@err) {
+    $Logger->log([
+      "timesheet retrieval error for %s: %s",
+      $iteration,
+      "@err"
+    ]);
+    $event->error_reply("I couldn't get your timesheet!");
+  })->then(sub ($ts_events) {
+    my $ymd   = DateTime->now(time_zone => $who->time_zone)->ymd;
+    my $total = sum0 map  {; $_->{work} } @$ts_events;
+    my $today = sum0 map  {; $_->{work} }
+                     grep {; $_->{work_performed_on} eq $ymd } @$ts_events;
+    $event->reply(
+      sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.",
+        $total, PL_N('hour', $total),
+        $today, PL_N('hour', $total)
+    );
+  })
+  ->retain;
 }
 
 sub _handle_projects ($self, $event, $text) {
