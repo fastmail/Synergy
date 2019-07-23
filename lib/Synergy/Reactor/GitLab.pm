@@ -494,6 +494,8 @@ sub handle_mr_search ($self, $event) {
 
   my $page;
 
+  my $labels;
+
   COND: for my $hunk (@$conds) {
     my ($name, $value) = @$hunk;
 
@@ -528,6 +530,25 @@ sub handle_mr_search ($self, $event) {
       next COND;
     }
 
+    if ($name eq 'label') {
+      # Having "foo" and "None" is nonsensical, but I'm not going to sweat it
+      # just now. -- rjbs, 2019-07-23
+      if ($value eq '*' or $value eq '~') {
+        return "You're supplying conflicting `label:` instructions!"
+          if defined $labels;
+
+        $labels = $value eq '*' ? 'Any' : 'None';
+      } else {
+        return "You're supplying conflicting `label:` instructions!"
+          if defined $labels  && ! ref $labels;
+
+        $labels->{$value} = 1;
+      }
+
+      $uri->query_param_append($name, $value);
+      next COND;
+    }
+
     if ($name eq 'search') {
       $uri->query_param_append($name, $value);
       next COND;
@@ -543,6 +564,14 @@ sub handle_mr_search ($self, $event) {
     }
 
     return $event->error_reply("Unknown query token: $name");
+  }
+
+  if ($labels) {
+    $uri->query_param_append(
+      labels => ref $labels
+              ? (join q{,}, keys %$labels)
+              : $labels
+    );
   }
 
   $page //= 1;
@@ -587,6 +616,9 @@ sub handle_mr_search ($self, $event) {
         $mr->{title},
         $mr->{author}{username},
         $mr->{assignee} ? "assigned to $mr->{assignee}{username}" : "unassigned";
+
+      $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
+        if $mr->{labels} && $mr->{labels}->@*;
     }
 
     $event->reply($text, { slack => $slack });
