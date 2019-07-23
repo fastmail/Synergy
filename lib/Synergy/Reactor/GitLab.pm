@@ -579,7 +579,7 @@ sub handle_mr_search ($self, $event) {
         $mr->{web_url},
         $mr->{title},
         $mr->{author}{username},
-        $mr->{assignee} ? "assigned to $mr->{assignee}" : "unassigned";
+        $mr->{assignee} ? "assigned to $mr->{assignee}{username}" : "unassigned";
     }
 
     $event->reply($text, { slack => $slack });
