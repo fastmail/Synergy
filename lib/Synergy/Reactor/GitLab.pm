@@ -212,7 +212,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         $e->was_targeted &&
-        $e->text =~ /^mrsearch\s+/i;
+        $e->text =~ /^mrs(?:earch)?(?:\z|\s+)/i;
       },
     },
     {
@@ -482,7 +482,7 @@ sub _parse_search ($self, $text) {
 
 sub handle_mr_search ($self, $event) {
   $event->mark_handled;
-  my $rest = $event->text =~ s/\Amrsearch\s+//ir;
+  my $rest = $event->text =~ s/\Amr(?:search)\s*//ir;
 
   my $conds = $self->_parse_search($rest);
 
