@@ -482,7 +482,7 @@ sub _parse_search ($self, $text) {
 
 sub handle_mr_search ($self, $event) {
   $event->mark_handled;
-  my $rest = $event->text =~ s/\Amr(?:search)\s*//ir;
+  my $rest = $event->text =~ s/\Amrs(?:earch)?\s*//ir;
 
   my $conds = $self->_parse_search($rest);
 
