@@ -459,8 +459,8 @@ sub _key_for_gitlab_data ($self, $event, $data) {
 
 sub _parse_search ($self, $text) {
   my %aliases = (
-    from => 'author',
-    to   => 'assignee',
+    by  => 'author',
+    for => 'assignee',
   );
 
   my $fallback = sub ($text_ref) {
@@ -471,7 +471,7 @@ sub _parse_search ($self, $text) {
 
   my $hunks = Synergy::Util::parse_colonstrings($text, { fallback => $fallback });
 
-  canonicalize_names($hunks, \%aliases);
+  Synergy::Util::canonicalize_names($hunks, \%aliases);
 
   my $error = grep {; @$_ > 2 } @$hunks;
 
