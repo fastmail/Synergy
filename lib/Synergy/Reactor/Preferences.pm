@@ -154,7 +154,7 @@ sub handle_list ($self, $event) {
 
     my $help = $has_pref->preference_help;
     for my $key (sort keys %$help) {
-      $text .= sprintf "%s.%s - %s\n",
+      $text .= sprintf "*%s.%s* - %s\n",
         $ns,
         $key,
         $help->{$key}{description} // 'mystery preference';
