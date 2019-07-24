@@ -2977,11 +2977,19 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
     }
   }
 
+  my @assignments = map {; assignment($_) } $my_arg->{owners}->@*;
+
+  my $triage_user = $self->hub->user_directory->user_named('triage');
+  my $task_is_for_triage =
+    $triage_user && $triage_user->has_lp_id
+    && grep {; $_->{person_id} eq $triage_user->lp_id } @assignments;
+
   my $payload = {
     task => {
       name        => $my_arg->{name},
-      assignments => [ map {; assignment($_) } @{ $my_arg->{owners} } ],
+      assignments => \@assignments,
       description => $my_arg->{description},
+      ( $task_is_for_triage ?  (tags => [ { text => 'triage' } ]) : () ),
 
       %container,
     }
@@ -2996,27 +3004,24 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
   return $task_f->then(sub ($task) {
     # If the task is assigned to the triage user, inform them.
     # -- rjbs, 2019-02-28
-    my $triage_user = $self->hub->user_directory->user_named('triage');
-    if ($triage_user && $triage_user->has_lp_id) {
-      if (grep {; $_->{person_id} eq $triage_user->lp_id } @{ $task->{assignments} }) {
-        my $who = $my_arg->{user} ? $my_arg->{user}->username : "some weirdo";
+    if ($task_is_for_triage) {
+      my $who = $my_arg->{user} ? $my_arg->{user}->username : "some weirdo";
 
-        my $text = sprintf
-          "$TRIAGE_EMOJI New task created for triage by %s in %s: %s (%s)",
+      my $text = sprintf
+        "$TRIAGE_EMOJI New task created for triage by %s in %s: %s (%s)",
+        $who,
+        $chan_desc,
+        $task->{name},
+        $self->item_uri($task->{id});
+
+      my $alt = {
+        slack => sprintf "$TRIAGE_EMOJI *New task created for triage by %s in %s*: %s",
           $who,
           $chan_desc,
-          $task->{name},
-          $self->item_uri($task->{id});
+          $self->_slack_item_link_with_name($task)
+      };
 
-        my $alt = {
-          slack => sprintf "$TRIAGE_EMOJI *New task created for triage by %s in %s*: %s",
-            $who,
-            $chan_desc,
-            $self->_slack_item_link_with_name($task)
-        };
-
-        $self->_inform_triage($text, $alt);
-      }
+      $self->_inform_triage($text, $alt);
     }
 
     return Future->done($task);
