@@ -15,12 +15,45 @@ use namespace::clean;
 sub listener_specs {
   return (
     {
+      # This is idiotic.  This has to exist for help. I have only myself to
+      # blame. -- rjbs, 2019-07-24
+      name => 'preferences',
+      method    => sub {},
+      exclusive => 1,
+      predicate => sub { return; },
+      help_entries => [
+        {
+          title => 'preferences',
+          text  => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
+Different components of Synergy provide user-level preferences that range from
+the vital (like your real name) to the … less vital.
+
+To know what preferences you can or have already set, try:
+
+• *list all preferences*: this, obviously, lists all preferences you can set
+• *dump my preferences*: this shows you all your preferences
+• *dump `USER`'s preferences*: see another user's prefs
+
+To set your preferences:
+
+• *set my `PREF` to `VALUE`*: set a preference
+• *clear my `PREF`*: unset a preference and go back to the default
+
+If you're an administrator, you can also…
+
+• *set `USER`'s `PREF` to `VALUE`*: set another user's preferences
+• *clear `USER`'s `PREF`*: unset some other user's preference
+EOH
+        },
+      ],
+    },
+    {
       name      => 'set',
       method    => 'handle_set',
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\Aset\s+(my|\w+'s)/in;
+        return unless $e->text =~ /\Aset\s+(my|\w+[’']s)/in;
       },
     },
     {
@@ -29,7 +62,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\Aclear\s+(my|\w+'s)/in;
+        return unless $e->text =~ /\Aclear\s+(my|\w+[’']s)/in;
       },
     },
     {
@@ -58,7 +91,7 @@ sub listener_specs {
 
 sub handle_set ($self, $event) {
   my ($who, $pref_name, $pref_value) =
-    $event->text =~ m{\A set \s+ (my|\w+'s) \s+         # set my
+    $event->text =~ m{\A set \s+ (my|\w+[’']s) \s+         # set my
                       ([-_a-z0-9]+  \.   [-_a-z0-9]+)   # component.pref
                       \s+ to \s+ (.*)                   # to value
                      }ix;
@@ -68,7 +101,7 @@ sub handle_set ($self, $event) {
 
 sub handle_clear ($self, $event) {
   my ($who, $pref_name, $rest) =
-    $event->text =~ m{\A clear \s+ (my|\w+'s) \s+       # set my
+    $event->text =~ m{\A clear \s+ (my|\w+[’']s) \s+       # set my
                       ([-_a-z0-9]+  \.  [-_a-z0-9]+)    # component.pref
                       \s* (.+)?
                      }ix;
