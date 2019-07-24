@@ -26,19 +26,42 @@ has _users => (
   isa  => 'HashRef',
   traits  => [ 'Hash' ],
   handles => {
-    all_users  => 'values',
-    user_named => 'get',
-    usernames  => 'keys',
-    _set_user  => 'set',
+    all_users       => 'values',
+    all_usernames   => 'keys',
+    _any_user_named => 'get',
+    _set_user       => 'set',
+    _user_pairs     => 'kv',
   },
   clearer => '_clear_users',
   writer  => '_set_users',
   default => sub {  {}  },
 );
 
-sub users ($self) {
-  return grep {; ! $_->is_deleted } $self->all_users;
-}
+has _active_users => (
+  isa  => 'HashRef',
+  traits  => [ 'Hash' ],
+  handles => {
+    users      => 'values',
+    user_named => 'get',
+    usernames  => 'keys',
+  },
+  lazy => 1,
+  clearer => '_clear_active_users',
+  default => sub ($self) {
+    my %active;
+
+    for my $pair ($self->_user_pairs) {
+      my ($name, $user) = @$pair;
+      next if $user->is_deleted;
+      $active{$name} = $user;
+    }
+
+    return \%active;
+  },
+);
+
+after _set_user  => sub ($self, @) { $self->_clear_active_users };
+after _set_users => sub ($self, @) { $self->_clear_active_users };
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
@@ -88,6 +111,7 @@ sub load_users_from_database ($self) {
 
   while (my $row = $user_sth->fetchrow_hashref) {
     my $username = $row->{username};
+    warn "$username is deleted? $row->{is_deleted}";
     $users{$username} = Synergy::User->new({
       directory => $self,
       username  => $username,
@@ -198,7 +222,7 @@ sub register_user ($self, $user) {
 }
 
 sub reload_user ($self, $username, $data) {
-  my $old = $self->user_named($username);
+  my $old = $self->_any_user_named($username);
 
   my $new_user = Synergy::User->new({
     %$old,
@@ -222,9 +246,6 @@ sub resolve_name ($self, $name, $resolving_user) {
   unless ($user) {
     ($user) = grep {; grep { $_ eq $name } $_->nicknames } $self->users;
   }
-
-  # deleted users don't resolve
-  return undef if $user && $user->is_deleted;
 
   return $user;
 }
