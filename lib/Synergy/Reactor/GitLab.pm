@@ -610,9 +610,21 @@ sub handle_mr_search ($self, $event) {
 
     my $slack = "*$text*";
     for my $mr (@page) {
+      my $icons = q{};
+      if ($mr->{work_in_progress}) {
+        $icons .= "🚧";
+        $mr->{title} =~ s/^wip:?\s+//i;
+      }
+
+      $icons .= "👍" if $mr->{upvotes};
+      $icons .= "👎" if $mr->{downvotes};
+
+      $icons .= " " if length $icons;
+
       $text  .= "\n* $mr->{title}";
-      $slack .= sprintf "\n<%s|MR> %s — _by %s_ — _%s_",
+      $slack .= sprintf "\n<%s|MR> %s%s — _by %s_ — _%s_",
         $mr->{web_url},
+        $icons,
         $mr->{title},
         $mr->{author}{username},
         $mr->{assignee} ? "assigned to $mr->{assignee}{username}" : "unassigned";
