@@ -480,6 +480,25 @@ sub _parse_search ($self, $text) {
   return $hunks;
 }
 
+sub _short_name_for_mr ($self, $mr) {
+  # So, this is pretty annoying.  The structure we get back for an MR doesn't
+  # give us much about the project other than an id, but we do have the web_url
+  # field, which is:
+  #   http://gitlab.example.com/my-group/my-project/merge_requests/1
+  #
+  # So, we extract the my-group/my-project and see whether we have a shortcut
+  # from (say) repos.yaml.
+
+  my ($g_slash_p, $id) = $mr->{web_url} =~ m{([^/]+/[^/]+)/merge_requests/([0-9]+)\z};
+
+  my %shortcuts = $self->project_shortcuts->%*;
+  my @found = sort { length $a <=> length $b }
+              grep {; $shortcuts{$_} eq $g_slash_p } keys %shortcuts;
+
+  my $name = $found[0] // $g_slash_p;
+  return "$name!$id";
+}
+
 sub handle_mr_search ($self, $event) {
   $event->mark_handled;
   my $rest = $event->text =~ s/\Amrs(?:earch)?\s*//ir;
@@ -622,8 +641,9 @@ sub handle_mr_search ($self, $event) {
       $icons .= " " if length $icons;
 
       $text  .= "\n* $mr->{title}";
-      $slack .= sprintf "\n<%s|MR> %s%s — _by %s_ — _%s_",
+      $slack .= sprintf "\n*<%s|%s>* %s%s — _by %s_ — _%s_",
         $mr->{web_url},
+        $self->_short_name_for_mr($mr),
         $icons,
         $mr->{title},
         $mr->{author}{username},
