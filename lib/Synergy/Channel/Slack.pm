@@ -334,7 +334,7 @@ sub maybe_respond_to_edit ($self, $slack_event) {
     return unless $reply->{was_targeted};
 
     my $event = $self->synergy_event_from_slack_event($message, 'edit');
-    $event->reply(
+    $event->ephemeral_reply(
       "I can only respond to edits of messages that caused errors, sorry."
     );
     return;
