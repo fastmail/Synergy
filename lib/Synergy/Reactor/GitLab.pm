@@ -625,7 +625,7 @@ sub handle_mr_search ($self, $event) {
     my $text  = sprintf "Results, page %s (items %s .. %s):",
       $page,
       $zero + 1,
-      $zero + 10;
+      $zero + @page;
 
     my $slack = "*$text*";
     for my $mr (@page) {
