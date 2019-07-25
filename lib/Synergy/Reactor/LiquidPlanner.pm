@@ -602,155 +602,163 @@ sub provide_lp_link ($self, $event) {
 
   return unless @ids;
 
-  ITEM: for my $item_id (@ids) {
-    $lpc
-      ->get_item($item_id)
-      ->else(sub {
-        $event->reply("Sorry, something went wrong looking for LP$item_id.");
-        return Future->done;
-      })
-      ->then(sub ($item) {
-        unless ($item) {
-          $event->error_reply("I can't find anything for LP$item_id.");
-          return Future->done;
-        }
+  my @gets = map {; $lpc->get_item($_)->else(sub { Future->fail("LP$_") }) } @ids;
 
-        my $name = $item->{name};
+  my $error_method = @ids == 1 ? 'error_reply' : 'reply';
 
-        my $reply;
+  Future->wait_all(@gets)->then(sub (@results) {
+    my @missing;
+    my @replies;
 
-        if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
-          my $icon = $item->{custom_field_values}{Emoji}
-                  // ($item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
-                    : $item->{type} eq 'Package' ? "📦"
-                    : $item->{type} eq 'Project' ? "📁"
-                    : $item->{type} eq 'Folder'  ? "🗂"
-                    : $item->{type} eq 'Inbox'   ? "📫"
-                    :                              confess("unreachable"));
+    ITEM: for my $result (@results) {
+      unless ($result->is_done) {
+        push @missing, $result->failure;
+        next ITEM;
+      }
 
-          my $uri = $self->item_uri($item_id);
+      my $item    = $result->get;
+      my $item_id = $item->{id};
+      my $name    = $item->{name};
 
-          my $plain = "$icon LP$item_id: $item->{name} ($uri)";
-          my $slack = sprintf '%s %s',
-            $icon,
-            $self->_slack_item_link_with_name($item, { emoji => 0 });
+      my $reply;
 
-          if ($as_cmd) {
-            my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
-                        $self->hub->user_directory->users;
+      if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
+        my $icon = $item->{custom_field_values}{Emoji}
+                // ($item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
+                  : $item->{type} eq 'Package' ? "📦"
+                  : $item->{type} eq 'Project' ? "📁"
+                  : $item->{type} eq 'Folder'  ? "🗂"
+                  : $item->{type} eq 'Inbox'   ? "📫"
+                  :                              confess("unreachable"));
 
-            # The user asked for this directly, so let's give them more detail.
-            $slack .= "\n";
+        my $uri = $self->item_uri($item_id);
 
-            if ($item->{package_crumbs} && $item->{package_crumbs}->@*) {
-              # Item is packaged, so parent means project and package means
-              # package.
-              $slack .= "*Project*: "
-                     .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
-                     .  "\n"
-                     .  "*Package*: "
-                     .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
-                     .  "\n";
-            } else {
-              # Item is unpackaged, so parent means package and there is no
-              # project.
-              $slack .= "*Package*: "
-                     .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
-                     .  "\n";
+        my $plain = "$icon LP$item_id: $item->{name} ($uri)";
+        my $slack = sprintf '%s %s',
+          $icon,
+          $self->_slack_item_link_with_name($item, { emoji => 0 });
+
+        if ($as_cmd) {
+          my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+                      $self->hub->user_directory->users;
+
+          # The user asked for this directly, so let's give them more detail.
+          $slack .= "\n";
+
+          if ($item->{package_crumbs} && $item->{package_crumbs}->@*) {
+            # Item is packaged, so parent means project and package means
+            # package.
+            $slack .= "*Project*: "
+                   .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
+                   .  "\n"
+                   .  "*Package*: "
+                   .  (join(q{ >> }, $item->{package_crumbs}->@*) || "(?)")
+                   .  "\n";
+          } else {
+            # Item is unpackaged, so parent means package and there is no
+            # project.
+            $slack .= "*Package*: "
+                   .  (join(q{ >> }, $item->{parent_crumbs}->@*) || "(?)")
+                   .  "\n";
+          }
+
+          if ($item->{custom_field_values}{Escalation}) {
+            $slack .= "*Escalation Point*: $item->{custom_field_values}{Escalation}\n";
+          }
+
+          if ($item->{assignments}) {
+            my @assignees = sort uniq
+                            map  {; $by_lp{ $_->{person_id} } // '?' }
+                            grep {; ! $_->{is_done} }
+                            $item->{assignments}->@*;
+
+            if (@assignees && $item->{type} eq 'Project') {
+              $slack .= "*Project Lead*: " . shift(@assignees) . "\n";
             }
 
-            if ($item->{custom_field_values}{Escalation}) {
-              $slack .= "*Escalation Point*: $item->{custom_field_values}{Escalation}\n";
-            }
-
-            if ($item->{assignments}) {
-              my @assignees = sort uniq
-                              map  {; $by_lp{ $_->{person_id} } // '?' }
-                              grep {; ! $_->{is_done} }
-                              $item->{assignments}->@*;
-
-              if (@assignees && $item->{type} eq 'Project') {
-                $slack .= "*Project Lead*: " . shift(@assignees) . "\n";
-              }
-
-              if (@assignees) {
-                $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
-              }
-            }
-
-            if ($item->{custom_field_values}{Stakeholders}) {
-              $slack .= sprintf "*Stakeholders*: %s\n",
-                join q{, },
-                sort
-                split /\s*,\s*/, $item->{custom_field_values}{Stakeholders};
-            }
-
-            my sub fmt_date_field ($field) {
-              return undef unless my $date_str = $item->{ $field };
-              my $dt = DateTime::Format::ISO8601->parse_datetime($date_str);
-
-              my $str = $self->hub->format_friendly_date(
-                $dt,
-                {
-                  target_time_zone  => $event->from_user->time_zone,
-                }
-              );
-
-              return $str;
-            }
-
-            if (my $str = fmt_date_field('created_at')) {
-              my $creator_id = $item->{created_by};
-              $slack .= sprintf "*Created*: by %s at %s\n",
-                $by_lp{ $creator_id } // 'somebody',
-                $str;
-            }
-
-            if (my $str = fmt_date_field('updated_at')) {
-              $slack .= "*Last updated*: $str\n";
-            }
-
-            if (my $str = fmt_date_field('done_on')) {
-              $slack .= "*Completed*: $str\n";
-            }
-
-            if ($flag{description}) {
-              $slack .= "\n>>> "
-                      . ($item->{description} // "(no description)")
-                      . "\n";
-            }
-
-            if ($item->{comments}) {
-              my ($latest) = sort {; $b->{created_at} cmp $a->{created_at} }
-                             $item->{comments}->@*;
-
-              my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
-                          $self->hub->user_directory->users;
-
-              if ($latest) {
-                my $created = parse_lp_datetime($latest->{created_at});
-
-                $slack .= sprintf "\n*Last comment* by %s, %s:\n>>> %s\n",
-                  $by_lp{ $latest->{person_id} } // 'somebody',
-                  concise(ago(time - $created->epoch, 1)),
-                  $latest->{plain_text};
-              }
+            if (@assignees) {
+              $slack .= "*Assignees*: " . join(q{, }, @assignees) . "\n";
             }
           }
 
-          return $event->reply(
-            $plain,
-            {
-              slack => $slack,
-            },
-          );
-        } else {
-          return $event->reply("LP$item_id: is a $item->{type}");
+          if ($item->{custom_field_values}{Stakeholders}) {
+            $slack .= sprintf "*Stakeholders*: %s\n",
+              join q{, },
+              sort
+              split /\s*,\s*/, $item->{custom_field_values}{Stakeholders};
+          }
+
+          my sub fmt_date_field ($field) {
+            return undef unless my $date_str = $item->{ $field };
+            my $dt = DateTime::Format::ISO8601->parse_datetime($date_str);
+
+            my $str = $self->hub->format_friendly_date(
+              $dt,
+              {
+                target_time_zone  => $event->from_user->time_zone,
+              }
+            );
+
+            return $str;
+          }
+
+          if (my $str = fmt_date_field('created_at')) {
+            my $creator_id = $item->{created_by};
+            $slack .= sprintf "*Created*: by %s at %s\n",
+              $by_lp{ $creator_id } // 'somebody',
+              $str;
+          }
+
+          if (my $str = fmt_date_field('updated_at')) {
+            $slack .= "*Last updated*: $str\n";
+          }
+
+          if (my $str = fmt_date_field('done_on')) {
+            $slack .= "*Completed*: $str\n";
+          }
+
+          if ($flag{description}) {
+            $slack .= "\n>>> "
+                    . ($item->{description} // "(no description)")
+                    . "\n";
+          }
+
+          if ($item->{comments}) {
+            my ($latest) = sort {; $b->{created_at} cmp $a->{created_at} }
+                           $item->{comments}->@*;
+
+            my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+                        $self->hub->user_directory->users;
+
+            if ($latest) {
+              my $created = parse_lp_datetime($latest->{created_at});
+
+              $slack .= sprintf "\n*Last comment* by %s, %s:\n>>> %s\n",
+                $by_lp{ $latest->{person_id} } // 'somebody',
+                concise(ago(time - $created->epoch, 1)),
+                $latest->{plain_text};
+            }
+          }
         }
-      })->else(
-        sub ($error) { $Logger->log("error: $error"); return Future->done;
-      })->retain;
-  }
+
+        push @replies, [
+          $plain,
+          {
+            slack => $slack,
+          },
+        ];
+      } else {
+        push @replies, "LP$item_id: is a $item->{type}";
+      }
+    }
+
+    $event->reply(@$_) for @replies;
+    if (@missing) {
+      $event->$error_method(
+        "I couldn't find some items you mentioned: " . join(q{, }, @missing)
+      );
+    }
+  })->retain;
 }
 
 has _last_lp_timer_task_ids => (
