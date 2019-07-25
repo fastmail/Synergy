@@ -6,7 +6,7 @@ use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor';
 
-use experimental qw(signatures);
+use experimental qw(signatures lexical_subs);
 use namespace::clean;
 use List::Util qw(first uniq);
 use Synergy::Util qw(parse_date_for_user);
@@ -39,8 +39,15 @@ sub handle_clox ($self, $event) {
     $time = $NOW_FACTORY->();
   }
 
+  # Some of our australian colleagues feel very strongly about being able to
+  # write 'Australian/Melbourne' rather than 'Australia/Sydney'.
+  my sub mel_to_syd ($tzname) {
+    return $tzname eq 'Australia/Melbourne' ? 'Australia/Sydney' : $tzname;
+  }
+
   my @tzs = sort {; $a cmp $b }
             uniq
+            map  {; mel_to_syd($_) }
             grep {; defined }
             map  {; $_->time_zone }
             $self->hub->user_directory->users;
@@ -48,7 +55,7 @@ sub handle_clox ($self, $event) {
   @tzs = ('America/New_York') unless @tzs;
 
   my $tz_nick = $self->hub->time_zone_names;
-  my $user_tz = $event->from_user->time_zone;
+  my $user_tz = mel_to_syd($event->from_user->time_zone);
 
   my %tz_objs = map {; $_ => DateTime::TimeZone->new(name => $_) } @tzs;
 
