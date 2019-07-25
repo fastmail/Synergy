@@ -641,13 +641,13 @@ sub handle_mr_search ($self, $event) {
       $icons .= " " if length $icons;
 
       $text  .= "\n* $mr->{title}";
-      $slack .= sprintf "\n*<%s|%s>* %s%s — _by %s_ — _%s_",
+      $slack .= sprintf "\n*<%s|%s>* %s%s — _(%s)_",
         $mr->{web_url},
         $self->_short_name_for_mr($mr),
         $icons,
         $mr->{title},
-        $mr->{author}{username},
-        $mr->{assignee} ? "assigned to $mr->{assignee}{username}" : "unassigned";
+        $mr->{author}{username}
+          . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
 
       $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
         if $mr->{labels} && $mr->{labels}->@*;
