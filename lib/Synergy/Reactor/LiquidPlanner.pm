@@ -233,7 +233,6 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
       return sprintf "$str (%0.1fh-%0.1fh)", $low, $high;
     };
 
-
     my $want_done = $item->{is_done};
     my @assignees = map  {; $str->($_) }
                     grep {; $want_done || ! $_->{is_done} }
@@ -1020,7 +1019,6 @@ after register_with_hub => sub ($self, @) {
     if (my $last_timer_ids = $state->{last_timer_ids}) {
       $self->_set_last_lp_timer_task_ids($last_timer_ids);
     }
-
 
     $self->save_state;
   }
@@ -2388,7 +2386,6 @@ sub _handle_tsearch ($self, $event, $text) {
     ],
   });
 }
-
 
 sub _handle_search ($self, $event, $text, $arg = {}) {
   my $instructions = $self->_parse_search($text);
