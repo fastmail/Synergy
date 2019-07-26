@@ -2373,12 +2373,8 @@ sub _compile_search ($self, $conds, $from_user) {
   return (\%flag, \%display, (%error ? \%error : undef));
 }
 
-sub _handle_search ($self, $event, $text) {
-  return $self->_do_search($event, $text);
-}
-
 sub _handle_psearch ($self, $event, $text) {
-  return $self->_do_search($event, $text, {
+  return $self->_handle_search($event, $text, {
     prepend_instructions => [
       { field => 'type', op => 'is', value => 'project' }
     ],
@@ -2386,7 +2382,7 @@ sub _handle_psearch ($self, $event, $text) {
 }
 
 sub _handle_tsearch ($self, $event, $text) {
-  return $self->_do_search($event, $text, {
+  return $self->_handle_search($event, $text, {
     prepend_instructions => [
       { field => 'type', op => 'is', value => 'task' }
     ],
@@ -2394,7 +2390,7 @@ sub _handle_tsearch ($self, $event, $text) {
 }
 
 
-sub _do_search ($self, $event, $text, $arg = {}) {
+sub _handle_search ($self, $event, $text, $arg = {}) {
   my $instructions = $self->_parse_search($text);
 
   # This is stupid. -- rjbs, 2019-03-30
