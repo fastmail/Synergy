@@ -12,6 +12,7 @@ use XML::LibXML;
 
 use experimental qw(signatures);
 use namespace::clean;
+use utf8;
 
 sub listener_specs {
   return;
@@ -116,6 +117,51 @@ sub unassigned_report ($self, $who, $arg = {}) {
       { slack => "\N{BUG} Unassigned $desc: $count" },
     ]);
   });
+}
+
+sub _filter_count_report ($self, $who, $arg) {
+  $self->_http_get({
+    method => 'private.filter.get',
+    xFilter  => $arg->{filter_id},
+  })->then(sub ($res) {
+
+    open my $fh, '<', \$res->decoded_content(charset => 'none')
+      or die "error making handle to XML results: $!";
+
+    my $doc = XML::LibXML->load_xml(IO => $fh);
+
+    my $count = grep {; $_->getChildrenByTagName('xRequest') }
+                $doc->getElementsByTagName('request');
+
+    return Future->done unless $count;
+
+    my $desc  = $arg->{description};
+    my $emoji = $arg->{emoji};
+    my $text = sprintf "$emoji %s: %s", $desc, $count;
+
+    return Future->done([ $text, { slack => $text } ]);
+  });
+}
+
+sub urgent_report ($self, $who, $arg = {}) {
+  $arg->{filter_id}     = 258;
+  $arg->{description} //= "All Urgent";
+  $arg->{emoji}       //= "\N{HEAVY EXCLAMATION MARK SYMBOL}";
+  return $self->_filter_count_report($who, $arg);
+}
+
+sub inbox_unassigned_report ($self, $who, $arg = {}) {
+  $arg->{filter_id}     = 279;
+  $arg->{description} //= "Inbox, Unassigned";
+  $arg->{emoji}       //= "\N{OPEN MAILBOX WITH RAISED FLAG}";
+  return $self->_filter_count_report($who, $arg);
+}
+
+sub inbox_report ($self, $who, $arg = {}) {
+  $arg->{filter_id}     = 141;
+  $arg->{description} //= "Inbox, Total";
+  $arg->{emoji}       //= "\N{OPEN MAILBOX WITH LOWERED FLAG}";
+  return $self->_filter_count_report($who, $arg);
 }
 
 __PACKAGE__->add_preference(
