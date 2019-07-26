@@ -111,7 +111,6 @@ sub load_users_from_database ($self) {
 
   while (my $row = $user_sth->fetchrow_hashref) {
     my $username = $row->{username};
-    warn "$username is deleted? $row->{is_deleted}";
     $users{$username} = Synergy::User->new({
       directory => $self,
       username  => $username,
