@@ -144,21 +144,18 @@ sub _filter_count_report ($self, $who, $arg) {
 }
 
 sub urgent_report ($self, $who, $arg = {}) {
-  $arg->{filter_id}     = 258;
   $arg->{description} //= "All Urgent";
   $arg->{emoji}       //= "\N{HEAVY EXCLAMATION MARK SYMBOL}";
   return $self->_filter_count_report($who, $arg);
 }
 
 sub inbox_unassigned_report ($self, $who, $arg = {}) {
-  $arg->{filter_id}     = 279;
   $arg->{description} //= "Inbox, Unassigned";
   $arg->{emoji}       //= "\N{OPEN MAILBOX WITH RAISED FLAG}";
   return $self->_filter_count_report($who, $arg);
 }
 
 sub inbox_report ($self, $who, $arg = {}) {
-  $arg->{filter_id}     = 141;
   $arg->{description} //= "Inbox, Total";
   $arg->{emoji}       //= "\N{OPEN MAILBOX WITH LOWERED FLAG}";
   return $self->_filter_count_report($who, $arg);
