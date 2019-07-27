@@ -746,8 +746,10 @@ sub provide_lp_link ($self, $event) {
             slack => $slack,
           },
         ];
+      } elsif ($item->{type} eq 'Inbox') {
+        push @replies, [ "LP$item_id is the inbox! 📪" ];
       } else {
-        push @replies, "LP$item_id: is a $item->{type}";
+        push @replies, [ "LP$item_id is a $item->{type}" ];
       }
     }
 
@@ -757,7 +759,8 @@ sub provide_lp_link ($self, $event) {
         "I couldn't find some items you mentioned: " . join(q{, }, @missing)
       );
     }
-  })->retain;
+  })->else(sub (@error) { $Logger->log("error with provide_lp_link: @error") })
+    ->retain;
 }
 
 has _last_lp_timer_task_ids => (
