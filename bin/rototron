@@ -37,25 +37,35 @@ if ($opt->debug) {
   print $plan ? JSON::MaybeXS->new->pretty->canonical->encode($plan) : "{}\n";
 }
 
+unless ($opt->really) {
+  if ($plan) {
+    printf "DRY RUN: update: %u\n",  0 + keys($plan->{update}->%*);
+    printf "DRY RUN: create: %u\n",  0 + keys($plan->{create}->%*);
+    printf "DRY RUN: destroy: %u\n", 0 + $plan->{create}->@*;
+  } else {
+    say "DRY RUN: no action required";
+  }
+
+  exit;
+}
+
 exit unless $plan;
 
-if ($opt->really) {
-  my $res = $rototron->jmap_client->request({
-    using       => [
-      'urn:ietf:params:jmap:mail',
-      'https://cyrusimap.org/ns/jmap/calendars',
-    ],
-    methodCalls => [
-      [ 'CalendarEvent/set' => $plan, ],
-    ],
-  });
+my $res = $rototron->jmap_client->request({
+  using       => [
+    'urn:ietf:params:jmap:mail',
+    'https://cyrusimap.org/ns/jmap/calendars',
+  ],
+  methodCalls => [
+    [ 'CalendarEvent/set' => $plan, ],
+  ],
+});
 
-  $res->assert_successful;
+$res->assert_successful;
 
-  if ($opt->debug) {
-    print JSON::MaybeXS->new->pretty->canonical->encode(
-      $res->sentence_named('CalendarEvent/set')->as_stripped_pair,
-    );
-  }
+if ($opt->debug) {
+  print JSON::MaybeXS->new->pretty->canonical->encode(
+    $res->sentence_named('CalendarEvent/set')->as_stripped_pair,
+  );
 }
 
