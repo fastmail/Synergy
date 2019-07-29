@@ -135,7 +135,7 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
 
   my $res = eval {
     my $res = $self->jmap_client->request({
-      using       => [ 'urn:ietf:params:jmap:mail' ],
+      using       => [ 'urn:ietf:params:jmap:mail', 'https://cyrusimap.org/ns/jmap/calendars', ],
       methodCalls => [
         [
           'CalendarEvent/query' => {
@@ -497,7 +497,7 @@ package Synergy::Rototron::AvailabilityChecker {
     CALENDAR: for my $calendar ($self->calendars) {
       my $res = eval {
         my $res = $self->jmap_client->request({
-          using       => [ 'urn:ietf:params:jmap:mail' ],
+          using       => [ 'urn:ietf:params:jmap:mail', 'https://cyrusimap.org/ns/jmap/calendars', ],
           methodCalls => [
             [
               'CalendarEvent/query' => {
