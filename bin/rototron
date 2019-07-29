@@ -41,7 +41,10 @@ exit unless $plan;
 
 if ($opt->really) {
   my $res = $rototron->jmap_client->request({
-    using       => [ 'urn:ietf:params:jmap:mail' ],
+    using       => [
+      'urn:ietf:params:jmap:mail',
+      'https://cyrusimap.org/ns/jmap/calendars',
+    ],
     methodCalls => [
       [ 'CalendarEvent/set' => $plan, ],
     ],
