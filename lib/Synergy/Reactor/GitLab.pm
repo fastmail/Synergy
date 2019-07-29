@@ -503,7 +503,7 @@ sub handle_mr_search ($self, $event) {
   $event->mark_handled;
   my $rest = $event->text =~ s/\Amrs(?:earch)?\s*//ir;
 
-  $rest = "for:me wip:no" unless length $rest;
+  $rest = "for:me wip:no backlogged:no" unless length $rest;
 
   my $conds = $self->_parse_search($rest);
 
