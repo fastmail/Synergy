@@ -103,24 +103,6 @@ sub format_datetime ($self, $dt, $format = undef) {
   return $self->directory->hub->format_friendly_date($dt);
 }
 
-has expandoes => (
-  reader  => '_expandoes',
-  isa     => 'HashRef',
-  traits  => [ 'Hash' ],
-  default => sub {  {}  },
-);
-
-sub defined_expandoes ($self) {
-  my $expandoes = $self->_expandoes;
-  my @keys = grep {; $expandoes->{$_}->@*  } keys %$expandoes;
-  return @keys;
-}
-
-sub tasks_for_expando ($self, $name) {
-  return unless my $expando = $self->_expandoes->{ $name };
-  return @$expando;
-}
-
 has identities => (
   is => 'ro',
   isa => 'HashRef',

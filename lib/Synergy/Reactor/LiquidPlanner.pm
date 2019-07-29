@@ -317,7 +317,6 @@ EOH
                   "chill: do not nag about a timer until you say something new",
                   "chill until WHEN: do not nag until the designated time",
                   ],
-  expand    =>  [ \&_handle_expand ],
   shows     =>  [ \&_handle_shows,       ],
   "show's"  =>  [ \&_handle_shows,       ],
   showtime  =>  [ \&_handle_showtime,    ],
@@ -2830,34 +2829,21 @@ sub _handle_good ($self, $event, $text) {
   my $user = $event->from_user;
 
   my ($what) = $text =~ /^([a-z_]+)/i;
-  my ($reply, $expand, $stop, $end_of_day);
+  my ($reply, $stop, $end_of_day);
 
-  if    ($what eq 'morning')    { $reply  = "Good morning!";
-                                  $expand = 'morning'; }
-
-  elsif ($what eq 'day_au')     { $reply  = "How ya goin'?";
-                                  $expand = 'morning'; }
-
-  elsif ($what eq 'day_de')     { $reply  = "Doch, wenn du ihn siehst!";
-                                  $expand = 'morning'; }
-
-  elsif ($what eq 'day')        { $reply  = "Long days and pleasant nights!";
-                                  $expand = 'morning'; }
-
-  elsif ($what eq 'afternoon')  { $reply  = "You, too!";
-                                  $expand = 'afternoon' }
-
+  if    ($what eq 'morning')    { $reply  = "Good morning!"; }
+  elsif ($what eq 'day_au')     { $reply  = "How ya goin'?"; }
+  elsif ($what eq 'day_de')     { $reply  = "Doch, wenn du ihn siehst!"; }
+  elsif ($what eq 'day')        { $reply  = "Long days and pleasant nights!"; }
+  elsif ($what eq 'afternoon')  { $reply  = "You, too!"; }
   elsif ($what eq 'evening')    { $reply  = "I'll be here when you get back!";
                                   $stop   = 1; }
-
   elsif ($what eq 'night')      { $reply  = "Sleep tight!";
                                   $stop   = 1;
                                   $end_of_day = 1; }
-
   elsif ($what eq 'riddance')   { $reply  = "I'll outlive you all.";
                                   $stop   = 1;
                                   $end_of_day = 1; }
-
   elsif ($what eq 'bye')        { $reply  = pick_one(\@BYE);
                                   $stop   = 1;
                                   $end_of_day = 1; }
@@ -2869,11 +2855,6 @@ sub _handle_good ($self, $event, $text) {
   if ($reply and not $self->auth_header_for($user)) {
     $event->mark_handled;
     return $event->reply($reply);
-  }
-
-  if ($expand && $user->tasks_for_expando($expand)) {
-    $self->expand_tasks($event, $expand, "$reply  ");
-    $reply = '';
   }
 
   if ($stop) {
@@ -2899,66 +2880,6 @@ sub _handle_good ($self, $event, $text) {
     $event->mark_handled;
     return $event->reply($reply);
   }
-}
-
-sub _handle_expand ($self, $event, $text) {
-  my $user = $event->from_user;
-  my ($what) = $text =~ /^([a-z_]+)/i;
-  $self->expand_tasks($event, $what);
-}
-
-sub expand_tasks ($self, $event, $expand_target, $prefix='') {
-  my $user = $event->from_user;
-
-  my $lpc = $self->lp_client_for_user($user);
-
-  unless ($expand_target && $expand_target =~ /\S/) {
-    my @names = sort $user->defined_expandoes;
-    return $event->reply($prefix . "You don't have any expandoes") unless @names;
-    return $event->reply($prefix . "Your expandoes: " . (join q{, }, @names));
-  }
-
-  my @tasks = $user->tasks_for_expando($expand_target);
-  return $event->error_reply($prefix . "You don't have an expando for <$expand_target>")
-    unless @tasks;
-
-  my $parent = $self->recurring_package_id;
-  my $desc = $event->description;
-
-  my (@ok, @fail);
-  for my $task (@tasks) {
-    my $payload = {
-      task => {
-        name        => $task,
-        parent_id   => $parent,
-        assignments => [ { person_id => $user->lp_id } ],
-        description => $desc,
-      }
-    };
-
-    $Logger->log([ "creating LP task: %s", $payload ]);
-
-    my $res = $lpc->create_task($payload);
-
-    if ($res->is_success) {
-      push @ok, $task;
-    } else {
-      push @fail, $task;
-    }
-  }
-
-  my $reply;
-  if (@ok) {
-    $reply = "I created your $expand_target tasks: " . join(q{; }, @ok);
-    $reply .= "  Some tasks failed to create: " . join(q{; }, @fail) if @fail;
-  } elsif (@fail) {
-    $reply = "Your $expand_target tasks couldn't be created.  Sorry!";
-  } else {
-    $reply = "Something impossible happened.  How exciting!";
-  }
-
-  $event->reply($prefix . $reply);
-  $event->mark_handled;
 }
 
 sub _create_lp_task ($self, $event, $my_arg, $arg) {
