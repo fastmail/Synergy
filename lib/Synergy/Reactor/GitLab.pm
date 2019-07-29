@@ -15,7 +15,7 @@ use Digest::MD5 qw(md5_hex);
 use Future 0.36;  # for ->retain
 use JSON::MaybeXS;
 use Lingua::EN::Inflect qw(PL_N PL_V);
-use List::Util qw(uniq);
+use List::Util qw(all uniq);
 use MIME::Base64;
 use POSIX qw(ceil);
 use Synergy::Logger '$Logger';
@@ -517,6 +517,8 @@ sub handle_mr_search ($self, $event) {
 
   my $labels;
 
+  my @postfilters;
+
   COND: for my $hunk (@$conds) {
     my ($name, $value) = @$hunk;
 
@@ -584,6 +586,19 @@ sub handle_mr_search ($self, $event) {
       next COND;
     }
 
+    if ($name eq 'backlogged') {
+      next COND if $value eq 'both';
+      return $event->error_reply("The value for `backlogged:` must be yes, no, or both.")
+        unless $value eq 'yes' or $value eq 'no';
+
+      push @postfilters, sub {
+        ! grep { fc $_ eq 'backlogged' } $_[0]->{labels}->@*
+      };
+
+      next COND;
+    }
+
+
     return $event->error_reply("Unknown query token: $name");
   }
 
@@ -620,6 +635,14 @@ sub handle_mr_search ($self, $event) {
 
     return $event->error_reply("You've gone past the last page!")
       if $zero > $#$data;
+
+    if (@postfilters) {
+      # Stupid, inefficient, good enough. -- rjbs, 2019-07-29
+      @$data = grep {;
+        my $datum = $_;
+        all { $_->($datum) } @postfilters;
+      } @$data;
+    }
 
     my $pages = ceil(@$data / 10);
     my @page  = grep {; $_ } $data->@[ $zero .. $zero+9 ];
