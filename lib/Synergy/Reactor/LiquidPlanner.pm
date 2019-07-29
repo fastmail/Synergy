@@ -3702,8 +3702,9 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
 }
 
 sub _handle_timesheet ($self, $event, $text) {
-  return $event->error_reply("The timesheet command doesn't take any arguments… yet.")
-    if length $text;
+  unless ($text eq 'today' or ! length $text) {
+    return $event->error_reply("The timesheet command's arguments are under construction, but for now, just say `timesheet` or `timesheet today`.");
+  }
 
   my $who = $event->from_user;
   my $lpc = $self->f_lp_client_for_user($who);
@@ -3711,7 +3712,7 @@ sub _handle_timesheet ($self, $event, $text) {
   # XXX: doesn't work with LiquidPlanner::Client !?
   my $iteration = $self->lp_client_for_master->current_iteration;
 
-  $lpc->timesheet_entries({
+  my $ts = $lpc->timesheet_entries({
     member_ids  => [ $who->lp_id ],
     start_date  => $iteration->{start},
     end_date    => $iteration->{end},
@@ -3722,18 +3723,54 @@ sub _handle_timesheet ($self, $event, $text) {
       "@err"
     ]);
     $event->error_reply("I couldn't get your timesheet!");
-  })->then(sub ($ts_events) {
-    my $ymd   = DateTime->now(time_zone => $who->time_zone)->ymd;
-    my $total = sum0 map  {; $_->{work} } @$ts_events;
-    my $today = sum0 map  {; $_->{work} }
-                     grep {; $_->{work_performed_on} eq $ymd } @$ts_events;
-    $event->reply(
-      sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.",
-        $total, PL_N('hour', $total),
-        $today, PL_N('hour', $total)
-    );
-  })
-  ->retain;
+  });
+
+  my $ymd = DateTime->now(time_zone => $who->time_zone)->ymd;
+
+  if ($text eq 'today') {
+    return $ts->then(sub ($ts_entries) {
+      my @entries = sort {; $a->{created_at} cmp $b->{created_at} }
+                   grep {; $_->{work_performed_on} eq $ymd } @$ts_entries;
+
+      unless (@entries) {
+        return $event->reply("You've got no work logged yet today!");
+      }
+
+      my @get = map {; $lpc->get_item($_) }
+                uniq
+                map {; $_->{item_id} } @entries;
+
+      Future->wait_all(@get)->then(sub (@got) {
+        my %item = map {; $_->get->{id} => $_->get } @got;
+
+        my $text = join qq{\n},
+          "Work tracked today:",
+          map {; sprintf "%0.2fh on %s",
+            $_->{work},
+            $item{$_->{item_id}}->{name} } @entries;
+
+        my $slack = join qq{\n},
+          "*Work tracked today:*",
+          map {; sprintf "%0.2fh on %s",
+            $_->{work},
+            $self->_slack_item_link_with_name($item{$_->{item_id}}) } @entries;
+
+        $event->reply($text, { slack => $slack });
+      });
+    })->retain;
+  } else {
+    return $ts->then(sub ($ts_events) {
+      my $total = sum0 map  {; $_->{work} } @$ts_events;
+      my $today = sum0 map  {; $_->{work} }
+                       grep {; $_->{work_performed_on} eq $ymd } @$ts_events;
+
+      $event->reply(
+        sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.",
+          $total, PL_N('hour', $total),
+          $today, PL_N('hour', $total)
+      );
+    })->retain;
+  }
 }
 
 sub _handle_projects ($self, $event, $text) {
