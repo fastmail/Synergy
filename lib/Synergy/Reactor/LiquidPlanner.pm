@@ -3755,6 +3755,10 @@ sub _handle_timesheet ($self, $event, $text) {
             $_->{work},
             $self->_slack_item_link_with_name($item{$_->{item_id}}) } @entries;
 
+        my $total = sum0 map {; $_->{work} } @entries;
+        $text  .= sprintf "\nTotal: %0.2fh", $total;
+        $slack .= sprintf "\n*Total:* %0.2fh", $total;
+
         $event->reply($text, { slack => $slack });
       });
     })->retain;
