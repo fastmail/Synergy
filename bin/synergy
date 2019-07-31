@@ -14,6 +14,9 @@ use Synergy::Logger '$Logger' => { init => {
 binmode *STDOUT, ':encoding(utf-8)';
 binmode *STDERR, ':encoding(utf-8)';
 
+STDERR->autoflush;
+STDOUT->autoflush;
+
 use Getopt::Long::Descriptive;
 use Synergy::Hub;
 
