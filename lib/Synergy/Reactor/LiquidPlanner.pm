@@ -3702,38 +3702,37 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
 }
 
 sub _handle_timesheet ($self, $event, $text) {
-  unless ($text eq 'today' or ! length $text) {
-    return $event->error_reply("The timesheet command's arguments are under construction, but for now, just say `timesheet` or `timesheet today`.");
+  unless ($text eq 'today' or $text eq 'yesterday' or ! length $text) {
+    return $event->error_reply("The timesheet command's arguments are under construction, but for now, just say `timesheet` or `timesheet {today,yesterday}`.");
   }
 
   my $who = $event->from_user;
   my $lpc = $self->f_lp_client_for_user($who);
 
-  # XXX: doesn't work with LiquidPlanner::Client !?
-  my $iteration = $self->lp_client_for_master->current_iteration;
+  if ($text eq 'today' or $text eq 'yesterday') {
+    my $when = DateTime->now(time_zone => $who->time_zone);
+    $when->subtract(days => 1) if $text eq 'yesterday';
+    my $ymd = $when->ymd;
 
-  my $ts = $lpc->timesheet_entries({
-    member_ids  => [ $who->lp_id ],
-    start_date  => $iteration->{start},
-    end_date    => $iteration->{end},
-  })->else(sub (@err) {
-    $Logger->log([
-      "timesheet retrieval error for %s: %s",
-      $iteration,
-      "@err"
-    ]);
-    $event->error_reply("I couldn't get your timesheet!");
-  });
+    my $ts = $lpc->timesheet_entries({
+      member_ids  => [ $who->lp_id ],
+      start_date  => $ymd,
+      end_date    => $ymd,
+    })->else(sub (@err) {
+      $Logger->log([
+        "timesheet retrieval error for %s: %s",
+        $ymd,
+        "@err"
+      ]);
+      $event->error_reply("I couldn't get your timesheet!");
+    });
 
-  my $ymd = DateTime->now(time_zone => $who->time_zone)->ymd;
-
-  if ($text eq 'today') {
     return $ts->then(sub ($ts_entries) {
       my @entries = sort {; $a->{created_at} cmp $b->{created_at} }
                    grep {; $_->{work_performed_on} eq $ymd } @$ts_entries;
 
       unless (@entries) {
-        return $event->reply("You've got no work logged yet today!");
+        return $event->reply("You've got no work logged yet \L$text!");
       }
 
       my @get = map {; $lpc->get_item($_) }
@@ -3743,30 +3742,48 @@ sub _handle_timesheet ($self, $event, $text) {
       Future->wait_all(@get)->then(sub (@got) {
         my %item = map {; $_->get->{id} => $_->get } @got;
 
-        my $text = join qq{\n},
-          "Work tracked today:",
+        my $plain = join qq{\n},
+          "Work tracked \L$text:",
           map {; sprintf "%0.2fh on %s",
             $_->{work},
             $item{$_->{item_id}}->{name} } @entries;
 
         my $slack = join qq{\n},
-          "*Work tracked today:*",
+          "*Work tracked \L$text:*",
           map {; sprintf "%0.2fh on %s",
             $_->{work},
             $self->_slack_item_link_with_name($item{$_->{item_id}}) } @entries;
 
         my $total = sum0 map {; $_->{work} } @entries;
-        $text  .= sprintf "\nTotal: %0.2fh", $total;
+        $plain  .= sprintf "\nTotal: %0.2fh", $total;
         $slack .= sprintf "\n*Total:* %0.2fh", $total;
 
-        $event->reply($text, { slack => $slack });
+        $event->reply($plain, { slack => $slack });
       });
     })->retain;
   } else {
+    # XXX: doesn't work with LiquidPlanner::Client !?
+    my $iteration = $self->lp_client_for_master->current_iteration;
+
+    my $ts = $lpc->timesheet_entries({
+      member_ids  => [ $who->lp_id ],
+      start_date  => $iteration->{start},
+      end_date    => $iteration->{end},
+    })->else(sub (@err) {
+      $Logger->log([
+        "timesheet retrieval error for %s: %s",
+        $iteration,
+        "@err"
+      ]);
+      $event->error_reply("I couldn't get your timesheet!");
+    });
+
+    my $today = DateTime->now(time_zone => $who->time_zone)->ymd;
+
     return $ts->then(sub ($ts_events) {
       my $total = sum0 map  {; $_->{work} } @$ts_events;
       my $today = sum0 map  {; $_->{work} }
-                       grep {; $_->{work_performed_on} eq $ymd } @$ts_events;
+                       grep {; $_->{work_performed_on} eq $today } @$ts_events;
 
       $event->reply(
         sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.",
