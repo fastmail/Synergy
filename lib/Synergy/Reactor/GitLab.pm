@@ -207,6 +207,20 @@ sub listener_specs {
       },
     },
     {
+      name      => 'r?',
+      method    => 'handle_r_hook',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        $e->was_targeted && $e->text eq 'r?'
+      },
+      help_entries => [
+        { title => 'r?',
+          text  => 'This is short for `mrsearch for:me wip:no backlogged:no` --
+          in other words, "what can I act on right now?".'
+        },
+      ],
+    },
+    {
       name      => 'mr-search',
       method    => 'handle_mr_search',
       exclusive => 1,
@@ -214,6 +228,27 @@ sub listener_specs {
         $e->was_targeted &&
         $e->text =~ /^mrs(?:earch)?(?:\z|\s+)/i;
       },
+      help_entries => [
+        { title => 'mrs',
+          text  => 'See *help mrsearch*.', # Sorry, no xrefs.
+        },
+        {
+          title => 'mrsearch',
+          text  =>  <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
+The *mrsearch* command searches merge requests in GitLab.  You can pass in a
+list of colon-separated pairs like *for:me* to limit the results, or just words
+to search for.  Here are the arguments you can pass:
+
+• *for:`USER`*: MRs assigned to the named user; `*` for "assigned to anybody"
+or `~` for "assigned to nobody"
+• *by:`USER`*: MRs authored by the named user
+• *label:`LABEL`*: MRs with the given label; `*` for "has a label at all" or
+`~` for "has no labels"
+• *wip:`{yes,no,both}`*: whether or not to include works in progress
+• *backlogged:`{yes,no,both}`*: whether or not to include MRs with the "Backlogged" label
+EOH
+        },
+      ],
     },
     {
       name => 'mention-mr',
@@ -499,13 +534,20 @@ sub _short_name_for_mr ($self, $mr) {
   return "$name!$id";
 }
 
+sub handle_r_hook ($self, $event) {
+  $event->mark_handled;
+  $self->_handle_mr_search_string("for:me wip:no backlogged:no", $event);
+}
+
 sub handle_mr_search ($self, $event) {
   $event->mark_handled;
   my $rest = $event->text =~ s/\Amrs(?:earch)?\s*//ir;
 
-  $rest = "for:me wip:no backlogged:no" unless length $rest;
+  $self->_handle_mr_search_string($rest, $event);
+}
 
-  my $conds = $self->_parse_search($rest);
+sub _handle_mr_search_string ($self, $text, $event) {
+  my $conds = $self->_parse_search($text);
 
   unless ($conds) {
     return $event->error_reply("I didn't understand your search.");
