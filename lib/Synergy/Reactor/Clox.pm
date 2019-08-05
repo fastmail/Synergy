@@ -26,6 +26,13 @@ sub listener_specs {
 # For testing. -- rjbs, 2018-07-14
 our $NOW_FACTORY = sub { DateTime->now };
 
+has always_include => (
+  isa     => 'ArrayRef',
+  default => sub {  []  },
+  traits  => [ 'Array' ],
+  handles => { always_include => 'elements' },
+);
+
 sub handle_clox ($self, $event) {
   $event->mark_handled;
 
@@ -49,8 +56,10 @@ sub handle_clox ($self, $event) {
             uniq
             map  {; mel_to_syd($_) }
             grep {; defined }
-            map  {; $_->time_zone }
-            $self->hub->user_directory->users;
+            ( $self->always_include,
+              ( grep {; defined }
+                map  {; $_->time_zone }
+                $self->hub->user_directory->users));
 
   @tzs = ('America/New_York') unless @tzs;
 
