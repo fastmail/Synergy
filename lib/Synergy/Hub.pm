@@ -487,9 +487,9 @@ sub format_friendly_date ($self, $dt, $arg = {}) {
   #   target_time_zone  - format into this time zone; default, $dt's TZ
 
   if ($arg->{target_time_zone} && $arg->{target_time_zone} ne $dt->time_zone->name) {
-    $dt = DateTime->new(
+    $dt = DateTime->from_epoch(
       time_zone => $arg->{target_time_zone},
-      map {; $_ => $dt->$_ } qw(year month day hour minute second)
+      epoch => $dt->epoch,
     );
   }
 
