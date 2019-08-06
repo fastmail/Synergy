@@ -34,6 +34,44 @@ has rtm_client => (
   },
 );
 
+has timelines => (
+  reader  => '_timelines',
+  lazy    => 1,
+  default => sub {  {}  },
+);
+
+sub timeline_for ($self, $user) {
+  return unless $self->user_has_preference($user, 'api-token');
+
+  my $username = $user->username;
+
+  my $store = $self->_timelines;
+  my $have  = $store->{$username};
+
+  # Here is the intent:  if three things running at once all ask for a
+  # timeline id, we should only create one.  So, if we have an answer, great,
+  # this is a cache.  If we have a pending future, great, everything can
+  # sequence on the same attempt to get a timeline, because having one is
+  # sufficient.  If we had one trying before, though, and it failed, we should
+  # clear it, because we can try again.  Maybe eventually we want a rate limit,
+  # here.  For now, whatever. -- rjbs, 2019-08-06
+  return $have if $have && ($have->is_done || ! $have->is_ready);
+  delete $store->{$username};
+
+  my $rsp_f = $self->rtm_client->api_call('rtm.timelines.create' => {
+    auth_token => $self->get_user_preference($user, 'api-token'),
+  });
+
+  return $store->{$username} = $rsp_f->then(sub ($rsp) {
+    unless ($rsp->is_success) {
+      $Logger->log([ "failed to create a timeline: %s", $rsp->_response ]);
+      return Future->fail("couldn't get timeline");
+    }
+
+    return Future->done($rsp->get('timeline'));
+  });
+}
+
 sub listener_specs {
   return (
     {
@@ -66,22 +104,31 @@ sub handle_todo ($self, $event) {
   return $event->error_reply("You didn't tell me what you want to do!")
     unless length $todo;
 
-  my $rsp_f = $self->rtm_client->api_call('rtm.tasks.addTask' => {
-    auth_token => $self->get_user_preference($event->from_user, 'api-token'),
-    name  => $todo,
-    parse => 1,
-  });
+  my $tl_f = $self->timeline_for($event->from_user);
 
-  $rsp_f->then(sub ($rsp) {
-    unless ($rsp->is_success) {
-      $Logger->log([
-        "failed to cope with a request to make a task: %s", $rsp->_response,
-      ]);
-      return $event->reply("Something went wrong creating that task, sorry.");
-    }
+  $tl_f->then(sub ($tl) {
+    my $rsp_f = $self->rtm_client->api_call('rtm.tasks.add' => {
+      auth_token => $self->get_user_preference($event->from_user, 'api-token'),
+      timeline   => $tl,
+      name  => $todo,
+      parse => 1,
+    });
 
-    $Logger->log([ "made task: %s", $rsp->_response ]);
-    return $event->reply("Task created!");
+    $rsp_f->then(sub ($rsp) {
+      unless ($rsp->is_success) {
+        $Logger->log([
+          "failed to cope with a request to make a task: %s", $rsp->_response,
+        ]);
+        return $event->reply("Something went wrong creating that task, sorry.");
+      }
+
+      # {{{"list": {"id": "7087408", "taskseries": [{"created": "2019-08-06T20:56:13Z", "id": "389696269", "location_id": "", "modified": "2019-08-06T20:56:13Z", "name": "run Jerrica under daemontools", "notes": [], "participants": [], "source": "api:fd58375d2e592a7f1e90ff575eae6e7c", "tags": [], "task": [{"added": "2019-08-06T20:56:13Z", "completed": "", "deleted": "", "due": "2019-08-09T04:00:00Z", "estimate": "", "has_due_time": "0", "id": "679750283", "postponed": "0", "priority": "N"}], "url": ""}]}, "stat": "ok", "transaction": {"id": "3515949782", "undoable": "0"}}}}
+      $Logger->log([ "made task: %s", $rsp->_response ]);
+      return $event->reply("Task created!");
+    });
+  })->else(sub (@fail) {
+    $Logger->log([ "failed to make task: %s", \@fail ]);
+    $event->reply("Sorry, something went wrong making that task.");
   })->retain;
 }
 
