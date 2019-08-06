@@ -40,7 +40,9 @@ sub listener_specs {
       name      => 'milk',
       method    => 'handle_milk',
       exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text eq 'milk' },
+      predicate => sub ($self, $e) {
+        $e->was_targeted && $e->text =~ /\Amilk(?:\s|\z)/
+      },
     },
   );
 }
@@ -48,18 +50,55 @@ sub listener_specs {
 sub handle_milk ($self, $event) {
   $event->mark_handled;
 
+  my (undef, $filter) = split /\s+/, $event->text, 2;
+
   return $event->error_reply("I don't have an RTM auth token for you.")
     unless $self->user_has_preference($event->from_user, 'api-token');
 
   my $rsp_f = $self->rtm_client->api_call('rtm.tasks.getList' => {
     auth_token => $self->get_user_preference($event->from_user, 'api-token'),
-    filter     => 'status:incomplete',
+    filter     => $filter || 'status:incomplete',
   });
 
   $rsp_f->then(sub ($rsp) {
-    $event->reply("I got a result and it was "
-      . ($rsp->is_success ? "successful" : "no good")
-      . ".");
+    unless ($rsp->is_success) {
+      $Logger->log([
+        "failed to cope with a request for milk: %s", $rsp->_response,
+      ]);
+      return $event->reply("Something went wrong getting that milk, sorry.");
+    }
+
+    # The structure is:
+    # { tasks => {
+    #   list  => [ { id => ..., taskseries => [ { name => ..., task => [ {}
+    my @lines;
+    for my $list ($rsp->get('tasks')->{list}->@*) {
+      for my $tseries ($list->{taskseries}->@*) {
+        my @tasks = $tseries->{task}->@*;
+        push @lines, map {; +{
+          string => sprintf('%s %s — %s',
+            ($_->{completed} ? '✓' : '•'),
+            $tseries->{name},
+            ($_->{due} ? "due $_->{due}" : "no due date")),
+          due    => $_->{due},
+          added  => $_->{added},
+        } } @tasks;
+
+        last if @lines >= 10;
+      }
+    }
+
+    $event->reply("No tasks found!") unless @lines;
+
+    @lines = sort { ($a->{due}||9) cmp ($b->{due}||9)
+                ||  $a->{added} cmp $b->{added} } @lines;
+
+    $#lines = 9 if @lines > 10;
+
+    $event->reply(join qq{\n},
+      "*Tasks found:*\n",
+      map {; $_->{string} } @lines
+    );
   })->retain;
 }
 
