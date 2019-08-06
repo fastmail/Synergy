@@ -44,7 +44,45 @@ sub listener_specs {
         $e->was_targeted && $e->text =~ /\Amilk(?:\s|\z)/
       },
     },
+    {
+      name      => 'todo',
+      method    => 'handle_todo',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        $e->was_targeted && $e->text =~ /\Atodo(?:\s|\z)/
+      },
+    },
   );
+}
+
+sub handle_todo ($self, $event) {
+  $event->mark_handled;
+
+  my (undef, $todo) = split /\s+/, $event->text, 2;
+
+  return $event->error_reply("I don't have an RTM auth token for you.")
+    unless $self->user_has_preference($event->from_user, 'api-token');
+
+  return $event->error_reply("You didn't tell me what you want to do!")
+    unless length $todo;
+
+  my $rsp_f = $self->rtm_client->api_call('rtm.tasks.addTask' => {
+    auth_token => $self->get_user_preference($event->from_user, 'api-token'),
+    name  => $todo,
+    parse => 1,
+  });
+
+  $rsp_f->then(sub ($rsp) {
+    unless ($rsp->is_success) {
+      $Logger->log([
+        "failed to cope with a request to make a task: %s", $rsp->_response,
+      ]);
+      return $event->reply("Something went wrong creating that task, sorry.");
+    }
+
+    $Logger->log([ "made task: %s", $rsp->_response ]);
+    return $event->reply("Task created!");
+  })->retain;
 }
 
 sub handle_milk ($self, $event) {
