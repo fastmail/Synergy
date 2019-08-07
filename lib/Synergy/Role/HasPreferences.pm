@@ -152,8 +152,9 @@ role {
     }
 
     $uprefs->{$pref_name} = $value // $default;
+    delete $uprefs->{$pref_name} unless defined $uprefs->{$pref_name};
 
-    $spec->{after_set}->($self, $username, $value);
+    $spec->{after_set}->($self, $username, $uprefs->{$pref_name});
 
     $self->save_state;
 
