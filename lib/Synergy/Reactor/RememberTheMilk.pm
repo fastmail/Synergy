@@ -72,6 +72,36 @@ sub timeline_for ($self, $user) {
   });
 }
 
+has pending_frobs => (
+  reader  => '_pending_frobs',
+  lazy    => 1,
+  default => sub {  {}  },
+);
+
+sub frob_for ($self, $user) {
+  return if $self->user_has_preference($user, 'api-token');
+
+  my $username = $user->username;
+
+  my $store = $self->_pending_frobs;
+  my $have  = $store->{$username};
+
+  # This is just the timeline generator code, copied and pasted.
+  return $have if $have && ($have->is_done || ! $have->is_ready);
+  delete $store->{$username};
+
+  my $rsp_f = $self->rtm_client->api_call('rtm.auth.getFrob' => {});
+
+  return $store->{$username} = $rsp_f->then(sub ($rsp) {
+    unless ($rsp->is_success) {
+      $Logger->log([ "failed to get a frob: %s", $rsp->_response ]);
+      return Future->fail("couldn't get frob");
+    }
+
+    return Future->done($rsp->get('frob'));
+  });
+}
+
 sub listener_specs {
   return (
     {
@@ -88,6 +118,14 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         $e->was_targeted && $e->text =~ /\Atodo(?:\s|\z)/
+      },
+    },
+    {
+      name      => 'auth',
+      method    => 'handle_auth',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        $e->was_targeted && $e->text =~ /\Amilkauth(?:\s|\z)/i
       },
     },
   );
@@ -187,11 +225,68 @@ sub handle_milk ($self, $event) {
   })->retain;
 }
 
+sub handle_auth ($self, $event) {
+  $event->mark_handled;
+  my (undef, $arg) = split /\s+/, lc $event->text, 2;
+
+  my $user = $event->from_user;
+
+  if ($self->user_has_preference($user, 'api-token')) {
+    return $event->error_reply("It looks like you've already authenticated!");
+  }
+
+  $arg //= 'start';
+  unless ($arg eq 'start' or $arg eq 'complete') {
+    return $event->error_reply("You need to say either `auth start` or `auth complete`.");
+  }
+
+  if ($arg eq 'start') {
+    return $self->frob_for($event->from_user)
+      ->on_fail(sub { $event->error_reply("Something went wrong!"); })
+      ->then(sub ($frob) {
+          my $auth_uri = join q{?},
+            "https://www.rememberthemilk.com/services/auth/",
+            $self->rtm_client->_signed_content({ frob => $frob, perms => 'write' });
+
+          my $text = "To authorize me to talk to RTM for you, follow this link: $auth_uri\n\n…and then tell me `auth complete`";
+          $event->private_reply($text, { slack => $text });
+        })
+      ->retain;
+  }
+
+  # So we must have 'auth complete'
+  my $frob_f = $self->frob_for($event->from_user);
+
+  return $event->reply("You're not ready to complete auth yet!")
+    unless $frob_f->is_ready;
+
+  my $token_f = $frob_f
+    ->then(sub ($frob) {
+      $self->rtm_client->api_call('rtm.auth.getToken' => { frob => $frob })
+    })
+    ->then(sub ($rsp) {
+      unless ($rsp->is_success) {
+        return Future->fail(
+          "Remember The Milk rejected our request to get a token!",
+          cmilk_rsp => $rsp->_response,
+        );
+      }
+
+      my $token = $rsp->get('auth')->{token};
+
+      my $got = $self->set_user_preference($user, 'api-token', $token);
+
+      $event->reply("You're authenticated!");
+    })
+    ->else(sub (@fail) {
+      $Logger->log([ "get token: %s", \@fail ]);
+    })->retain;
+}
+
 __PACKAGE__->add_preference(
   name      => 'api-token',
   validator => sub ($self, $value, @) {
-    return $value if $value =~ /\A[a-f0-9]+\z/;
-    return (undef, "Your user-id must be a hex string.")
+    return (undef, "You can only set your API token with the milkauth command.");
   },
   describer => sub ($v) { return defined $v ? "<redacted>" : '<undef>' },
   default   => undef,
