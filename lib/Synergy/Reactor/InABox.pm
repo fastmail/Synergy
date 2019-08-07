@@ -138,7 +138,7 @@ sub _handle_create ($self, $event, @args) {
   }
 
   my %droplet_create_args = (
-    name     => $event->from_user->username.'.fminabox',
+    name     => $self->_box_name_for_user($event->from_user->username),
     region   => $self->_region_for_user($event->from_user),
     size     => 's-4vcpu-8gb',
     image    => $snapshot_id,
@@ -463,7 +463,7 @@ sub _get_droplet_for ($self, $who) {
         return Future->done;
       }
       my $data = decode_json($res->content);
-      my ($droplet) = grep { $_->{name} eq "$who.fminabox" } $data->{droplets}->@*;
+      my ($droplet) = grep { $_->{name} eq $self->_box_name_for_user($who) } $data->{droplets}->@*;
       Future->done($droplet);
     }
   );
@@ -530,6 +530,10 @@ sub _get_ssh_key ($self) {
       Future->done($ssh_key);
     }
   );
+}
+
+sub _box_name_for_user ($self, $user) {
+  return $user.'.box.'.$self->box_domain;
 }
 
 sub _region_for_user ($self, $user) {
