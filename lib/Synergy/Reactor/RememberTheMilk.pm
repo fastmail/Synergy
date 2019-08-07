@@ -41,7 +41,7 @@ has timelines => (
 );
 
 sub timeline_for ($self, $user) {
-  return unless $self->get_user_preference($user, 'api-token');
+  return unless my $token = $self->get_user_preference($user, 'api-token');
 
   my $username = $user->username;
 
@@ -59,7 +59,7 @@ sub timeline_for ($self, $user) {
   delete $store->{$username};
 
   my $rsp_f = $self->rtm_client->api_call('rtm.timelines.create' => {
-    auth_token => $self->get_user_preference($user, 'api-token'),
+    auth_token => $token,
   });
 
   return $store->{$username} = $rsp_f->then(sub ($rsp) {
@@ -79,7 +79,7 @@ has pending_frobs => (
 );
 
 sub frob_for ($self, $user) {
-  return if $self->get_user_preference($user, 'api-token');
+  return if $self->user_has_preference($user, 'api-token');
 
   my $username = $user->username;
 
@@ -231,7 +231,7 @@ sub handle_auth ($self, $event) {
 
   my $user = $event->from_user;
 
-  if (defined $self->get_user_preference($user, 'api-token')) {
+  if ($self->user_has_preference($user, 'api-token')) {
     return $event->error_reply("It looks like you've already authenticated!");
   }
 
