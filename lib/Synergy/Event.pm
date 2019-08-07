@@ -141,7 +141,11 @@ sub reply ($self, $text, $alts = {}, $args = {}) {
 }
 
 sub private_reply ($self, $text, $alts = {}) {
-  $Logger->log_debug("sending $text to someone");
+  $Logger->log_debug([
+    "sending message <<<%s>>> to  %s",
+    $text,
+    $self->from_address,
+  ]);
 
   return $self->from_channel->send_message(
     $self->from_address,
