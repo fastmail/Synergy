@@ -237,7 +237,7 @@ sub handle_auth ($self, $event) {
 
   $arg //= 'start';
   unless ($arg eq 'start' or $arg eq 'complete') {
-    return $event->error_reply("You need to say either `auth start` or `auth complete`.");
+    return $event->error_reply("You need to say either `milkauth start` or `milkauth complete`.");
   }
 
   if ($arg eq 'start') {
