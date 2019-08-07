@@ -286,7 +286,8 @@ sub handle_auth ($self, $event) {
 __PACKAGE__->add_preference(
   name      => 'api-token',
   validator => sub ($self, $value, @) {
-    return (undef, "You can only set your API token with the milkauth command.");
+    return (undef, "You can only set your API token with the milkauth command.")
+      if defined $value;
   },
   describer => sub ($v) { return defined $v ? "<redacted>" : '<undef>' },
   default   => undef,
