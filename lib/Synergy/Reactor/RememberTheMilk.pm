@@ -248,7 +248,7 @@ sub handle_auth ($self, $event) {
             "https://www.rememberthemilk.com/services/auth/",
             $self->rtm_client->_signed_content({ frob => $frob, perms => 'write' });
 
-          my $text = "To authorize me to talk to RTM for you, follow this link: $auth_uri\n\n…and then tell me `auth complete`";
+          my $text = "To authorize me to talk to RTM for you, follow this link: $auth_uri\n\n…and then tell me `milkauth complete`";
           $event->private_reply($text, { slack => $text });
         })
       ->retain;
