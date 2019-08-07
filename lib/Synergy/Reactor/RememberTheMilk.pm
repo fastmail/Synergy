@@ -41,7 +41,7 @@ has timelines => (
 );
 
 sub timeline_for ($self, $user) {
-  return unless $self->user_has_preference($user, 'api-token');
+  return unless $self->get_user_preference($user, 'api-token');
 
   my $username = $user->username;
 
@@ -79,7 +79,7 @@ has pending_frobs => (
 );
 
 sub frob_for ($self, $user) {
-  return if $self->user_has_preference($user, 'api-token');
+  return if $self->get_user_preference($user, 'api-token');
 
   my $username = $user->username;
 
@@ -137,7 +137,7 @@ sub handle_todo ($self, $event) {
   my (undef, $todo) = split /\s+/, $event->text, 2;
 
   return $event->error_reply("I don't have an RTM auth token for you.")
-    unless $self->user_has_preference($event->from_user, 'api-token');
+    unless my $token = $self->get_user_preference($event->from_user, 'api-token');
 
   return $event->error_reply("You didn't tell me what you want to do!")
     unless length $todo;
@@ -146,7 +146,7 @@ sub handle_todo ($self, $event) {
 
   $tl_f->then(sub ($tl) {
     my $rsp_f = $self->rtm_client->api_call('rtm.tasks.add' => {
-      auth_token => $self->get_user_preference($event->from_user, 'api-token'),
+      auth_token => $token,
       timeline   => $tl,
       name  => $todo,
       parse => 1,
@@ -176,10 +176,10 @@ sub handle_milk ($self, $event) {
   my (undef, $filter) = split /\s+/, $event->text, 2;
 
   return $event->error_reply("I don't have an RTM auth token for you.")
-    unless $self->user_has_preference($event->from_user, 'api-token');
+    unless my $token = $self->get_user_preference($event->from_user, 'api-token');
 
   my $rsp_f = $self->rtm_client->api_call('rtm.tasks.getList' => {
-    auth_token => $self->get_user_preference($event->from_user, 'api-token'),
+    auth_token => $token,
     filter     => $filter || 'status:incomplete',
   });
 
@@ -231,7 +231,7 @@ sub handle_auth ($self, $event) {
 
   my $user = $event->from_user;
 
-  if ($self->user_has_preference($user, 'api-token')) {
+  if (defined $self->get_user_preference($user, 'api-token')) {
     return $event->error_reply("It looks like you've already authenticated!");
   }
 
