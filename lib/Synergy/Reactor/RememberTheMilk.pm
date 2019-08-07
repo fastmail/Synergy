@@ -288,6 +288,8 @@ __PACKAGE__->add_preference(
   validator => sub ($self, $value, @) {
     return (undef, "You can only set your API token with the milkauth command.")
       if defined $value;
+
+    return (undef, undef);
   },
   describer => sub ($v) { return defined $v ? "<redacted>" : '<undef>' },
   default   => undef,
