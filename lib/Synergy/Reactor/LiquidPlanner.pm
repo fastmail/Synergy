@@ -3143,33 +3143,37 @@ sub _handle_timer_abort ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
-  my $lpc = $self->lp_client_for_user($user);
-  my $timer_res = $lpc->my_running_timer;
+  my $lpc = $self->f_lp_client_for_user($user);
+  $lpc
+    ->my_running_timer
+    ->else(sub {
+      return $event->reply("Sorry, something went wrong getting your timer.");
+    })
+    ->then(sub ($timer = undef) {
+      return $event->reply("You don't have a running timer to abort.")
+        unless $timer;
 
-  return $event->reply("Sorry, something went wrong getting your timer.")
-    unless $timer_res->is_success;
+      my @all;
+      push @all, $lpc->stop_timer_for_task_id($timer->item_id);
+      push @all, $lpc->clear_timer_for_task_id($timer->item_id);
+      push @all, $lpc->get_item($timer->item_id);
 
-  return $event->reply("You don't have a running timer to abort.")
-    unless my $timer = $timer_res->payload;
+      Future->needs_all(@all)->then(sub ($stop, $clear, $task) {
+        my $uri = $self->item_uri($timer->item_id);
+        my $task_was = " The task was: " . $task->{name} . " ($uri)";
+        $self->timer_for_user($user)->clear_last_nag;
 
-  my $stop_res = $lpc->stop_timer_for_task_id($timer->item_id);
-  my $clr_res  = $lpc->clear_timer_for_task_id($timer->item_id);
+        my $base = "Okay, I stopped and cleared your timer. The task was:";
+        my $text = "$base $task->{name} ($uri)";
 
-  my $task_was = '';
+        my $slack = sprintf '%s  %s',
+          $base, $self->_slack_item_link_with_name($task);
 
-  my $task_res = $lpc->get_item($timer->item_id);
-
-  if ($task_res->is_success) {
-    my $uri = $self->item_uri($timer->item_id);
-    $task_was = " The task was: " . $task_res->payload->{name} . " ($uri)";
-  }
-
-  if ($stop_res->is_success and $clr_res->is_success) {
-    $self->timer_for_user($user)->clear_last_nag;
-    $event->reply("Okay, I stopped and cleared your timer.$task_was");
-  } else {
-    $event->reply("Something went wrong aborting your timer.");
-  }
+        $event->reply($text, { slack => $slack });
+      })->else(sub {
+        $event->reply("Something went wrong aborting your timer.");
+      });
+    })->retain;
 }
 
 sub _handle_timer_commit ($self, $event, $comment) {
