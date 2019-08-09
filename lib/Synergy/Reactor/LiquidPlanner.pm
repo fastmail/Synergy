@@ -1029,8 +1029,8 @@ sub nag ($self, $timer, @) {
   USER: for my $user ($self->hub->user_directory->users) {
     next USER unless my $sy_timer = $self->timer_for_user($user);
 
-    next USER unless $self->get_user_preference($user, 'should-nag');
-
+    # All users get "your timer is running too long" nag, but only people who
+    # have requested it get more aggressive nagging.
     my $username = $user->username;
 
     my $last_nag = $sy_timer->last_relevant_nag;
@@ -1060,15 +1060,15 @@ sub nag ($self, $timer, @) {
         my $friendly = $self->hub->channel_named($self->primary_nag_channel_name);
         $friendly->send_message_to_user($user, $msg);
 
-        if ($user) {
-          my $aggressive = $self->hub->channel_named($self->aggressive_nag_channel_name);
-          $aggressive->send_message_to_user($user, $msg);
-        }
+        my $aggressive = $self->hub->channel_named($self->aggressive_nag_channel_name);
+        $aggressive->send_message_to_user($user, $msg);
 
         $sy_timer->last_nag({ time => time, level => 0 });
         next USER;
       }
     }
+
+    next USER unless $self->get_user_preference($user, 'should-nag');
 
     my $showtime = $sy_timer->is_showtime;
     my $user_dnd = $self->_user_doing_dnd($user);
