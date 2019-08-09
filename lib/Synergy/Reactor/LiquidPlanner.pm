@@ -1827,6 +1827,12 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
         member_id   => $user->lp_id,
         activity_id => $task->{activity_id},
       })->then(sub {
+        # If they logged time, great! Don't nag next time around.
+        if ($plan->{log_hours}) {
+          my $sy_timer = $self->timer_for_user($user);
+          $sy_timer->last_saw_timer(time);
+        }
+
         Future->done({
           work => $plan->{log_hours},
           done => $plan->{done},
@@ -3695,6 +3701,11 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
       $slack_base .= ", but I couldn't start your timer";
     }
   }
+
+  # A user has told us what they're up to; that's just as good as tracking
+  # time, so don't nag them next time around. -- michael, 2019-08-09
+  my $sy_timer = $self->timer_for_user($user);
+  $sy_timer->last_saw_timer(time);
 
   $slack_base .= sprintf qq{.  The task is: %s},
     $self->_slack_item_link_with_name($task);
