@@ -3374,35 +3374,33 @@ sub _handle_timer_reset ($self, $event, $text) {
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
-  my $lpc = $self->lp_client_for_user($user);
-
   return $event->error_reply("I didn't understand your timer reset request.")
     unless ($text // 'timer') eq 'timer';
 
-  my $timer_res = $lpc->my_running_timer;
+  my $lpc = $self->f_lp_client_for_user($user);
 
-  return $event->reply("Sorry, something went wrong getting your timer.")
-    unless $timer_res->is_success;
-
-  return $event->reply("You don't have a running timer to reset.")
-    unless my $timer = $timer_res->payload;
-
-  my $task_id = $timer->item_id;
-  my $clr_res = $lpc->clear_timer_for_task_id($task_id);
-
-  return $event->reply("Something went wrong resetting your timer.")
-    unless $clr_res->is_success;
-
-  $self->timer_for_user($user)->clear_last_nag;
-
-  my $start_res = $lpc->stop_timer_for_task_id($task_id);
-
-  if ($start_res->is_success) {
-    $self->set_last_lp_timer_task_id_for_user($user, $task_id);
-    $event->reply("Okay, I cleared your timer and left it running.");
-  } else {
-    $event->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
-  }
+  my $task_id;
+  $self->_maybe_running_timer($event, $lpc)
+    ->then(sub ($timer) {
+      $task_id = $timer->item_id;
+      return $lpc->clear_timer_for_task_id($task_id)
+    })
+    ->else(sub {
+      $event->reply("Something went wrong resetting your timer.");
+      Future->fail('clear');
+    })
+    ->then(sub {
+      $lpc->start_timer_for_task_id($task_id);
+    })
+    ->else(sub {
+      $event->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
+      Future->fail('restart');
+    })
+    ->then(sub {
+      $self->timer_for_user($user)->clear_last_nag;
+      $self->set_last_lp_timer_task_id_for_user($user, $task_id);
+      return $event->reply("Okay, I cleared your timer and left it running.");
+    })->retain;
 }
 
 sub _handle_timer_resume ($self, $event, $text) {
