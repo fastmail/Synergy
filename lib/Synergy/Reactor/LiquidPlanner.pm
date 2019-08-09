@@ -3519,27 +3519,25 @@ sub _handle_timer_start ($self, $event, $text) {
 
 sub _handle_timer_start_existing ($self, $event, $task) {
   # TODO: make sure the task isn't closed! -- rjbs, 2016-01-25
-  # TODO: print the description of the task instead of its number -- rjbs,
-  # 2016-01-25
   my $user = $event->from_user;
-  my $lpc  = $self->lp_client_for_user($user);
-  my $start_res = $lpc->start_timer_for_task_id($task->{id});
+  my $lpc  = $self->f_lp_client_for_user($user);
+  $lpc->start_timer_for_task_id($task->{id})
+    ->then(sub {
+      $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
 
-  if ($start_res->is_success) {
-    $self->set_last_lp_timer_task_id_for_user($user, $task->{id});
+      my $uri   = $self->item_uri($task->{id});
+      my $text  = "Started task: $task->{name} ($uri)";
+      my $slack = sprintf "Started task %s",
+        $self->_slack_item_link_with_name($task);
 
-    my $uri   = $self->item_uri($task->{id});
-    my $text  = "Started task: $task->{name} ($uri)";
-    my $slack = sprintf "Started task %s",
-      $self->_slack_item_link_with_name($task);
-
-    return $event->reply(
-      $text,
-      { slack => $slack },
-    );
-  } else {
-    return $event->reply("Sorry, something went wrong and I couldn't start the timer.");
-  }
+      return $event->reply(
+        $text,
+        { slack => $slack },
+      );
+    })
+    ->else(sub {
+      return $event->reply("Sorry, something went wrong and I couldn't start the timer.");
+    })->retain;
 }
 
 sub _handle_timer_stop ($self, $event, $text = '') {
