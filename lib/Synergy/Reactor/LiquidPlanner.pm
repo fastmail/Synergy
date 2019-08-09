@@ -1046,10 +1046,12 @@ sub nag ($self, $timer, @) {
       $sy_timer->last_saw_timer(time);
     }
 
+    my $nag_interval =  $self->get_user_preference($user, 'nagging-interval');
+
     { # Timer running too long!
       if ($lp_timer && $lp_timer->running_time > 3) {
-        if ($last_nag && time - $last_nag->{time} < 900) {
-          $Logger->log("$username: Won't nag, nagged within the last 15min.");
+        if ($last_nag && time - $last_nag->{time} < $nag_interval) {
+          $Logger->log("$username: Won't nag, nagged within the last ${nag_interval}s.");
           next USER;
         }
 
@@ -1089,8 +1091,8 @@ sub nag ($self, $timer, @) {
 
       my $level = 0;
       if ($last_nag) {
-        if (time - $last_nag->{time} < 900) {
-          $Logger->log("$username: Won't nag, nagged within the last 15min.");
+        if (time - $last_nag->{time} < $nag_interval) {
+          $Logger->log("$username: Won't nag, nagged within the last ${nag_interval}s.");
           next USER;
         }
         $level = $last_nag->{level} + 1;
@@ -1099,7 +1101,7 @@ sub nag ($self, $timer, @) {
       # Have we seen a timer recently? Give them a grace period
       if (
            $sy_timer->last_saw_timer
-        && $sy_timer->last_saw_timer > time - 900
+        && $sy_timer->last_saw_timer > time - $nag_interval
       ) {
         $Logger->log([
           "not nagging %s, they only recently disabled a timer",
@@ -4362,6 +4364,31 @@ __PACKAGE__->add_preference(
   name      => 'should-nag',
   validator => sub ($self, $value, @) { return bool_from_text($value) },
   default   => 0,
+);
+
+__PACKAGE__->add_preference(
+  name        => 'nagging-interval',
+  default     => 900,
+  description => 'how long between LP timer nags',
+  help        => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
+The amount of time, in seconds, that determines how often you'll be nagged
+about not having a LiquidPlanner timer running. This is also the grace period
+for how long after you've said what you're up before she'll bug you again.
+EOH
+  validator   => sub ($self, $value, @) {
+    # special-case undef, which is used by 'clear'. This will kick back to the
+    # default.
+    return undef unless defined $value;
+
+    my $n = 0 + $value;
+
+    # I am deciding, arbitrarily, that less than 5 minutes or more than 90
+    # minutes is no good.
+    return (undef, "nagging interval must be between 5m-90m (300-5400 seconds)")
+      if $n < 60 * 5 || $n > 60 * 90;
+
+    return $n;
+  },
 );
 
 __PACKAGE__->add_preference(
