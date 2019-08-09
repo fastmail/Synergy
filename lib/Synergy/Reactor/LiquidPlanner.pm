@@ -3136,6 +3136,22 @@ sub _handle_timer ($self, $event, $text) {
     })->retain;
 }
 
+sub _maybe_running_timer ($self, $event, $f_lpc, $no_timer_text = undef) {
+  return $f_lpc
+    ->my_running_timer
+    ->else(sub {
+      return $event->reply("Sorry, something went wrong getting your timer.");
+    })->then(sub ($timer = undef) {
+      unless ($timer) {
+        $no_timer_text //= "You don't seem to have a running timer.";
+        $event->reply($no_timer_text) unless $timer;
+        return Future->fail;
+      }
+
+      return Future->done($timer);
+    });
+}
+
 sub _handle_timer_abort ($self, $event, $text) {
   return $event->error_reply("I didn't understand your abort request.")
     unless ($text // 'timer') eq 'timer';
@@ -3144,15 +3160,8 @@ sub _handle_timer_abort ($self, $event, $text) {
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
   my $lpc = $self->f_lp_client_for_user($user);
-  $lpc
-    ->my_running_timer
-    ->else(sub {
-      return $event->reply("Sorry, something went wrong getting your timer.");
-    })
-    ->then(sub ($timer = undef) {
-      return $event->reply("You don't have a running timer to abort.")
-        unless $timer;
-
+  $self->_maybe_running_timer($event, $lpc)
+    ->then(sub ($timer) {
       my @all;
       push @all, $lpc->stop_timer_for_task_id($timer->item_id);
       push @all, $lpc->clear_timer_for_task_id($timer->item_id);
@@ -3546,16 +3555,8 @@ sub _handle_timer_stop ($self, $event, $text = '') {
     unless ($text // 'timer') eq 'timer';
 
   my $lpc = $self->f_lp_client_for_user($user);
-  $lpc
-    ->my_running_timer
-    ->else(sub {
-      return $event->reply("Sorry, something went wrong getting your timer.");
-    })
-    ->then(sub ($timer = undef) {
-      return $event->reply("You don't have a running timer to stop.")
-        unless $timer;
-
-
+  $self->_maybe_running_timer($event, $lpc)
+    ->then(sub ($timer) {
       my @all;
       push @all, $lpc->stop_timer_for_task_id($timer->item_id);
       push @all, $lpc->get_item($timer->item_id);
@@ -3574,7 +3575,7 @@ sub _handle_timer_stop ($self, $event, $text = '') {
         $self->timer_for_user($user)->clear_last_nag;
         $event->reply($text, { slack => $slack });
       })->else(sub {
-        $event->reply("Something went wrong aborting your timer.");
+        $event->reply("Something went wrong stopping your timer.");
       });
     })->retain;
 }
