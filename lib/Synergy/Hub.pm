@@ -208,16 +208,6 @@ sub component_named ($self, $name) {
   confess("Could not find channel or reactor named '$name'");
 }
 
-# Temporary, so that we can slowly convert git config to proper preferences.
-sub load_preferences_from_user ($self, $user) {
-  my $username = blessed $user ? $user->username : $user;
-  for my $component ($self->user_directory, $self->channels, $self->reactors) {
-    next unless $component->has_preferences;
-    next unless $component->can('load_preferences_from_user');
-    $component->load_preferences_from_user($username);
-  }
-}
-
 sub handle_event ($self, $event) {
   $Logger->log([
     "%s event from %s/%s: %s",
@@ -359,10 +349,6 @@ sub synergize {
       $hub->$register($thing);
     }
   }
-
-  # Everything's all registered...give them a chance to load up user prefs
-  # before calling ->start.
-  $hub->load_preferences_from_user($_) for $hub->user_directory->users;
 
   $hub->set_loop($loop);
 

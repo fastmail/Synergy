@@ -440,38 +440,4 @@ __PACKAGE__->add_preference(
   },
 );
 
-# Temporary, presumably. We're assuming here that the values from git are
-# valid. This routine loads up our preferences from the user object, unless we
-# already have a better preference saved for them.
-sub load_preferences_from_user ($self, $username) {
-  $Logger->log_debug([ "Loading global preferences for %s", $username ]);
-  my $user = $self->user_named($username);
-
-  $self->set_user_preference($user, 'time-zone', $user->_time_zone)
-    unless $self->user_has_preference($user, 'time-zone');
-
-  my $existing_real = $user->has_realname ? $user->realname : undef;
-  my $existing_pref = $self->get_user_preference($user, 'realname');
-
-  # If the user doesn't have an existing preference, always update.
-  if ($existing_real && ! $existing_pref) {
-    $self->set_user_preference($user, 'realname', $existing_real);
-  }
-
-  # If the user *does* have an existing preference, and it's just their
-  # username, overwrite it.
-  if ($existing_pref && $existing_pref eq $username && $existing_real) {
-    $self->set_user_preference($user, 'realname', $existing_real);
-  }
-
-  # If we have nicknames already, and those nicknames are from user config,
-  # and we don't have a pref already...load them.
-  my @existing_nicks = $user->has_nicknames ? $user->_nicknames->@* : undef;
-  my $pref_nicks = $self->get_user_preference($user, 'nicknames') // [];
-
-  if (@existing_nicks && ! @$pref_nicks) {
-    $self->set_user_preference($user, 'nicknames', \@existing_nicks);
-  }
-}
-
 1;

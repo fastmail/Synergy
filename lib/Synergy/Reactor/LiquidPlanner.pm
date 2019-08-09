@@ -4373,16 +4373,6 @@ __PACKAGE__->add_preference(
   description => 'the project shortcut to which tasks for this user will default',
 );
 
-# Temporary, presumably. We're assuming here that the values from git are
-# valid.
-sub load_preferences_from_user ($self, $username) {
-  $Logger->log_debug([ "Loading LiquidPlanner preferences for %s", $username ]);
-  my $user = $self->hub->user_directory->user_named($username);
-
-  $self->set_user_preference($user, 'should-nag', $user->should_nag)
-    unless $self->user_has_preference($user, 'should-nag');
-}
-
 sub user_status_for ($self, $event, $user) {
   return unless $self->auth_header_for($user);
 
