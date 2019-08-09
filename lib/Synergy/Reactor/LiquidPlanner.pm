@@ -3664,66 +3664,61 @@ sub _handle_spent ($self, $event, $text) {
 
 sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
   my $user = $event->from_user;
+  my $lpc = $self->f_lp_client_for_user($user);
+  $lpc
+    ->get_activity_id($task_id, $user->lp_id)
+    ->else(sub {
+      # XXX it would be nice if we had a thing that automatically replied and
+      # failed this.
+      $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
+      Future->fail('no activity id');
+    })
+    ->then(sub ($activity_id) {
+      $lpc->track_time({
+        task_id => $task_id,
+        work    => $duration / 3600,
+        member_id   => $user->lp_id,
+        activity_id => $activity_id,
+      })
+    })
+    ->else(sub {
+      $event->reply("I couldn't log your time, sorry.");
+      Future->fail('bad track_time response');
+    })
+    ->then(sub { $lpc->get_item($task_id) })
+    ->else(sub {
+      $event->reply("I logged that time, but something went wrong trying to describe it!");
+      Future->fail('bad task get');
+    })
+    ->then(sub ($task) {
+      return Future->done($task) unless $start;
 
-  my $lpc = $self->lp_client_for_user($user);
+      return $lpc->start_timer_for_task_id($task->{id})
+         ->then(sub { Future->done($task, " and started your timer") })
+         ->else(sub { Future->done($task, ", but I couldn't start your timer") });
+    })
+    ->then(sub ($task, $more = '') {
+      my $uri  = $self->item_uri($task_id);
 
-  my $activity_res = $lpc->get_activity_id($task_id, $user->lp_id);
+      my $plain_base = qq{I logged that time on "$task->{name}"};
+      my $slack_base = qq{I logged that time};
 
-  unless ($activity_res->is_success) {
-    return $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
-  }
+      # A user has told us what they're up to; that's just as good as tracking
+      # time, so don't nag them next time around. -- michael, 2019-08-09
+      my $sy_timer = $self->timer_for_user($user);
+      $sy_timer->last_saw_timer(time);
 
-  my $activity_id = $activity_res->payload;
+      $plain_base .= $more;
+      $slack_base .= $more;
 
-  my $track_ok = $lpc->track_time({
-    task_id => $task_id,
-    work    => $duration / 3600,
-    member_id   => $user->lp_id,
-    activity_id => $activity_id,
-  });
+      $slack_base .= sprintf qq{.  The task is: %s},
+        $self->_slack_item_link_with_name($task);
 
-  unless ($track_ok) {
-    return $event->reply("I couldn't log your time, sorry.");
-  }
-
-  my $task_res = $lpc->get_item($task_id);
-
-  unless ($task_res->is_success) {
-    return $event->reply(
-      "I logged that time, but something went wrong trying to describe it!"
-    );
-  }
-
-  my $uri  = $self->item_uri($task_id);
-  my $task = $task_res->payload;
-
-  my $plain_base = qq{I logged that time on "$task->{name}"};
-  my $slack_base = qq{I logged that time};
-
-  if ($start) {
-    if ($lpc->start_timer_for_task_id($task->{id})->is_success) {
-      $plain_base .= " and started your timer";
-      $slack_base .= " and started your timer";
-    } else {
-      $plain_base .= ", but I couldn't start your timer";
-      $slack_base .= ", but I couldn't start your timer";
-    }
-  }
-
-  # A user has told us what they're up to; that's just as good as tracking
-  # time, so don't nag them next time around. -- michael, 2019-08-09
-  my $sy_timer = $self->timer_for_user($user);
-  $sy_timer->last_saw_timer(time);
-
-  $slack_base .= sprintf qq{.  The task is: %s},
-    $self->_slack_item_link_with_name($task);
-
-  return $event->reply(
-    "$plain_base.\n$uri",
-    {
-      slack => $slack_base,
-    }
-  );
+      return $event->reply(
+        "$plain_base.\n$uri",
+        { slack => $slack_base, }
+      );
+    })->retain;
 }
 
 sub _handle_timesheet ($self, $event, $text) {
