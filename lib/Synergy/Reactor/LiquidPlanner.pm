@@ -3726,6 +3726,9 @@ sub _handle_timesheet ($self, $event, $text) {
   my $who = $event->from_user;
   my $lpc = $self->f_lp_client_for_user($who);
 
+  my $goal = $self->get_user_preference($who, 'tracking-goal');
+  my $tada = qq{\N{PARTY POPPER}};
+
   if ($text eq 'today' or $text eq 'yesterday') {
     my $when = DateTime->now(time_zone => $who->time_zone);
     $when->subtract(days => 1) if $text eq 'yesterday';
@@ -3775,6 +3778,9 @@ sub _handle_timesheet ($self, $event, $text) {
         $plain  .= sprintf "\nTotal: %0.2fh", $total;
         $slack .= sprintf "\n*Total:* %0.2fh", $total;
 
+        $plain .= " $tada" if defined $goal && $total > $goal;
+        $slack .= " $tada" if defined $goal && $total > $goal;
+
         $event->reply($plain, { slack => $slack });
       });
     })->retain;
@@ -3803,9 +3809,10 @@ sub _handle_timesheet ($self, $event, $text) {
                        grep {; $_->{work_performed_on} eq $today } @$ts_events;
 
       $event->reply(
-        sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.",
+        sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.%s",
           $total, PL_N('hour', $total),
-          $today, PL_N('hour', $total)
+          $today, PL_N('hour', $total),
+          (defined $goal && $today > $goal ? " $tada" : ""),
       );
     })->retain;
   }
@@ -4398,6 +4405,23 @@ EOH
     return (undef, "nagging interval must be between 5m-90m (300-5400 seconds)")
       if $n < 60 * 5 || $n > 60 * 90;
 
+    return $n;
+  },
+);
+
+__PACKAGE__->add_preference(
+  name        => 'tracking-goal',
+  default     => undef,
+  description => "how many hours a day you'd like to track",
+  help        => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
+The amount of time, in hours, that you'd like to log.
+EOH
+  validator   => sub ($self, $value, @) {
+    return undef unless defined $value;
+
+    my $n = 0 + $value;
+    return (undef, "that seems like...not enough time") if $n < 0;
+    return (undef, "that seems like...too much time") if $n > 8;
     return $n;
   },
 );
