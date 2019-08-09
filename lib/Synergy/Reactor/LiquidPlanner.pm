@@ -3147,16 +3147,17 @@ sub _handle_timer ($self, $event, $text) {
 sub _maybe_running_timer ($self, $event, $f_lpc, $no_timer_text = undef) {
   return $f_lpc
     ->my_running_timer
-    ->else(sub {
-      return $event->reply("Sorry, something went wrong getting your timer.");
-    })->then(sub ($timer = undef) {
+    ->then(sub ($timer = undef) {
       unless ($timer) {
         $no_timer_text //= "You don't seem to have a running timer.";
         $event->reply($no_timer_text) unless $timer;
-        return Future->fail;
+        return Future->fail('no timer');
       }
 
       return Future->done($timer);
+    })
+    ->else(sub {
+      return $event->reply("Sorry, something went wrong getting your timer.");
     });
 }
 
@@ -3171,25 +3172,28 @@ sub _handle_timer_abort ($self, $event, $text) {
   $self->_maybe_running_timer($event, $lpc)
     ->then(sub ($timer) {
       my @all;
+      push @all, $lpc->get_item($timer->item_id);
       push @all, $lpc->stop_timer_for_task_id($timer->item_id);
       push @all, $lpc->clear_timer_for_task_id($timer->item_id);
-      push @all, $lpc->get_item($timer->item_id);
 
-      Future->needs_all(@all)->then(sub ($stop, $clear, $task) {
-        my $uri = $self->item_uri($timer->item_id);
-        my $task_was = " The task was: " . $task->{name} . " ($uri)";
-        $self->timer_for_user($user)->clear_last_nag;
+      return Future->wait_all(@all)
+    })
+    ->then(sub ($task_f, @) {
+      my $task = $task_f->get;
 
-        my $base = "Okay, I stopped and cleared your timer. The task was:";
-        my $text = "$base $task->{name} ($uri)";
+      my $uri = $self->item_uri($task->{id});
+      my $task_was = " The task was: " . $task->{name} . " ($uri)";
+      $self->timer_for_user($user)->clear_last_nag;
 
-        my $slack = sprintf '%s  %s',
-          $base, $self->_slack_item_link_with_name($task);
+      my $base = "Okay, I stopped and cleared your timer. The task was:";
+      my $text = "$base $task->{name} ($uri)";
 
-        $event->reply($text, { slack => $slack });
-      })->else(sub {
-        $event->reply("Something went wrong aborting your timer.");
-      });
+      my $slack = sprintf '%s  %s',
+        $base, $self->_slack_item_link_with_name($task);
+
+      $event->reply($text, { slack => $slack });
+    })->else(sub {
+      $event->reply("Something went wrong aborting your timer.");
     })->retain;
 }
 
@@ -3395,14 +3399,14 @@ sub _handle_timer_reset ($self, $event, $text) {
     })
     ->else(sub {
       $event->reply("Something went wrong resetting your timer.");
-      Future->fail('clear');
+      Future->fail('clear timer failed');
     })
     ->then(sub {
       $lpc->start_timer_for_task_id($task_id);
     })
     ->else(sub {
       $event->reply("Okay, I cleared your timer but couldn't restart it… sorry!");
-      Future->fail('restart');
+      Future->fail('restart timer failed');
     })
     ->then(sub {
       $self->timer_for_user($user)->clear_last_nag;
@@ -3562,25 +3566,29 @@ sub _handle_timer_stop ($self, $event, $text = '') {
   $self->_maybe_running_timer($event, $lpc)
     ->then(sub ($timer) {
       my @all;
-      push @all, $lpc->stop_timer_for_task_id($timer->item_id);
       push @all, $lpc->get_item($timer->item_id);
+      push @all, $lpc->stop_timer_for_task_id($timer->item_id);
 
-      Future->needs_all(@all)->then(sub ($stop, $task) {
-        my $uri = $self->item_uri($timer->item_id);
-        my $task_was = " The task was: " . $task->{name} . " ($uri)";
-        $self->timer_for_user($user)->clear_last_nag;
+      return Future->wait_all(@all);
+    })
+    ->then(sub ($task_f, @) {
+      my $task = $task_f->get;
 
-        my $base = "Okay, I stopped your timer. The task was:";
-        my $text = "$base $task->{name} ($uri)";
+      my $uri = $self->item_uri($task->{id});
+      my $task_was = " The task was: " . $task->{name} . " ($uri)";
+      $self->timer_for_user($user)->clear_last_nag;
 
-        my $slack = sprintf '%s  %s',
-          $base, $self->_slack_item_link_with_name($task);
+      my $base = "Okay, I stopped your timer. The task was:";
+      my $text = "$base $task->{name} ($uri)";
 
-        $self->timer_for_user($user)->clear_last_nag;
-        $event->reply($text, { slack => $slack });
-      })->else(sub {
-        $event->reply("Something went wrong stopping your timer.");
-      });
+      my $slack = sprintf '%s  %s',
+        $base, $self->_slack_item_link_with_name($task);
+
+      $self->timer_for_user($user)->clear_last_nag;
+      $event->reply($text, { slack => $slack });
+    })
+    ->else(sub {
+      $event->reply("Something went wrong stopping your timer.");
     })->retain;
 }
 
