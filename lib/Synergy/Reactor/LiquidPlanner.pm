@@ -3085,48 +3085,55 @@ sub _handle_timer ($self, $event, $text) {
   return $event->error_reply($ERR_NO_LP)
     unless $user && $self->auth_header_for($user);
 
-  my $lpc = $self->lp_client_for_user($user);
-  my $timer_res = $lpc->my_running_timer;
+  my $lpc = $self->f_lp_client_for_user($user);
+  $lpc
+    ->my_running_timer
+    ->else(sub {
+      return $event->reply("Sorry, something went wrong getting your timer.");
+    })
+    ->then(sub ($timer = undef) {
+      my $sy_timer = $self->timer_for_user($user);
 
-  return $event->reply("Sorry, something went wrong getting your timer.")
-    unless $timer_res->is_success;
+      unless ($timer) {
+        my $nag = $sy_timer->last_relevant_nag;
+        my $msg;
+        if (! $nag) {
+          $msg = "You don't have a running timer.";
+        } elsif ($nag->{level} == 0) {
+          $msg = "Like I said, you don't have a running timer.";
+        } else {
+          $msg = "Like I keep telling you, you don't have a running timer!";
+        }
 
-  my $timer = $timer_res->payload;
-  my $sy_timer = $self->timer_for_user($user);
+        $event->reply($msg);
+        return Future->done;
+      }
 
-  unless ($timer) {
-    my $nag = $sy_timer->last_relevant_nag;
-    my $msg;
-    if (! $nag) {
-      $msg = "You don't have a running timer.";
-    } elsif ($nag->{level} == 0) {
-      $msg = "Like I said, you don't have a running timer.";
-    } else {
-      $msg = "Like I keep telling you, you don't have a running timer!";
-    }
+      return $lpc->get_item($timer->item_id)
+        ->else(sub {
+          $event->reply("Sorry, something went wrong getting your timer task.");
+          return Future->fail("LP" . $timer->item_id)
+        })
+        ->then(sub ($task) { return Future->done($timer, $task) });
+    })
+    ->then(sub ($timer = undef, $task = undef) {
+      return Future->done unless $timer;
 
-    return $event->reply($msg);
-  }
+      my $time = $timer->real_total_time_duration;
 
-  my $time = $timer->real_total_time_duration;
+      my $url = $self->item_uri($task->{id});
 
-  my $task_res = $lpc->get_item($timer->item_id);
+      my $base  = "Your timer has been running for $time, work on";
+      my $slack = sprintf '%s: %s',
+        $base, $self->_slack_item_link_with_name($task);
 
-  my $task = ($task_res->is_success && $task_res->payload)
-          || { id => $timer->item_id, name => '??' };
-
-  my $url = $self->item_uri($task->{id});
-
-  my $base  = "Your timer has been running for $time, work on";
-  my $slack = sprintf '%s: %s',
-    $base, $self->_slack_item_link_with_name($task);
-
-  return $event->reply(
-    "$base: $task->{name} ($url)",
-    {
-      slack => $slack,
-    },
-  );
+      return $event->reply(
+        "$base: $task->{name} ($url)",
+        {
+          slack => $slack,
+        },
+      );
+    })->retain;
 }
 
 sub _handle_timer_abort ($self, $event, $text) {
