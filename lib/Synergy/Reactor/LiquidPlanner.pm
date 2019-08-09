@@ -3535,7 +3535,7 @@ sub _handle_timer_start_existing ($self, $event, $task) {
   }
 }
 
-sub _handle_timer_stop ($self, $event, $text) {
+sub _handle_timer_stop ($self, $event, $text = '') {
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
@@ -3545,31 +3545,38 @@ sub _handle_timer_stop ($self, $event, $text) {
   return $event->error_reply("I didn't understand your timer stop request.")
     unless ($text // 'timer') eq 'timer';
 
-  my $lpc = $self->lp_client_for_user($user);
-  my $timer_res = $lpc->my_running_timer;
+  my $lpc = $self->f_lp_client_for_user($user);
+  $lpc
+    ->my_running_timer
+    ->else(sub {
+      return $event->reply("Sorry, something went wrong getting your timer.");
+    })
+    ->then(sub ($timer = undef) {
+      return $event->reply("You don't have a running timer to stop.")
+        unless $timer;
 
-  return $event->reply("Sorry, something went wrong getting your timer.")
-    unless $timer_res->is_success;
 
-  return $event->reply("You don't have a running timer to stop.")
-    unless my $timer = $timer_res->payload;
+      my @all;
+      push @all, $lpc->stop_timer_for_task_id($timer->item_id);
+      push @all, $lpc->get_item($timer->item_id);
 
-  my $stop_res = $lpc->stop_timer_for_task_id($timer->item_id);
-  return $event->reply("I couldn't stop your timer.")
-    unless $stop_res->is_success;
+      Future->needs_all(@all)->then(sub ($stop, $task) {
+        my $uri = $self->item_uri($timer->item_id);
+        my $task_was = " The task was: " . $task->{name} . " ($uri)";
+        $self->timer_for_user($user)->clear_last_nag;
 
-  my $task_was = '';
+        my $base = "Okay, I stopped your timer. The task was:";
+        my $text = "$base $task->{name} ($uri)";
 
-  my $task_res = $lpc->get_item($timer->item_id);
+        my $slack = sprintf '%s  %s',
+          $base, $self->_slack_item_link_with_name($task);
 
-  if ($task_res->is_success) {
-    my $uri = $self->item_uri($timer->item_id);
-    $task_was = " The task was: " . $task_res->payload->{name} . " ($uri)";
-
-  }
-
-  $self->timer_for_user($user)->clear_last_nag;
-  return $event->reply("Okay, I stopped your timer.$task_was");
+        $self->timer_for_user($user)->clear_last_nag;
+        $event->reply($text, { slack => $slack });
+      })->else(sub {
+        $event->reply("Something went wrong aborting your timer.");
+      });
+    })->retain;
 }
 
 sub _handle_spent ($self, $event, $text) {
