@@ -49,19 +49,6 @@ has project_id => (
   required => 1,
 );
 
-has user_config => (
-  is => 'ro',
-  isa => 'HashRef',
-  traits  => [ 'Hash' ],
-  lazy => 1,
-  default => sub { {} },
-  writer => '_set_user_config',
-  handles => {
-    set_user   => 'set',
-    user_pairs => 'kv',
-  },
-);
-
 has project_shortcuts => (
   is => 'ro',
   isa => 'HashRef',
@@ -138,18 +125,8 @@ has expansion_record_reaper => (
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
-    # Backcompat: the user config used to be the only thing in state, and it's
-    # not any more. This can go away eventually -- michael, 2018-08-13
-    my $user_config = exists $state->{users} ? $state->{users} : $state;
-    $self->_set_user_config($user_config);
-
     if (my $prefs = $state->{preferences}) {
       $self->_load_preferences($prefs);
-    }
-
-    for my $pair ($self->user_pairs) {
-      my ($username, $uconfig) = @$pair;
-      $self->hub->user_directory->reload_user($username, $uconfig);
     }
 
     my $repo_state = $state->{repos} // {};
@@ -161,16 +138,7 @@ sub start ($self) {
   my $timer = IO::Async::Timer::Countdown->new(
     delay => 60,
     on_expire => sub {
-      $Logger->log("fetching user config from GitLab");
-
-      my $f = $self->_reload_all;
-      $f->on_done(sub {
-        my @errors = map {; $_->failure} $f->failed_futures;
-        $Logger->log([
-          "error doing initial user config load from GitLab: %s",
-          \@errors,
-        ]);
-      });
+      $Logger->log("fetching repo config from GitLab");
 
       my $f2 = $self->_reload_repos;
       $f2->on_fail(sub ($err) {
@@ -189,7 +157,6 @@ sub start ($self) {
 
 sub state ($self) {
   return {
-    users => $self->user_config,
     repos => $self->project_shortcuts,
     preferences => $self->user_preferences,
   };
@@ -285,35 +252,9 @@ sub handle_reload ($self, $event) {
 
   $what =~ s/^\s*|\s*$//g;
 
-  return $self->handle_my_config($event)  if $what eq 'my config';
-  return $self->handle_all_config($event) if $what eq 'all user config';
-  return $self->handle_repos($event)      if $what eq 'repos';
+  return $self->handle_repos($event) if $what eq 'repos';
 
   return $event->error_reply("I don't know how to reload <$what>");
-}
-
-sub handle_my_config ($self, $event) {
-  my $username = $event->from_user->username;
-  my $f = $self->_update_user_config($username);
-
-  $f->on_fail(sub ($err) { $event->reply("error reloading config: $err") });
-  $f->on_done(sub { $event->reply("your configuration has been reloaded") });
-}
-
-sub handle_all_config ($self, $event) {
-  return $event->reply("Sorry, only the master user can do that")
-    unless $event->from_user->is_master;
-
-  my $f = $self->_reload_all;
-  $f->on_done(sub {
-    if ($f->ready_futures == $f->done_futures) {
-      return $event->reply("user config reload");
-    }
-
-    my @errors = map {; $_->failure } $f->failed_futures;
-    my $who = join ', ', sort @errors;
-    return $event->reply("encounted errors while reloading following users: $who");
-  });
 }
 
 sub handle_repos ($self, $event) {
@@ -322,65 +263,6 @@ sub handle_repos ($self, $event) {
   $f->on_fail(sub ($err) {
     return $event->reply("encounter errors reloading repos: $err");
   });
-}
-
-sub _reload_all ($self) {
-  my (@errors, @futures);
-
-  for my $username ($self->hub->user_directory->usernames) {
-    my $f = $self->_update_user_config($username);
-    push @futures, $f;
-  }
-
-  return Future->wait_all(@futures);
-}
-
-sub _update_user_config ($self, $username) {
-  my $url = sprintf("%s/v4/projects/%s/repository/files/%s.yaml?ref=master",
-    $self->api_uri,
-    $self->project_id,
-    $username,
-  );
-
-  my $http_future = $self->hub->http_get(
-    $url,
-    'PRIVATE-TOKEN' => $self->api_token,
-    async => 1,
-  );
-
-  my $ret_future = $self->loop->new_future;
-
-  $http_future->on_done(sub ($res) {
-    unless ($res->is_success) {
-      if ($res->code == 404) {
-        $self->hub->user_directory->reload_user($username, {});
-        return $ret_future->fail("$username: no config in git");
-      }
-
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      return $ret_future->fail("$username: error retrieving config");
-    }
-
-    my $content = eval {
-      decode_base64( $JSON->decode( $res->decoded_content )->{content} );
-    };
-
-    return $ret_future->fail("$username: error with GitLab response")
-      unless $content;
-
-    my $uconfig = eval { YAML::XS::Load($content) };
-    return $ret_future->fail("$username: error with YAML in config")
-      unless $uconfig;
-
-    $self->hub->user_directory->reload_user($username, $uconfig);
-    $self->hub->load_preferences_from_user($username);
-    $self->set_user($username => $uconfig);
-    $self->save_state;
-
-    $ret_future->done;
-  });
-
-  return $ret_future;
 }
 
 sub _reload_repos ($self) {
