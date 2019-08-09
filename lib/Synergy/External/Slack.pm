@@ -161,7 +161,7 @@ sub handle_frame ($self, $slack_event) {
   # Cancel the timeout, then mark the future done with the decoded frame
   # object.
   my $timeout = delete $self->pending_timeouts->{$reply_to};
-  $timeout->cancel;
+  $timeout->cancel if $timeout;
 
   my $f = delete $self->pending_frames->{$reply_to};
   $f->done({
