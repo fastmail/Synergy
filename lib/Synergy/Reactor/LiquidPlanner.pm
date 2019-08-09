@@ -4427,6 +4427,10 @@ EOH
     return (undef, "that seems like...too much time") if $n > 8;
     return $n;
   },
+  describer   => sub ($val) {
+    return "<undef>" unless defined $val;
+    return "$val hours";
+  },
 );
 
 __PACKAGE__->add_preference(
