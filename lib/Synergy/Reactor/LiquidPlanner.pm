@@ -3174,7 +3174,8 @@ sub _maybe_running_timer ($self, $event, $f_lpc, $no_timer_text = undef) {
 
       return Future->done($timer);
     })
-    ->else(sub {
+    ->else(sub ($type, @) {
+      return if $type eq 'no timer';
       return $event->reply("Sorry, something went wrong getting your timer.");
     });
 }
@@ -3231,7 +3232,7 @@ sub _handle_timer_commit ($self, $event, $comment) {
   my $user = $event->from_user;
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
-  my $lpc = $self->lp_client_for_user($user);
+  my $lpc = $self->f_lp_client_for_user($user);
 
   if ($event->text =~ /\A\s*that\s*\z/) {
     my $last  = $self->get_last_utterance($event->source_identifier);
@@ -3259,30 +3260,8 @@ sub _handle_timer_commit ($self, $event, $comment) {
   $meta{DONE} = 1 if $comment =~ s/\Adone\z//i;
   $meta{STOP} = 1 if $meta{DONE} or $meta{CHILL} or $meta{SOTP};
 
-  my $lp_timer = $self->lp_timer_for_user($user);
-
-  return $event->reply("You don't seem to have a running timer.")
-    unless $lp_timer && ref $lp_timer; # XXX <-- stupid return type
-
   my $sy_timer = $self->timer_for_user($user);
   return $event->reply("You don't timer-capable.") unless $sy_timer;
-
-  my $task_id = $lp_timer->item_id;
-
-  my $item_res = $lpc->get_item($task_id);
-  unless ($item_res->is_success) {
-    return $event->error_reply("I couldn't find the item you're talking about.");
-  }
-
-  my $item = $item_res->payload;
-
-  my $activity_res = $lpc->get_activity_id($task_id, $user->lp_id);
-
-  unless ($activity_res->is_success) {
-    return $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
-  }
-
-  my $activity_id = $activity_res->payload;
 
   if ($meta{STOP} and ! $sy_timer->chilling) {
     if ($meta{CHILL}) {
@@ -3294,85 +3273,102 @@ sub _handle_timer_commit ($self, $event, $comment) {
     }
   }
 
-  my $task_base = "/tasks/$task_id";
+  $self
+    ->_maybe_running_timer($event, $lpc)
+    ->then(sub ($timer) {
+      my $task_id = $timer->item_id;
+      return $lpc->get_item($task_id)
+        ->transform(done => sub ($task) { return ($timer, $task) })
+        ->else(sub {
+          $event->error_reply("I couldn't find the item you're talking about.");
+          return Future->fail('bad task get');
+        });
+    })
+    ->then(sub ($timer, $task) {
+      return $lpc->get_activity_id($task->{id}, $user->lp_id)
+        ->transform(done => sub ($act_id) { return ($timer, $task, $act_id) })
+        ->else(sub {
+          $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
+          return Future->fail('no activity id');
+        });
+    })
+    ->then(sub ($timer, $task, $activity_id) {
+      my $task_base = "/tasks/$task->{id}";
 
-  my $work_to_commit = $timer_override // $lp_timer->real_total_time;
-  my $work_duration  = concise( duration( $work_to_commit * 3600 ) );
+      my $work_to_commit = $timer_override // $timer->real_total_time;
+      my $work_duration  = concise( duration( $work_to_commit * 3600 ) );
 
-  my $cancel_done;
-  if ($meta{DONE} && $item->{custom_field_values}{"Synergy Task Shortcut"}) {
-    $meta{DONE} = 0;
-    $cancel_done = 1;
-  }
+      my $track_args = {
+        task_id => $task->{id},
+        work    => $work_to_commit,
+        done    => $meta{DONE},
+        comment => $comment,
+        member_id   => $user->lp_id,
+        activity_id => $activity_id,
+      };
 
-  my $commit_res = $lpc->track_time({
-    task_id => $task_id,
-    work    => $work_to_commit,
-    done    => $meta{DONE},
-    comment => $comment,
-    member_id   => $user->lp_id,
-    activity_id => $activity_id,
-  });
+      return $lpc->track_time($track_args)
+        ->transform(done => sub { return ($task, $work_duration) })
+        ->else(sub {
+          $self->save_state;
+          $event->reply("I couldn't commit your work, sorry.");
+          return Future->fail('bad commit');
+        });
+    })
+    ->then(sub ($task, $dur) {
+      $sy_timer->clear_last_nag;
+      $self->save_state;
 
-  unless ($commit_res->is_success) {
-    $self->save_state;
-    return $event->reply("I couldn't commit your work, sorry.");
-  }
+      return $lpc->clear_timer_for_task_id($task->{id})
+        ->transform(done => sub { return ($task, $dur) })
+        ->else(sub {
+          $meta{CLEARFAIL} = 1;
+          return Future->done($task, $dur);
+        });
+    })
+    ->then(sub ($task, $dur) {
+      return Future->done($task, $dur) if $meta{STOP};
 
-  $sy_timer->clear_last_nag;
-  $self->save_state;
+      return $lpc->start_timer_for_task_id($task->{id})
+        ->transform(done => sub { return ($task, $dur) })
+        ->else(sub {
+          $meta{STARTFAIL} = 1;
+          return Future->done($task, $dur);
+        });
+    })
+    ->then(sub ($task, $dur) {
+      my $cancel_done;
+      if ($meta{DONE} && $task->{custom_field_values}{"Synergy Task Shortcut"}) {
+        $meta{DONE} = 0;
+        $cancel_done = 1;
+      }
 
-  {
-    my $clear_res = $lpc->clear_timer_for_task_id($task_id);
-    $meta{CLEARFAIL} = ! $clear_res->is_success;
-  }
+      my $also
+        = $meta{DONE}  ? " and marked your work done"
+        : $meta{CHILL} ? " stopped the timer, and will chill until you're back"
+        : $meta{STOP}  ? " and stopped the timer"
+        :                "";
 
-  unless ($meta{STOP}) {
-    my $start_res = $lpc->start_timer_for_task_id($task_id);
-    $meta{STARTFAIL} = ! $start_res->is_success;
-  }
+      my @errors = (
+        ($meta{CLEARFAIL} ? ("I couldn't clear the timer's old value")  : ()),
+        ($meta{STARTFAIL} ? ("I couldn't restart the timer")            : ()),
+        ($cancel_done     ? ("I left it undone, because it has a shortcut") : ()),
+      );
 
-  my $also
-    = $meta{DONE}  ? " and marked your work done"
-    : $meta{CHILL} ? " stopped the timer, and will chill until you're back"
-    : $meta{STOP}  ? " and stopped the timer"
-    :                "";
+      if (@errors) {
+        $also .= ".  I had trouble, though:  "
+        .  join q{ and }, @errors;
+      }
 
-  my @errors = (
-    ($meta{CLEARFAIL} ? ("I couldn't clear the timer's old value")  : ()),
-    ($meta{STARTFAIL} ? ("I couldn't restart the timer")            : ()),
-    ($cancel_done     ? ("I left it undone, because it has a shortcut") : ()),
-  );
+      my $uri = $self->item_uri($task->{id});
 
-  if (@errors) {
-    $also .= ".  I had trouble, though:  "
-          .  join q{ and }, @errors;
-  }
+      my $base  = "Okay, I've committed $dur of work$also.  The task was:";
+      my $text  = "$base $task->{name} ($uri)";
+      my $slack = sprintf '%s  %s',
+        $base, $self->_slack_item_link_with_name($task);
 
-  my $uri = $self->item_uri($lp_timer->item_id);
-
-  my $task_res = $lpc->get_item($task_id);
-  unless ($task_res->is_success) {
-    return $event->reply(
-      "I logged that time, but something went wrong trying to describe it!"
-      . (@errors ? ("  I had other trouble, too: " . join q{; }, @errors)
-                 : q{}),
-    );
-  }
-
-  my $task = $task_res->payload;
-
-  my $base  = "Okay, I've committed $work_duration of work$also.  The task was:";
-  my $text  = "$base $task->{name} ($uri)";
-  my $slack = sprintf '%s  %s',
-    $base, $self->_slack_item_link_with_name($task);
-
-  $event->reply(
-    $text,
-    {
-      slack => $slack,
-    }
-  );
+      return $event->reply($text, { slack => $slack });
+    })->retain;
 }
 
 sub _handle_timer_done ($self, $event, $text) {
