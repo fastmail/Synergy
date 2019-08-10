@@ -758,8 +758,11 @@ sub provide_lp_link ($self, $event) {
         "I couldn't find some items you mentioned: " . join(q{, }, @missing)
       );
     }
-  })->else(sub (@error) { $Logger->log("error with provide_lp_link: @error") })
-    ->retain;
+    Future->done;
+  })->else(sub (@error) {
+    $Logger->log("error with provide_lp_link: @error");
+    Future->done;
+  })->retain;
 }
 
 has _last_lp_timer_task_ids => (
