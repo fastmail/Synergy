@@ -2986,6 +2986,21 @@ sub lp_timer_for_user ($self, $user) {
   return $timer;
 }
 
+# XXX temporary. Returns a future that yields a timer or undef
+sub f_lp_timer_for_user ($self, $user) {
+  return unless $self->auth_header_for($user);
+
+  my $lpc = $self->f_lp_client_for_user($user);
+  return $lpc->my_running_timer
+    ->then(sub ($timer = undef) {
+      return Future->done unless $timer;
+
+      $self->set_last_lp_timer_task_id_for_user($user, $timer->item_id);
+      return Future->done($timer);
+    })
+    ->else(sub { Future->done });
+}
+
 sub _handle_showtime ($self, $event, $text) {
   my $user  = $event->from_user;
   my $timer = $user
@@ -3426,47 +3441,51 @@ sub _handle_timer_resume ($self, $event, $text) {
 
   return $event->error_reply($ERR_NO_LP) unless $self->auth_header_for($user);
 
-  my $lpc = $self->lp_client_for_user($user);
+  # I am not thrilled about all these nested chains. -- michael, 2019-08-10
+  my $lpc = $self->f_lp_client_for_user($user);
+  $self->f_lp_timer_for_user($user)
+    ->then(sub ($timer = undef) {
+      return Future->done unless $timer;
 
-  my $lp_timer = $self->lp_timer_for_user($user);
+      return $lpc->get_item($timer->item_id)
+        ->else(sub {
+          $event->reply("You already have a running timer (but I couldn't figure out its task…)");
+          Future->fail('timer running');
+        })
+        ->then(sub ($task) {
+          $event->reply("You already have a running timer ($task->{name})");
+          Future->fail('timer running');
+        });
+    })
+    ->then(sub {
+      my $task_id = $self->last_lp_timer_task_id_for_user($user);
 
-  if ($lp_timer && ref $lp_timer) {
-    my $task_res = $lpc->get_item($lp_timer->item_id);
+      unless ($task_id) {
+        $event->reply("I'm not aware of any previous timer you had running. Sorry!");
+        return Future->fail('no previous timer');
+      }
 
-    unless ($task_res->is_success) {
-      return $event->reply("You already have a running timer (but I couldn't figure out its task…)");
-    }
-
-    my $task = $task_res->payload;
-    return $event->reply("You already have a running timer ($task->{name})");
-  }
-
-  my $task_id = $self->last_lp_timer_task_id_for_user($user);
-
-  unless ($task_id) {
-    return $event->reply("I'm not aware of any previous timer you had running. Sorry!");
-  }
-
-  my $task_res = $lpc->get_item($task_id);
-
-  unless ($task_res->is_success) {
-    return $event->reply("I found your timer but I couldn't figure out its task…");
-  }
-
-  my $task = $task_res->payload;
-  my $res  = $lpc->start_timer_for_task_id($task->{id});
-
-  unless ($res->is_success) {
-    return $event->reply("I failed to resume the timer for $task->{name}, sorry!");
-  }
-
-  return $event->reply(
-    "Timer resumed. Task is: $task->{name}",
-    {
-      slack => sprintf("Timer resumed on %s",
-        $self->_slack_item_link_with_name($task)),
-    },
-  );
+      return $lpc->get_item($task_id)
+        ->else(sub {
+          $event->reply("I found your timer but I couldn't figure out its task…");
+          return Future->fail('bad task get');
+        });
+    })
+    ->then(sub ($task) {
+      return $lpc->start_timer_for_task_id($task->{id})
+        ->then(sub {
+          return $event->reply(
+            "Timer resumed. Task is: $task->{name}",
+            {
+              slack => sprintf("Timer resumed on %s",
+                $self->_slack_item_link_with_name($task)),
+            },
+          );
+        })
+        ->else(sub {
+          return $event->reply("I failed to resume the timer for $task->{name}, sorry!");
+        });
+    })->retain;
 }
 
 sub _handle_timer_start ($self, $event, $text) {
