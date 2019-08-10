@@ -3621,21 +3621,24 @@ sub _handle_spent ($self, $event, $text) {
   }
 
   my $workspace_id = $self->workspace_id;
+  my $maybe_base  = qr{(?:\Qhttps://app.liquidplanner.com/space/$workspace_id/\E.*/|LP\s*)?}i;
+  my $maybe_flags = qr{(?:\s+(.+))?\s*};
 
-  if (
-    $name =~ m{\A\s*(?:https://app.liquidplanner.com/space/$workspace_id/.*/)?([0-9]+)P?/?\s*\z}
-  ) {
-    my ($task_id) = ($1);
-    return $self->_spent_on_existing($event, $task_id, $duration);
-  }
+  my ($task_id, $rest);
 
-  if ($name =~ m{\A\s*\*(\w+)(?:\s+(.+))?\z}) {
-    my ($shortcut, $rest) = ($1, $2);
+  if ($name =~ m{\A\s*$maybe_base([0-9]+)P?/?$maybe_flags\z}) {
+    ($task_id, $rest) = ($1, $2);
+  } elsif ($name =~ m{\A\s*\*(\w+)$maybe_flags\z}) {
+    (my $shortcut, $rest) = ($1, $2);
 
     my ($task, $error) = $self->task_for_shortcut($shortcut);
     return $event->reply($error) unless $task;
 
-    my ($remainder, %plan) = $self->_extract_flags_from_task_text($rest);
+    $task_id = $task->{id};
+  }
+
+  if ($task_id) {
+    my ($remainder, %plan) = $self->_extract_flags_from_task_text($rest // '');
     return $event->error_reply("I didn't understand all the flags you used.")
       if $remainder =~ /\S/;
 
@@ -3644,7 +3647,7 @@ sub _handle_spent ($self, $event, $text) {
     return $event->error_reply("The only special thing you can do when spending time on an existing task is start its timer.")
       if keys %plan;
 
-    return $self->_spent_on_existing($event, $task->{id}, $duration, $start);
+    return $self->_spent_on_existing($event, $task_id, $duration, $start);
   }
 
   my ($plan, $error) = $self->task_plan_from_spec(
