@@ -3248,6 +3248,7 @@ sub _handle_timer_commit ($self, $event, $comment) {
   my $time_re = qr{TIME ([0-9]+(?:\.[0-9]+))([hm]?)};
 
   my %meta;
+  $comment //= '';
   while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL|$time_re)\s*\z//) {
     my $got = $1;
     if ($got =~ $time_re) {
