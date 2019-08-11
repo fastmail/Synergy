@@ -3338,6 +3338,21 @@ sub _handle_timer_commit ($self, $event, $comment) {
         });
     })
     ->then(sub ($task, $dur) {
+      my $ymd = DateTime->now(time_zone => $user->time_zone)->ymd;
+      my $ts_args = {
+        member_ids  => [ $user->lp_id ],
+        start_date  => $ymd,
+        end_date    => $ymd,
+      };
+
+      return $lpc->timesheet_entries($ts_args)
+        ->transform(done => sub ($ts_entries) { $task, $dur, $ts_entries })
+        ->else(sub (@err) {
+          $meta{TIMESHEETFAIL} = 1;
+          return Future->done($task, $dur);
+        });
+    })
+    ->then(sub ($task, $dur, $ts_entries = undef) {
       my $cancel_done;
       if ($meta{DONE} && $task->{custom_field_values}{"Synergy Task Shortcut"}) {
         $meta{DONE} = 0;
@@ -3354,6 +3369,7 @@ sub _handle_timer_commit ($self, $event, $comment) {
         ($meta{CLEARFAIL} ? ("I couldn't clear the timer's old value")  : ()),
         ($meta{STARTFAIL} ? ("I couldn't restart the timer")            : ()),
         ($cancel_done     ? ("I left it undone, because it has a shortcut") : ()),
+        ($meta{TIMESHEETFAIL} ? ("I couldn't get your timesheet")           : ()),
       );
 
       if (@errors) {
@@ -3361,9 +3377,21 @@ sub _handle_timer_commit ($self, $event, $comment) {
         .  join q{ and }, @errors;
       }
 
+      my $ts_text = '';
+      if ($ts_entries) {
+        my $goal = $self->get_user_preference($user, 'tracking-goal');
+        my $tada = qq{\N{PARTY POPPER}};
+
+        my $total = sum0 map  {; $_->{work} } @$ts_entries;
+        $ts_text = sprintf("  So far today, you've logged %0.02f %s.%s",
+          $total, PL_N('hour', $total),
+          (defined $goal && $total > $goal ? " $tada" : ""),
+        );
+      }
+
       my $uri = $self->item_uri($task->{id});
 
-      my $base  = "Okay, I've committed $dur of work$also.  The task was:";
+      my $base  = "Okay, I've committed $dur of work$also.$ts_text  The task was:";
       my $text  = "$base $task->{name} ($uri)";
       my $slack = sprintf '%s  %s',
         $base, $self->_slack_item_link_with_name($task);
