@@ -173,7 +173,7 @@ sub handle_dump ($self, $event) {
 
 sub _error_no_prefs ($self, $event, $component) {
   $event->mark_handled;
-  $event->reply("<$component> does not appear to have preferences");
+  $event->error_reply("<$component> does not appear to have preferences");
 }
 
 sub handle_list ($self, $event) {
