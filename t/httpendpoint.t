@@ -41,8 +41,8 @@ package Synergy::Channel::Test::HTTPEndpointAuth {
 }
 
 # Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
+my $synergy = Synergy::Hub->synergize({
+  config => {
     user_directory => "t/data/users.yaml",
     channels => {
       'test-channel-endpoint' => {
@@ -55,7 +55,7 @@ my $synergy = Synergy::Hub->synergize(
       },
     },
   }
-);
+});
 
 # Tests begin here.
 testing_loop($synergy->loop);

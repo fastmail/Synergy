@@ -18,8 +18,8 @@ use Net::Async::HTTP;
 use Synergy::Hub;
 
 # Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
+my $synergy = Synergy::Hub->synergize({
+  config => {
     user_directory  => "t/data/users.yaml",
     time_zone_names => {
       "America/New_York"  => "🇺🇸",
@@ -38,7 +38,7 @@ my $synergy = Synergy::Hub->synergize(
       echo => { class => 'Synergy::Reactor::Echo' },
     }
   }
-);
+});
 
 sub from_epoch { DateTime->from_epoch(epoch => $_[0]) }
 

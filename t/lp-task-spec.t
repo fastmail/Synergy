@@ -13,8 +13,8 @@ use Synergy::Logger::Test '$Logger';
 use Synergy::Hub;
 
 my $tmpfile = Path::Tiny->tempfile;
-my $synergy = Synergy::Hub->synergize(
-  {
+my $synergy = Synergy::Hub->synergize({
+  config => {
     user_directory => "t/data/users-lp.yaml",
     channels => {
       'test-channel' => {
@@ -38,7 +38,7 @@ my $synergy = Synergy::Hub->synergize(
     },
     state_dbfile => "$tmpfile",
   }
-);
+});
 
 for my $to_set (
   [ jetta => { lp => { 'default-project-shortcut' => 'pies' } } ],

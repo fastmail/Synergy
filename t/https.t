@@ -17,8 +17,8 @@ use Plack::Response;
 use Synergy::Hub;
 
 # Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
+my $synergy = Synergy::Hub->synergize({
+  config => {
     user_directory => "t/data/users.yaml",
     channels => {
       'test-channel' => {
@@ -28,7 +28,7 @@ my $synergy = Synergy::Hub->synergize(
     tls_cert_file => "t/data/synergy.crt",
     tls_key_file => "t/data/synergy.key",
   }
-);
+});
 
 $synergy->server->register_path('/ok', sub {
   return Plack::Response->new(200)->finalize;

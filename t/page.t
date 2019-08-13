@@ -20,8 +20,8 @@ my $PAGE = "Hello\n\nfriend.";
 my $tmpfile = Path::Tiny->tempfile;
 
 # Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
+my $synergy = Synergy::Hub->synergize({
+  config => {
     user_directory => "t/data/users-page.yaml",
     channels => {
       'test-1' => {
@@ -49,7 +49,7 @@ my $synergy = Synergy::Hub->synergize(
     },
     state_dbfile => "$tmpfile",
   }
-);
+});
 
 # Tests begin here.
 testing_loop($synergy->loop);

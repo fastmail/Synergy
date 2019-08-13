@@ -15,8 +15,8 @@ use Net::Async::HTTP;
 use Synergy::Hub;
 
 # Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
+my $synergy = Synergy::Hub->synergize({
+  config => {
     user_directory => "t/data/users.yaml",
     channels => {
       'test-channel' => {
@@ -33,7 +33,7 @@ my $synergy = Synergy::Hub->synergize(
       echo => { class => 'Synergy::Reactor::Echo' },
     }
   }
-);
+});
 
 # Tests begin here.
 testing_loop($synergy->loop);

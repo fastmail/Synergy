@@ -10,6 +10,8 @@ use namespace::clean;
 use File::pushd;
 use File::Find;
 use Path::Tiny;
+use YAML::XS;
+use Try::Tiny;
 
 has git_dir => (
   is => 'ro',
@@ -180,10 +182,48 @@ sub get_version_desc ($self) {
   $output;
 }
 
-sub check_next {
+sub check_next ($self, @) {
+  my $cf = $self->hub->config_file;
+
+  # No config file? Huh. Do normal check
+  return $self->check_next_file_find unless $cf;
+
+  my $reader  = $cf =~ /\.ya?ml\z/ ? sub { YAML::XS::LoadFile($_[0]) }
+              : $cf =~ /\.json\z/  ? \&Synergy::Hub::_slurp_json_file
+              : $cf =~ /\.toml\z/  ? \&Synergy::Hub::_slurp_toml_file
+              : undef;
+
+  return $self->check_next_file_find unless $reader;
+
+  my ($config, $err);
+
+  try {
+    $config = $reader->($cf);
+  } catch {
+    $err = "Failed to parse config ($cf): $_";
+  };
+
+  return $err if $err;
+
+  my %allowed;
+
+  for my $thing (qw( channels reactors )) {
+    for my $thing_config (values %{ $config->{$thing} }) {
+      my $thing_class  = delete $thing_config->{class};
+
+      next unless $thing_class;
+
+      $allowed{$thing_class} = 1;
+    }
+  }
+
+  return $self->check_next_file_find(\%allowed);
+}
+
+sub check_next_file_find ($self, $allowed = {}) {
   my $data = "use lib qw(lib);\n";
 
-  find(sub { wanted(\$data) }, 'lib/');
+  find(sub { wanted($allowed, \$data) }, 'lib/');
 
   my $f = Path::Tiny->tempfile;
   $f->spew($data);
@@ -194,9 +234,7 @@ sub check_next {
   return;
 }
 
-sub wanted {
-  my $data = shift;
-
+sub wanted ($allowed, $data) {
   return unless -f $_;
   return unless /\.pm$/;
 
@@ -205,6 +243,9 @@ sub wanted {
   $name =~ s/^lib\///;
   $name =~ s/\//::/g;
   $name =~ s/\.pm//;
+
+  # Only load channels/reactors referenced in config
+  return if %$allowed && $name =~ /Synergy::(Reactor|Channel)/ && ! $allowed->{$name};
 
   $$data .= "use $name;\n";
 }

@@ -24,6 +24,11 @@ use URI;
 use Scalar::Util qw(blessed);
 use Defined::KV;
 
+has config_file => (
+  is  => 'ro',
+  isa => 'Maybe[Str]',
+);
+
 has name => (
   is  => 'ro',
   isa => 'Str',
@@ -295,11 +300,10 @@ sub set_loop ($self, $loop) {
   return $loop;
 }
 
-sub synergize {
-  my $class = shift;
-  my ($loop, $config) = @_ == 2 ? @_
-                      : @_ == 1 ? (undef, @_)
-                      : confess("weird arguments passed to synergize");
+sub synergize ($class, $arg) {
+  my $loop = delete $arg->{loop};
+  my $config = delete $arg->{config};
+  my $config_file = delete $arg->{config_file};
 
   $loop //= do {
     require IO::Async::Loop;
@@ -321,6 +325,7 @@ sub synergize {
     defined_kv(tls_cert_file   => $config->{tls_cert_file}),
     defined_kv(tls_key_file    => $config->{tls_key_file}),
     defined_kv(state_dbfile    => $config->{state_dbfile}),
+    config_file                => $config_file,
   });
 
   $directory->register_with_hub($hub);
@@ -384,10 +389,11 @@ sub synergize_file {
               : $filename =~ /\.toml\z/  ? \&_slurp_toml_file
               : confess "don't know how to synergize_file $filename";
 
-  return $class->synergize(
-    ($loop ? $loop : ()),
-    $reader->($filename),
-  );
+  return $class->synergize({
+    loop        => $loop,
+    config      => $reader->($filename),
+    config_file => $filename,
+  });
 }
 
 has http_client => (
