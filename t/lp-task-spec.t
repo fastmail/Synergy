@@ -43,16 +43,17 @@ my $synergy = Synergy::Hub->synergize(
 for my $to_set (
   [ jetta => { lp => { 'default-project-shortcut' => 'pies' } } ],
   [ riot  => { lp => { 'default-project-shortcut' => 'gorp' } } ],
+  [ roxy  => { user => { 'nicknames' => [ 'roxanne' ] } } ],
 ) {
   my ($username, $prefs) = @$to_set;
 
   my $user = $synergy->user_directory->user_named($username);
 
-  for my $reactor_name (keys %$prefs) {
-    my $reactor = $synergy->reactor_named($reactor_name);
-    for my $pref (keys $prefs->{$reactor_name}->%*) {
-      my $value = $prefs->{$reactor_name}{$pref};
-      $reactor->set_user_preference($user, $pref, $value);
+  for my $component_name (keys %$prefs) {
+    my $component = $synergy->component_named($component_name);
+    for my $pref (keys $prefs->{$component_name}->%*) {
+      my $value = $prefs->{$component_name}{$pref};
+      $component->set_user_preference($user, $pref, $value);
     }
   }
 }

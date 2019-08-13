@@ -1,21 +1,17 @@
 ---
 roxy:
   realname: Roxanne Pelligrini
-  nicknames: [ roxanne ]
   lp_id: 1
   lp_token: "8675309"
 stormer:
   realname: Mary Phillips
-  nicknames: [ mary ]
   lp_id: 2
   lp_token: "deadbeef"
 jetta:
   realname: Sheila Burns
-  nicknames: [ sheila ]
   lp_id: 3
   lp_token: "feeb00cat"
 riot:
   realname: Rory Llewelyn
-  nicknames: [ rory ]
   lp_id: 4
   lp_token: "0u812"
