@@ -127,6 +127,7 @@ role {
 
     my $spec = $pref_specs{ $pref_name };
     my $default = $spec->{default};
+    $default = $default->() if $default && ref $default eq 'CODE';
 
     my $username = blessed $user ? $user->username : $user;
     return unless $username;
