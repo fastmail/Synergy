@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Logger;
 use parent 'Log::Dispatchouli::Global';
 
-use Log::Dispatchouli 2.002;
+use Log::Dispatchouli 2.019; # enable_stderr
 
 sub logger_globref {
   no warnings 'once';
