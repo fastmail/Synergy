@@ -54,7 +54,8 @@ sub listener_specs {
       method    => 'handle_strike',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aagenda strike\s/i
+        $e->was_targeted
+        && ($e->text =~ /\Aagenda strike\s/i || $e->text =~ /^\[x\]\s/)
       },
     },
     {
@@ -320,7 +321,7 @@ sub handle_strike ($self, $event) {
     return;
   }
 
-  my ($agendaname, $text) = $event->text =~ /\Aagenda strike from\s+([^\s:]+):?\s+(.+)\z/;
+  my ($agendaname, $text) = $event->text =~ /\A(?:agenda strike from|\[x\])\s+([^\s:]+):?\s+(.+)\z/;
 
   unless (length $text) {
     return $event->error_reply("It's *agenda strike from AGENDA: ITEM*.");
