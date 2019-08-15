@@ -19,7 +19,7 @@ has page_channel_name => (
 has pushover_channel_name => (
   is => 'ro',
   isa => 'Str',
-  required => 1,
+  predicate => 'has_pushover_channel',
 );
 
 sub listener_specs {
@@ -58,26 +58,27 @@ sub handle_page ($self, $event) {
   my $paged = 0;
 
   if ($user->has_identity_for($self->page_channel_name) || $user->has_phone) {
-
-    my $page_channel = $self->hub->channel_named($self->page_channel_name);
+    my $to_channel = $self->hub->channel_named($self->page_channel_name);
 
     my $from = $event->from_user ? $event->from_user->username
                                  : $event->from_address;
 
-    $page_channel->send_message_to_user($user, "$from says: $what");
+    $to_channel->send_message_to_user($user, "$from says: $what");
 
     $paged = 1;
   }
 
-  if ($user->has_identity_for($self->pushover_channel_name)) {
-    my $page_channel = $self->hub->channel_named($self->pushover_channel_name);
+  if ($self->has_pushover_channel) {
+    if ($user->has_identity_for($self->pushover_channel_name)) {
+      my $to_channel = $self->hub->channel_named($self->pushover_channel_name);
 
-    my $from = $event->from_user ? $event->from_user->username
-                                 : $event->from_address;
+      my $from = $event->from_user ? $event->from_user->username
+                                   : $event->from_address;
 
-    $page_channel->send_message_to_user($user, "$from says: $what");
+      $to_channel->send_message_to_user($user, "$from says: $what");
 
-    $paged = 1;
+      $paged = 1;
+    }
   }
 
   if ( $paged ) {
