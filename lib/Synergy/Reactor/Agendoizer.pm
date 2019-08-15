@@ -90,6 +90,14 @@ sub listener_specs {
         $e->was_targeted && $e->text =~ /\Aagenda unshare\s/i
       },
     },
+    {
+      name      => 'sharing',
+      method    => 'handle_sharing',
+      exclusive => 1,
+      predicate => sub ($, $e) {
+        $e->was_targeted && $e->text =~ /\Aagenda sharing\s/i
+      },
+    },
   );
 }
 
@@ -467,7 +475,7 @@ sub handle_share ($self, $event) {
 
   for my $instruction (@instructions) {
     my $who  = $self->resolve_name($instruction->[0], $event->from_user);
-    my $perm = $instruction->[1] // 'write';
+    my $perm = $instruction->[1] // 'add';
 
     $error{"I don't know who `$who` is."} = 1 unless $who;
 
@@ -529,6 +537,44 @@ sub handle_unshare ($self, $event) {
   $self->save_state;
 
   return $event->reply("That agenda is now entirely private.");
+}
+
+sub handle_sharing ($self, $event) {
+  $event->mark_handled;
+
+  unless ($event->from_user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my ($agendaname) = $event->text =~ /\Aagenda sharing for (\S+)\z/;
+
+  unless (length $agendaname) {
+    return $event->error_reply("To see sharing for an agenda, it's *agenda sharing for `AGENDA`*.");
+  }
+
+  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
+
+  return $event->error_reply("Sorry, I don't know whose agenda you want.")
+    unless $owner;
+
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agenda;
+
+  unless (keys $agenda->{share}->%*) {
+    return $event->reply("That agenda isn't shared at all.");
+  }
+
+  my $reply = sprintf "Sharing for %s/%s is as follows:\n",
+    $owner->username,
+    $agenda->{name};
+
+  $reply .= join qq{\n},
+            map {; sprintf "• *%s* can *%s* items", $_, $agenda->{share}{$_} }
+            sort { fc $a cmp fc $b }
+            keys $agenda->{share}->%*;
+
+  return $event->reply($reply);
 }
 
 1;
