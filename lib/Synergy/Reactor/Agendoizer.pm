@@ -58,7 +58,8 @@ These commands manage agenda sharing:
 
 • *agenda share `AGENDA` with `USER`:`PERM`*: updates a user's permissions for
 an agenda; you can supply multiple user/permission pairs, separated by spaces,
-and if there is no colon in the pair, the default permission is `add`.
+and if there is no colon in the pair, the default permission is `add`.  To
+share with everyone provide the username `*`.
 • *agenda unshare `AGENDA`: totally unshare an agenda
 • *agenda sharing for `AGENDA`: shows what permissions exist
 EOH
@@ -514,22 +515,32 @@ sub handle_share ($self, $event) {
   my %error;
 
   for my $instruction (@instructions) {
-    my $who  = $self->resolve_name($instruction->[0], $event->from_user);
     my $perm = $instruction->[1] // 'add';
 
-    $error{"I don't know who `$who` is."} = 1 unless $who;
+    my $sharee;
+
+    if (! length $instruction->[0]) {
+      return $event->error_reply("Your share request didn't make sense to me.");
+    } elsif ($instruction->[0] eq '*') {
+      $sharee = '';
+    } else {
+      my $who  = $self->resolve_name($instruction->[0], $event->from_user);
+      $error{"I don't know who `$who` is."} = 1 unless $who;
+
+      $sharee = $who->username if $who;
+
+      $error{"Sharing with yourself is weird and I won't allow it."} = 1
+        if $who && $who->username eq $event->from_user->username;
+    }
 
     # TTP: Totally tragic perm.
     $error{"I don't know how to share for `$perm`."} = 1
       unless $KNOWN_PERM{$perm};
 
-    $error{"Sharing with yourself is weird and I won't allow it."} = 1
-      if $who->username eq $event->from_user->username;
+    $error{"You mentioned $sharee more than once!"} = 1
+      if $plan{$sharee};
 
-    $error{"You mentioned " . $who->username . " more than once!"} = 1
-      if $plan{ $who->username };
-
-    $plan{$who->username} = $perm;
+    $plan{$sharee} = $perm;
   }
 
   if (%error) {
@@ -610,7 +621,10 @@ sub handle_sharing ($self, $event) {
     $agenda->{name};
 
   $reply .= join qq{\n},
-            map {; sprintf "• *%s* can *%s* items", $_, $agenda->{share}{$_} }
+            map {;
+              sprintf "• *%s* can *%s* items",
+                (length $_ ? $_ : 'all users'),
+                $agenda->{share}{$_} }
             sort { fc $a cmp fc $b }
             keys $agenda->{share}->%*;
 
