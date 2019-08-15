@@ -11,10 +11,8 @@ with 'Synergy::Role::Reactor';
 use experimental qw(signatures);
 use namespace::clean;
 
-# remove from list X: T
 # email X [to Y?]
 # update list X /set foo bar
-# share list X with Y
 
 sub listener_specs {
   return (
@@ -70,6 +68,22 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($, $e) {
         $e->was_targeted && $e->text =~ /\Adelete list\s/i
+      },
+    },
+    {
+      name      => 'share_list',
+      method    => 'handle_share_list',
+      exclusive => 1,
+      predicate => sub ($, $e) {
+        $e->was_targeted && $e->text =~ /\Ashare list \S+ with\s/i
+      },
+    },
+    {
+      name      => 'unshare_list',
+      method    => 'handle_unshare_list',
+      exclusive => 1,
+      predicate => sub ($, $e) {
+        $e->was_targeted && $e->text =~ /\Aunshare list\s/i
       },
     },
   );
@@ -401,6 +415,110 @@ sub handle_delete_list ($self, $event) {
   $self->save_state;
 
   return $event->reply("I deleted the list!");
+}
+
+my %KNOWN_PERM = map {; $_ => 1 } qw(read write delete);
+
+sub handle_share_list ($self, $event) {
+  $event->mark_handled;
+
+  unless ($event->from_user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my ($listname, $args) = $event->text =~ /\Ashare list (\S+) with\s+(.+)\z/;
+
+  unless (length $args) {
+    return $event->error_reply("I didn't understand how you wanted to share.");
+  }
+
+  my ($owner, $list) = $self->resolve_list_and_user($listname, $event->from_user);
+
+  return $event->error_reply("Sorry, I don't know whose list you want.")
+    unless $owner;
+
+  return $event->error_reply("Sorry, you can only share your own lists.")
+    unless $owner->username eq $event->from_user->username;
+
+  return $event->error_reply("Sorry, I can't find that list.")
+    unless $list;
+
+  my @instructions = map  {; [ split /:/, $_ ] }
+                     grep {; length }
+                     split /\s+/, $args;
+
+  unless (@instructions) {
+    return $event->error_reply("I didn't understand how you wanted to share.");
+  }
+
+  my %plan;
+  my %error;
+
+  for my $instruction (@instructions) {
+    my $who  = $self->resolve_name($instruction->[0], $event->from_user);
+    my $perm = $instruction->[1] // 'write';
+
+    $error{"I don't know who `$who` is."} = 1 unless $who;
+
+    # TTP: Totally tragic perm.
+    $error{"I don't know how to share for `$perm`."} = 1
+      unless $KNOWN_PERM{$perm};
+
+    $error{"Sharing with yourself is weird and I won't allow it."} = 1
+      if $who->username eq $event->from_user->username;
+
+    $error{"You mentioned " . $who->username . " more than once!"} = 1
+      if $plan{ $who->username };
+
+    $plan{$who->username} = $perm;
+  }
+
+  if (%error) {
+    return $event->error_reply(
+      join q{  },
+      "I'm not sharing that list:  ",
+      sort keys %error,
+    );
+  }
+
+  $list->{share}->%* = ($list->{share}->%*, %plan);
+
+  $self->save_state;
+
+  return $event->reply("I have updated permissions on that list!");
+}
+
+sub handle_unshare_list ($self, $event) {
+  $event->mark_handled;
+
+  unless ($event->from_user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my ($listname) = $event->text =~ /\Aunshare list (\S+)\z/;
+
+  unless (length $listname) {
+    return $event->error_reply("I didn't understand what you wanted to unshare.");
+  }
+
+  my ($owner, $list) = $self->resolve_list_and_user($listname, $event->from_user);
+
+  return $event->error_reply("Sorry, I don't know whose list you want.")
+    unless $owner;
+
+  return $event->error_reply("Sorry, you can only unshare your own lists.")
+    unless $owner->username eq $event->from_user->username;
+
+  return $event->error_reply("Sorry, I can't find that list.")
+    unless $list;
+
+  $list->{share} = {};
+
+  $self->save_state;
+
+  return $event->reply("That list is now entirely private.");
 }
 
 1;
