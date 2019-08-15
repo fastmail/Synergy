@@ -12,78 +12,81 @@ use experimental qw(signatures);
 use namespace::clean;
 
 # email X [to Y?]
-# update list X /set foo bar
+# update agenda X /set foo bar
 
 sub listener_specs {
   return (
     {
-      name      => 'new_list',
-      method    => 'handle_new',
-      exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /^(?:new|add) list\s/i },
-    },
-    {
-      name      => 'list_of_lists',
-      method    => 'handle_list_of_lists',
+      name      => 'create',
+      method    => 'handle_create',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Alists\z/i
+        $e->was_targeted && $e->text =~ /^agenda create\s/i
       },
     },
     {
-      name      => 'list_contents',
-      method    => 'handle_list_contents',
+      name      => 'list',
+      method    => 'handle_list',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Alist\s/i
+        $e->was_targeted && $e->text =~ /\Aagenda list\z/i
       },
     },
     {
-      name      => 'add_to_list',
-      method    => 'handle_add_to_list',
+      name      => 'for',
+      method    => 'handle_for',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aadd to\s/i
+        $e->was_targeted && $e->text =~ /\Aagenda for\s/i
       },
     },
     {
-      name      => 'remove_from_list',
-      method    => 'handle_remove_from_list',
+      name      => 'add',
+      method    => 'handle_add',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aremove from\s/i
+        $e->was_targeted
+        && ($e->text =~ /\Aagenda add\s/i || $e->text =~ /^\[\]\s/)
       },
     },
     {
-      name      => 'clear_list',
-      method    => 'handle_clear_list',
+      name      => 'strike',
+      method    => 'handle_strike',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aclear list\s/i
+        $e->was_targeted && $e->text =~ /\Aagenda strike\s/i
       },
     },
     {
-      name      => 'delete_list',
-      method    => 'handle_delete_list',
+      name      => 'clear',
+      method    => 'handle_clear',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Adelete list\s/i
+        $e->was_targeted && $e->text =~ /\Aagenda clear\s/i
       },
     },
     {
-      name      => 'share_list',
-      method    => 'handle_share_list',
+      name      => 'delete',
+      method    => 'handle_delete',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Ashare list \S+ with\s/i
+        $e->was_targeted && $e->text =~ /\Aagenda delete\s/i
       },
     },
     {
-      name      => 'unshare_list',
-      method    => 'handle_unshare_list',
+      name      => 'share',
+      method    => 'handle_share',
       exclusive => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aunshare list\s/i
+        $e->was_targeted && $e->text =~ /\Aagenda share \S+ with\s/i
+      },
+    },
+    {
+      name      => 'unshare',
+      method    => 'handle_unshare',
+      exclusive => 1,
+      predicate => sub ($, $e) {
+        $e->was_targeted && $e->text =~ /\Aagenda unshare\s/i
       },
     },
   );
@@ -91,61 +94,64 @@ sub listener_specs {
 
 sub state ($self) {
   return {
-    userlists => $self->_userlists,
+    useragendas => $self->_useragendas,
   };
 }
 
 after register_with_hub => sub ($self, @) {
   my $state = $self->fetch_state;
 
-  if ($state && $state->{userlists}) {
-    $self->set_userlists_from_storage($state->{userlists});
+  if ($state && $state->{useragendas}) {
+    $self->set_useragendas_from_storage($state->{useragendas});
   }
 };
 
-# list storage:
+# agenda storage:
 #   USER => {
 #     FLAT_NAME => {
 #      name  => EXACT_NAME,
 #      share => { username => PERMS, '' => PERMS } # empty str is "everyone"
 #      items => [ { text => ..., added_at => ..., ??? }, ... ]
-#      description => TEXT, # what even is this list?
+#      description => TEXT, # what even is this agenda?
 
-has userlists => (
-  reader  => '_userlists',
-  writer  => 'set_userlists_from_storage',
+has useragendas => (
+  reader  => '_useragendas',
+  writer  => 'set_useragendas_from_storage',
   default => sub {  {}  },
 );
 
-sub lists_for ($self, $user) {
-  $self->_userlists->{ $user->username } //= {};
+sub agendas_for ($self, $user) {
+  $self->_useragendas->{ $user->username } //= {};
 }
 
-sub lists_shared_with ($self, $user) {
-  my $username  = $user->username;
-  my $userlists = $self->_userlists;
+sub agendas_shared_with ($self, $user) {
+  my $username    = $user->username;
+  my $useragendas = $self->_useragendas;
 
   my %return;
-  for my $sharer (grep {; $_ ne $username } keys %$userlists) {
-    for my $list (keys $userlists->{$sharer}->%*) {
-      $return{"$sharer/$list"} = $userlists->{$sharer}{$list};
+  for my $sharer (grep {; $_ ne $username } keys %$useragendas) {
+    for my $agenda (keys $useragendas->{$sharer}->%*) {
+      $return{"$sharer/$agenda"} = $useragendas->{$sharer}{$agenda};
     }
   }
 
   return \%return;
 }
 
-my $listname_re = qr{[0-9a-z]+}i;
+my $agendaname_re = qr{[0-9a-z]+}i;
 
-sub handle_new ($self, $event) {
+sub handle_create ($self, $event) {
   my $text = $event->text;
 
   $event->mark_handled;
 
-  my ($name) = $text =~ /\A(?:new|add) list named ($listname_re)\s*\z/;
+  my ($name) = $text =~ /\Aagenda create ($agendaname_re)\z/;
 
   unless ($name) {
-    return $event->error_reply("It's *new list named `NAME`*, and the name has to be just numbers and English alphabet letters.");
+    if ($text =~ /\Aagenda create ([\pl\pn]+)\z/) {
+      return $event->error_reply("I acknoweldge and appreciate that you are very clever, but we speak ASCII in the Agendoizer.");
+    }
+    return $event->error_reply("It's *agenda create `NAME`*, and the name has to be just numbers and letters.");
   }
 
   unless ($event->from_user) {
@@ -153,26 +159,22 @@ sub handle_new ($self, $event) {
     return;
   }
 
-  if (fc $name eq 'list' or fc $name eq 'lists') {
-    return $event->error_reply("For the sake of everybody sanity, I'm not going to let you call your list \F$name!");
+  my $agendas = $self->agendas_for($event->from_user);
+
+  if ($agendas->{ fc $name }) {
+    return $event->error_reply("This is awkward:  you already have an agenda with that name.");
   }
 
-  my $lists = $self->lists_for($event->from_user);
-
-  if ($lists->{ fc $name }) {
-    return $event->error_reply("This is awkward:  you already have a list with that name.");
-  }
-
-  $lists->{ fc $name } = { name => $name, share => {}, items => [] };
+  $agendas->{ fc $name } = { name => $name, share => {}, items => [] };
 
   $self->save_state;
 
-  $event->reply("I've created a new list for you.");
+  $event->reply("I've created a new agenda for you.");
 
   return;
 }
 
-sub handle_list_of_lists ($self, $event) {
+sub handle_list ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
@@ -180,49 +182,49 @@ sub handle_list_of_lists ($self, $event) {
     return;
   }
 
-  my $lists = {
-    $self->lists_for($event->from_user)->%*,
-    $self->lists_shared_with($event->from_user)->%*
+  my $agendas = {
+    $self->agendas_for($event->from_user)->%*,
+    $self->agendas_shared_with($event->from_user)->%*
   };
 
   my @to_list = $event->is_public
-              ? (grep {; $lists->{$_}{share}{''} } keys %$lists)
-              : keys %$lists;
+              ? (grep {; $agendas->{$_}{share}{''} } keys %$agendas)
+              : keys %$agendas;
 
   unless (@to_list) {
-    if (@to_list != keys %$lists) {
-      return $event->reply("The only lists you can see are private.");
+    if (@to_list != keys %$agendas) {
+      return $event->reply("The only agendas you can see are private.");
     }
 
-    return $event->reply("You don't have any available lists.");
+    return $event->reply("You don't have any available agendas.");
   }
 
-  my $text = "Lists you can see:\n"
+  my $text = "Agendas you can see:\n"
            . join qq{\n}, map {; "* $_" } sort @to_list;
 
-  if (@to_list != keys %$lists) {
-    $text .= "\n…and some private lists not shown here.";
+  if (@to_list != keys %$agendas) {
+    $text .= "\n…and some private agendas not shown here.";
   }
 
   $event->reply($text);
 }
 
-sub resolve_list_and_user ($self, $str, $user) {
+sub resolve_agenda_and_user ($self, $str, $user) {
   my ($upart, $lpart) = $str =~ m{/} ? (split m{/}, $str, 2) : ('me', $str);
 
   return (undef, undef) unless my $who = $self->resolve_name($upart, $user);
 
-  my $list = $self->lists_for($who)->{ fc $lpart };
+  my $agenda = $self->agendas_for($who)->{ fc $lpart };
 
-  undef $list
-    if $list
+  undef $agenda
+    if $agenda
     && $who->username ne $user->username
-    && ! $list->{share}{$user->username};
+    && ! $agenda->{share}{$user->username};
 
-  return ($who, $list);
+  return ($who, $agenda);
 }
 
-sub handle_list_contents ($self, $event) {
+sub handle_for ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
@@ -232,40 +234,40 @@ sub handle_list_contents ($self, $event) {
 
   my $username = $event->from_user->username;
 
-  my ($arg) = $event->text =~ /\Alist\s+(\S+)\s*\z/;
+  my ($arg) = $event->text =~ /\Aagenda for (\S+)\s*\z/;
 
   unless (length $arg) {
-    return $event->error_reply("It's *list NAME* where the name is one of your list names or username/listname for a list shared with you.");
+    return $event->error_reply("It's *agenda for NAME* where the name is one of your agenda names or username/agendaname for a agenda shared with you.");
   }
 
-  my ($owner, $list) = $self->resolve_list_and_user($arg, $event->from_user);
+  my ($owner, $agenda) = $self->resolve_agenda_and_user($arg, $event->from_user);
 
-  return $event->error_reply("Sorry, I don't know whose list you want.")
+  return $event->error_reply("Sorry, I don't know whose agenda you want.")
     unless $owner;
 
-  return $event->error_reply("Sorry, I can't find that list.")
-    unless $list;
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agenda;
 
   if (
     $event->is_public
-    && ! $list->{share}{''}
+    && ! $agenda->{share}{''}
     && $owner->username ne $username
   ) {
     # Okay, it's weird, but my view is:  you can add or remove specific stuff
-    # on a private list in public and it's not so bad, but listing its contents
+    # on a private agenda in public and it's not so bad, but listing its contents
     # all out would be bad. -- rjbs, 2019-08-14
-    $event->error_reply("Sorry, I couldn't find that list.");
-    my $well_actually = sprintf "Actually, I declined to talk about %s/%s in public, because it's a private list!", $owner->username, $list->{name};
+    $event->error_reply("Sorry, I couldn't find that agenda.");
+    my $well_actually = sprintf "Actually, I declined to talk about %s/%s in public, because it's a private agenda!", $owner->username, $agenda->{name};
     $event->private_reply($well_actually, { slack => $well_actually });
   }
 
-  my $items = $list->{items};
+  my $items = $agenda->{items};
 
   unless (@$items) {
-    return $event->reply("I found that list, but it's empty!");
+    return $event->reply("I found that agenda, but it's empty!");
   }
 
-  my $text = "Items on that list:\n";
+  my $text = "Items on that agenda:\n";
   $text .= join qq{\n},
            map  {; "* $_->{text}" }
            sort { $a->{added_at} <=> $b->{added_at} } @$items;
@@ -273,7 +275,7 @@ sub handle_list_contents ($self, $event) {
   $event->reply($text);
 }
 
-sub handle_add_to_list ($self, $event) {
+sub handle_add ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
@@ -281,25 +283,25 @@ sub handle_add_to_list ($self, $event) {
     return;
   }
 
-  my ($listname, $text) = $event->text =~ /\Aadd to\s+([^\s:]+):?\s+(.+)\z/;
+  my ($agendaname, $text) = $event->text =~ /\A(?:agenda add to|\[\])\s+([^\s:]+):?\s+(.+)\z/;
 
   unless (length $text) {
-    return $event->error_reply("It's *add to LIST: WHAT*.");
+    return $event->error_reply("It's *agenda add to AGENDA: ITEM*.");
   }
 
-  my ($owner, $list) = $self->resolve_list_and_user($listname, $event->from_user);
+  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
-  return $event->error_reply("Sorry, I don't know whose list you want.")
+  return $event->error_reply("Sorry, I don't know whose agenda you want.")
     unless $owner;
 
-  return $event->error_reply("Sorry, I can't find that list.")
-    unless $list;
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agenda;
 
-  return $event->error_reply("Sorry, you can't write to that list.")
+  return $event->error_reply("Sorry, you can't add to that agenda.")
     unless $owner->username eq $event->from_user->username
-    or $list->{share}{ $event->from_user->username } =~ /\A(?:write|delete)\z/;
+    or $agenda->{share}{ $event->from_user->username } =~ /\A(?:write|strike)\z/;
 
-  push $list->{items}->@*, {
+  push $agenda->{items}->@*, {
     added_at => time,
     added_by => $event->from_user->username,
     text     => $text,
@@ -307,10 +309,10 @@ sub handle_add_to_list ($self, $event) {
 
   $self->save_state;
 
-  return $event->reply("I added it to the list!");
+  return $event->reply("I added it to the agenda!");
 }
 
-sub handle_remove_from_list ($self, $event) {
+sub handle_strike ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
@@ -318,41 +320,41 @@ sub handle_remove_from_list ($self, $event) {
     return;
   }
 
-  my ($listname, $text) = $event->text =~ /\Aremove from\s+([^\s:]+):?\s+(.+)\z/;
+  my ($agendaname, $text) = $event->text =~ /\Aagenda strike from\s+([^\s:]+):?\s+(.+)\z/;
 
   unless (length $text) {
-    return $event->error_reply("It's *remove from LIST: WHAT*.");
+    return $event->error_reply("It's *agenda strike from AGENDA: ITEM*.");
   }
 
-  my ($owner, $list) = $self->resolve_list_and_user($listname, $event->from_user);
+  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
-  return $event->error_reply("Sorry, I don't know whose list you want.")
+  return $event->error_reply("Sorry, I don't know whose agenda you want.")
     unless $owner;
 
-  return $event->error_reply("Sorry, I can't find that list.")
-    unless $list;
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agenda;
 
-  return $event->error_reply("Sorry, you can't delete from that list.")
+  return $event->error_reply("Sorry, you can't strike from that agenda.")
     unless $owner->username eq $event->from_user->username
-    or $list->{share}{ $event->from_user->username } eq 'delete';
+    or $agenda->{share}{ $event->from_user->username } eq 'strike';
 
-  my $to_delete = grep {; fc $_->{text} eq fc $text } $list->{items}->@*;
+  my $to_strike = grep {; fc $_->{text} eq fc $text } $agenda->{items}->@*;
 
-  unless ($to_delete) {
-    $event->error_reply("Sorry, I don't see an item like that on the list.");
+  unless ($to_strike) {
+    $event->error_reply("Sorry, I don't see an item like that on the agenda.");
   }
 
-  $list->{items}->@* = grep {; fc $_->{text} ne fc $text } $list->{items}->@*;
+  $agenda->{items}->@* = grep {; fc $_->{text} ne fc $text } $agenda->{items}->@*;
 
   $self->save_state;
 
-  my $reply = "I delete that from the list!";
-  $reply .= "  It was on there $to_delete times." if $to_delete > 1;
+  my $reply = "I struck that from the agenda!";
+  $reply .= "  It was on there $to_strike times." if $to_strike > 1;
 
   return $event->reply($reply);
 }
 
-sub handle_clear_list ($self, $event) {
+sub handle_clear ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
@@ -360,32 +362,33 @@ sub handle_clear_list ($self, $event) {
     return;
   }
 
-  my ($listname) = $event->text =~ /\Aclear list\s+(\S+)\s*\z/;
+  my ($agendaname) = $event->text =~ /\Aagenda clear\s+(\S+)\s*\z/;
 
-  unless (length $listname) {
-    return $event->error_reply("It's *clear list LIST*.");
+  unless (length $agendaname) {
+    return $event->error_reply("It's *agenda clear AGENDA*.");
   }
 
-  my ($owner, $list) = $self->resolve_list_and_user($listname, $event->from_user);
+  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
-  return $event->error_reply("Sorry, I don't know whose list you want.")
+  return $event->error_reply("Sorry, I don't know whose agenda you want.")
     unless $owner;
 
-  return $event->error_reply("Sorry, I can't find that list.")
-    unless $list;
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agenda;
 
-  return $event->error_reply("Sorry, you can't delete from that list.")
+  return $event->error_reply("Sorry, you can't strike items from that agenda.")
     unless $owner->username eq $event->from_user->username
-    or $list->{share}{ $event->from_user->username } eq 'delete';
+    or $agenda->{share}{ $event->from_user->username } eq 'strike';
 
-  $list->{items}->@* = ();
+  $agenda->{items}->@* = ();
 
   $self->save_state;
 
-  return $event->reply("I cleared the list!");
+  return $event->reply("I cleared the agenda!");
 }
 
-sub handle_delete_list ($self, $event) {
+# delete
+sub handle_delete ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
@@ -393,33 +396,33 @@ sub handle_delete_list ($self, $event) {
     return;
   }
 
-  my ($listname) = $event->text =~ /\Adelete list\s+(\S+)\s*\z/;
+  my ($agendaname) = $event->text =~ /\Aagenda delete\s+(\S+)\s*\z/;
 
-  unless (length $listname) {
-    return $event->error_reply("It's *delete list LIST*.");
+  unless (length $agendaname) {
+    return $event->error_reply("It's *agenda delete AGENDA*.");
   }
 
-  my ($owner, $list) = $self->resolve_list_and_user($listname, $event->from_user);
+  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
-  return $event->error_reply("Sorry, I don't know whose list you want.")
+  return $event->error_reply("Sorry, I don't know whose agenda you want.")
     unless $owner;
 
-  return $event->error_reply("Sorry, you can only delete your own lists.")
+  return $event->error_reply("Sorry, you can only delete your own agendas.")
     unless $owner->username eq $event->from_user->username;
 
-  return $event->error_reply("Sorry, I can't find that list.")
-    unless $list;
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agenda;
 
-  delete $self->_userlists->{ $event->from_user->username }{ fc $list->{name} };
+  delete $self->_useragendas->{ $event->from_user->username }{ fc $agenda->{name} };
 
   $self->save_state;
 
-  return $event->reply("I deleted the list!");
+  return $event->reply("I deleted the agenda!");
 }
 
-my %KNOWN_PERM = map {; $_ => 1 } qw(read write delete);
+my %KNOWN_PERM = map {; $_ => 1 } qw(read add strike);
 
-sub handle_share_list ($self, $event) {
+sub handle_share ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
@@ -427,22 +430,22 @@ sub handle_share_list ($self, $event) {
     return;
   }
 
-  my ($listname, $args) = $event->text =~ /\Ashare list (\S+) with\s+(.+)\z/;
+  my ($agendaname, $args) = $event->text =~ /\Aagenda share (\S+) with\s+(.+)\z/;
 
   unless (length $args) {
     return $event->error_reply("I didn't understand how you wanted to share.");
   }
 
-  my ($owner, $list) = $self->resolve_list_and_user($listname, $event->from_user);
+  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
-  return $event->error_reply("Sorry, I don't know whose list you want.")
+  return $event->error_reply("Sorry, I don't know whose agenda you want.")
     unless $owner;
 
-  return $event->error_reply("Sorry, you can only share your own lists.")
+  return $event->error_reply("Sorry, you can only share your own agendas.")
     unless $owner->username eq $event->from_user->username;
 
-  return $event->error_reply("Sorry, I can't find that list.")
-    unless $list;
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agenda;
 
   my @instructions = map  {; [ split /:/, $_ ] }
                      grep {; length }
@@ -477,19 +480,19 @@ sub handle_share_list ($self, $event) {
   if (%error) {
     return $event->error_reply(
       join q{  },
-      "I'm not sharing that list:  ",
+      "I'm not sharing that agenda:  ",
       sort keys %error,
     );
   }
 
-  $list->{share}->%* = ($list->{share}->%*, %plan);
+  $agenda->{share}->%* = ($agenda->{share}->%*, %plan);
 
   $self->save_state;
 
-  return $event->reply("I have updated permissions on that list!");
+  return $event->reply("I have updated permissions on that agenda!");
 }
 
-sub handle_unshare_list ($self, $event) {
+sub handle_unshare ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
@@ -497,28 +500,28 @@ sub handle_unshare_list ($self, $event) {
     return;
   }
 
-  my ($listname) = $event->text =~ /\Aunshare list (\S+)\z/;
+  my ($agendaname) = $event->text =~ /\Aagenda unshare (\S+)\z/;
 
-  unless (length $listname) {
+  unless (length $agendaname) {
     return $event->error_reply("I didn't understand what you wanted to unshare.");
   }
 
-  my ($owner, $list) = $self->resolve_list_and_user($listname, $event->from_user);
+  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
-  return $event->error_reply("Sorry, I don't know whose list you want.")
+  return $event->error_reply("Sorry, I don't know whose agenda you want.")
     unless $owner;
 
-  return $event->error_reply("Sorry, you can only unshare your own lists.")
+  return $event->error_reply("Sorry, you can only unshare your own agendas.")
     unless $owner->username eq $event->from_user->username;
 
-  return $event->error_reply("Sorry, I can't find that list.")
-    unless $list;
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agenda;
 
-  $list->{share} = {};
+  $agenda->{share} = {};
 
   $self->save_state;
 
-  return $event->reply("That list is now entirely private.");
+  return $event->reply("That agenda is now entirely private.");
 }
 
 1;
