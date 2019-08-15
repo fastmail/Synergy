@@ -23,6 +23,46 @@ sub listener_specs {
       predicate => sub ($, $e) {
         $e->was_targeted && $e->text =~ /^agenda create\s/i
       },
+      help_entries => [
+        { title => 'agenda', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
+The *agenda* command lets you manage simple agendas.  It's not even much of
+a todo list, it's just a way to make a list of items that you'll want to look
+at later.  It was made to make it as quick and easy to write down "Hey, I want
+to talk to Stormer about this next time we have a call!" as was possible.
+
+• *agenda create `AGENDA`*: create an agenda for yourself
+• *agenda list*: list all the agendas you can see
+• *agenda for `AGENDA`*: show the items on the given agenda
+• *agenda add to `AGENDA`: `ITEM`*: add the given item to an agenda
+• *agenda strike from `AGENDA`: `ITEM`*: strike the item from an agenda
+• *agenda clear `AGENDA`*: strike everything from an agenda
+(great if you've just had your meeting!)
+• *agenda delete `AGENDA`*: delete an agenda entirely
+
+See also *help agenda sharing*.
+EOH
+
+        { title => 'agenda sharing', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+Agenda names are short runs of letters and numbers.  By default `huddle` means
+your agenda named "huddle", but you can refer to someone else's agendas by
+using their username, like `rjbs/travel`.
+
+Normally, you can't see anyone else's agendas, but agendas can be shared with
+individual users or with everyone.  There are three levels of permission:
+
+• read: the sharee can see the agenda and its contents
+• add: the sharee can add items to the agenda
+• strike: the sharee can strike items from the agenda
+
+These commands manage agenda sharing:
+
+• *agenda share `AGENDA` with `USER`:`PERM`*: updates a user's permissions for
+an agenda; you can supply multiple user/permission pairs, separated by spaces,
+and if there is no colon in the pair, the default permission is `add`.
+• *agenda unshare `AGENDA`: totally unshare an agenda
+• *agenda sharing for `AGENDA`: shows what permissions exist
+EOH
+      ],
     },
     {
       name      => 'list',
