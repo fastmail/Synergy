@@ -46,7 +46,7 @@ sub _build_stream {
 
   my %arg = (
     write_handle => \*STDOUT,
-    autoflush    => 1,
+    # autoflush    => 1,
   );
 
   unless($channel->send_only) {
@@ -158,7 +158,7 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
 
 sub send_message ($self, $address, $text, $alts = {}) {
   my $name = $self->name;
-  $self->_stream->write(">>> $name!$address > $text\n");
+  print { $self->_stream->write_handle } ">>> $name!$address > $text\n";
   return;
 }
 
