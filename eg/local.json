@@ -12,6 +12,7 @@
   },
   "reactors": {
     "clox"    : { "class": "Synergy::Reactor::Clox" },
+    "agenda"  : { "class": "Synergy::Reactor::Agendoizer" },
     "help"    : { "class": "Synergy::Reactor::Help" },
     "uptime"  : { "class": "Synergy::Reactor::Uptime" },
     "who"     : { "class": "Synergy::Reactor::Who" },
