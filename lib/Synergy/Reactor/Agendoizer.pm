@@ -46,7 +46,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($, $e) {
         $e->was_targeted
-        && ($e->text =~ /\Aagenda add\s/i || $e->text =~ /^\[\]\s/)
+        && ($e->text =~ /\Aagenda add\s/i || $e->text =~ /^\[[^-\]]+\]\s/)
       },
     },
     {
@@ -55,7 +55,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($, $e) {
         $e->was_targeted
-        && ($e->text =~ /\Aagenda strike\s/i || $e->text =~ /^\[x\]\s/)
+        && ($e->text =~ /\Aagenda strike\s/i || $e->text =~ /^\[-[^\]]+\]\s/)
       },
     },
     {
@@ -284,7 +284,10 @@ sub handle_add ($self, $event) {
     return;
   }
 
-  my ($agendaname, $text) = $event->text =~ /\A(?:agenda add to|\[\])\s+([^\s:]+):?\s+(.+)\z/;
+  my ($agendaname, $text)
+   = $event->text =~ /\A\[/
+   ? $event->text =~ /\A\[([^\]]+)\]\s+(.+)\z/
+   : $event->text =~ /\Aagenda add to\s+([^\s:]+):?\s+(.+)\z/;
 
   unless (length $text) {
     return $event->error_reply("It's *agenda add to AGENDA: ITEM*.");
@@ -321,7 +324,10 @@ sub handle_strike ($self, $event) {
     return;
   }
 
-  my ($agendaname, $text) = $event->text =~ /\A(?:agenda strike from|\[x\])\s+([^\s:]+):?\s+(.+)\z/;
+  my ($agendaname, $text)
+   = $event->text =~ /\A\[/
+   ? $event->text =~ /\A\[-([^\]]+)\]\s+(.+)\z/
+   : $event->text =~ /\Aagenda strike from\s+([^\s:]+):?\s+(.+)\z/;
 
   unless (length $text) {
     return $event->error_reply("It's *agenda strike from AGENDA: ITEM*.");
