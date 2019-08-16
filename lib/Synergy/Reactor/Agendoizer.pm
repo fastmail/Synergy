@@ -60,8 +60,8 @@ These commands manage agenda sharing:
 an agenda; you can supply multiple user/permission pairs, separated by spaces,
 and if there is no colon in the pair, the default permission is `add`.  To
 share with everyone provide the username `*`.
-• *agenda unshare `AGENDA`: totally unshare an agenda
-• *agenda sharing for `AGENDA`: shows what permissions exist
+• *agenda unshare `AGENDA`*: totally unshare an agenda
+• *agenda sharing for `AGENDA`*: shows what permissions exist
 EOH
       ],
     },
