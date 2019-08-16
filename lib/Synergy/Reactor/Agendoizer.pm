@@ -255,7 +255,7 @@ sub handle_list ($self, $event) {
   }
 
   my $text = "Agendas you can see:\n"
-           . join qq{\n}, map {; "* $_" } sort @to_list;
+           . join qq{\n}, map {; "• $_" } sort @to_list;
 
   if (@to_list != keys %$agendas) {
     $text .= "\n…and some private agendas not shown here.";
@@ -351,7 +351,7 @@ sub handle_for ($self, $event) {
 
   my $text = "Items on that agenda:\n";
   $text .= join qq{\n},
-           map  {; "* $_->{text}" }
+           map  {; "• $_->{text}" }
            sort { $a->{added_at} <=> $b->{added_at} } @$items;
 
   $event->reply($text);
@@ -389,7 +389,7 @@ sub handle_add ($self, $event) {
   my @lines = grep /\S/, split /\v+/, $text;
 
   if (@lines > 1) {
-    unless ('...' eq shift @lines) {
+    unless (grep {; $_ eq '...' or $_ eq '…' } shift @lines) {
       return $event->error_reply(
         q{Multi-line agenda adds need to have "..." as the first line.}
       );
