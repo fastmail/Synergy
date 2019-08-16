@@ -39,6 +39,11 @@ to talk to Stormer about this next time we have a call!" as was possible.
 (great if you've just had your meeting!)
 • *agenda delete `AGENDA`*: delete an agenda entirely
 
+You can also add items with *[`AGENDA`] `ITEM`* and strike them with
+*[-`AGENDA`] `ITEM`*.  When adding items this way, you can write `...` for the
+item and then provide a bullet list on subsequent lines, each item of which
+will be added.
+
 See also *help agenda sharing*.
 EOH
 
@@ -362,8 +367,8 @@ sub handle_add ($self, $event) {
 
   my ($agendaname, $text)
     = $event->text =~ /\A\[/
-    ? $event->text =~ /\A\[([^\]]+)\]\s+(.+)\z/
-    : $event->text =~ /\Aagenda add to\s+([^\s:]+):?\s+(.+)\z/;
+    ? $event->text =~ /\A\[([^\]]+)\]\s+(.+)\z/s
+    : $event->text =~ /\Aagenda add to\s+([^\s:]+):?\s+(.+)\z/s;
 
   unless (length $text) {
     return $event->error_reply("It's *agenda add to AGENDA: ITEM*.");
@@ -381,11 +386,33 @@ sub handle_add ($self, $event) {
     unless $agrez->{owner}->username eq $event->from_user->username
     or $agrez->{perms}{add};
 
-  push $agrez->{agenda}->{items}->@*, {
-    added_at => time,
-    added_by => $event->from_user->username,
-    text     => $text,
-  };
+  my @lines = grep /\S/, split /\v+/, $text;
+
+  if (@lines > 1) {
+    unless ('...' eq shift @lines) {
+      return $event->error_reply(
+        q{Multi-line agenda adds need to have "..." as the first line.}
+      );
+    }
+
+    unless (@lines == grep {; s/\A[*•]\s+// } @lines) {
+      return $event->error_reply(
+        q{Multi-line agenda adds need to have a bullet for every item.}
+      );
+    }
+
+  }
+
+  return $event->error_reply("Sorry, I can't find that agenda.")
+    unless $agrez->{agenda};
+
+  push $agrez->{agenda}->{items}->@*, map {;
+    {
+      added_at => time,
+      added_by => $event->from_user->username,
+      text     => $_,
+    }
+  } @lines;
 
   $self->save_state;
 
@@ -402,8 +429,8 @@ sub handle_strike ($self, $event) {
 
   my ($agendaname, $text)
    = $event->text =~ /\A\[/
-   ? $event->text =~ /\A\[-([^\]]+)\]\s+(.+)\z/
-   : $event->text =~ /\Aagenda strike from\s+([^\s:]+):?\s+(.+)\z/;
+   ? $event->text =~ /\A\[-([^\]]+)\]\s+(.+)\z/s
+   : $event->text =~ /\Aagenda strike from\s+([^\s:]+):?\s+(.+)\z/s;
 
   unless (length $text) {
     return $event->error_reply("It's *agenda strike from AGENDA: ITEM*.");
@@ -423,7 +450,7 @@ sub handle_strike ($self, $event) {
   my $to_strike = grep {; fc $_->{text} eq fc $text } $agenda->{items}->@*;
 
   unless ($to_strike) {
-    $event->error_reply("Sorry, I don't see an item like that on the agenda.");
+    return $event->error_reply("Sorry, I don't see an item like that on the agenda.");
   }
 
   $agenda->{items}->@* = grep {; fc $_->{text} ne fc $text } $agenda->{items}->@*;
