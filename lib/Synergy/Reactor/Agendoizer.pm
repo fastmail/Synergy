@@ -259,19 +259,44 @@ sub handle_list ($self, $event) {
   $event->reply($text);
 }
 
+sub _best_of ($p1, $p2) {
+  return $p1 if ! defined $p2;
+  return $p2 if ! defined $p1;
+
+  for my $opt (qw(strike add read)) {
+    return $opt if $p1 eq $opt || $p2 eq $opt;
+  }
+
+  return undef;
+}
+
+my %PERM = (
+  admin   => { map {; $_ => 1 } qw( read add strike admin ) },
+  strike  => { map {; $_ => 1 } qw( read add strike       ) },
+  add     => { map {; $_ => 1 } qw( read add              ) },
+  read    => { map {; $_ => 1 } qw( read                  ) },
+);
+
 sub resolve_agenda_and_user ($self, $str, $user) {
   my ($upart, $lpart) = $str =~ m{/} ? (split m{/}, $str, 2) : ('me', $str);
 
-  return (undef, undef) unless my $who = $self->resolve_name($upart, $user);
+  my $result = {};
 
-  my $agenda = $self->agendas_for($who)->{ fc $lpart };
+  return $result unless $result->{owner}  = $self->resolve_name($upart, $user);
+  return $result unless $result->{agenda} = $self->agendas_for($result->{owner})->{ fc $lpart };
 
-  undef $agenda
-    if $agenda
-    && $who->username ne $user->username
-    && ! $agenda->{share}{$user->username};
+  my $perms = $result->{owner}->username eq $user->username
+            ? 'admin'
+            : _best_of(
+                $result->{agenda}{share}{''},
+                $result->{agenda}{share}{ $user->username }
+              );
 
-  return ($who, $agenda);
+  return { owner => $result->{owner} } unless $perms;
+
+  $result->{perms} = $PERM{ $perms };
+
+  return $result;
 }
 
 sub handle_for ($self, $event) {
@@ -290,24 +315,26 @@ sub handle_for ($self, $event) {
     return $event->error_reply("It's *agenda for NAME* where the name is one of your agenda names or username/agendaname for a agenda shared with you.");
   }
 
-  my ($owner, $agenda) = $self->resolve_agenda_and_user($arg, $event->from_user);
+  my $agrez = $self->resolve_agenda_and_user($arg, $event->from_user);
 
   return $event->error_reply("Sorry, I don't know whose agenda you want.")
-    unless $owner;
+    unless $agrez->{owner};
 
   return $event->error_reply("Sorry, I can't find that agenda.")
-    unless $agenda;
+    unless my $agenda = $agrez->{agenda};
 
   if (
     $event->is_public
     && ! $agenda->{share}{''}
-    && $owner->username ne $username
+    && ! $agrez->{perms}{admin}
   ) {
     # Okay, it's weird, but my view is:  you can add or remove specific stuff
     # on a private agenda in public and it's not so bad, but listing its contents
     # all out would be bad. -- rjbs, 2019-08-14
     $event->error_reply("Sorry, I couldn't find that agenda.");
-    my $well_actually = sprintf "Actually, I declined to talk about %s/%s in public, because it's a private agenda!", $owner->username, $agenda->{name};
+    my $well_actually = sprintf "Actually, I declined to talk about %s/%s in public, because it's a private agenda!",
+      $agrez->{owner}->username,
+      $agenda->{name};
     $event->private_reply($well_actually, { slack => $well_actually });
   }
 
@@ -334,27 +361,27 @@ sub handle_add ($self, $event) {
   }
 
   my ($agendaname, $text)
-   = $event->text =~ /\A\[/
-   ? $event->text =~ /\A\[([^\]]+)\]\s+(.+)\z/
-   : $event->text =~ /\Aagenda add to\s+([^\s:]+):?\s+(.+)\z/;
+    = $event->text =~ /\A\[/
+    ? $event->text =~ /\A\[([^\]]+)\]\s+(.+)\z/
+    : $event->text =~ /\Aagenda add to\s+([^\s:]+):?\s+(.+)\z/;
 
   unless (length $text) {
     return $event->error_reply("It's *agenda add to AGENDA: ITEM*.");
   }
 
-  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
+  my $agrez = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
   return $event->error_reply("Sorry, I don't know whose agenda you want.")
-    unless $owner;
+    unless $agrez->{owner};
 
   return $event->error_reply("Sorry, I can't find that agenda.")
-    unless $agenda;
+    unless $agrez->{agenda};
 
   return $event->error_reply("Sorry, you can't add to that agenda.")
-    unless $owner->username eq $event->from_user->username
-    or $agenda->{share}{ $event->from_user->username } =~ /\A(?:write|strike)\z/;
+    unless $agrez->{owner}->username eq $event->from_user->username
+    or $agrez->{perms}{add};
 
-  push $agenda->{items}->@*, {
+  push $agrez->{agenda}->{items}->@*, {
     added_at => time,
     added_by => $event->from_user->username,
     text     => $text,
@@ -382,17 +409,16 @@ sub handle_strike ($self, $event) {
     return $event->error_reply("It's *agenda strike from AGENDA: ITEM*.");
   }
 
-  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
+  my $agrez = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
   return $event->error_reply("Sorry, I don't know whose agenda you want.")
-    unless $owner;
+    unless $agrez->{owner};
 
   return $event->error_reply("Sorry, I can't find that agenda.")
-    unless $agenda;
+    unless my $agenda = $agrez->{agenda};
 
   return $event->error_reply("Sorry, you can't strike from that agenda.")
-    unless $owner->username eq $event->from_user->username
-    or $agenda->{share}{ $event->from_user->username } eq 'strike';
+    unless $agrez->{perms}{strike};
 
   my $to_strike = grep {; fc $_->{text} eq fc $text } $agenda->{items}->@*;
 
@@ -424,17 +450,16 @@ sub handle_clear ($self, $event) {
     return $event->error_reply("It's *agenda clear AGENDA*.");
   }
 
-  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
+  my $agrez = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
   return $event->error_reply("Sorry, I don't know whose agenda you want.")
-    unless $owner;
+    unless $agrez->{owner};
 
   return $event->error_reply("Sorry, I can't find that agenda.")
-    unless $agenda;
+    unless my $agenda = $agrez->{agenda};
 
   return $event->error_reply("Sorry, you can't strike items from that agenda.")
-    unless $owner->username eq $event->from_user->username
-    or $agenda->{share}{ $event->from_user->username } eq 'strike';
+    unless $agrez->{perms}{strike};
 
   $agenda->{items}->@* = ();
 
@@ -458,16 +483,16 @@ sub handle_delete ($self, $event) {
     return $event->error_reply("It's *agenda delete AGENDA*.");
   }
 
-  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
+  my $agrez = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
   return $event->error_reply("Sorry, I don't know whose agenda you want.")
-    unless $owner;
-
-  return $event->error_reply("Sorry, you can only delete your own agendas.")
-    unless $owner->username eq $event->from_user->username;
+    unless $agrez->{owner};
 
   return $event->error_reply("Sorry, I can't find that agenda.")
-    unless $agenda;
+    unless my $agenda = $agrez->{agenda};
+
+  return $event->error_reply("Sorry, you can only delete your own agendas.")
+    unless $agrez->{perms}{admin};
 
   delete $self->_useragendas->{ $event->from_user->username }{ fc $agenda->{name} };
 
@@ -475,8 +500,6 @@ sub handle_delete ($self, $event) {
 
   return $event->reply("I deleted the agenda!");
 }
-
-my %KNOWN_PERM = map {; $_ => 1 } qw(read add strike);
 
 sub handle_share ($self, $event) {
   $event->mark_handled;
@@ -492,16 +515,16 @@ sub handle_share ($self, $event) {
     return $event->error_reply("I didn't understand how you wanted to share.");
   }
 
-  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
+  my $agrez = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
   return $event->error_reply("Sorry, I don't know whose agenda you want.")
-    unless $owner;
-
-  return $event->error_reply("Sorry, you can only share your own agendas.")
-    unless $owner->username eq $event->from_user->username;
+    unless $agrez->{owner};
 
   return $event->error_reply("Sorry, I can't find that agenda.")
-    unless $agenda;
+    unless my $agenda = $agrez->{agenda};
+
+  return $event->error_reply("Sorry, you can only share your own agendas.")
+    unless $agrez->{perms}{admin};
 
   my @instructions = map  {; [ split /:/, $_ ] }
                      grep {; length }
@@ -535,7 +558,10 @@ sub handle_share ($self, $event) {
 
     # TTP: Totally tragic perm.
     $error{"I don't know how to share for `$perm`."} = 1
-      unless $KNOWN_PERM{$perm};
+      unless exists $PERM{$perm};
+
+    $error{"You can't share admin permissions."} = 1
+      if $perm eq 'admin';
 
     $error{"You mentioned $sharee more than once!"} = 1
       if $plan{$sharee};
@@ -572,16 +598,16 @@ sub handle_unshare ($self, $event) {
     return $event->error_reply("I didn't understand what you wanted to unshare.");
   }
 
-  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
+  my $agrez = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
   return $event->error_reply("Sorry, I don't know whose agenda you want.")
-    unless $owner;
-
-  return $event->error_reply("Sorry, you can only unshare your own agendas.")
-    unless $owner->username eq $event->from_user->username;
+    unless $agrez->{owner};
 
   return $event->error_reply("Sorry, I can't find that agenda.")
-    unless $agenda;
+    unless my $agenda = $agrez->{agenda};
+
+  return $event->error_reply("Sorry, you can only unshare your own agendas.")
+    unless $agrez->{perms}{admin};
 
   $agenda->{share} = {};
 
@@ -604,20 +630,20 @@ sub handle_sharing ($self, $event) {
     return $event->error_reply("To see sharing for an agenda, it's *agenda sharing for `AGENDA`*.");
   }
 
-  my ($owner, $agenda) = $self->resolve_agenda_and_user($agendaname, $event->from_user);
+  my $agrez = $self->resolve_agenda_and_user($agendaname, $event->from_user);
 
   return $event->error_reply("Sorry, I don't know whose agenda you want.")
-    unless $owner;
+    unless $agrez->{owner};
 
   return $event->error_reply("Sorry, I can't find that agenda.")
-    unless $agenda;
+    unless my $agenda = $agrez->{agenda};
 
   unless (keys $agenda->{share}->%*) {
     return $event->reply("That agenda isn't shared at all.");
   }
 
   my $reply = sprintf "Sharing for %s/%s is as follows:\n",
-    $owner->username,
+    $agrez->{owner}->username,
     $agenda->{name};
 
   $reply .= join qq{\n},
