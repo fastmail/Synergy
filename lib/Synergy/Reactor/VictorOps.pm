@@ -11,7 +11,7 @@ use namespace::clean;
 use JSON::MaybeXS;
 use List::Util qw(first);
 
-has endpoint_uri => (
+has alert_endpoint_uri => (
   is => 'ro',
   isa => 'Str',
   required => 1,
@@ -37,7 +37,7 @@ sub handle_alert ($self, $event) {
   my $username = $event->from_user->username;
 
   my $future = $self->hub->http_post(
-    $self->endpoint_uri,
+    $self->alert_endpoint_uri,
     async => 1,
     Content_Type  => 'application/json',
     Content       => encode_json({
