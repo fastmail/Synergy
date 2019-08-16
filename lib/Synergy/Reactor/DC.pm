@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Reactor::DC;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use experimental qw(lexical_subs signatures);
 use namespace::clean;

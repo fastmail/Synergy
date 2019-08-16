@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Reactor::Announce;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use experimental qw(signatures);
 use Carp;

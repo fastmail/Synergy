@@ -4,7 +4,7 @@ package Synergy::Reactor::Weather;
 use utf8;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use experimental qw(signatures);
 use namespace::clean;

@@ -11,24 +11,11 @@ use Synergy::Listener;
 
 with 'Synergy::Role::HubComponent';
 
-has listeners => (
-  isa => 'ArrayRef',
-  traits  => [ 'Array' ],
-  handles => { listeners => 'elements' },
-  default => sub ($self, @) {
-    my @listeners;
-    for my $spec ($self->listener_specs) {
-      push @listeners, Synergy::Listener->new({
-        reactor => $self,
-        $spec->%{ qw( exclusive name predicate method ) },
-        (exists $spec->{help_entries} ? (help_entries => $spec->{help_entries})
-                                      : ()),
-      });
-    }
-
-    return \@listeners;
-  },
-);
+sub help_entries {
+  # Generally here to be overridden.  Should return an arrayref of help
+  # entries, each with { title => ..., text => ... }
+  return [];
+}
 
 sub start ($self) { }
 

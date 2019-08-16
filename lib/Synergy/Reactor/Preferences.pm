@@ -7,7 +7,7 @@ use Try::Tiny;
 use Synergy::Logger '$Logger';
 use utf8;
 
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use experimental qw(signatures);
 use namespace::clean;

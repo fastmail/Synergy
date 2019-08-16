@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Reactor::Prometheus;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 with 'Synergy::Role::HTTPEndpoint';
 
 use experimental qw(signatures);

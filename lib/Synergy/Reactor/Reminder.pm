@@ -4,7 +4,7 @@ package Synergy::Reactor::Reminder;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use experimental qw(signatures);
 use namespace::clean;

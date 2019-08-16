@@ -4,7 +4,8 @@ package Synergy::Reactor::Status;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor', 'Synergy::Role::ProvidesUserStatus';
+with 'Synergy::Role::Reactor::EasyListening',
+     'Synergy::Role::ProvidesUserStatus';
 
 use utf8;
 use experimental qw(signatures);

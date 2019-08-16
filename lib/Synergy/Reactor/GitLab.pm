@@ -4,7 +4,7 @@ use utf8;
 package Synergy::Reactor::GitLab;
 
 use Moose;
-with 'Synergy::Role::Reactor',
+with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::HasPreferences';
 
 use experimental qw(signatures);
