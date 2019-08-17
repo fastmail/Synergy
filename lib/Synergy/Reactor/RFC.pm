@@ -4,7 +4,7 @@ use warnings;
 package Synergy::Reactor::RFC;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use experimental qw(signatures);
 use namespace::clean;

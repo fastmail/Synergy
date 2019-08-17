@@ -1,7 +1,7 @@
 use v5.24.0;
 package Synergy::Reactor::Register;
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use experimental qw(signatures);
 use namespace::clean;

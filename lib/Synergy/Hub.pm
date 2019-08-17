@@ -219,10 +219,7 @@ sub handle_event ($self, $event) {
 
   my @hits;
   for my $reactor ($self->reactors) {
-    for my $listener ($reactor->listeners) {
-      next unless $listener->matches_event($event);
-      push @hits, [ $reactor, $listener ];
-    }
+    push @hits, map {; [ $reactor, $_ ] } $reactor->listeners_matching($event);
   }
 
   if (1 < grep {; $_->[1]->is_exclusive } @hits) {

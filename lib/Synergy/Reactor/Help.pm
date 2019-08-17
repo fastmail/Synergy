@@ -4,7 +4,7 @@ package Synergy::Reactor::Help;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use experimental qw(signatures);
 use namespace::clean;
@@ -33,9 +33,7 @@ sub handle_help ($self, $event) {
 
   my ($help, $rest) = split /\s+/, $event->text, 2;
 
-  my @help = map {; $_->help_entries }
-             map {; $_->listeners }
-             $self->hub->reactors;
+  my @help = map {; $_->help_entries->@* } $self->hub->reactors;
 
   unless ($rest) {
     my $help_str = join q{, }, uniq sort map {; $_->{title} } @help;

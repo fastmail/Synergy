@@ -6,7 +6,7 @@ use utf8;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::EasyListening';
 
 use Synergy::Logger '$Logger';
 

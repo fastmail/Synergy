@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Reactor::HelpSpot;
 
 use Moose;
-with 'Synergy::Role::Reactor',
+with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::HasPreferences';
 
 use URI;
