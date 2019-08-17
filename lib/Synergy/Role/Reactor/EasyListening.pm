@@ -34,7 +34,7 @@ around help_entries => sub ($orig, $self, @rest) {
   my $entries = $self->$orig(@rest);
   return [
     @$entries,
-    (map {; $_->help_entries->@* } $self->listeners),
+    (map {; $_->help_entries } $self->listeners),
   ];
 };
 
