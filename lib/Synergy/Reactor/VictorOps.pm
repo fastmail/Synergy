@@ -54,6 +54,11 @@ sub listener_specs {
       method    => 'handle_maint_query',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint\s*$/i },
     },
+    {
+      name      => 'maint-start',
+      method    => 'handle_maint_start',
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint\s+start\s*$/i },
+    },
   );
 }
 
@@ -141,6 +146,40 @@ sub handle_maint_query ($self, $event) {
   );
 
   $f->retain;
+}
+
+sub handle_maint_start ($self, $event) {
+  $event->mark_handled;
+
+  my $f = $self->hub->http_post(
+    $self->_vo_api_endpoint('/maintenancemode/start'),
+    $self->_vo_api_headers,
+    async => 1,
+    Content_Type => 'application/json',
+    Content      => encode_json( { names => [] } ), # nothing, global mode
+  )->then(
+    sub ($res) {
+      if ($res->code == 409) {
+        return $event->reply("VO already in maint!");
+      }
+
+      unless ($res->is_success) {
+        $Logger->log("VO: post maint failed: ".$res->as_string);
+        return $event->reply("I couldn't start maint. Sorry!");
+      }
+
+      return $event->reply("🚨 VO now in maint! Good luck!");
+    }
+  )->else(
+    sub (@fails) {
+      $Logger->log("VO: handle_maint_start failed: @fails");
+      return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
+    }
+  );
+
+  $f->retain;
+
+  return;
 }
 
 1;
