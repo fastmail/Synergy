@@ -53,6 +53,16 @@ sub listener_specs {
       name      => 'maint-query',
       method    => 'handle_maint_query',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint\s*$/i },
+      help_entries => [
+        { title => 'maint', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
+Conveniences for managing VictorOps "maintenance mode", aka "silence all the
+alerts because everything is on fire."
+
+• *maint*: show current maintenance state
+• *maint start*: enter maintenance mode. All alerts are now silenced!
+• *maint end*, *demaint*, *unmaint*: leave maintenance mode. Alerts are noisy again!
+EOH
+      ],
     },
     {
       name      => 'maint-start',
