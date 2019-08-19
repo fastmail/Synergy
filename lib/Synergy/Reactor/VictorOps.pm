@@ -59,6 +59,16 @@ sub listener_specs {
       method    => 'handle_maint_start',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint\s+start\s*$/i },
     },
+    {
+      name      => 'maint-end',
+      method    => 'handle_maint_end',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return 1 if $e->text =~ /^maint\s+end\s*$/i;
+        return 1 if $e->text =~ /^unmaint\s*$/i;
+        return 1 if $e->text =~ /^demaint\s*$/i;
+      },
+    },
   );
 }
 
@@ -180,6 +190,61 @@ sub handle_maint_start ($self, $event) {
   $f->retain;
 
   return;
+}
+
+sub handle_maint_end ($self, $event) {
+  $event->mark_handled;
+
+  my $f = $self->hub->http_get(
+    $self->_vo_api_endpoint('/maintenancemode'),
+    $self->_vo_api_headers,
+    async => 1,
+  )->then(
+    sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log("VO: get maintenancemode failed: ".$res->as_string);
+        return $event->reply("I couldn't look up the current VO maint state. Sorry!");
+      }
+
+      my $data = decode_json($res->content);
+      my $maint = $data->{activeInstances} // [];
+      unless (@$maint) {
+        return $event->reply("VO not in maint right now. Everything is fine maybe!");
+      }
+
+      my ($global_maint) = grep { $_->{isGlobal} } @$maint;
+      unless ($global_maint) {
+        return $event->reply(
+          "I couldn't find the VO global maint, but there were other maint modes set. ".
+          "This isn't something I know how to deal with. ".
+          "You'll need to go and sort it out in the VO web UI.");
+      }
+
+      my $instance_id = $global_maint->{instanceId};
+
+      return $self->hub->http_put(
+        $self->_vo_api_endpoint("/maintenancemode/$instance_id/end"),
+        $self->_vo_api_headers,
+        async => 1,
+      );
+    }
+  )->then(
+    sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log("VO: put maintenancemode failed: ".$res->as_string);
+        return $event->reply("I couldn't clear the VO maint state. Sorry!");
+      }
+
+      return $event->reply("🚨 VO maint cleared. Good job everyone!");
+    }
+  )->else(
+    sub (@fails) {
+      $Logger->log("VO: handle_maint_end failed: @fails");
+      return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
+    }
+  );
+
+  $f->retain;
 }
 
 1;
