@@ -428,7 +428,7 @@ sub http_request ($self, $method, $url, %args) {
   my @args = (method => $method, uri => $uri);
 
   if ($method ne 'GET' && $method ne 'HEAD' && $method ne 'DELETE') {
-    push @args, (content => $content // []);
+    push @args, defined_kv(content => $content);
   }
 
   if ($content_type) {
