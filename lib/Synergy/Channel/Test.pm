@@ -5,6 +5,8 @@ package Synergy::Channel::Test;
 use Moose;
 use experimental qw(signatures);
 
+
+use IO::Async::Timer::Countdown;
 use IO::Async::Timer::Periodic;
 
 use Synergy::Event;
