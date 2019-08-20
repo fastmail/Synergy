@@ -44,14 +44,14 @@ wait_for {
   $synergy->channel_named('test-channel')->is_exhausted;
 };
 
-my @replies = $synergy->channel_named('test-channel')->sent_messages;
+my @sent = $synergy->channel_named('test-channel')->sent_messages;
 
-is(@replies, 5, "five replies recorded");
+is(@sent, 5, "five replies recorded");
 
-is(  $replies[0]{address}, 'public',                    "1st: expected address");
-like($replies[0]{text},    qr{I heard you, .* "Hi\."},  "1st: expected text");
+is(  $sent[0]{address}, 'public',                    "1st: expected address");
+like($sent[0]{text},    qr{I heard you, .* "Hi\."},  "1st: expected text");
 
-is(  $replies[4]{address}, 'public',                    "5th: expected address");
-like($replies[4]{text},    qr{I heard you, .* "Bye\."}, "5th: expected text");
+is(  $sent[4]{address}, 'public',                    "5th: expected address");
+like($sent[4]{text},    qr{I heard you, .* "Bye\."}, "5th: expected text");
 
 done_testing;
