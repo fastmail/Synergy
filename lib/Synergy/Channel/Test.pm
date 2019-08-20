@@ -59,9 +59,15 @@ has sent_messages => (
   },
 );
 
+has default_from => (
+  is  => 'ro',
+  isa => 'Str',
+  default => 'tester',
+);
+
 sub _inject_event ($self, $arg) {
   my $text = $arg->{text} // "This is a test, sent at " . localtime . ".";
-  my $from_address = $arg->{from_address} // 'tester';
+  my $from_address = $arg->{from} // $self->default_from;
 
   my $prefix = $self->prefix;
   my $had_prefix = $text =~ s/\A\Q$prefix\E\s*//;
