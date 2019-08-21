@@ -5,7 +5,8 @@ package Synergy::Reactor::VictorOps;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::EasyListening',
+     'Synergy::Role::HasPreferences';
 
 use experimental qw(signatures);
 use namespace::clean;
@@ -42,6 +43,27 @@ has team_name => (
   is => 'ro',
   isa => 'Str',
   required => 1,
+);
+
+has _vo_to_slack_map => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits => ['Hash'],
+  lazy => 1,
+  clearer => '_clear_vo_to_slack_map',
+  handles => {
+    username_from_vo => 'get',
+  },
+  default => sub ($self) {
+    my %map;
+
+    for my $sy_username (keys $self->user_preferences->%*) {
+      my $vo_username = $self->get_user_preference($sy_username, 'username');
+      $map{$vo_username} = $sy_username;
+    }
+
+    return \%map;
+  },
 );
 
 sub listener_specs {
@@ -137,6 +159,20 @@ sub _vo_api_headers ($self) {
   );
 }
 
+sub state ($self) {
+  return {
+    preferences => $self->user_preferences,
+  };
+}
+
+after register_with_hub => sub ($self, @) {
+  if (my $state = $self->fetch_state) {
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+  }
+};
+
 sub handle_maint_query ($self, $event) {
   $event->mark_handled;
 
@@ -201,6 +237,8 @@ sub handle_oncall ($self, $event) {
 
       # XXX probably not generic enough
       my @users = map {; $_->{onCalluser}{username} } $team->{oncallNow}[0]{users}->@*;
+
+      @users = map {; $self->username_from_vo($_) // $_ } @users;
 
       return $event->reply('current oncall: ' . join(', ', sort @users));
   })
@@ -296,5 +334,15 @@ sub handle_maint_end ($self, $event) {
 
   $f->retain;
 }
+
+__PACKAGE__->add_preference(
+  name      => 'username',
+  after_set => sub ($self, $username, $val) { $self->_clear_vo_to_slack_map },
+  validator => sub ($self, $value, @) {
+    return (undef, 'username cannot contain spaces') if $value =~ /\s/;
+
+    return lc $value;
+  },
+);
 
 1;
