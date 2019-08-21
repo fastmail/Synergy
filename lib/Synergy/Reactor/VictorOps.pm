@@ -215,35 +215,39 @@ sub handle_maint_query ($self, $event) {
   $f->retain;
 }
 
-sub handle_oncall ($self, $event) {
-  $event->mark_handled;
-
-  $self->hub->http_get(
+sub _current_oncall_names ($self) {
+  return $self->hub->http_get(
     $self->_vo_api_endpoint('/oncall/current'),
     $self->_vo_api_headers,
     async => 1,
   )
   ->then(sub ($http_res) {
-      unless ($http_res->is_success) {
-        $Logger->log("VO: get maintenancemode failed: " . $http_res->as_string);
-        return $event->reply("I couldn't look up who's on call. Sorry!");
-      }
+    unless ($http_res->is_success) {
+      $Logger->log("VO: get oncall failed: " . $http_res->as_string);
+      return Future->fail('http get');
+    }
 
-      my $data = decode_json($http_res->content);
-      my ($team) = grep {; $_->{team}{slug} eq $self->team_name } $data->{teamsOnCall}->@*;
+    my $data = decode_json($http_res->content);
+    my ($team) = grep {; $_->{team}{slug} eq $self->team_name } $data->{teamsOnCall}->@*;
 
-      return $event->reply("I couldn't look up who's on call. Sorry!")
-        unless $team;
+    return Future->fail('no team') unless $team;
 
-      # XXX probably not generic enough
-      my @users = map {; $_->{onCalluser}{username} } $team->{oncallNow}[0]{users}->@*;
+    # XXX probably not generic enough
+    my @names = map {; $_->{onCalluser}{username} } $team->{oncallNow}[0]{users}->@*;
+    return Future->done(@names);
+  });
+}
 
-      @users = map {; $self->username_from_vo($_) // $_ } @users;
+sub handle_oncall ($self, $event) {
+  $event->mark_handled;
 
-      return $event->reply('current oncall: ' . join(', ', sort @users));
-  })
-  ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
-  ->retain;
+  $self->_current_oncall_names
+    ->then(sub (@names) {
+        my @users = map {; $self->username_from_vo($_) // $_ } @names;
+        return $event->reply('current oncall: ' . join(', ', sort @users));
+    })
+    ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
+    ->retain;
 }
 
 sub handle_maint_start ($self, $event) {
