@@ -86,9 +86,9 @@ sub listener_specs {
 Conveniences for managing VictorOps "maintenance mode", aka "silence all the
 alerts because everything is on fire."
 
-• *maint*: show current maintenance state
+• *maint*, *maint status*: show current maintenance state
 • *maint start*: enter maintenance mode. All alerts are now silenced!
-• *maint end*, *demaint*, *unmaint*: leave maintenance mode. Alerts are noisy again!
+• *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
 EOH
       ],
     },
