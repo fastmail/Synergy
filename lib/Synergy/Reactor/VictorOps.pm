@@ -38,6 +38,12 @@ has api_key => (
   required => 1,
 );
 
+has team_name => (
+  is => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
 sub listener_specs {
   return (
     {
@@ -52,7 +58,7 @@ sub listener_specs {
     {
       name      => 'maint-query',
       method    => 'handle_maint_query',
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint\s*$/i },
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint(\s+status)?\s*$/in },
       help_entries => [
         { title => 'maint', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
 Conveniences for managing VictorOps "maintenance mode", aka "silence all the
@@ -74,10 +80,15 @@ EOH
       method    => 'handle_maint_end',
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return 1 if $e->text =~ /^maint\s+end\s*$/i;
+        return 1 if $e->text =~ /^maint\s+(end|stop)\s*$/i;
         return 1 if $e->text =~ /^unmaint\s*$/i;
         return 1 if $e->text =~ /^demaint\s*$/i;
       },
+    },
+    {
+      name      => 'oncall',
+      method    => 'handle_oncall',
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
     },
   );
 }
@@ -131,7 +142,7 @@ sub handle_maint_query ($self, $event) {
 
   my $f = $self->hub->http_get(
     $self->_vo_api_endpoint('/maintenancemode'),
-    $self->_vo_api_headers,
+    $self->_pi_vo_api_headers,
     async => 1,
   )->then(
     sub ($res) {
@@ -166,6 +177,35 @@ sub handle_maint_query ($self, $event) {
   );
 
   $f->retain;
+}
+
+sub handle_oncall ($self, $event) {
+  $event->mark_handled;
+
+  $self->hub->http_get(
+    $self->_vo_api_endpoint('/oncall/current'),
+    $self->_vo_api_headers,
+    async => 1,
+  )
+  ->then(sub ($http_res) {
+      unless ($http_res->is_success) {
+        $Logger->log("VO: get maintenancemode failed: " . $http_res->as_string);
+        return $event->reply("I couldn't look up who's on call. Sorry!");
+      }
+
+      my $data = decode_json($http_res->content);
+      my ($team) = grep {; $_->{team}{slug} eq $self->team_name } $data->{teamsOnCall}->@*;
+
+      return $event->reply("I couldn't look up who's on call. Sorry!")
+        unless $team;
+
+      # XXX probably not generic enough
+      my @users = map {; $_->{onCalluser}{username} } $team->{oncallNow}[0]{users}->@*;
+
+      return $event->reply('current oncall: ' . join(', ', sort @users));
+  })
+  ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
+  ->retain;
 }
 
 sub handle_maint_start ($self, $event) {
