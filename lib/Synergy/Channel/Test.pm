@@ -72,11 +72,13 @@ sub _inject_event ($self, $arg) {
   my $prefix = $self->prefix;
   my $had_prefix = $text =~ s/\A\Q$prefix\E\s*//;
 
+  my $from_user = $self->hub->user_directory->user_by_channel_and_address($self->name, $from_address);
+
   my $event = Synergy::Event->new({
     type => 'message',
     text => $text,
     from_address => $from_address,
-    from_user    => $self->hub->user_directory->user_by_channel_and_address($self->name, $from_address),
+    ($from_user ? (from_user => $from_user) : ()),
     from_channel => $self,
     was_targeted => $had_prefix,
     conversation_address => 'public',
