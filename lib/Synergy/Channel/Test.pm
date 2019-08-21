@@ -5,6 +5,8 @@ package Synergy::Channel::Test;
 use Moose;
 use experimental qw(signatures);
 
+
+use IO::Async::Timer::Countdown;
 use IO::Async::Timer::Periodic;
 
 use Synergy::Event;
@@ -57,17 +59,26 @@ has sent_messages => (
   },
 );
 
+has default_from => (
+  is  => 'ro',
+  isa => 'Str',
+  default => 'tester',
+);
+
 sub _inject_event ($self, $arg) {
   my $text = $arg->{text} // "This is a test, sent at " . localtime . ".";
-  my $from_address = $arg->{from_address} // 'tester';
+  my $from_address = $arg->{from} // $self->default_from;
 
   my $prefix = $self->prefix;
   my $had_prefix = $text =~ s/\A\Q$prefix\E\s*//;
+
+  my $from_user = $self->hub->user_directory->user_by_channel_and_address($self->name, $from_address);
 
   my $event = Synergy::Event->new({
     type => 'message',
     text => $text,
     from_address => $from_address,
+    ($from_user ? (from_user => $from_user) : ()),
     from_channel => $self,
     was_targeted => $had_prefix,
     conversation_address => 'public',
