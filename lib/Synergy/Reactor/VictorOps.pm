@@ -178,7 +178,7 @@ sub handle_maint_query ($self, $event) {
 
   my $f = $self->hub->http_get(
     $self->_vo_api_endpoint('/maintenancemode'),
-    $self->_pi_vo_api_headers,
+    $self->_vo_api_headers,
     async => 1,
   )->then(
     sub ($res) {
