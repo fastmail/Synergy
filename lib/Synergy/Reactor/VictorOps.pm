@@ -95,7 +95,9 @@ EOH
     {
       name      => 'maint-start',
       method    => 'handle_maint_start',
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint\s+start\s*$/i },
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ m{^maint\s+start\s*(/force)?\s*$}i },
     },
     {
       name      => 'maint-end',
@@ -196,7 +198,7 @@ sub handle_maint_query ($self, $event) {
       state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
 
       # the way we use VO there's probably not more than one, but at least this
-      # way if there are we won't just drop the rest on the floor -- robn, 2019-08-16 
+      # way if there are we won't just drop the rest on the floor -- robn, 2019-08-16
       my $maint_text = join ', ', map {
         my $start = DateTime->from_epoch(epoch => int($_->{startedAt} / 1000));
         my $ago = $ago_formatter->format_datetime($start);
@@ -238,6 +240,17 @@ sub _current_oncall_names ($self) {
   });
 }
 
+# This returns a Future that, when done, gives a boolean as to whether or not
+# $who is oncall right now.
+sub _user_is_oncall ($self, $who) {
+  return $self->_current_oncall_names
+    ->then(sub (@names) {
+      my $want_name = $self->get_user_preference($who->username, 'username')
+                   // $who->username;
+      return Future->done(!! first { $_ eq $want_name } @names)
+    });
+}
+
 sub handle_oncall ($self, $event) {
   $event->mark_handled;
 
@@ -253,33 +266,54 @@ sub handle_oncall ($self, $event) {
 sub handle_maint_start ($self, $event) {
   $event->mark_handled;
 
-  my $f = $self->hub->http_post(
-    $self->_vo_api_endpoint('/maintenancemode/start'),
-    $self->_vo_api_headers,
-    async => 1,
-    Content_Type => 'application/json',
-    Content      => encode_json( { names => [] } ), # nothing, global mode
-  )->then(
-    sub ($res) {
-      if ($res->code == 409) {
-        return $event->reply("VO already in maint!");
-      }
+  my $force = $event->text =~ m{/force\s*$};
+  my $f;
 
-      unless ($res->is_success) {
-        $Logger->log("VO: post maint failed: ".$res->as_string);
-        return $event->reply("I couldn't start maint. Sorry!");
-      }
+  if ($force) {
+    # don't bother checking
+    $f = Future->done;
+  } else {
+    $f = $self->_user_is_oncall($event->from_user)->then(sub ($is_oncall) {
+      return Future->done if $is_oncall;
 
-      return $event->reply("🚨 VO now in maint! Good luck!");
+      $event->error_reply(join(q{ },
+        "You don't seem to be on call right now.",
+        "Usually, the person oncall is getting the alerts, so they should be",
+        "the one to decide whether or not to shut them up.",
+        "If you really want to do this, try again with /force."
+      ));
+      return Future->fail('not oncall');
+    });
+  }
+
+  $f->then(sub {
+    return $self->hub->http_post(
+      $self->_vo_api_endpoint('/maintenancemode/start'),
+      $self->_vo_api_headers,
+      async => 1,
+      Content_Type => 'application/json',
+      Content      => encode_json( { names => [] } ), # nothing, global mode
+    );
+  })
+  ->then(sub ($res) {
+    if ($res->code == 409) {
+      return $event->reply("VO already in maint!");
     }
-  )->else(
-    sub (@fails) {
-      $Logger->log("VO: handle_maint_start failed: @fails");
-      return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
-    }
-  );
 
-  $f->retain;
+    unless ($res->is_success) {
+      $Logger->log("VO: post maint failed: ".$res->as_string);
+      return $event->reply("I couldn't start maint. Sorry!");
+    }
+
+    return $event->reply("🚨 VO now in maint! Good luck!");
+  })
+  ->else(sub (@fails) {
+    return if $fails[0] eq 'not oncall';
+
+    $Logger->log("VO: handle_maint_start failed: @fails");
+    return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
+  })
+  ->retain;
 
   return;
 }
