@@ -8,6 +8,8 @@ with 'Synergy::Role::Reactor::EasyListening';
 use experimental qw(signatures);
 use namespace::clean;
 
+use URI;
+
 has slack_synergy_channel_name => (
   is => 'ro',
   isa => 'Str',
@@ -55,11 +57,20 @@ sub listener_specs {
       my $channel = $r->_slack_channel_name_from_event($e);
       return unless $channel eq $r->yelling_channel_name;
 
-      my $text = $e->text;
-      $text =~ s/[#@](?:\S+)//g;  # don't complain about @rjbs
-      $text =~ s/:[-_a-z0-9]+://g; # don't complain about :smile:
+      my @words = split /\s+/, $e->text;
 
-      return $text =~ /\p{Ll}/;
+      return !! grep {
+        sub {
+          return if m/^[#@]/;           # don't complain about @rjbs
+          return if m/^:[-_a-z0-9]+:$/; # don't complain about :smile:
+
+          # don't complain about URLs
+          return if URI->new($_)->has_recognized_scheme;
+
+          # do complain about lowercase
+          return m/\p{Ll}/;
+        }->()
+      } @words;
     },
   };
 }
