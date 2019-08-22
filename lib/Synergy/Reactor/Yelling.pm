@@ -58,19 +58,16 @@ sub listener_specs {
       return unless $channel eq $r->yelling_channel_name;
 
       my @words = split /\s+/, $e->text;
+      for (@words) {
+        next if m/^[#@]/;                             # don't complain about @rjbs
+        next if m/^:[-_a-z0-9]+:$/;                   # or :smile:
+        next if URI->new($_)->has_recognized_scheme;  # or URLS
 
-      return !! grep {
-        sub {
-          return if m/^[#@]/;           # don't complain about @rjbs
-          return if m/^:[-_a-z0-9]+:$/; # don't complain about :smile:
+        # do complain about lowercase
+        return 1 if m/\p{Ll}/;
+      }
 
-          # don't complain about URLs
-          return if URI->new($_)->has_recognized_scheme;
-
-          # do complain about lowercase
-          return m/\p{Ll}/;
-        }->()
-      } @words;
+      return;
     },
   };
 }
