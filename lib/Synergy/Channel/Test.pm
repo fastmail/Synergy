@@ -37,6 +37,7 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
 
 sub send_message ($self, $address, $text, $alts = {}) {
   $self->record_message({ address => $address, text => $text });
+  return Future->done;
 }
 
 sub describe_event { "(some test event)" }

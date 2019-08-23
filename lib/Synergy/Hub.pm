@@ -15,6 +15,7 @@ use JSON::MaybeXS;
 use YAML::XS;
 use TOML;
 use Module::Runtime qw(require_module);
+use Net::Async::HTTP;
 use Synergy::UserDirectory;
 use Path::Tiny ();
 use Plack::App::URLMap;
