@@ -335,7 +335,8 @@ sub handle_maint_end ($self, $event) {
       my $data = decode_json($res->content);
       my $maint = $data->{activeInstances} // [];
       unless (@$maint) {
-        return $event->reply("VO not in maint right now. Everything is fine maybe!");
+        $event->reply("VO not in maint right now. Everything is fine maybe!");
+        return Future->fail('no maint');
       }
 
       my ($global_maint) = grep { $_->{isGlobal} } @$maint;
@@ -365,6 +366,7 @@ sub handle_maint_end ($self, $event) {
     }
   )->else(
     sub (@fails) {
+      return if $fails[0] eq 'no maint';
       $Logger->log("VO: handle_maint_end failed: @fails");
       return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
     }

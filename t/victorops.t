@@ -42,8 +42,12 @@ my $s = $result->synergy;
 my $channel = $s->channel_named('test-channel');
 
 # Fake up responses from VO.
+my @VO_RESPONSES;
 my $VO_RESPONSE = gen_response(200, {});
-$s->server->register_path('/vo', sub { $VO_RESPONSE });
+$s->server->register_path('/vo', sub {
+  return shift @VO_RESPONSES if @VO_RESPONSES;
+  return $VO_RESPONSE;
+});
 my $url = sprintf("http://localhost:%s/vo", $s->server->server_port);
 
 # Muck with the guts of VO reactor to catch our fakes.
@@ -118,6 +122,44 @@ subtest "enter maint" => sub {
     single_message_text(),
     qr{already in maint}i,
     'get a warning from trying to maint when already there'
+  );
+};
+
+subtest 'exit maint' => sub {
+  # not in maint
+  $VO_RESPONSE = gen_response(200, { activeInstances => [] });
+
+  send_message('synergy: demaint', 'alice');
+  like(
+    single_message_text(),
+    qr{not in maint right now}i,
+    'get a warning from trying to demaint when not there'
+  );
+
+  # first response for "yeah we're in maint," second for successful demaint
+  @VO_RESPONSES = (
+    gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42 }] }),
+    gen_response(200, {}),
+  );
+
+  send_message('synergy: demaint', 'alice');
+  like(
+    single_message_text(),
+    qr{maint cleared}i,
+    'successful demaint from a mainted state'
+  );
+
+  # first response for "yeah we're in maint," second for successful demaint
+  @VO_RESPONSES = (
+    gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42 }] }),
+    gen_response(400, {}),
+  );
+
+  send_message('synergy: demaint', 'alice');
+  like(
+    single_message_text(),
+    qr{couldn't clear the VO maint}i,
+    'reasonable error on demaint failure'
   );
 };
 
