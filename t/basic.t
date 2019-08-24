@@ -2,49 +2,32 @@
 use v5.24.0;
 use warnings;
 
-use lib 'lib';
+use lib 'lib', 't/lib';
 
 use Test::More;
 
-use Synergy::Logger::Test '$Logger';
+use Synergy::Tester;
 
-use IO::Async::Loop;
-use IO::Async::Test;
-use IO::Async::Timer::Periodic;
-use Net::Async::HTTP;
-use Synergy::Hub;
+my $result = Synergy::Tester->testergize({
+  reactors => {
+    echo => { class => 'Synergy::Reactor::Echo' },
+    pref => { class => 'Synergy::Reactor::Preferences' },
+  },
+  default_from => 'alice',
+  users => {
+    alice   => undef,
+    charlie => undef,
+  },
+  todo => [
+    [ send    => { text => "synergy: Hi." }  ],
+    [ wait    => { seconds => 1  }  ],
+    [ repeat  => { text => "synergy: Hello?", times => 3, sleep => 0.34 } ],
+    [ wait    => { seconds => 1  }  ],
+    [ send    => { text => "synergy: Bye." } ],
+  ],
+});
 
-# Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
-    user_directory => "t/data/users.yaml",
-    channels => {
-      'test-channel' => {
-        class     => 'Synergy::Channel::Test',
-        todo      => [
-          [ send    => { text => "synergy: Hi." }  ],
-          [ wait    => { seconds => 1  }  ],
-          [ repeat  => { text => "synergy: Hello?", times => 3, sleep => 0.34 } ],
-          [ wait    => { seconds => 1  }  ],
-          [ send    => { text => "synergy: Bye." } ],
-        ],
-      }
-    },
-    reactors => {
-      echo => { class => 'Synergy::Reactor::Echo' },
-      pref => { class => 'Synergy::Reactor::Preferences' },
-    }
-  }
-);
-
-# Tests begin here.
-testing_loop($synergy->loop);
-
-wait_for {
-  $synergy->channel_named('test-channel')->is_exhausted;
-};
-
-my @sent = $synergy->channel_named('test-channel')->sent_messages;
+my @sent = $result->synergy->channel_named('test-channel')->sent_messages;
 
 is(@sent, 5, "five replies recorded");
 
