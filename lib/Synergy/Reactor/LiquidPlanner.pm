@@ -261,7 +261,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   return $text;
 }
 
-has [ qw( inbox_package_id urgent_package_id project_portfolio_id recurring_package_id ) ] => (
+has [ qw( inbox_package_id interrupts_package_id urgent_package_id project_portfolio_id recurring_package_id ) ] => (
   is  => 'ro',
   isa => 'Int',
   required => 1,
@@ -1811,6 +1811,10 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
   my $user = $event->from_user;
   my $arg  = {};
 
+  if ( ! $plan->{package} && ($plan->{done} || $plan->{start})) {
+    $plan->{package_id} = $self->interrupts_package_id;
+  }
+
   my $task_f = $self->_create_lp_task($event, $plan, $arg);
 
   $task_f->on_fail(sub {
@@ -2159,6 +2163,7 @@ sub _compile_search ($self, $conds, $from_user) {
 
       $value = fc $value;
       my $to_set = $value eq 'inbox'      ? $self->inbox_package_id
+                 : $value eq 'interrupts' ? $self->interrupts_package_id
                  : $value eq 'urgent'     ? $self->urgent_package_id
                  : $value =~ /\A[0-9]+\z/ ? $value
                  : undef;
