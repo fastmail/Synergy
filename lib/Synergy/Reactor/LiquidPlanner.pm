@@ -1080,6 +1080,7 @@ sub nag ($self, $timer, @) {
         $aggressive->send_message_to_user($user, $msg);
 
         $sy_timer->last_nag({ time => time, level => 0 });
+        $Logger->log("$username: setting nag level to 0 after running-too-long timer");
         next USER;
       }
     }
@@ -1110,6 +1111,7 @@ sub nag ($self, $timer, @) {
           next USER;
         }
         $level = $last_nag->{level} + 1;
+        $Logger->log("$username: setting nag level to $level");
       }
 
       # Have we seen a timer recently? Give them a grace period
