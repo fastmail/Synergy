@@ -264,6 +264,20 @@ __PACKAGE__->add_preference(
 );
 
 __PACKAGE__->add_preference(
+  name        => 'phone',
+  description => 'your phone number',
+  help        => 'Your phone number, in the form +1NNNNNNNNNN',
+  validator   => sub ($self, $value, $event) {
+    # dumb validation
+    my $err = 'phone number must be all digits, beginning with +';
+    $value =~ s/^\s*|\s*$//g;
+
+    return (undef, $err) unless $value =~ /^\+[0-9]+$/;
+    return "$value";
+  },
+);
+
+__PACKAGE__->add_preference(
   name => 'realname',
   validator => sub { "$_[1]" },
   after_set => sub ($self, $username, $value) {

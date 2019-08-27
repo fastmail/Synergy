@@ -117,8 +117,8 @@ has identities => (
   },
 );
 
-has phone       => (is => 'ro', isa => 'Str', predicate => 'has_phone');
-has want_page   => (is => 'ro', isa => 'Bool', default => 1);
+sub phone ($self)     { return $self->preference('phone') }
+sub has_phone ($self) { return !! $self->phone }
 
 has should_nag  => (is => 'ro', isa => 'Bool', default => 0);
 
