@@ -887,7 +887,7 @@ sub see_if_back ($self, $event) {
 
   my $lpc = $self->f_lp_client_for_user($event->from_user);
 
-  $lpc->my_running_timer->then(sub ($lp_timer) {
+  $lpc->my_running_timer->then(sub ($lp_timer = undef) {
     $Logger->log([
       '%s is back; ending chill_until_active',
       $event->from_user->username,
@@ -897,6 +897,8 @@ sub see_if_back ($self, $event) {
     $self->save_state;
     $event->ephemeral_reply("You're back!  No longer chilling.")
       if $timer->is_business_hours && ! defined $lp_timer;
+
+    return Future->done;
   })->retain;
 }
 
