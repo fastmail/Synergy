@@ -3077,7 +3077,7 @@ sub _handle_chill ($self, $event, $text) {
   if (! length $text or $text =~ /^until\s+I'm\s+back\s*$/i) {
     $sy_timer->chill_until_active(1);
     $self->save_state;
-    return $event->reply("Okay, I'll stop pestering you until you've active again.");
+    return $event->reply("Okay, I'll stop pestering you until you're active again.");
   }
 
   my $time = parse_time_hunk($text, $user);
