@@ -3761,17 +3761,23 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
       Future->fail('bad task get');
     })
     ->then(sub ($task) {
-      return Future->done($task) unless $start;
+      if ($start) {
+        return $lpc->start_timer_for_task_id($task->{id})
+           ->then(sub { Future->done($task, " and started your timer.") })
+           ->else(sub { Future->done($task, ", but I couldn't start your timer.") });
+      }
 
-      return $lpc->start_timer_for_task_id($task->{id})
-         ->then(sub { Future->done($task, " and started your timer") })
-         ->else(sub { Future->done($task, ", but I couldn't start your timer") });
+      return $self->_maybe_logged_today_text($user)
+        ->transform(done => sub ($text) {
+          $text = ". $text" if $text;
+          return ($task, $text);
+        });
     })
     ->then(sub ($task, $more = '') {
       my $uri  = $self->item_uri($task_id);
 
-      my $plain_base = qq{I logged that time on "$task->{name}"};
-      my $slack_base = qq{I logged that time};
+      my $plain_base = qq{I logged that time on "$task->{name}."};
+      my $slack_base = qq{I logged that time.};
 
       # A user has told us what they're up to; that's just as good as tracking
       # time, so don't nag them next time around. -- michael, 2019-08-09
@@ -3781,7 +3787,7 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
       $plain_base .= $more;
       $slack_base .= $more;
 
-      $slack_base .= sprintf qq{.  The task is: %s},
+      $slack_base .= sprintf qq{  The task is: %s},
         $self->_slack_item_link_with_name($task);
 
       return $event->reply(
@@ -3791,7 +3797,50 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
     })->retain;
 }
 
+# Returns a successful future that yields a floating point number of how many
+# hours $user has logged today. This future will never fail because I am
+# assuming that this is always extra information. -- michael, 2019-08-30
+sub _time_logged_today_for ($self, $user) {
+  my $ymd = DateTime->now(time_zone => $user->time_zone)->ymd;
+  my $ts_args = {
+    member_ids  => [ $user->lp_id ],
+    start_date  => $ymd,
+    end_date    => $ymd,
+  };
+
+  my $lpc = $self->f_lp_client_for_user($user);
+  return $lpc->timesheet_entries($ts_args)
+    ->then(sub ($ts_entries) {
+      my $total = sum0 map  {; $_->{work} } @$ts_entries;
+      return Future->done($total);
+    })
+    ->else(sub (@err) {
+      $Logger->log([ "error getting time logged today: %s", \@err]);
+      return Future->done(0)
+    });
+}
+
+# A future that yields either an empty string or one like "So far today,
+# you've logged 2.4 hours." and maybe a celebratory emoji.
+sub _maybe_logged_today_text ($self, $user) {
+  state $tada = qq{\N{PARTY POPPER}};
+
+  return $self->_time_logged_today_for($user)
+    ->then(sub ($hours) {
+      return Future->done('') unless $hours;
+
+      my $goal = $self->get_user_preference($user, 'tracking-goal');
+      my $text = sprintf("So far today, you've logged %0.02f %s.%s",
+        $hours, PL_N('hour', $hours),
+        (defined $goal && $hours > $goal ? " $tada" : ""),
+      );
+
+      return Future->done($text);
+    });
+}
+
 sub _handle_timesheet ($self, $event, $text) {
+  $text //= '';
   unless ($text eq 'today' or $text eq 'yesterday' or ! length $text) {
     return $event->error_reply("The timesheet command's arguments are under construction, but for now, just say `timesheet` or `timesheet {today,yesterday}`.");
   }
