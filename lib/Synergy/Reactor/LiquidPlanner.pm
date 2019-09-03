@@ -3750,7 +3750,7 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
 
       return $self->_maybe_logged_today_text($user)
         ->transform(done => sub ($text) {
-          $text = ". $text" if $text;
+          $text = " $text" if $text;
           return ($task, $text);
         });
     })

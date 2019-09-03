@@ -220,7 +220,12 @@ sub handle_create ($self, $event) {
     return $event->error_reply("This is awkward:  you already have an agenda with that name.");
   }
 
-  $agendas->{ fc $name } = { name => $name, share => {}, items => [] };
+  $agendas->{ fc $name } = {
+    owner => $name,
+    name  => $name,
+    share => {},
+    items => []
+  };
 
   $self->save_state;
 
