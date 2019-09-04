@@ -144,7 +144,7 @@ sub _is_urgent ($self, $item) {
 
 sub _last_comment_ago ($self, $item) {
   return unless $item->{comments} && $item->{comments}->@*;
-  my ($latest) = sort { $a->{created_at} cmp $b->{created_at} }
+  my ($latest) = sort { $b->{created_at} cmp $a->{created_at} }
                  $item->{comments}->@*;
 
   my $updated = parse_lp_datetime($latest->{updated_at});
