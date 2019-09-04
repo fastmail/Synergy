@@ -2209,11 +2209,16 @@ sub _compile_search ($self, $conds, $from_user) {
       bad_op($field, $op) unless ($op//'is') eq 'is';
 
       $value = fc $value;
-      bad_value('client') unless my $client = $self->client_named($value);
 
-      maybe_conflict('client', $client->{id});
+      my $to_store;
+      if ($value ne '~') {
+        bad_value('client') unless my $client = $self->client_named($value);
+        $to_store = $client->{id};
+      }
 
-      $flag{client} = $client->{id};
+      maybe_conflict('client', $to_store // '~');
+
+      $flag{client} = $to_store;
       next COND;
     }
 
@@ -2500,8 +2505,10 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
     push @filters, [ 'project_id', '=', $flag{project} ];
   }
 
-  if (defined $flag{client}) {
-    push @filters, [ 'client_id', '=', $flag{client} ];
+  if (exists $flag{client}) {
+    push @filters, defined $flag{client}
+      ? [ 'client_id', '=', $flag{client} ]
+      : [ 'client_id', 'is_not_set' ];
   }
 
   if (defined $flag{tags}) {
