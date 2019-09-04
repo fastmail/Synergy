@@ -211,7 +211,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     $str .= ", $y" unless $y == $now->year;
 
     $text .= " \N{EN DASH} due $str";
-    $text .= " \N{CROSS MARK}" if $item->{promise_by} lt $now->ymd;
+    $text .= " \N{ALARM CLOCK}" if $item->{promise_by} lt $now->ymd;
   }
 
   for my $field (qw(escalation stakeholders)) {
