@@ -83,6 +83,10 @@ has reply_reaper => (
   }
 );
 
+my %allowable_subtypes = map {; $_ => 1 } qw(
+  me_message
+);
+
 sub start ($self) {
   $self->slack->connect;
   $self->loop->add($self->reply_reaper->start);
@@ -121,17 +125,19 @@ sub start ($self) {
       return;
     }
 
-    if ($slack_event->{subtype} && $slack_event->{subtype} eq 'message_changed') {
+    my $subtype = $slack_event->{subtype};
+
+    if ($subtype && $subtype eq 'message_changed') {
       $self->maybe_respond_to_edit($slack_event);
       return;
     }
 
-    if ($slack_event->{subtype} && $slack_event->{subtype} eq 'message_deleted') {
+    if ($subtype && $subtype eq 'message_deleted') {
       $self->maybe_delete_reply($slack_event);
       return;
     }
 
-    if ($slack_event->{subtype}) {
+    if ($subtype && ! $allowable_subtypes{$subtype}) {
       $Logger->log([
         "refusing to respond to message with subtype %s",
         $slack_event->{subtype},
@@ -147,7 +153,7 @@ sub start ($self) {
       $Logger->log([
         "couldn't convert a %s/%s message to channel %s, dropping it",
         $slack_event->{type},
-        ($slack_event->{subtype} // '[none]'),
+        ($subtype // '[none]'),
         $slack_event->{channel},
       ]);
       return;
