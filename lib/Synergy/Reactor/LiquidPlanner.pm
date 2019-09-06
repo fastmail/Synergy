@@ -449,6 +449,8 @@ EOH
                 ],
 
   update    =>  [ \&_handle_update,      ],
+
+  close    =>  [ \&_handle_close, "close TASK: mark a task done" ],
 );
 
 sub listener_specs {
@@ -1640,6 +1642,22 @@ sub _handle_comment ($self, $event, $text) {
     ->retain;
 
   return;
+}
+
+sub _handle_close ($self, $event, $text) {
+  $event->mark_handled;
+
+  $text =~ s/\A(LP)\s+/$1/gi;
+  my ($what, $rest) = split /\s+/, $text, 2;
+
+  $event->error_reply("You can't do anything else when closing a task this way, sorry.")
+    if $rest;
+
+  my ($item, $error) = $self->_item_from_token($what);
+  return $event->error_reply($error) unless $item;
+
+  my $method_name = "_handle_update_for_\L$item->{type}";
+  return $self->$method_name($event, $item, "/done");
 }
 
 sub _handle_update ($self, $event, $text) {
