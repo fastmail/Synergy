@@ -1065,8 +1065,7 @@ sub nag ($self, $timer, @) {
     }
 
     my $nag_interval =  $self->get_user_preference($user, 'nagging-interval');
-    my $should_nag   =  $self->get_user_preference($user, 'should-nag');
-    my $wants_aggressive_nag = $should_nag && ! $should_nag eq 'slack-only';
+    my $wants_aggressive_nag = $self->get_user_preference($user, 'aggressive-nagging');
 
     { # Timer running too long!
       if ($lp_timer && $lp_timer->running_time > 3) {
@@ -1093,7 +1092,7 @@ sub nag ($self, $timer, @) {
       }
     }
 
-    next USER unless $should_nag;
+    next USER unless $self->get_user_preference($user, 'should-nag');
 
     my $showtime = $sy_timer->is_showtime;
     my $user_dnd = $self->_user_doing_dnd($user);
@@ -4514,16 +4513,16 @@ __PACKAGE__->add_preference(
 );
 
 __PACKAGE__->add_preference(
-  name        => 'should-nag',
-  description => 'how long between LP timer nags',
-  validator => sub ($self, $value, @) {
-    return $value if $value eq 'slack-only';
-    my ($val, $err) = bool_from_text($value);
-    return $val if defined $val;
-
-    return (undef, "$err, or slack-only for slack-only nagging");
-  },
+  name      => 'should-nag',
+  validator => sub ($self, $value, @) { return bool_from_text($value) },
   default   => 0,
+);
+
+__PACKAGE__->add_preference(
+  name      => 'aggressive-nagging',
+  validator => sub ($self, $value, @) { return bool_from_text($value) },
+  default   => 1,   # back-compat: maybe we want this to be no?
+  description => 'whether you want text messages about timers',
 );
 
 __PACKAGE__->add_preference(
