@@ -113,7 +113,9 @@ sub http_post {
 }
 
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
-  unless ($user->phone) {
+  my $phone = $user->identity_for($self->name) // $user->phone;
+
+  unless ($phone) {
     $Logger->log([
       "can't send message, no phone number for %s",
       $user->username,
@@ -121,10 +123,8 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
     return;
   }
 
-  my $where = $user->phone;
-
-  $Logger->log([ "sending text <$text> to $where" ]);
-  $self->send_message($where, $text, $alts);
+  $Logger->log([ "sending text <$text> to $phone" ]);
+  $self->send_message($phone, $text, $alts);
 }
 
 sub send_message ($self, $target, $text, $alts) {
