@@ -35,7 +35,7 @@ sub listener_specs {
       name      => 'rfc-mention',
       method    => 'handle_rfc',
       predicate => sub ($self, $e) {
-        return unless $e->text =~ /(^|\s)RFC\s*[0-9]+/in; },
+        return unless $e->text =~ /(^|\s|\/)RFC\s*[0-9]+/in; },
     },
   );
 }
@@ -171,6 +171,9 @@ sub handle_rfc ($self, $event) {
 my $sec_dig = qr/(?:[0-9]+[-.]?)+/;
 
 sub extract_rfc ($self, $text) {
+  # match a URL, but not something like "message/rfc822"
+  return if $text =~ m{/rfc}i && $text !~ m{\Qtools.ietf.org\E}i;
+
   return unless $text =~ s/.*RFC\s*([0-9]+)//ig;
 
   my $num = $1;
