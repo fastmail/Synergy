@@ -1522,7 +1522,7 @@ sub _handle_subcmds ($self, $phase, $cmd_line, $plan) {
 
     if ($cmd eq 'done') {
       cmd_error("The /done command takes no arguments.") if @args;
-      $plan->{done} = 1;
+      $plan->{is_done} = \1;
       next CMD;
     };
 
@@ -1694,10 +1694,6 @@ sub _handle_update_for_task ($self, $event, $task, $cmd_line) {
 #  return (undef, \%error) if %error;
 #  return (\%plan, undef);
 
-  $event->reply( "Update plan for LP$task->{id}: ```"
-               . JSON->new->canonical->encode($plan)
-               . "```");
-
   return $self->_execute_item_update_plan($event, $task, $plan);
 }
 
@@ -1713,8 +1709,12 @@ sub _execute_item_update_plan ($self, $event, $item, $plan) {
   my $user = $event->from_user;
   my $arg  = {};
 
-  my %UPDATE_FIELD = map {; $_ => 1 } qw(name);
+  my %UPDATE_FIELD = map {; $_ => 1 } qw(name is_done);
   if (my @unknown = grep {; ! $UPDATE_FIELD{$_} } keys %$plan) {
+    $event->reply( "Update plan for LP$item->{id}: ```"
+                 . JSON->new->canonical->encode($plan)
+                 . "```");
+
     return $event->error_reply(
       "You wanted to update things but I don't know how: "
       . join(q{, }, sort uniq @unknown)
@@ -1731,7 +1731,10 @@ sub _execute_item_update_plan ($self, $event, $item, $plan) {
   });
 
   $update_f->then(sub ($item) {
-    $event->reply("Updated " . $self->_slack_item_link_with_name);
+    my $uri   = $self->item_uri($item->{id});
+    my $plain = "Updated $item->{name}: ($uri)";
+    my $slack = "Updated " . $self->_slack_item_link_with_name($item);
+    $event->reply($plain, { slack => $slack });
   })->retain;
 
   return;
