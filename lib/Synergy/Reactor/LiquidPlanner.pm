@@ -1071,6 +1071,11 @@ sub nag ($self, $timer, @) {
           next USER;
         }
 
+        if ($sy_timer->overlong_nag_count > 3) {
+          $Logger->log("$username: won't nag for overlong timer after 3 such nags");
+          next USER;
+        }
+
         my $msg = "Your timer has been running for "
                 . $lp_timer->running_time_duration
                 . ".  Maybe you should commit your work.";
@@ -1081,12 +1086,13 @@ sub nag ($self, $timer, @) {
         my $aggressive = $self->hub->channel_named($self->aggressive_nag_channel_name);
         $aggressive->send_message_to_user($user, $msg);
 
+        $sy_timer->record_overlong_nag;
         $sy_timer->last_nag({ time => time, level => 0 });
-        $Logger->log("$username: setting nag level to 0 after running-too-long timer");
         next USER;
       }
     }
 
+    $sy_timer->reset_overlong_nag;
     next USER unless $self->get_user_preference($user, 'should-nag');
 
     my $showtime = $sy_timer->is_showtime;
@@ -1113,7 +1119,6 @@ sub nag ($self, $timer, @) {
           next USER;
         }
         $level = $last_nag->{level} + 1;
-        $Logger->log("$username: setting nag level to $level");
       }
 
       # Have we seen a timer recently? Give them a grace period

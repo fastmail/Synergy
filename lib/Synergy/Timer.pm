@@ -106,6 +106,17 @@ has last_saw_timer => (
   is => 'rw',
 );
 
+has overlong_nag_count => (
+  is      => 'rw',
+  isa     => 'Int',
+  default => 0,
+  traits  => [ 'Counter' ],
+  handles => {
+    record_overlong_nag => 'inc',
+    reset_overlong_nag  => 'reset',
+  },
+);
+
 sub last_relevant_nag {
   my ($self) = @_;
 
