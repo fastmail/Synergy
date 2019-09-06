@@ -268,6 +268,9 @@ __PACKAGE__->add_preference(
   description => 'your phone number',
   help        => 'Your phone number, in the form +1NNNNNNNNNN',
   validator   => sub ($self, $value, $event) {
+    # clear: allow undef, but no error
+    return undef unless defined $value;
+
     # dumb validation
     my $err = 'phone number must be all digits, beginning with +';
     $value =~ s/^\s*|\s*$//g;
