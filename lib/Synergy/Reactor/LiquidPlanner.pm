@@ -1065,6 +1065,8 @@ sub nag ($self, $timer, @) {
     }
 
     my $nag_interval =  $self->get_user_preference($user, 'nagging-interval');
+    my $should_nag   =  $self->get_user_preference($user, 'should-nag');
+    my $wants_aggressive_nag = $should_nag && ! $should_nag eq 'slack-only';
 
     { # Timer running too long!
       if ($lp_timer && $lp_timer->running_time > 3) {
@@ -1080,8 +1082,10 @@ sub nag ($self, $timer, @) {
         my $friendly = $self->hub->channel_named($self->primary_nag_channel_name);
         $friendly->send_message_to_user($user, $msg);
 
-        my $aggressive = $self->hub->channel_named($self->aggressive_nag_channel_name);
-        $aggressive->send_message_to_user($user, $msg);
+        if ($wants_aggressive_nag) {
+          my $aggressive = $self->hub->channel_named($self->aggressive_nag_channel_name);
+          $aggressive->send_message_to_user($user, $msg);
+        }
 
         $sy_timer->last_nag({ time => time, level => 0 });
         $Logger->log("$username: setting nag level to 0 after running-too-long timer");
@@ -1089,7 +1093,7 @@ sub nag ($self, $timer, @) {
       }
     }
 
-    next USER unless $self->get_user_preference($user, 'should-nag');
+    next USER unless $should_nag;
 
     my $showtime = $sy_timer->is_showtime;
     my $user_dnd = $self->_user_doing_dnd($user);
@@ -1135,7 +1139,7 @@ sub nag ($self, $timer, @) {
       $Logger->log([ 'nagging %s at level %s', $user->username, $level ]);
       my $friendly = $self->hub->channel_named($self->primary_nag_channel_name);
       $friendly->send_message_to_user($user, $msg);
-      if ($level >= 2) {
+      if ($level >= 2 && $wants_aggressive_nag) {
         my $aggressive = $self->hub->channel_named($self->aggressive_nag_channel_name);
         $aggressive->send_message_to_user($user, $msg);
       }
@@ -4510,8 +4514,15 @@ __PACKAGE__->add_preference(
 );
 
 __PACKAGE__->add_preference(
-  name      => 'should-nag',
-  validator => sub ($self, $value, @) { return bool_from_text($value) },
+  name        => 'should-nag',
+  description => 'how long between LP timer nags',
+  validator => sub ($self, $value, @) {
+    return $value if $value eq 'slack-only';
+    my ($val, $err) = bool_from_text($value);
+    return $val if defined $val;
+
+    return (undef, "$err, or slack-only for slack-only nagging");
+  },
   default   => 0,
 );
 
