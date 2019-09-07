@@ -57,6 +57,21 @@ my sub parse_lp_datetime ($str) {
   DateTime::Format::ISO8601->parse_datetime($str);
 }
 
+has triage_cache => (
+  is               => 'ro',
+  isa              => 'HashRef',
+  traits           => [ 'Hash' ],
+  lazy             => 1,
+  handles          => {
+    _have_seen_triage_task   => 'get',
+    _mark_triage_task_seen   => 'set',
+    _seen_triage_tasks       => 'keys',
+    _remove_gone_triage_task => 'delete',
+  },
+
+  default => sub { {} },
+);
+
 has workspace_id => (
   is  => 'ro',
   isa => 'Int',
@@ -995,7 +1010,81 @@ sub start ($self) {
 
   $self->hub->loop->add($timer);
 
-  $timer->start;
+  my $triage_timer = IO::Async::Timer::Periodic->new(
+    interval => 900, # 15 minutes for now
+    on_tick  => sub ($timer, @arg) { $self->check_for_new_triage_tasks }
+  );
+
+  $triage_timer->start;
+
+  $self->hub->loop->add($triage_timer);
+
+  $self->check_for_new_triage_tasks(1);
+}
+
+sub check_for_new_triage_tasks ($self, $first_run = 0) {
+  my $triage_user = $self->hub->user_directory->user_named('triage');
+  return unless $triage_user;
+
+  my %search = (
+    owner     => { $triage_user->lp_id => 1 },
+    page_size => 1000, # If there's more than 1k we have bigger problems.
+  );
+
+  my $lpc    = $self->f_lp_client_for_master;
+  my $future = $self->_execute_search($lpc, \%search, {});
+
+  $future
+    ->else(sub {
+      $Logger->log([ "failed to get triage tasks?! @_", ]);
+      return Future->done;
+    })
+    ->then(sub ($action, @rest) {
+      if    ($action eq 'reply')    { $Logger->log([ "triage task reply?! @rest" ]); }
+      elsif ($action eq 'error')    { $Logger->log([ "triage task error?! @rest" ]); }
+      elsif ($action eq 'itemlist') {
+        my ($itemlist) = @rest;
+
+        my %saw;
+
+        for my $item ($itemlist->{items}->@*) {
+          $saw{$item->{id}}++;
+
+          if ($first_run) {
+            $self->_mark_triage_task_seen($item->{id} => 1);
+            next;
+          }
+
+          next if $self->_have_seen_triage_task($item->{id});
+
+          my $text = sprintf
+            "$TRIAGE_EMOJI Existing task assigned to triage: %s (%s)",
+            $item->{name},
+            $self->item_uri($item->{id});
+
+          my $alt = {
+            slack => sprintf "$TRIAGE_EMOJI *Existing task assigned to triage*: %s",
+              $self->_slack_item_link_with_name($item)
+          };
+
+          $self->_inform_triage($text, $alt);
+
+          $self->_mark_triage_task_seen($item->{id} => 1);
+        }
+
+        unless ($first_run) {
+          # Clean up cache for any tasks no longer in triage user
+          my %have = map { $_ => 1 } $self->_seen_triage_tasks;
+
+          delete $have{$_} for keys %saw;
+
+          $self->_remove_gone_triage_task($_) for keys %have;
+        }
+      } else {
+        $Logger->log([ "triage task unexpected search execution result: %s", [ $action, @rest ] ]);
+      }
+      return Future->done;
+    })->retain;
 }
 
 after register_with_hub => sub ($self, @) {
@@ -2491,6 +2580,12 @@ sub _send_search_result ($self, $event, $result, $display) {
 }
 
 sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
+  my $page_size = 10;
+
+  if ($search && $search->{page_size}) {
+    $page_size = delete $search->{page_size};
+  }
+
   my %flag  = $search ? %$search : ();
 
   my %error = $orig_error ? %$orig_error : ();
@@ -2507,7 +2602,6 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   # more, later, if we're filtering by user on un-done tasks, because the
   # LiquidPlanner behavior on owner filtering is less than ideal.
   # -- rjbs, 2019-02-18
-  my $page_size = 10;
   my ($limit, $offset) = ($page_size + 5, 0);
 
   $flag{done} = 0 unless exists $flag{done};
@@ -2555,7 +2649,7 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
 
   $flag{page} //= 1;
   if ($flag{page}) {
-    $offset = ($flag{page} - 1) * 10;
+    $offset = ($flag{page} - 1) * $page_size;
     $limit += $offset;
   }
 
@@ -2735,7 +2829,7 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
     }
 
     my $more  = @tasks > $offset + 11;
-    @tasks = splice @tasks, $offset, 10;
+    @tasks = splice @tasks, $offset, $page_size;
 
     return Future->done(reply => "That's past the last page of results.")
       unless @tasks;
@@ -2998,6 +3092,8 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
       };
 
       $self->_inform_triage($text, $alt);
+
+      $self->_mark_triage_task_seen($task->{id} => 1);
     }
 
     return Future->done($task);
