@@ -182,7 +182,7 @@ sub listener_specs {
       },
       help_entries => [
         { title => 'r?',
-          text  => 'This is short for `mrsearch for:me wip:no backlogged:no` --
+          text  => 'This is short for `mrsearch for:me backlogged:no` --
           in other words, "what can I act on right now?".'
         },
       ],
@@ -418,7 +418,7 @@ sub _short_name_for_mr ($self, $mr) {
 
 sub handle_r_hook ($self, $event) {
   $event->mark_handled;
-  $self->_handle_mr_search_string("for:me wip:no backlogged:no", $event);
+  $self->_handle_mr_search_string("for:me backlogged:no", $event);
 }
 
 sub handle_mr_search ($self, $event) {
