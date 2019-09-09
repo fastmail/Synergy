@@ -1111,6 +1111,11 @@ sub nag ($self, $timer, @) {
         next USER;
       }
 
+      if ($self->_maybe_logged_today_text($user)->get) {
+        $Logger->log("$username: already met tracking goal; not nagging");
+        next USER;
+      }
+
       my $level = 0;
       if ($last_nag) {
         if (time - $last_nag->{time} < $nag_interval) {
