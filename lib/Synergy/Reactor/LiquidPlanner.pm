@@ -1111,9 +1111,12 @@ sub nag ($self, $timer, @) {
         next USER;
       }
 
-      if ($self->_maybe_logged_today_text($user)->get) {
-        $Logger->log("$username: already met tracking goal; not nagging");
-        next USER;
+      if (defined (my $goal = $self->get_user_preference($user, 'tracking-goal'))) {
+        my $logged_today = $self->_time_logged_today_for($user)->get;
+        if ($logged_today > $goal) {
+          $Logger->log("$username: already met tracking goal; not nagging");
+          next USER;
+        }
       }
 
       my $level = 0;
