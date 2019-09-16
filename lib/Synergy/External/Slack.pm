@@ -164,6 +164,8 @@ sub handle_frame ($self, $slack_event) {
   $timeout->cancel if $timeout;
 
   my $f = delete $self->pending_frames->{$reply_to};
+  return unless $f;
+
   $f->done({
     type => 'slack',
     transport_data => $slack_event,
