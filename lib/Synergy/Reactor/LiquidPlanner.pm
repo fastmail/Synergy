@@ -1613,7 +1613,7 @@ sub _item_from_token ($self, $token) {
 sub _handle_comment ($self, $event, $text) {
   $event->mark_handled;
 
-  return $self->error_reply("Sorry, I didn't understand your comment command.")
+  return $event->error_reply("Sorry, I didn't understand your comment command.")
     unless $text =~ s/\Aon\s+//;
 
   # We want to accept "update lp 123 ..." just like "update lp123", because
@@ -1648,7 +1648,7 @@ sub _handle_comment ($self, $event, $text) {
   $post
     ->then(sub { return $event->reply($plain, { slack => $slack }); })
     ->else(sub {
-      $event->reply_error("Something went wrong leaving that comment!")
+      $event->error_reply("Something went wrong leaving that comment!")
     })
     ->retain;
 

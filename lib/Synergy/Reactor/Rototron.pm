@@ -191,7 +191,7 @@ sub handle_duty ($self, $event) {
 
   if ($when) {
     $when_dt = eval { parse_date_for_user($when, $event->from_user) };
-    return $event->reply_error("I didn't understand the day you asked about")
+    return $event->error_reply("I didn't understand the day you asked about")
       unless $when_dt;
   } else {
     $is_now = 1;
