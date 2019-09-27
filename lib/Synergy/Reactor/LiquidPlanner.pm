@@ -3430,6 +3430,7 @@ sub _handle_timer_commit ($self, $event, $comment) {
       }
 
       my $uri = $self->item_uri($task->{id});
+      $ts_text = " $ts_text" if $ts_text;
 
       my $base  = "Okay, I've committed $dur of work$also.$ts_text  The task was:";
       my $text  = "$base $task->{name} ($uri)";
