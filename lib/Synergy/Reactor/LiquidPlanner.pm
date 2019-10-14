@@ -350,6 +350,7 @@ EOH
       "• *type:`TYPE`*, pick what type of items to find (package, project, task)",
       "• *tags:`TAG`*, find items with the given tag",
       "• *o[wner]:`USER`*, items owned by the named user",
+      "• *closed:`{before,after}`:`YYYY-MM-DD`*, items closed in the time range",
       "• *creator:`USER`*, items created by the named user",
       "• *created:`{before,after}`:`YYYY-MM-DD`*, items created in the time range",
       "• *lastupdated:`{before,after}`:`YYYY-MM-DD`*, items last updated in the time range",
@@ -2355,7 +2356,7 @@ sub _compile_search ($self, $conds, $from_user) {
       next COND;
     }
 
-    if ($field eq 'created' or $field eq 'lastupdated') {
+    if ($field eq 'created' or $field eq 'lastupdated' or $field eq 'closed') {
       cond_error("The `$field` term has to be used like this: `$field:before:YYYY-MM-DD` (or use _after_ instead of _before_).")
         unless defined $op and ($op eq 'after' or $op eq 'before');
 
@@ -2548,7 +2549,11 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   }
 
   {
-    my %datefield = (created => 'created', lastupdated => 'last_updated');
+    my %datefield = (
+      created => 'created',
+      closed  => 'date_done',
+      lastupdated => 'last_updated',
+    );
 
     for my $field (keys %datefield) {
       if (my $got = $flag{$field}) {
