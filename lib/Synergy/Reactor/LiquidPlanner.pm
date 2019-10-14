@@ -2519,7 +2519,10 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   my $page_size = 10;
   my ($limit, $offset) = ($page_size + 5, 0);
 
-  $flag{done} = 0 unless exists $flag{done};
+  unless (exists $flag{done}) {
+    $flag{done} = $flag{closed} ? 1 : 0;
+  }
+
   if (defined $flag{done}) {
     push @filters, [ 'is_done', 'is', ($flag{done} ? 'true' : 'false') ];
   }
