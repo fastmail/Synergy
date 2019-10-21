@@ -41,7 +41,7 @@ unless ($opt->really) {
   if ($plan) {
     printf "DRY RUN: update: %u\n",  0 + keys($plan->{update}->%*);
     printf "DRY RUN: create: %u\n",  0 + keys($plan->{create}->%*);
-    printf "DRY RUN: destroy: %u\n", 0 + $plan->{create}->@*;
+    printf "DRY RUN: destroy: %u\n", 0 + $plan->{destroy}->@*;
   } else {
     say "DRY RUN: no action required";
   }
