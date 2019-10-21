@@ -55,6 +55,16 @@ sub config ($self) {
   return $cached->{config}
 }
 
+my @USING = qw(
+  urn:ietf:params:jmap:core
+  urn:ietf:params:jmap:mail
+  urn:ietf:params:jmap:submission
+  https://cyrusimap.org/ns/jmap/mail
+  https://cyrusimap.org/ns/jmap/contacts
+  https://cyrusimap.org/ns/jmap/calendars
+  https://cyrusimap.org/ns/jmap/jscalendar19
+);
+
 has availability_checker => (
   is    => 'ro',
   lazy  => 1,
@@ -67,6 +77,7 @@ has availability_checker => (
 
       # XXX This is bonkers. -- rjbs, 2019-02-02
       jmap_client => Synergy::Rototron::JMAPClient->new({
+        default_using => \@USING,
         $self->config->{jmap}->%{ qw( api_uri username password ) },
       }),
     });
@@ -79,6 +90,7 @@ has jmap_client => (
   clearer => '_clear_jmap_client',
   default => sub ($self, @) {
     return Synergy::Rototron::JMAPClient->new({
+      default_using => \@USING,
       $self->config->{jmap}->%{ qw( api_uri username password ) },
     });
   },
