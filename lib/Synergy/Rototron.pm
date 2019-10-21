@@ -175,7 +175,7 @@ my sub event_mismatches ($lhs, $rhs) {
   my %mismatch;
 
   for my $key (qw(
-    @type title start duration isAllDay freeBusyStatus
+    @type title start duration showWithoutTime freeBusyStatus
     replyTo keywords
   )) {
     $mismatch{$key} = 1
@@ -235,11 +235,11 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
                       $user->{name} // $user->{username}),
         start     => $start,
         duration  => "P1D",
-        isAllDay  => JSON::MaybeXS->true,
         keywords  => { $rotor->keyword => JSON::MaybeXS->true },
         replyTo   => { imip => "MAILTO:$user->{username}\@fastmailteam.com" },
-        freeBusyStatus  => "free",
         calendarId      => $rotor->calendar_id,
+        freeBusyStatus  => "free",
+        showWithoutTime => JSON::MaybeXS->true,
         participants    => {
           $user->{username} => {
             participationStatus => 'accepted',
