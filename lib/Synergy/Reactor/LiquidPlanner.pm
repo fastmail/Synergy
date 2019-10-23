@@ -3312,14 +3312,16 @@ sub _handle_timer_commit ($self, $event, $comment) {
   }
 
   my $timer_override;
-  my $time_re = qr{TIME ([0-9]+(?:\.[0-9]+)?)([hm]?)};
+  my $time_re = qr{TIME ([^\s]+)};
 
   my %meta;
   $comment //= '';
   while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL|$time_re)\s*\z//) {
     my $got = $1;
     if ($got =~ $time_re) {
-      $timer_override = $1 * (($2 || 'h') eq 'h' ? 1 : 60);
+      my ($duration, $err) = $self->get_duration($1);
+      return $event->reply($err) if $err;
+      $timer_override = $duration / 3600;
     } else {
       $meta{$got}++;
     }
@@ -3699,19 +3701,8 @@ sub _handle_spent ($self, $event, $text) {
     return $event->error_reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
   }
 
-  my $duration;
-  my $ok = eval { $duration = parse_duration($dur_str); 1 };
-  unless ($ok) {
-    return $event->error_reply("I didn't understand how long you spent!");
-  }
-
-  if ($duration > 12 * 86_400) {
-    my $dur_restr = duration($duration);
-    return $event->error_reply(
-        qq{You said to spend "$dur_str" which I read as $dur_restr.  }
-      . qq{That's too long!},
-    );
-  }
+  my ($duration, $err) = $self->get_duration($dur_str);
+  return $event->error_reply($err) if $err;
 
   my $workspace_id = $self->workspace_id;
   my $maybe_base  = qr{(?:\Qhttps://app.liquidplanner.com/space/$workspace_id/\E.*/|LP\s*)?}i;
@@ -4731,6 +4722,25 @@ sub _summarize_item_list ($self, $items, $arg) {
     events     => [ grep {; $_->{type} eq 'Event' } @$items ],
     others     => [ grep {; $_->{type} !~ /\A Project | Package | Folder | Task | Event \z/x } @$items ],
   };
+}
+
+sub get_duration ($self, $dur_str) {
+  my $duration;
+  my $ok = eval { $duration = parse_duration($dur_str); 1 };
+  unless ($ok) {
+    return (undef, "I didn't understand how long you spent!");
+  }
+
+  if ($duration > 12 * 86_400) {
+    my $dur_restr = duration($duration);
+    return (
+      undef,
+        qq{You said to spend "$dur_str" which I read as $dur_restr.  }
+      . qq{That's too long!},
+    );
+  }
+
+  return $duration;
 }
 
 1;
