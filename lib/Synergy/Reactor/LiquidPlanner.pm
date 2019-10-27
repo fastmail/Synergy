@@ -272,6 +272,7 @@ my %KNOWN = (
   '++'      =>  [ \&_handle_plus_plus,
                   "++ TASK: short for `task for me: TASK`, so see `help task`"],
   '<<'      =>  [ \&_handle_angle_angle ], # To Neil, with love.
+  '> >'     =>  [ \&_handle_angle_angle ], # ayfkm, slack.
   '>>'      =>  [ \&_handle_angle_angle,
                   ">> PERSON REST: short for `task for PERSON: REST`, so see `help task`"],
 
@@ -469,6 +470,10 @@ sub listener_specs {
         return unless $event->type eq 'message';
         return unless $event->was_targeted;
 
+        # Slack now "helpfully" corrects '>>' in DM to '> >', which means our
+        # regex doesn't match. -- michael, 2019-10-27
+        return 1 if $event->text =~ /^> >/;
+
         my ($what) = $event->text =~ /^(\S+)(?: \z | \s)/x;
         $what &&= lc $what;
 
@@ -534,6 +539,7 @@ sub dispatch_event ($self, $event) {
   $text = "good day_de" if $text =~ /\Agruß gott[1!.]?\z/i;
   $text =~ s/\Ago{3,}d(?=\s)/good/;
   $text =~  s/^done, /done /;   # ugh
+  $text =~ s/^> >/>>/;          # ugh again
 
   my ($what, $rest) = split /\s+/, $text, 2;
   $what &&= lc $what;
