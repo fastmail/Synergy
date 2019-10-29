@@ -809,6 +809,7 @@ sub state ($self) {
   my $timers = $self->user_timers;
   my $last_timer_ids = $self->_last_lp_timer_task_ids;
   my $prefs = $self->user_preferences;
+  my $good_mornings = $self->good_mornings;
 
   return {
     user_timers => {
@@ -817,6 +818,7 @@ sub state ($self) {
     },
     last_timer_ids => $last_timer_ids,
     preferences    => $prefs,
+    good_mornings  => $good_mornings,
   };
 }
 
@@ -995,14 +997,21 @@ sub task_for_shortcut ($self, $shortcut) {
 }
 
 sub start ($self) {
-  my $timer = IO::Async::Timer::Periodic->new(
+  my $nag_timer = IO::Async::Timer::Periodic->new(
     interval => 300,
     on_tick  => sub ($timer, @arg) { $self->nag($timer); },
   );
 
-  $self->hub->loop->add($timer);
+  my $good_morning_timer = IO::Async::Timer::Periodic->new(
+    interval => 15 * 60,
+    on_tick  => sub ($timer, @arg) { $self->check_for_good_mornings($timer); },
+  );
 
-  $timer->start;
+  $self->hub->loop->add($nag_timer);
+  $self->hub->loop->add($good_morning_timer);
+
+  $nag_timer->start;
+  $good_morning_timer->start;
 }
 
 after register_with_hub => sub ($self, @) {
@@ -4737,6 +4746,53 @@ sub _summarize_item_list ($self, $items, $arg) {
     events     => [ grep {; $_->{type} eq 'Event' } @$items ],
     others     => [ grep {; $_->{type} !~ /\A Project | Package | Folder | Task | Event \z/x } @$items ],
   };
+}
+
+# for now, { username => { last_informed_at => timestamp } }
+has good_mornings => (
+  is      => 'ro',
+  isa     => 'HashRef',
+  traits  => [ 'Hash' ],
+  lazy    => 1,
+  default => sub { {} },
+  handles => {
+    good_morning_for     => 'get',
+    set_good_morning_for => 'set',
+  },
+);
+
+# Eventually this will be more full-purpose, but for now we'll just check for
+# the triage officer.
+sub check_for_good_mornings ($self, $timer) {
+  # Inform the triage officer of their noble duty
+  if (my $rototron = $self->_rototron) {
+    my $roto_reactor = $self->hub->reactor_named('rototron');
+
+    for my $officer ($roto_reactor->current_triage_officers) {
+      next unless my $channel = $self->hub->channel_named($self->triage_channel_name);
+
+      my $username = $officer->username;
+      my $gm = $self->good_morning_for($username);
+      my $last_ping = $gm->{last_informed_at};
+
+      # 12h is daft, but oh well.
+      if (!$last_ping || $last_ping < (60 * 60 * 12)) {
+        my $text = join(q{ },
+          "Good morning, $username!",
+          "I just wanted to remind you that you're on triage duty today.",
+          "Good luck! $TRIAGE_EMOJI",
+        );
+
+        $Logger->log([ "Notifying %s of their triage duty", $username ]);
+        $channel->send_message_to_user($officer, $text);
+
+        $gm->{last_informed_at} = time;
+        $self->set_good_morning_for($username, $gm);
+      }
+    }
+  }
+
+  $self->save_state;
 }
 
 1;
