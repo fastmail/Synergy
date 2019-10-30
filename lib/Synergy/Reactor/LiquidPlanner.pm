@@ -1012,6 +1012,8 @@ sub start ($self) {
 
   $nag_timer->start;
   $good_morning_timer->start;
+
+  $self->check_for_good_mornings;
 }
 
 after register_with_hub => sub ($self, @) {
@@ -4771,7 +4773,7 @@ has last_morning_report_time => (
   isa => 'Int',
 );
 
-sub check_for_good_mornings ($self, $timer) {
+sub check_for_good_mornings ($self, $ = undef) {
   my $channel = $self->hub->channel_named($self->triage_channel_name);
   return unless $channel;
 

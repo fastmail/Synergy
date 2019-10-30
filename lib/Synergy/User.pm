@@ -12,6 +12,8 @@ use utf8;
 use DateTime;
 use namespace::autoclean;
 
+use Synergy::Logger '$Logger';
+
 has directory => (
   is => 'ro',
   weak_ref => 1,
@@ -163,8 +165,13 @@ sub is_working_now ($self) {
 sub has_started_work_since ($self, $since) {
   my $now = DateTime->now(time_zone => $self->time_zone);
 
+  unless ($self->is_working_now) {
+    $Logger->log([ 'HAS_STARTED_WORK: user %s is loafing', $self->username ]);
+    return
+  }
+
   state $key = [ undef, qw( mon tue wed thu fri sat sun ) ];
-  my $dow  = $now->day_of_week;
+  my $dow   = $now->day_of_week;
   my $hours = $self->business_hours->{ $key->[ $dow ] };
 
   # No hours for today?  Not working.
@@ -174,15 +181,23 @@ sub has_started_work_since ($self, $since) {
   my ($start_h, $start_m) = split /:/, $hours->{start}, 2;
 
   my $start_dt =  DateTime->new(
-    year => $now->year,
-    month => $now->month,
-    day => $now->day,
-    hour => $start_h,
-    minute => $start_m,
+    year      => $now->year,
+    month     => $now->month,
+    day       => $now->day,
+    hour      => $start_h,
+    minute    => $start_m,
     time_zone => $self->time_zone,
   );
 
-  return $start_dt->epoch >= $since && $self->is_working_now;
+  $Logger->log([
+    'HAS_STARTED_WORK: user %s is on duty and started at %s %s %s',
+    $self->username,
+    $start_dt->ymd,
+    $start_dt->hms,
+    $start_dt->time_zone,
+  ]);
+
+  return $start_dt->epoch >= $since;
 }
 
 sub is_on_triage ($self) {
