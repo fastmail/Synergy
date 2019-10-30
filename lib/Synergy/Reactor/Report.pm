@@ -57,6 +57,41 @@ after register_with_hub => sub ($self, @) {
   });
 };
 
+sub begin_report ($self, $report, $target) {
+  my $hub = $self->hub;
+
+  my @results;
+
+  for my $section ($report->{sections}->@*) {
+    my ($reactor_name, $method, $arg) = @$section;
+
+    my $reactor = $hub->reactor_named($reactor_name);
+
+    # I think this will need rejiggering later. -- rjbs, 2019-03-22
+    push @results, $reactor->$method(
+      $target,
+      ($arg ? $arg : ()),
+    );
+  }
+
+  Future->needs_all(@results)->then(sub (@hunks) {
+    return Future->done unless @hunks;
+
+    # This \u is bogus, we should allow canonical name to be in the report
+    # definition. -- rjbs, 2019-03-22
+    my $title = $report->{title};
+    my $text  = qq{$title for } . $target->username . q{:};
+    my $slack = qq{*$text*};
+
+    while (my $hunk = shift @hunks) {
+      $text   .= "\n" . $hunk->[0];
+      $slack  .= "\n" . ($hunk->[1]{slack} // qq{`$hunk->[0]`});
+    }
+
+    return Future->done($text, { slack => $slack });
+  });
+}
+
 sub report ($self, $event) {
   my $report_name;
   my $who_name;
@@ -111,27 +146,13 @@ sub report ($self, $event) {
     },
   );
 
-  my $hub = $self->hub;
+  # This \u is bogus, we should allow canonical name to be in the report
+  # definition. -- rjbs, 2019-03-22
+  local $report->{title} = $report->{title} // "\u$report_name report";
 
-  my @results;
+  my ($text, $alt) = $self->begin_report($report, $target)->get;
 
-  for my $section ($report->{sections}->@*) {
-    my ($reactor_name, $method, $arg) = @$section;
-
-    my $reactor = $hub->reactor_named($reactor_name);
-
-    # I think this will need rejiggering later. -- rjbs, 2019-03-22
-    push @results, $reactor->$method(
-      $target,
-      ($arg ? $arg : ()),
-    );
-  }
-
-  # unwrap collapses futures, but only if given exactly one future, so we map
-  # -- rjbs, 2019-03-21
-  my @hunks = Future->needs_all(@results)->get;
-
-  unless (@hunks) {
+  unless (defined $text) {
     $event->private_reply(
       "Nothing to report.",
       {
@@ -145,17 +166,6 @@ sub report ($self, $event) {
     return $event->reply("I have nothing at all to report!");
   }
 
-  # This \u is bogus, we should allow canonical name to be in the report
-  # definition. -- rjbs, 2019-03-22
-  my $title = $report->{title} // "\u$report_name report";
-  my $text  = qq{$title for } . $target->username . q{:};
-  my $slack = qq{*$text*};
-
-  while (my $hunk = shift @hunks) {
-    $text   .= "\n" . $hunk->[0];
-    $slack  .= "\n" . ($hunk->[1]{slack} // qq{`$hunk->[0]`});
-  }
-
   $event->private_reply(
     "Report sent!",
     {
@@ -166,12 +176,7 @@ sub report ($self, $event) {
     },
   );
 
-  return $event->reply(
-    $text,
-    {
-      slack => $slack,
-    },
-  );
+  return $event->reply($text, $alt);
 }
 
 sub report_report ($self, $who, $arg = {}) {
