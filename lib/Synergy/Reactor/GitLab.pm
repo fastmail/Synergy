@@ -912,8 +912,6 @@ sub mr_report ($self, $who, $arg = {}) {
 
     return Future->done unless @filed || @assigned || @selfies;
 
-    my $string = q{};
-
     my $wipstr = sub ($mrs) {
       my $wip = grep {; $_->{title} =~ /^wip:/i } @$mrs;
       return $wip
@@ -921,26 +919,48 @@ sub mr_report ($self, $who, $arg = {}) {
         : '';
     };
 
+    my $link = sub ($author, $assignee) {
+      return sprintf '<%s/dashboard/merge_requests?scope=all&state=opened%s%s|GL>',
+        $self->url_base,
+        (defined $author   ? "&author_username=$author"     : ''),
+        (defined $assignee ? "&assignee_username=$assignee" : ''),
+    };
+
+    my @plain;
+    my @slack;
+
     if (@filed) {
-      $string .= sprintf "\N{LOWER LEFT CRAYON} Merge %s waiting on others: %i%s\n",
+      push @plain, sprintf "\N{LOWER LEFT CRAYON} Merge %s waiting on others: %i%s",
         PL_N('request', 0+@filed), 0+@filed, $wipstr->(\@filed);
+
+      my $url = $link->($who->username, undef);
+      push @slack, $plain[-1] =~ s/ / $url /r;
     }
 
     if (@assigned) {
       my $wip = grep {; $_->{title} =~ /^wip:/i } @filed;
-      $string .= sprintf "\N{LOWER LEFT CRAYON} Merge %s to review: %i%s\n",
+      push @plain, sprintf "\N{LOWER LEFT CRAYON} Merge %s to review: %i%s",
         PL_N('request', 0+@assigned), 0+@assigned, $wipstr->(\@assigned);
+
+      my $url = $link->(undef, $who->username);
+      push @slack, $plain[-1] =~ s/ / $url /r;
     }
 
     if (@selfies) {
       my $wip = grep {; $_->{title} =~ /^wip:/i } @filed;
-      $string .= sprintf "\N{LOWER LEFT CRAYON} Self-assigned merge %s: %i%s\n",
+      push @plain, sprintf "\N{LOWER LEFT CRAYON} Self-assigned merge %s: %i%s",
         PL_N('request', 0+@selfies), 0+@selfies, $wipstr->(\@selfies);
+
+      my $url = $link->($who->username, $who->username);
+      push @slack, $plain[-1] =~ s/ / $url /r;
     }
 
-    chomp $string;
-
-    return Future->done([ $string, { slack => $string } ]);
+    return Future->done([
+      (join qq{\n}, @plain),
+      {
+        slack => (join qq{\n}, @slack),
+      }
+    ]);
   });
 }
 
