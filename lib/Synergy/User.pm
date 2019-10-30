@@ -165,10 +165,7 @@ sub is_working_now ($self) {
 sub has_started_work_since ($self, $since) {
   my $now = DateTime->now(time_zone => $self->time_zone);
 
-  unless ($self->is_working_now) {
-    $Logger->log([ 'HAS_STARTED_WORK: user %s is loafing', $self->username ]);
-    return
-  }
+  return unless $self->is_working_now;
 
   state $key = [ undef, qw( mon tue wed thu fri sat sun ) ];
   my $dow   = $now->day_of_week;
@@ -188,14 +185,6 @@ sub has_started_work_since ($self, $since) {
     minute    => $start_m,
     time_zone => $self->time_zone,
   );
-
-  $Logger->log([
-    'HAS_STARTED_WORK: user %s is on duty and started at %s %s %s',
-    $self->username,
-    $start_dt->ymd,
-    $start_dt->hms,
-    $start_dt->time_zone,
-  ]);
 
   return $start_dt->epoch >= $since;
 }
