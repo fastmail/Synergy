@@ -57,7 +57,7 @@ after register_with_hub => sub ($self, @) {
   });
 };
 
-sub fixed_text_report ($self, $who, $arg) {
+sub fixed_text_report ($self, $who, $arg = {}) {
   return Future->done([
     $arg->{text},
     $arg->{alt},

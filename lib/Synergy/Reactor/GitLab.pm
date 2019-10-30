@@ -851,7 +851,7 @@ sub handle_commit ($self, $event) {
   })->retain;
 }
 
-sub mr_report ($self, $who) {
+sub mr_report ($self, $who, $arg = {}) {
   my @futures;
 
   my $user_id = $self->get_user_preference($who, 'user-id');

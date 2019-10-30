@@ -4247,7 +4247,7 @@ my %Phase_Pos = (
   'Landing'   => 6,
 );
 
-sub project_report ($self, $who) {
+sub project_report ($self, $who, $arg = {}) {
   return unless my $lp_id = $who->lp_id;
 
   my $lpc = $self->lp_client_for_user($who);
@@ -4299,7 +4299,7 @@ sub project_report ($self, $who) {
   return Future->done([ $text, { slack => $text } ]);
 }
 
-sub iteration_report ($self, $who) {
+sub iteration_report ($self, $who, $arg = {}) {
   return unless my $lp_id = $who->lp_id;
 
   my $lpc = $self->lp_client_for_user($who);
