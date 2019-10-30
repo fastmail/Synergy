@@ -4778,7 +4778,7 @@ sub check_for_good_mornings ($self, $timer) {
     my $last_ping = $gm->{last_informed_at};
 
     # 12h is daft, but oh well.
-    if (!$last_ping || $last_ping > (time - 60*60*12)) {
+    if (!$last_ping || $last_ping < (time - 60*60*12)) {
       my $report = $report_reactor->begin_report($morning, $user);
 
       my ($text, $alts) = $report->get;
