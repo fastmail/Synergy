@@ -101,8 +101,6 @@ sub report ($self, $event) {
     return $event->error_reply("Sorry, I don't know who $who_name is!");
   }
 
-  my $hub = $self->hub;
-
   $event->reply(
     "I'm generating that report now, it'll be just a moment",
     {
@@ -112,6 +110,8 @@ sub report ($self, $event) {
       }
     },
   );
+
+  my $hub = $self->hub;
 
   my @results;
 
@@ -129,7 +129,7 @@ sub report ($self, $event) {
 
   # unwrap collapses futures, but only if given exactly one future, so we map
   # -- rjbs, 2019-03-21
-  my @hunks = map {; Future->unwrap($_) } @results;
+  my @hunks = Future->needs_all(@results)->get;
 
   unless (@hunks) {
     $event->private_reply(
