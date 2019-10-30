@@ -4761,34 +4761,35 @@ has good_mornings => (
   },
 );
 
-# Eventually this will be more full-purpose, but for now we'll just check for
-# the triage officer.
 sub check_for_good_mornings ($self, $timer) {
-  # Inform the triage officer of their noble duty
-  if (my $rototron = $self->_rototron) {
-    my $roto_reactor = $self->hub->reactor_named('rototron');
+  my $channel = $self->hub->channel_named($self->triage_channel_name);
+  return unless $channel;
 
-    for my $officer ($roto_reactor->current_triage_officers) {
-      next unless my $channel = $self->hub->channel_named($self->triage_channel_name);
+  my $report_reactor = $self->hub->reactor_named('report');
 
-      my $username = $officer->username;
-      my $gm = $self->good_morning_for($username);
-      my $last_ping = $gm->{last_informed_at};
+  my $morning = $report_reactor->report_named('morning');
+  return unless $morning;
 
-      # 12h is daft, but oh well.
-      if (!$last_ping || $last_ping < (60 * 60 * 12)) {
-        my $text = join(q{ },
-          "Good morning, $username!",
-          "I just wanted to remind you that you're on triage duty today.",
-          "Good luck! $TRIAGE_EMOJI",
-        );
+  for my $user ($self->hub->user_directory->users) {
+    next unless $user->has_identity_for($channel->name);
 
-        $Logger->log([ "Notifying %s of their triage duty", $username ]);
-        $channel->send_message_to_user($officer, $text);
+    my $username = $user->username;
+    my $gm = $self->good_morning_for($username);
+    my $last_ping = $gm->{last_informed_at};
 
-        $gm->{last_informed_at} = time;
-        $self->set_good_morning_for($username, $gm);
-      }
+    # 12h is daft, but oh well.
+    if (!$last_ping || $last_ping < (60 * 60 * 12)) {
+      my $report = $report_reactor->begin_report($morning, $user);
+
+      my ($text, $alts) = $report->get;
+
+      next unless defined $text; # !? -- rjbs, 2019-10-29
+
+      $Logger->log([ "sending %s the morning report", $username ]);
+      $channel->send_message_to_user($user, $text, $alts);
+
+      $gm->{last_informed_at} = time;
+      $self->set_good_morning_for($username, $gm);
     }
   }
 
