@@ -1045,6 +1045,10 @@ after register_with_hub => sub ($self, @) {
       $self->_set_last_lp_timer_task_ids($last_timer_ids);
     }
 
+    if (my $gm = $state->{good_mornings}) {
+      $self->_set_good_mornings($gm);
+    }
+
     $self->save_state;
   }
 };
@@ -4755,6 +4759,7 @@ has good_mornings => (
   traits  => [ 'Hash' ],
   lazy    => 1,
   default => sub { {} },
+  writer  => '_set_good_mornings',
   handles => {
     good_morning_for     => 'get',
     set_good_morning_for => 'set',
