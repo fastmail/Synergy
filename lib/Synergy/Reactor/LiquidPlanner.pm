@@ -818,7 +818,7 @@ sub state ($self) {
     },
     last_timer_ids => $last_timer_ids,
     preferences    => $prefs,
-    good_mornings  => $good_mornings,
+    last_morning_report_time => $self->last_morning_report_time,
   };
 }
 
@@ -1045,8 +1045,8 @@ after register_with_hub => sub ($self, @) {
       $self->_set_last_lp_timer_task_ids($last_timer_ids);
     }
 
-    if (my $gm = $state->{good_mornings}) {
-      $self->_set_good_mornings($gm);
+    if (my $epoch = $state->{last_morning_report_time}) {
+      $self->last_morning_report_time($epoch);
     }
 
     $self->save_state;
@@ -4766,38 +4766,36 @@ has good_mornings => (
   },
 );
 
+has last_morning_report_time => (
+  is => 'rw',
+  isa => 'Int',
+);
+
 sub check_for_good_mornings ($self, $timer) {
   my $channel = $self->hub->channel_named($self->triage_channel_name);
   return unless $channel;
 
   my $report_reactor = $self->hub->reactor_named('report');
-
   my $morning = $report_reactor->report_named('morning');
   return unless $morning;
 
+  my $last = $self->last_morning_report_time // time - 15*60;
+
   for my $user ($self->hub->user_directory->users) {
     next unless $user->has_identity_for($channel->name);
+    next unless $user->has_started_work_since($last);
 
-    my $username = $user->username;
-    my $gm = $self->good_morning_for($username);
-    my $last_ping = $gm->{last_informed_at};
+    my $report = $report_reactor->begin_report($morning, $user);
 
-    # 12h is daft, but oh well.
-    if (!$last_ping || $last_ping < (time - 60*60*12)) {
-      my $report = $report_reactor->begin_report($morning, $user);
+    my ($text, $alts) = $report->get;
 
-      my ($text, $alts) = $report->get;
+    next unless defined $text; # !? -- rjbs, 2019-10-29
 
-      next unless defined $text; # !? -- rjbs, 2019-10-29
-
-      $Logger->log([ "sending %s the morning report", $username ]);
-      $channel->send_message_to_user($user, $text, $alts);
-
-      $gm->{last_informed_at} = time;
-      $self->set_good_morning_for($username, $gm);
-    }
+    $Logger->log([ "sending %s the morning report", $user->username ]);
+    $channel->send_message_to_user($user, $text, $alts);
   }
 
+  $self->last_morning_report_time(time);
   $self->save_state;
 }
 
