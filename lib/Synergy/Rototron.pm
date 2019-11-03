@@ -62,7 +62,6 @@ my @USING = qw(
   https://cyrusimap.org/ns/jmap/mail
   https://cyrusimap.org/ns/jmap/contacts
   https://cyrusimap.org/ns/jmap/calendars
-  https://cyrusimap.org/ns/jmap/jscalendar19
 );
 
 has availability_checker => (
