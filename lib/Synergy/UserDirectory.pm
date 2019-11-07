@@ -236,6 +236,7 @@ sub resolve_name ($self, $name, $resolving_user) {
   return unless $name;
 
   $name = lc $name;
+  $name =~ s/^@//;
 
   return $resolving_user
     if $name eq 'me' || $name eq 'my' || $name eq 'myself' || $name eq 'i';
