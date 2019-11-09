@@ -3975,6 +3975,43 @@ sub _handle_timesheet ($self, $event, $text) {
   }
 }
 
+sub timesheet_report ($self, $who, $arg = {}) {
+  my $lpc  = $self->f_lp_client_for_user($who);
+  my $goal = $self->get_user_preference($who, 'tracking-goal');
+  my $tada = qq{\N{PARTY POPPER}};
+
+  # XXX: doesn't work with LiquidPlanner::Client !?
+  my $iteration = $self->lp_client_for_master->current_iteration;
+
+  my $ts = $lpc->timesheet_entries({
+    member_ids  => [ $who->lp_id ],
+    start_date  => $iteration->{start},
+    end_date    => $iteration->{end},
+  })->else(sub (@err) {
+    $Logger->log([
+      "timesheet retrieval error for %s: %s",
+      $iteration,
+      "@err"
+    ]);
+
+    return Future->done;
+  });
+
+  my $today = DateTime->now(time_zone => $who->time_zone)->ymd;
+
+  return $ts->then(sub ($ts_events) {
+    my $total = sum0 map  {; $_->{work} } @$ts_events;
+    my $today = sum0 map  {; $_->{work} }
+                     grep {; $_->{work_performed_on} eq $today } @$ts_events;
+
+    my $str = sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.%s",
+      $total, PL_N('hour', $total),
+      $today, PL_N('hour', $total),
+      (defined $goal && $today > $goal ? " $tada" : "");
+    return Future->done([ $str, { slack => $str } ]);
+  });
+}
+
 sub _handle_projects ($self, $event, $text) {
   my @sorted = sort $self->project_shortcuts;
 
