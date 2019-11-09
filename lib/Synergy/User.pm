@@ -162,31 +162,34 @@ sub is_working_now ($self) {
   return $timer->is_business_hours;
 }
 
-sub has_started_work_since ($self, $since) {
-  my $now = DateTime->now(time_zone => $self->time_zone);
+state $DOW_NAME = [ undef, qw( mon tue wed thu fri sat sun ) ];
 
-  return unless $self->is_working_now;
-
-  state $key = [ undef, qw( mon tue wed thu fri sat sun ) ];
-  my $dow   = $now->day_of_week;
-  my $hours = $self->business_hours->{ $key->[ $dow ] };
+sub shift_for_day ($self, $when) {
+  my $dow   = $when->day_of_week;
+  my $hours = $self->business_hours->{ $DOW_NAME->[ $dow ] };
 
   # No hours for today?  Not working.
   return unless $hours && %$hours;
 
-  # Start nagging
-  my ($start_h, $start_m) = split /:/, $hours->{start}, 2;
+  if (my $roto = $self->directory->hub->reactor_named('rototron')) {
+    return unless $roto->user_is_available_on($self->username, $when);
+  }
 
-  my $start_dt =  DateTime->new(
-    year      => $now->year,
-    month     => $now->month,
-    day       => $now->day,
-    hour      => $start_h,
-    minute    => $start_m,
-    time_zone => $self->time_zone,
-  );
+  my %shift;
+  for my $key (qw( start end )) {
+    my ($h, $m) = split /:/, $hours->{$key}, 2;
 
-  return $start_dt->epoch >= $since;
+    $shift{key} = DateTime->new(
+      year      => $when->year,
+      month     => $when->month,
+      day       => $when->day,
+      hour      => $h,
+      minute    => $m,
+      time_zone => $self->time_zone,
+    )->epoch;
+  }
+
+  return \%shift;
 }
 
 sub is_on_triage ($self) {
