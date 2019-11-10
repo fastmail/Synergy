@@ -809,7 +809,6 @@ sub state ($self) {
   my $timers = $self->user_timers;
   my $last_timer_ids = $self->_last_lp_timer_task_ids;
   my $prefs = $self->user_preferences;
-  my $good_mornings = $self->good_mornings;
 
   return {
     user_timers => {
@@ -818,7 +817,6 @@ sub state ($self) {
     },
     last_timer_ids => $last_timer_ids,
     preferences    => $prefs,
-    last_morning_report_time => $self->last_morning_report_time,
   };
 }
 
@@ -1002,18 +1000,9 @@ sub start ($self) {
     on_tick  => sub ($timer, @arg) { $self->nag($timer); },
   );
 
-  my $good_morning_timer = IO::Async::Timer::Periodic->new(
-    interval => 15 * 60,
-    on_tick  => sub ($timer, @arg) { $self->check_for_good_mornings($timer); },
-  );
-
   $self->hub->loop->add($nag_timer);
-  $self->hub->loop->add($good_morning_timer);
 
   $nag_timer->start;
-  $good_morning_timer->start;
-
-  $self->check_for_good_mornings;
 }
 
 after register_with_hub => sub ($self, @) {
@@ -1045,10 +1034,6 @@ after register_with_hub => sub ($self, @) {
 
     if (my $last_timer_ids = $state->{last_timer_ids}) {
       $self->_set_last_lp_timer_task_ids($last_timer_ids);
-    }
-
-    if (my $epoch = $state->{last_morning_report_time}) {
-      $self->last_morning_report_time($epoch);
     }
 
     $self->save_state;
@@ -3990,6 +3975,43 @@ sub _handle_timesheet ($self, $event, $text) {
   }
 }
 
+sub timesheet_report ($self, $who, $arg = {}) {
+  my $lpc  = $self->f_lp_client_for_user($who);
+  my $goal = $self->get_user_preference($who, 'tracking-goal');
+  my $tada = qq{\N{PARTY POPPER}};
+
+  # XXX: doesn't work with LiquidPlanner::Client !?
+  my $iteration = $self->lp_client_for_master->current_iteration;
+
+  my $ts = $lpc->timesheet_entries({
+    member_ids  => [ $who->lp_id ],
+    start_date  => $iteration->{start},
+    end_date    => $iteration->{end},
+  })->else(sub (@err) {
+    $Logger->log([
+      "timesheet retrieval error for %s: %s",
+      $iteration,
+      "@err"
+    ]);
+
+    return Future->done;
+  });
+
+  my $today = DateTime->now(time_zone => $who->time_zone)->ymd;
+
+  return $ts->then(sub ($ts_events) {
+    my $total = sum0 map  {; $_->{work} } @$ts_events;
+    my $today = sum0 map  {; $_->{work} }
+                     grep {; $_->{work_performed_on} eq $today } @$ts_events;
+
+    my $str = sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.%s",
+      $total, PL_N('hour', $total),
+      $today, PL_N('hour', $total),
+      (defined $goal && $today > $goal ? " $tada" : "");
+    return Future->done([ $str, { slack => $str } ]);
+  });
+}
+
 sub _handle_projects ($self, $event, $text) {
   my @sorted = sort $self->project_shortcuts;
 
@@ -4752,53 +4774,6 @@ sub _summarize_item_list ($self, $items, $arg) {
     events     => [ grep {; $_->{type} eq 'Event' } @$items ],
     others     => [ grep {; $_->{type} !~ /\A Project | Package | Folder | Task | Event \z/x } @$items ],
   };
-}
-
-# for now, { username => { last_informed_at => timestamp } }
-has good_mornings => (
-  is      => 'ro',
-  isa     => 'HashRef',
-  traits  => [ 'Hash' ],
-  lazy    => 1,
-  default => sub { {} },
-  writer  => '_set_good_mornings',
-  handles => {
-    good_morning_for     => 'get',
-    set_good_morning_for => 'set',
-  },
-);
-
-has last_morning_report_time => (
-  is => 'rw',
-  isa => 'Int',
-);
-
-sub check_for_good_mornings ($self, $ = undef) {
-  my $channel = $self->hub->channel_named($self->triage_channel_name);
-  return unless $channel;
-
-  my $report_reactor = $self->hub->reactor_named('report');
-  my $morning = $report_reactor->report_named('morning');
-  return unless $morning;
-
-  my $last = $self->last_morning_report_time // time - 15*60;
-
-  for my $user ($self->hub->user_directory->users) {
-    next unless $user->has_identity_for($channel->name);
-    next unless $user->has_started_work_since($last);
-
-    my $report = $report_reactor->begin_report($morning, $user);
-
-    my ($text, $alts) = $report->get;
-
-    next unless defined $text; # !? -- rjbs, 2019-10-29
-
-    $Logger->log([ "sending %s the morning report", $user->username ]);
-    $channel->send_message_to_user($user, $text, $alts);
-  }
-
-  $self->last_morning_report_time(time);
-  $self->save_state;
 }
 
 1;
