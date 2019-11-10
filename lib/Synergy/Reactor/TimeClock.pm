@@ -16,6 +16,10 @@ use List::Util qw(max);
 
 use utf8;
 
+sub listener_specs {
+  return; # for now
+}
+
 has primary_channel_name => (
   is  => 'ro',
   isa => 'Str',
