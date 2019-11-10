@@ -5,7 +5,6 @@ package Synergy::Reactor::LiquidPlanner;
 use Moose;
 with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::HasPreferences',
-     'Synergy::Role::ProvidesUserStatus',
      ;
 
 use experimental qw(signatures lexical_subs);
