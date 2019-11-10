@@ -92,10 +92,12 @@ sub check_for_shift_changes ($self) {
 
   return unless grep {; defined } values %report;
 
+  my $now_dt = DateTime->from_epoch(epoch => $now);
+
   USER: for my $user ($self->hub->user_directory->users) {
     next unless $user->has_identity_for($channel->name);
 
-    next unless my $shift = $user->shift_for_day($now);
+    next unless my $shift = $user->shift_for_day($now_dt);
 
     for my $which (sort keys %if) {
       next unless $if{$which}->($shift->@{ qw(start end) });
