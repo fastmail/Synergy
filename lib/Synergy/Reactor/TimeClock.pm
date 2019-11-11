@@ -102,7 +102,7 @@ sub check_for_shift_changes ($self) {
     for my $which (sort keys %if) {
       next unless $if{$which}->($shift->@{ qw(start end) });
 
-      my $report = $report_reactor->begin_report($which, $user);
+      my $report = $report_reactor->begin_report($report{$which}, $user);
 
       my ($text, $alts) = $report->get;
 
