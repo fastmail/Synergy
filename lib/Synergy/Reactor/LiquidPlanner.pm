@@ -96,7 +96,7 @@ sub _link_base_uri ($self) {
 }
 
 sub auth_header_for ($self, $user) {
-  return unless my $token = $self->get_user_preference($user, 'api-token');
+  return undef unless my $token = $self->get_user_preference($user, 'api-token');
 
   if ($token =~ /-/) {
     return "Bearer $token";
