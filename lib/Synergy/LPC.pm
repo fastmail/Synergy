@@ -53,10 +53,11 @@ sub _http_failure ($self, $http_res, $desc = undef) {
   my $details = $req ? sprintf(' (%s %s)', $req->method, $req->uri) : q{};
 
   $self->log([
-    "error with %s%s: %s",
+    "error with %s%s: %s\n---\n%s",
     $desc // "HTTP operation",
     $details,
     $http_res->as_string,
+    $req ? $req->as_string : '(no request)',
   ]);
   return _failure;
 }
