@@ -1213,7 +1213,7 @@ sub get_project_shortcuts ($self) { $self->_get_treeitem_shortcuts('Project') }
 sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 
 sub lp_client_for_user ($self, $user) {
-  return unless my $auth = $self->auth_header_for_user($user);
+  return unless my $auth = $self->auth_header_for($user);
 
   Synergy::LPC->new({
     auth_token    => $self->auth_header_for($user),
@@ -1235,7 +1235,7 @@ sub lp_client_for_user ($self, $user) {
 }
 
 sub f_lp_client_for_user ($self, $user) {
-  return unless my $auth = $self->auth_header_for_user($user);
+  return unless my $auth = $self->auth_header_for($user);
 
   LiquidPlanner::Client->new({
     auth_token    => $self->auth_header_for($user),
