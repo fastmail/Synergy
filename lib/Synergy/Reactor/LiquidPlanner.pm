@@ -3980,6 +3980,15 @@ sub _handle_timesheet ($self, $event, $text) {
 }
 
 sub timesheet_report ($self, $who, $arg = {}) {
+  unless (defined $who->lp_id) {
+    return Future->done([
+      "No LiquidPlanner, so no timesheet report!",
+      {
+       slack => "No LiquidPlanner, so no timesheet report!",
+      }
+    ]);
+  }
+
   my $lpc  = $self->f_lp_client_for_user($who);
   my $goal = $self->get_user_preference($who, 'tracking-goal');
   my $tada = qq{\N{PARTY POPPER}};
