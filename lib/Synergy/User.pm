@@ -172,7 +172,7 @@ sub shift_for_day ($self, $when) {
   return unless $hours && %$hours;
 
   if (my $roto = $self->directory->hub->reactor_named('rototron')) {
-    return unless $roto->user_is_available_on($self->username, $when);
+    return unless $roto->rototron->user_is_available_on($self->username, $when);
   }
 
   my %shift;
