@@ -92,6 +92,8 @@ sub check_for_shift_changes ($self) {
 
   return unless grep {; defined } values %report;
 
+  $Logger->log("TimeClock: checking for shift changes");
+
   my $now_dt = DateTime->from_epoch(epoch => $now);
 
   USER: for my $user ($self->hub->user_directory->users) {
