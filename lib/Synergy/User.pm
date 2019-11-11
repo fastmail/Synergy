@@ -179,7 +179,7 @@ sub shift_for_day ($self, $when) {
   for my $key (qw( start end )) {
     my ($h, $m) = split /:/, $hours->{$key}, 2;
 
-    $shift{key} = DateTime->new(
+    $shift{$key} = DateTime->new(
       year      => $when->year,
       month     => $when->month,
       day       => $when->day,
