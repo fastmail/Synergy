@@ -164,7 +164,12 @@ sub is_working_now ($self) {
 
 state $DOW_NAME = [ undef, qw( mon tue wed thu fri sat sun ) ];
 
-sub shift_for_day ($self, $when) {
+sub shift_for_day ($self, $moment) {
+  my $when  = DateTime->from_epoch(
+    time_zone => $self->time_zone,
+    epoch     => $moment->epoch,
+  );
+
   my $dow   = $when->day_of_week;
   my $hours = $self->business_hours->{ $DOW_NAME->[ $dow ] };
 
