@@ -102,7 +102,22 @@ sub check_for_shift_changes ($self) {
     next unless my $shift = $user->shift_for_day($now_dt);
 
     for my $which (sort keys %if) {
-      next unless $if{$which}->($shift->@{ qw(start end) });
+      my $will_send = $if{$which}->($shift->@{ qw(start end) });
+
+      $Logger->log([
+        "TimeClock: DEBUG: %s",
+        {
+          last      => $last,
+          now       => $now,
+          which     => $which,
+          who       => $user->username,
+          will_send => $will_send,
+          $shift->%{ qw(start end) },
+        },
+      ]);
+
+
+      next unless $will_send;
 
       my $report = $report_reactor->begin_report($report{$which}, $user);
 
