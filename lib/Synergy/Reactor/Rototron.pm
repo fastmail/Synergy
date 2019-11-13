@@ -39,6 +39,14 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^(?:(\S+)\s+is\s+)?(un)?available\b/in },
     },
+    {
+      name      => 'manual_assignment',
+      method    => 'handle_manual_assignment',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        $e->was_targeted && $e->text =~ /^assign roto (\S+) to (\S+) /ni;
+      },
+    },
   );
 }
 
@@ -61,6 +69,77 @@ has rototron => (
 after register_with_hub => sub ($self, @) {
   $self->rototron; # crash early, crash often -- rjbs, 2019-01-31
 };
+
+sub _expand_date_range ($from, $to) {
+  $from = $from->clone; # Sigh. -- rjbs, 2019-11-13
+
+  my @dates;
+  until ($from > $to) {
+    push @dates, $from->clone;
+    $from->add(days => 1);
+  }
+
+  return @dates;
+}
+
+sub handle_manual_assignment ($self, $event) {
+  my ($username, $rotor_name, $from, $to);
+
+  my $ymd_re = qr{ [0-9]{4} - [0-9]{2} - [0-9]{2} }x;
+  if ($event->text =~ /^assign roto (\S+) to (\S+) on ($ymd_re)\z/) {
+    $rotor_name = $1;
+    $username   = $2;
+    $from       = parse_date_for_user($3, $event->from_user);
+    $to         = parse_date_for_user($3, $event->from_user);
+  } elsif ($event->text =~ /^assign roto (\S+) to (\S+) from ($ymd_re) to ($ymd_re)\z/) {
+    $rotor_name = $1;
+    $username   = $2;
+    $from       = parse_date_for_user($3, $event->from_user);
+    $to         = parse_date_for_user($4, $event->from_user);
+  } else {
+    return;
+  }
+
+  $event->mark_handled;
+
+  unless (grep {; $_->name eq $rotor_name } $self->rototron->rotors) {
+    return $event->error_reply("I don't know a rotor with that name.");
+  }
+
+  unless ($from && $to) {
+    return $event->error_reply(
+      "I had problems understanding the dates in your *assign roto* command.",
+    );
+  }
+
+  my @dates = _expand_date_range($from, $to);
+
+  unless (@dates) { return $event->error_reply("That range didn't make sense."); }
+  if (@dates > 28) { return $event->error_reply("That range is too large."); }
+
+  my $assign_to;
+  if ($username ne '*') {
+    my $target = $self->resolve_name($username, $event->from_user);
+
+    unless ($target) {
+      return $event->error_reply("I don't know who you wanted to assign the rotor to.");
+    }
+
+    $assign_to = $target->username;
+  }
+
+  $self->availability_checker->update_manual_assignments({
+    $rotor_name => { map {; $_->ymd => $assign_to } @dates },
+  });
+
+  $event->reply(
+    sprintf "I updated the assignments on that rotor for %s %s.",
+      NUMWORDS(0+@dates),
+      PL_N('day', 0+@dates),
+  );
+
+  $self->_replan_range($dates[0], $dates[-1]);
+}
 
 sub handle_set_availability ($self, $event) {
   $event->mark_handled;
@@ -96,11 +175,7 @@ sub handle_set_availability ($self, $event) {
   $from->truncate(to => 'day');
   $to->truncate(to => 'day');
 
-  my @dates;
-  until ($from > $to) {
-    push @dates, $from->clone;
-    $from->add(days => 1);
-  }
+  my @dates = _expand_date_range($from, $to);
 
   unless (@dates) { return $event->error_reply("That range didn't make sense."); }
   if (@dates > 28) { return $event->error_reply("That range is too large."); }

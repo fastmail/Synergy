@@ -231,7 +231,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
     for (my $day = $from_dt->clone; $day <= $to_dt; $day->add(days => 1)) {
       next if $rotor->excludes_dow($day->day_of_week);
 
-      my $user  = $rotor->user_for_day($day);
+      my $user  = $rotor->user_for_day($day, $rotor);
 
       # TODO: never change the assignee of the current week when we change
       # rotations, but... this can wait -- rjbs, 2019-01-30
@@ -344,6 +344,8 @@ package Synergy::Rototron::Rotor {
   use Moose;
   use experimental qw(lexical_subs signatures);
 
+  use Synergy::Logger '$Logger';
+
   my sub flag ($str) {
     join q{},
     map {; charnames::string_vianame("REGIONAL INDICATOR SYMBOL LETTER $_") }
@@ -427,7 +429,11 @@ package Synergy::Rototron::Rotor {
   has availability_checker => (
     is => 'ro',
     required => 1,
-    handles  => [ qw( user_is_available_on ) ],
+    handles  => [ qw(
+      manual_assignment_for
+      update_manual_assignments
+      user_is_available_on
+    ) ],
   );
 
   # Let's talk about the epoch here.  It's the first Monday before this program
@@ -440,8 +446,20 @@ package Synergy::Rototron::Rotor {
 
   my sub _week_of_date ($dt) { int( ($dt->epoch - $epoch) / (86400 * 7) ) }
 
-  sub user_for_day ($self, $day) {
+  sub user_for_day ($self, $day, $rotor) {
     my @staff = $self->_staff->@*;
+
+    if (my $username = $self->manual_assignment_for($rotor, $day)) {
+      my ($user) = grep {; $_->{username} eq $username } $self->_full_staff->@*;
+      return $user if $user;
+
+      $Logger->log([
+        "no user named %s, but that name is assigned for %s on %s",
+        $username,
+        $rotor->name,
+        $day->ymd,
+      ]);
+    }
 
     my $weekn = _week_of_date($day);
 
@@ -579,6 +597,61 @@ package Synergy::Rototron::AvailabilityChecker {
 
     %$cache = (cached_at => time, leave_days => \%leave_days);
     return \%leave_days;
+  }
+
+  sub manual_assignment_for ($self, $rotor, $day) {
+    my $ymd = $day->ymd;
+
+    my ($username) = $self->_dbh->selectrow_array(
+      q{SELECT username FROM manual_assignments WHERE rotor_name = ? AND date = ?},
+      undef,
+      $rotor->name,
+      $ymd,
+    );
+
+    return $username;
+  }
+
+  # update_manual_assignments({
+  #   rotor1 => {
+  #     ymd1 => user1,
+  #     ymd2 => user1,
+  #     ymd3 => undef,
+  #   },
+  #   ...
+  sub update_manual_assignments ($self, $plan) {
+    my $dbh = $self->_dbh;
+
+    $dbh->begin_work;
+
+    # We don't know the users or rotors here, so it better be valid.
+    # -- rjbs, 2019-11-13
+    for my $rotor (keys %$plan) {
+      for my $ymd (keys $plan->{$rotor}->%*) {
+        # validate ymd? -- rjbs, 2019-11-13
+        $dbh->do(
+          "DELETE FROM manual_assignments WHERE rotor_name = ? AND date = ?",
+          undef,
+          $rotor,
+          $ymd,
+        );
+
+        my $username = $plan->{$rotor}{$ymd};
+        if (defined $username) {
+          $dbh->do(
+            "INSERT INTO manual_assignments (rotor_name, date, username) VALUES (?,?,?)",
+            undef,
+            $rotor,
+            $ymd,
+            $username,
+          );
+        }
+      }
+    }
+
+    $dbh->commit;
+
+    return;
   }
 
   sub user_is_available_on ($self, $username, $dt) {
