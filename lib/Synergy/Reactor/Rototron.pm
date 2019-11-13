@@ -26,12 +26,45 @@ sub listener_specs {
       method    => 'handle_duty',
       exclusive => 1,
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^duty(?:\s|$)/i },
+
+      help_entries => [
+        {
+          title => 'duty',
+          text  => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg
+The *duty* command tells you who is on duty for various duty rotations.  For
+more information on duty rotations, see *help rotors*.
+EOH
+        },
+      ],
     },
     {
       name      => 'rotors',
       method    => 'handle_rotors',
       exclusive => 1,
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /\Arotors\z/i },
+
+      help_entries => [
+        {
+          title => 'rotors',
+          text  => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg
+The *rotors* command lists all duty rotations managed by Synergy.  A duty
+rotation represents a job that gets done by different people at different
+times, based on some schedule.  To see who's on duty for various rotations, now
+or at some future time, use the *duty* command.
+
+To tell Synergy that you're not available (or are available) on a given day,
+you can say either:
+
+• `USER` is `{available,unavailable}` on `YYYY-MM-DD`
+• `USER` is `{available,unavailable}` from `YYYY-MM-DD` to `YYYY-MM-DD`
+
+To manually assign someone to a duty rotation, you can say either:
+
+• assign rotor `ROTOR` to `USER` on `YYYY-MM-DD`
+• assign rotor `ROTOR` to `USER` from `YYYY-MM-DD` to `YYYY-MM-DD`
+EOH
+        }
+      ],
     },
     {
       name      => 'unavailable',
@@ -44,7 +77,7 @@ sub listener_specs {
       method    => 'handle_manual_assignment',
       exclusive => 1,
       predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /^assign roto (\S+) to (\S+) /ni;
+        $e->was_targeted && $e->text =~ /^assign rotor (\S+) to (\S+) /ni;
       },
     },
   );
@@ -86,12 +119,12 @@ sub handle_manual_assignment ($self, $event) {
   my ($username, $rotor_name, $from, $to);
 
   my $ymd_re = qr{ [0-9]{4} - [0-9]{2} - [0-9]{2} }x;
-  if ($event->text =~ /^assign roto (\S+) to (\S+) on ($ymd_re)\z/) {
+  if ($event->text =~ /^assign rotor (\S+) to (\S+) on ($ymd_re)\z/) {
     $rotor_name = $1;
     $username   = $2;
     $from       = parse_date_for_user($3, $event->from_user);
     $to         = parse_date_for_user($3, $event->from_user);
-  } elsif ($event->text =~ /^assign roto (\S+) to (\S+) from ($ymd_re) to ($ymd_re)\z/) {
+  } elsif ($event->text =~ /^assign rotor (\S+) to (\S+) from ($ymd_re) to ($ymd_re)\z/) {
     $rotor_name = $1;
     $username   = $2;
     $from       = parse_date_for_user($3, $event->from_user);
@@ -108,7 +141,7 @@ sub handle_manual_assignment ($self, $event) {
 
   unless ($from && $to) {
     return $event->error_reply(
-      "I had problems understanding the dates in your *assign roto* command.",
+      "I had problems understanding the dates in your *assign rotor* command.",
     );
   }
 
