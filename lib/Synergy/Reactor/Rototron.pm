@@ -2,6 +2,8 @@ use v5.24.0;
 use warnings;
 package Synergy::Reactor::Rototron;
 
+use utf8;
+
 use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor::EasyListening';
@@ -24,6 +26,12 @@ sub listener_specs {
       method    => 'handle_duty',
       exclusive => 1,
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^duty(?:\s|$)/i },
+    },
+    {
+      name      => 'rotors',
+      method    => 'handle_rotors',
+      exclusive => 1,
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /\Arotors\z/i },
     },
     {
       name      => 'unavailable',
@@ -179,6 +187,21 @@ sub _user_from_duty ($self, $duty) {
   return unless $username;
 
   return $self->hub->user_directory->user_named($username);
+}
+
+sub handle_rotors ($self, $event) {
+  $event->mark_handled;
+
+  my @lines;
+  for my $rotor (sort {; fc $a->name cmp fc $b->name } $self->rototron->rotors) {
+    push @lines, sprintf '• %s — %s', $rotor->name, $rotor->description;
+  }
+
+  my $text = join qq{\n}, @lines;
+  $event->reply(
+    "Known duty rotations:\n$text",
+    { slack => "*Known duty rotations:*\n$text" }
+  );
 }
 
 sub handle_duty ($self, $event) {
