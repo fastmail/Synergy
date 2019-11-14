@@ -361,4 +361,24 @@ sub handle_duty ($self, $event) {
   $event->reply($reply);
 }
 
+sub start ($self) {
+  my $timer = IO::Async::Timer::Periodic->new(
+    interval => 15 * 60,
+    on_tick  => sub { $self->_plan_the_future; },
+  );
+
+  $self->hub->loop->add($timer);
+
+  $timer->start;
+}
+
+sub _plan_the_future ($self) {
+  my $start = DateTime->today;
+  my $days  = 60 + 6 - $start->day_of_week % 7;
+  my $end   = $start->clone->add(days => $days);
+  my @dates = _expand_date_range($start, $end);
+
+  $self->_replan_range($dates[0], $dates[-1]);
+}
+
 1;
