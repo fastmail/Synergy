@@ -2057,8 +2057,6 @@ sub _handle_tasks ($self, $event, $text) {
   return $event->reply("You don't have any open tasks right now.  Woah!")
     unless @task_page;
 
-  $Logger->log([ "WTF: <@lp_tasks> <@task_page>" ]);
-
   $event->reply(
     $self->_format_item_list(
       {
