@@ -38,6 +38,12 @@ EOH
       ],
     },
     {
+      name      => 'replan',
+      method    => 'handle_replan',
+      exclusive => 1,
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /\Areplan rotors\z/i },
+    },
+    {
       name      => 'rotors',
       method    => 'handle_rotors',
       exclusive => 1,
@@ -234,6 +240,13 @@ sub handle_set_availability ($self, $event) {
   );
 
   $self->_replan_range($dates[0], $dates[-1]);
+}
+
+sub handle_replan ($self, $event) {
+  return unless $event->text =~ /\Areplan rotors\z/i;
+  $event->mark_handled;
+  $self->_plan_the_future;
+  $self->reply("Okay, I've replanned upcoming duty rotations!");
 }
 
 sub _replan_range ($self, $from_dt, $to_dt) {
