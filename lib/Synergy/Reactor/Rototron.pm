@@ -94,7 +94,8 @@ has rototron => (
   handles => [ qw(availability_checker jmap_client) ],
   default => sub ($self, @) {
     return Synergy::Rototron->new({
-      config_path => $self->roto_config_path,
+      user_directory => $self->hub->user_directory,
+      config_path    => $self->roto_config_path,
     });
   },
 );

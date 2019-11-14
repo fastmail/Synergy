@@ -73,6 +73,7 @@ has availability_checker => (
     Synergy::Rototron::AvailabilityChecker->new({
       db_path => $self->config->{availability_db},
       calendars => $self->config->{availability_calendars},
+      user_directory => $self->user_directory,
 
       # XXX This is bonkers. -- rjbs, 2019-02-02
       jmap_client => Synergy::Rototron::JMAPClient->new({
@@ -81,6 +82,11 @@ has availability_checker => (
       }),
     });
   }
+);
+
+has user_directory => (
+  is => 'ro',
+  required => 1,
 );
 
 has jmap_client => (
@@ -496,6 +502,11 @@ package Synergy::Rototron::AvailabilityChecker {
 
       return $dbh;
     },
+  );
+
+  has user_directory => (
+    is => 'ro',
+    required => 1,
   );
 
   has jmap_client => (

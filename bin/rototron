@@ -24,6 +24,7 @@ my ($opt, $desc) = describe_options(
 
 my $rototron = Synergy::Rototron->new({
   config_path => $opt->config,
+  user_directory => undef, # This won't work for long! -- rjbs, 2019-11-14
 });
 
 # We want to populate out 90d, plus enough days to get us to a Friday.
