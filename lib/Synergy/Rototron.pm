@@ -668,6 +668,10 @@ package Synergy::Rototron::AvailabilityChecker {
   sub user_is_available_on ($self, $username, $dt) {
     my $ymd = $dt->ymd;
 
+    if (my $user = $self->user_directory->user_named($username)) {
+      return 0 unless $user->hours_for_dow($dt->day_of_week);
+    }
+
     my $leave = $self->_leave_days;
     return 0 if $leave->{$username}{$dt->ymd};
 

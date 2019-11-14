@@ -164,17 +164,20 @@ sub is_working_now ($self) {
 
 state $DOW_NAME = [ undef, qw( mon tue wed thu fri sat sun ) ];
 
+sub hours_for_dow ($self, $dow) {
+  my $hours = $self->business_hours->{ $DOW_NAME->[ $dow ] };
+
+  return undef unless $hours && %$hours;
+  return $hours;
+}
+
 sub shift_for_day ($self, $moment) {
   my $when  = DateTime->from_epoch(
     time_zone => $self->time_zone,
     epoch     => $moment->epoch,
   );
 
-  my $dow   = $when->day_of_week;
-  my $hours = $self->business_hours->{ $DOW_NAME->[ $dow ] };
-
-  # No hours for today?  Not working.
-  return unless $hours && %$hours;
+  return unless my $hours = $self->hours_for_dow($moment->day_of_week);
 
   if (my $roto = $self->directory->hub->reactor_named('rototron')) {
     return unless $roto->rototron->user_is_available_on($self->username, $when);
