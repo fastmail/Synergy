@@ -292,13 +292,12 @@ sub handle_oncall_mention ($self, $event) {
   my $where = $event->from_channel->describe_conversation($event);
   my $text = "$who_rang mentioned \@$gname in $where: " . $event->text;
 
-  my $alt = {
-    slack => sprintf("\N{AMBULANCE} *\@$gname mentioned by %s in %s*: %s",
-      $who_rang,
-      $where,
-      $event->text,
-    ),
-  };
+  my $up = "\N{WHITE UP POINTING BACKHAND INDEX}";
+  my $rich = sprintf("\N{AMBULANCE}: %s\n$up: *\@%s mentioned by %s in %s*",
+    $event->text, $gname, $who_rang, $where,
+  );
+
+  my $alt = { slack => $rich };
 
   $self->_current_oncall_names
     ->then(sub (@names) {
