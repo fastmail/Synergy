@@ -45,6 +45,17 @@ has team_name => (
   required => 1,
 );
 
+has oncall_channel_name => (
+  is => 'ro',
+  isa => 'Str',
+);
+
+has oncall_group_name => (
+  is => 'ro',
+  isa => 'Str',
+  predicate => 'has_oncall_group_name',
+);
+
 has _vo_to_slack_map => (
   is => 'ro',
   isa => 'HashRef',
@@ -113,6 +124,15 @@ EOH
       name      => 'oncall',
       method    => 'handle_oncall',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
+    },
+    {
+      name      => 'oncall mention',
+      method    => 'handle_oncall_mention',
+      predicate => sub ($self, $e) {
+        return unless $self->reactor->has_oncall_group_name;
+        my $gname = $self->reactor->oncall_group_name;
+        return $e->text =~ /\@$gname/i;
+      },
     },
   );
 }
@@ -261,6 +281,42 @@ sub handle_oncall ($self, $event) {
     })
     ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
     ->retain;
+}
+
+sub handle_oncall_mention ($self, $event) {
+  return unless $self->oncall_channel_name;
+  return unless my $channel = $self->hub->channel_named($self->oncall_channel_name);
+  my $gname = $self->oncall_group_name;
+
+  my $who_rang = $event->from_user ? $event->from_user->username : 'someone';
+  my $where = $event->from_channel->describe_conversation($event);
+  my $text = "$who_rang mentioned \@$gname in $where: " . $event->text;
+
+  my $alt = {
+    slack => sprintf("\N{AMBULANCE} *\@$gname mentioned by %s in %s*: %s",
+      $who_rang,
+      $where,
+      $event->text,
+    ),
+  };
+
+  $self->_current_oncall_names
+    ->then(sub (@names) {
+      my @oncallers = map {; $self->username_from_vo($_) // $_ } @names;
+      my @users = map {; $self->hub->user_directory->user_named($_) } @oncallers;
+
+      for my $officer (@users) {
+        next if $officer->username eq $who_rang;       # don't inform yourself
+        $channel->send_message_to_user($officer, $text, $alt);
+      }
+
+      return if grep {; $_ eq $who_rang } @oncallers;  # don't inform yourself
+
+      my $officers = join(q{, }, @oncallers);
+      $event->ephemeral_reply(
+        "I've informed oncall ($officers); someone should be with you soon!"
+      );
+    })->retain;
 }
 
 sub handle_maint_start ($self, $event) {
