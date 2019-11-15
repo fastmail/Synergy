@@ -292,7 +292,7 @@ sub handle_oncall_mention ($self, $event) {
   my $where = $event->from_channel->describe_conversation($event);
   my $text = "$who_rang mentioned \@$gname in $where: " . $event->text;
 
-  my $up = "\N{WHITE UP POINTING BACKHAND INDEX}";
+  my $up = "\N{WHITE UP POINTING INDEX}";
   my $rich = sprintf("\N{AMBULANCE}: %s\n$up: *\@%s mentioned by %s in %s*",
     $event->text, $gname, $who_rang, $where,
   );
@@ -300,21 +300,31 @@ sub handle_oncall_mention ($self, $event) {
   my $alt = { slack => $rich };
 
   $self->_current_oncall_names
-    ->then(sub (@names) {
-      my @oncallers = map {; $self->username_from_vo($_) // $_ } @names;
-      my @users = map {; $self->hub->user_directory->user_named($_) } @oncallers;
+    ->then(sub (@vo_names) {
+      my @oncall_names = map {; $self->username_from_vo($_) // $_ } @vo_names;
+      my @users = map {; $self->hub->user_directory->user_named($_) } @oncall_names;
 
       for my $officer (@users) {
         next if $officer->username eq $who_rang;       # don't inform yourself
         $channel->send_message_to_user($officer, $text, $alt);
       }
 
-      return if grep {; $_ eq $who_rang } @oncallers;  # don't inform yourself
+      my $officers = join(q{, }, @oncall_names);
+      my @slack_ids = map {; '<@' . $_->identity_for($channel->name) . '>' }
+                      grep {; $_->username ne $who_rang }
+                      @users;
 
-      my $officers = join(q{, }, @oncallers);
-      $event->ephemeral_reply(
-        "I've informed oncall ($officers); someone should be with you soon!"
+      # if only one person oncall, and they are the person mentioning @oncall,
+      # don't mention anything.
+      return unless @slack_ids;
+
+      $event->reply(
+        "I've informed oncall ($officers); someone should be with you soon!",
+        {
+          slack => join(q{ }, @slack_ids) . ", $up here's that message I told you about",
+        }
       );
+
     })->retain;
 }
 
