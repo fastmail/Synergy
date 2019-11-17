@@ -61,8 +61,47 @@ after register_with_hub => sub ($self, @) {
   }
 };
 
+has timeclock_dbfile => (
+  is => 'ro',
+  isa => 'Str',
+  default => "timeclock.sqlite",
+);
+
+has _timeclock_dbh => (
+  is  => 'ro',
+  lazy     => 1,
+  init_arg => undef,
+  default  => sub ($self, @) {
+    my $dbf = $self->timeclock_dbfile;
+
+    my $dbh = DBI->connect(
+      "dbi:SQLite:dbname=$dbf",
+      undef,
+      undef,
+      { RaiseError => 1 },
+    );
+    die $DBI::errstr unless $dbh;
+
+    $dbh->do(q{
+      CREATE TABLE IF NOT EXISTS reports (
+        id INTEGER PRIMARY KEY,
+        from_user TEXT NOT NULL,
+        reported_at INTEGER NOT NULL,
+        report TEXT NOT NULL
+      );
+    });
+
+    return $dbh;
+  },
+);
+
 sub handle_clock_out ($self, $event) {
   $event->mark_handled;
+
+  unless ($event->from_user) {
+    $event->error_reply("I don't know who you are, so you can't clock out.");
+    return;
+  }
 
   my ($comment) = $event->text =~ /^clock out:\s*(\S.+)\z/i;
 
@@ -70,6 +109,14 @@ sub handle_clock_out ($self, $event) {
     $event->error_reply("To clock out, it's: *clock out: `SUMMARY`*.");
     return;
   }
+
+  $self->_timeclock_dbh->do(
+    "INSERT INTO reports (from_user, reported_at, report) VALUES (?, ?, ?)",
+    undef,
+    $event->from_user->username,
+    $event->time,
+    $comment,
+  );
 
   if ($event->is_public) {
     $event->reply("See you later!");
