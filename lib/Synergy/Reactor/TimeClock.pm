@@ -116,7 +116,6 @@ sub check_for_shift_changes ($self) {
         },
       ]);
 
-
       next unless $will_send;
 
       my $report = $report_reactor->begin_report($report{$which}, $user);
