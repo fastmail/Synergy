@@ -17,7 +17,15 @@ use List::Util qw(max);
 use utf8;
 
 sub listener_specs {
-  return; # for now
+  return {
+    name      => 'clock_out',
+    method    => 'handle_clock_out',
+    exclusive => 1,
+    predicate => sub ($self, $e) {
+      return unless $e->was_targeted;
+      return unless $e->text =~ /\Aclock out\b/;
+    },
+  };
 }
 
 has primary_channel_name => (
@@ -52,6 +60,25 @@ after register_with_hub => sub ($self, @) {
     }
   }
 };
+
+sub handle_clock_out ($self, $event) {
+  $event->mark_handled;
+
+  my ($comment) = $event->text =~ /^clock out:\s*(\S.+)\z/i;
+
+  unless ($comment) {
+    $event->error_reply("To clock out, it's: *clock out: `SUMMARY`*.");
+    return;
+  }
+
+  if ($event->is_public) {
+    $event->reply("See you later!");
+  } else {
+    $event->reply("See you later! Next time, consider clocking out in public!");
+  }
+
+  return;
+}
 
 has last_report_time => (
   is   => 'rw',
