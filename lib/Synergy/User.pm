@@ -177,7 +177,7 @@ sub shift_for_day ($self, $moment) {
     epoch     => $moment->epoch,
   );
 
-  return unless my $hours = $self->hours_for_dow($moment->day_of_week);
+  return unless my $hours = $self->hours_for_dow($when->day_of_week);
 
   if (my $roto = $self->directory->hub->reactor_named('rototron')) {
     return unless $roto->rototron->user_is_available_on($self->username, $when);
