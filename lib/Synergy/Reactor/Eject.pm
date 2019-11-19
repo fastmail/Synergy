@@ -20,8 +20,6 @@ sub listener_specs {
 
 sub handle_eject ($self, $event) {
   $event->mark_handled;
-  return $event->reply('only the master user can do that')
-    unless $event->from_user && $event->from_user->is_master;
 
   my $f = $event->reply('Good bye.');
   $f->on_done(sub {
