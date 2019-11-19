@@ -45,17 +45,6 @@ has team_name => (
   required => 1,
 );
 
-has oncall_channel_name => (
-  is => 'ro',
-  isa => 'Str',
-);
-
-has oncall_group_name => (
-  is => 'ro',
-  isa => 'Str',
-  predicate => 'has_oncall_group_name',
-);
-
 has _vo_to_slack_map => (
   is => 'ro',
   isa => 'HashRef',
@@ -124,15 +113,6 @@ EOH
       name      => 'oncall',
       method    => 'handle_oncall',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
-    },
-    {
-      name      => 'oncall mention',
-      method    => 'handle_oncall_mention',
-      predicate => sub ($self, $e) {
-        return unless $self->reactor->has_oncall_group_name;
-        my $gname = $self->reactor->oncall_group_name;
-        return $e->text =~ /\@$gname/i;
-      },
     },
   );
 }
@@ -281,51 +261,6 @@ sub handle_oncall ($self, $event) {
     })
     ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
     ->retain;
-}
-
-sub handle_oncall_mention ($self, $event) {
-  return unless $self->oncall_channel_name;
-  return unless my $channel = $self->hub->channel_named($self->oncall_channel_name);
-  my $gname = $self->oncall_group_name;
-
-  my $who_rang = $event->from_user ? $event->from_user->username : 'someone';
-  my $where = $event->from_channel->describe_conversation($event);
-  my $text = "$who_rang mentioned \@$gname in $where: " . $event->text;
-
-  my $up = "\N{WHITE UP POINTING INDEX}";
-  my $rich = sprintf("\N{AMBULANCE}: %s\n$up: *\@%s mentioned by %s in %s*",
-    $event->text, $gname, $who_rang, $where,
-  );
-
-  my $alt = { slack => $rich };
-
-  $self->_current_oncall_names
-    ->then(sub (@vo_names) {
-      my @oncall_names = map {; $self->username_from_vo($_) // $_ } @vo_names;
-      my @users = map {; $self->hub->user_directory->user_named($_) } @oncall_names;
-
-      for my $officer (@users) {
-        next if $officer->username eq $who_rang;       # don't inform yourself
-        $channel->send_message_to_user($officer, $text, $alt);
-      }
-
-      my $officers = join(q{, }, @oncall_names);
-      my @slack_ids = map {; '<@' . $_->identity_for($channel->name) . '>' }
-                      grep {; $_->username ne $who_rang }
-                      @users;
-
-      # if only one person oncall, and they are the person mentioning @oncall,
-      # don't mention anything.
-      return unless @slack_ids;
-
-      $event->reply(
-        "I've informed oncall ($officers); someone should be with you soon!",
-        {
-          slack => join(q{ }, @slack_ids) . ", $up here's that message I told you about",
-        }
-      );
-
-    })->retain;
 }
 
 sub handle_maint_start ($self, $event) {
