@@ -94,22 +94,19 @@ sub format_weather ($self, $location) {
   my $temp_c = kelvin_to_celsius($data->{main}{temp});
   my $temp_f = kelvin_to_fahrenheit($data->{main}{temp});
   my $humidity = $data->{main}{humidity};
-  my $wind_speed = ms_to_kmh($data->{wind}{speed});
+  my $wind_speed_kph = ms_to_kmh($data->{wind}{speed});
+  my $wind_speed_mph = $wind_speed_kph * 0.62;
   my $wind_dir = $bearing[$data->{wind}{deg} / 25.5];
   my $icon = $icons{$data->{weather}[0]{icon}}; # XXX day/night according to UTC time, adjust
   my $desc = $data->{weather}[0]{main};
 
-  sprintf "%s %s: 🌡 %d℃/%d℉ 💧 %d%% 💨 %dkm/h %s %s %s",
-    $place,
-    $flag,
-    $temp_c,
-    $temp_f,
-    $humidity,
-    $wind_speed,
-    $wind_dir,
-    $icon,
-    $desc,
-  ;
+  return join("\N{EM SPACE}",
+    sprintf("*%s %s:*", $flag, $place),
+    sprintf("🌡 %d℃/%d℉", $temp_c, $temp_f),
+    sprintf("💧 %d%%", $humidity),
+    sprintf("💨 %dkph/%dmph %s", $wind_speed_kph, $wind_speed_mph, $wind_dir),
+    sprintf("%s %s", $icon, $desc),
+  );
 }
 
 sub kelvin_to_celsius ($k) {
