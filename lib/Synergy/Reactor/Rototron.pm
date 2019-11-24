@@ -17,7 +17,7 @@ use Lingua::EN::Inflect qw(NUMWORDS PL_N);
 use List::Util qw(uniq);
 use Synergy::Logger '$Logger';
 use Synergy::Rototron;
-use Synergy::Util qw(parse_date_for_user);
+use Synergy::Util qw(expand_date_range parse_date_for_user);
 
 sub listener_specs {
   return (
@@ -110,18 +110,6 @@ after register_with_hub => sub ($self, @) {
   $self->rototron; # crash early, crash often -- rjbs, 2019-01-31
 };
 
-sub _expand_date_range ($from, $to) {
-  $from = $from->clone; # Sigh. -- rjbs, 2019-11-13
-
-  my @dates;
-  until ($from > $to) {
-    push @dates, $from->clone;
-    $from->add(days => 1);
-  }
-
-  return @dates;
-}
-
 sub handle_manual_assignment ($self, $event) {
   my ($username, $rotor_name, $from, $to);
 
@@ -152,7 +140,7 @@ sub handle_manual_assignment ($self, $event) {
     );
   }
 
-  my @dates = _expand_date_range($from, $to);
+  my @dates = expand_date_range($from, $to);
 
   unless (@dates) { return $event->error_reply("That range didn't make sense."); }
   if (@dates > 28) { return $event->error_reply("That range is too large."); }
@@ -215,7 +203,7 @@ sub handle_set_availability ($self, $event) {
   $from->truncate(to => 'day');
   $to->truncate(to => 'day');
 
-  my @dates = _expand_date_range($from, $to);
+  my @dates = expand_date_range($from, $to);
 
   unless (@dates) { return $event->error_reply("That range didn't make sense."); }
   if (@dates > 28) { return $event->error_reply("That range is too large."); }
@@ -390,7 +378,7 @@ sub _plan_the_future ($self) {
   my $start = DateTime->today;
   my $days  = 60 + 6 - $start->day_of_week % 7;
   my $end   = $start->clone->add(days => $days);
-  my @dates = _expand_date_range($start, $end);
+  my @dates = expand_date_range($start, $end);
 
   $self->_replan_range($dates[0], $dates[-1]);
 }

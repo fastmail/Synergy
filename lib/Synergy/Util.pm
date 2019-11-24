@@ -18,6 +18,8 @@ use Sub::Exporter -setup => [ qw(
   parse_time_hunk
   pick_one
 
+  expand_date_range
+
   parse_switches
   canonicalize_names
 
@@ -76,6 +78,18 @@ sub parse_time_hunk ($hunk, $user) {
 
 sub pick_one ($opts) {
   return $opts->[ rand @$opts ];
+}
+
+sub expand_date_range ($from, $to) {
+  $from = $from->clone; # Sigh. -- rjbs, 2019-11-13
+
+  my @dates;
+  until ($from > $to) {
+    push @dates, $from->clone;
+    $from->add(days => 1);
+  }
+
+  return @dates;
 }
 
 # Even a quoted string can't contain control characters.  Get real.
