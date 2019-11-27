@@ -204,9 +204,76 @@ sub parse_colonstrings ($text, $arg) {
   return \@hunks;
 }
 
+my %MORSE_FOR = do {
+  no warnings 'qw';
+  (
+    ' ' => '  ',
+    qw(
+      .     .-.-.-
+      ,     --..--
+      :     ---...
+      ?     ..--..
+      '     .----.
+      -     -....-
+      ;     -.-.-
+      /     -..-.
+      (     -.--.
+      )     -.--.-
+      "     .-..-.
+      _     ..--.-
+      =     -...-
+      +     .-.-.
+      !     -.-.--
+      @     .--.-.
+      A     .-
+      B     -...
+      C     -.-.
+      D     -..
+      E     .
+      F     ..-.
+      G     --.
+      H     ....
+      I     ..
+      J     .---
+      K     -.-
+      L     .-..
+      M     --
+      N     -.
+      O     ---
+      P     .--.
+      Q     --.-
+      R     .-.
+      S     ...
+      T     -
+      U     ..-
+      V     ...-
+      W     .--
+      X     -..-
+      Y     -.--
+      Z     --..
+      0     -----
+      1     .----
+      2     ..---
+      3     ...--
+      4     ....-
+      5     .....
+      6     -....
+      7     --...
+      8     ---..
+      9     ----.
+    )
+  );
+};
+
 my %Trans = (
   latin => sub ($s) { $s },
   rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
+  morse => sub ($s) {
+    $s =~ s/\s+/ /g;
+
+    my @cps = split //, $s;
+    join q{ }, map {; exists $MORSE_FOR{uc $_} ? $MORSE_FOR{ uc $_} : $_ } @cps;
+  },
   alexandrian => sub ($s) {
     my %letter = qw(
       a Σ     b h     c /     d ﻝ     e Ф
