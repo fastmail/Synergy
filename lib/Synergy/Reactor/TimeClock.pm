@@ -23,7 +23,7 @@ sub listener_specs {
     exclusive => 1,
     predicate => sub ($self, $e) {
       return unless $e->was_targeted;
-      return unless $e->text =~ /\Aclock out\b/;
+      return unless $e->text =~ /\Aclock (?:out|off)\b/;
     },
   };
 }
@@ -98,15 +98,15 @@ has _timeclock_dbh => (
 sub handle_clock_out ($self, $event) {
   $event->mark_handled;
 
-  unless ($event->from_user) {
-    $event->error_reply("I don't know who you are, so you can't clock out.");
+  my ($w2, $comment) = $event->text =~ /^clock (out|off):\s*(\S.+)\z/i;
+
+  unless ($comment) {
+    $event->error_reply("To clock \L$w2\E, it's: *clock \L$w2\E: `SUMMARY`*.");
     return;
   }
 
-  my ($comment) = $event->text =~ /^clock out:\s*(\S.+)\z/i;
-
-  unless ($comment) {
-    $event->error_reply("To clock out, it's: *clock out: `SUMMARY`*.");
+  unless ($event->from_user) {
+    $event->error_reply("I don't know who you are, so you can't clock \L$w2\E.");
     return;
   }
 
@@ -121,7 +121,7 @@ sub handle_clock_out ($self, $event) {
   if ($event->is_public) {
     $event->reply("See you later!");
   } else {
-    $event->reply("See you later! Next time, consider clocking out in public!");
+    $event->reply("See you later! Next time, consider clocking \L$w2\E in public!");
   }
 
   return;
