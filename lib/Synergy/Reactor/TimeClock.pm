@@ -33,6 +33,7 @@ sub listener_specs {
       {
         title => 'clock off',
         text  => 'see *clock out*',
+        unlisted => 1,
       },
     ],
   };

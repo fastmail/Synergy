@@ -36,7 +36,9 @@ sub handle_help ($self, $event) {
   my @help = map {; $_->help_entries->@* } $self->hub->reactors;
 
   unless ($rest) {
-    my $help_str = join q{, }, uniq sort map {; $_->{title} } @help;
+    my $help_str = join q{, }, uniq sort map  {; $_->{title} }
+                                         grep {; ! $_->{unlisted} } @help;
+
     $event->error_reply(qq{You can say "help TOPIC" for help on a topic.  }
                 . qq{Here are topics I know about: $help_str});
     return;
