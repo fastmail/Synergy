@@ -194,7 +194,7 @@ sub handle_set_availability ($self, $event) {
     $from = parse_date_for_user($d1, $event->from_user);
     $to   = parse_date_for_user($d2, $event->from_user);
   } else {
-    return $event->reply(
+    return $event->error_reply(
       "It's: `$adj on YYYY-MM-DD` "
       . "or `$adj from YYYY-MM-DD to YYYY-MM-DD`"
     );

@@ -3876,6 +3876,51 @@ sub _maybe_logged_today_text ($self, $user) {
     });
 }
 
+sub _timesheet_search ($self, $arg) {
+  # arg:
+  #   user: $user
+  #   start: $dt
+  #   end: $dt
+
+  my @dates = expand_date_range($arg->{start}, $arg->{end});
+
+  return Future->done({ ok => 0, description => "date range empty" })
+    unless @dates;
+
+  return Future->done({ ok => 0, description => "date range too large" })
+    if @dates > 14;
+
+  # XXX handle no user, user has no lp id, invalid start/end
+  my $lpc = $self->f_lp_client_for_user($arg->{user});
+
+  my $ts = $lpc->timesheet_entries({
+    member_ids  => [ $arg->{user}->lp_id ],
+    start_date  => $arg->{start}->ymd,
+    end_date    => $arg->{end}->ymd,
+  });
+
+  my $items = $ts->then(sub ($ts_entries) {
+    $lpc->get_items([ uniq map {; $_->{item_id} } @$ts_entries ]);
+  });
+
+  my $report = $items->then(sub ($item_for) {
+    my $ymd = do { ... };
+    my @entries = sort {; $a->{created_at} cmp $b->{created_at} }
+                  grep {; $_->{work_performed_on} eq $ymd } $ts->get->@*;
+
+    # XXX
+  });
+
+  $report->else(sub (@err) {
+    $Logger->log([ "timesheet retrieval error for %s", $arg ]);
+
+    Future->done({ ok => 0, description => "error with timesheet query" });
+  });
+
+  # XXX This thing is totally unfinished. -- rjbs, 2019-11-24
+  ...
+}
+
 sub _handle_timesheet ($self, $event, $text) {
   $text //= '';
   unless ($text eq 'today' or $text eq 'yesterday' or ! length $text) {
