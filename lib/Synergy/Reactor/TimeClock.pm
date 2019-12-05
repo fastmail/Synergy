@@ -25,6 +25,16 @@ sub listener_specs {
       return unless $e->was_targeted;
       return unless $e->text =~ /\Aclock (?:out|off)\b/;
     },
+    help_entries => [
+      {
+        title => 'clock out',
+        text  => "*clock out: `[REPORT]`*: declare you're done for the day and file a brief report about it",
+      },
+      {
+        title => 'clock off',
+        text  => 'see *clock out*',
+      },
+    ],
   };
 }
 
