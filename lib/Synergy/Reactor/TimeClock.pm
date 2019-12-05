@@ -17,26 +17,43 @@ use List::Util qw(max);
 use utf8;
 
 sub listener_specs {
-  return {
-    name      => 'clock_out',
-    method    => 'handle_clock_out',
-    exclusive => 1,
-    predicate => sub ($self, $e) {
-      return unless $e->was_targeted;
-      return unless $e->text =~ /\Aclock (?:out|off)\b/;
+  return (
+    {
+      name      => 'clock_out',
+      method    => 'handle_clock_out',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ /\Aclock (?:out|off)\b/;
+      },
+      help_entries => [
+        {
+          title => 'clock out',
+          text  => "*clock out: `[REPORT]`*: declare you're done for the day and file a brief report about it",
+        },
+        {
+          title => 'clock off',
+          text  => 'see *clock out*',
+          unlisted => 1,
+        },
+      ],
     },
-    help_entries => [
-      {
-        title => 'clock out',
-        text  => "*clock out: `[REPORT]`*: declare you're done for the day and file a brief report about it",
+    {
+      name      => 'recent_clockouts',
+      method    => 'handle_recent_clockouts',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return lc $e->text eq 'recent clockouts';
       },
-      {
-        title => 'clock off',
-        text  => 'see *clock out*',
-        unlisted => 1,
-      },
-    ],
-  };
+      help_entries => [
+        {
+          title => 'clockouts',
+          text  => '*recent clockouts*: give a summary of clockouts for the past 48h',
+        },
+      ],
+    },
+  );
 }
 
 has primary_channel_name => (
@@ -136,6 +153,40 @@ sub handle_clock_out ($self, $event) {
   }
 
   return;
+}
+
+sub handle_recent_clockouts ($self, $event) {
+  $event->mark_handled;
+
+  my $reports = $self->_timeclock_dbh->selectall_arrayref(
+    "SELECT from_user, reported_at, report FROM reports WHERE reported_at >= ?",
+    { Slice => {} },
+    time  -  86_400 * 2,
+  );
+
+  my $hub = $self->hub;
+  my $dir = $hub->user_directory;
+
+  my $text = q{};
+  for my $report (sort {; $a->{reported_at} <=> $b->{reported_at} } @$reports) {
+    my $user = $dir->user_named($report->{from_user});
+    my $when = $user
+      ? $user->format_timestamp($report->{reported_at})
+      : $hub->format_friendly_date( DateTime->from_epoch(epoch => $report->{reported_at}) );
+
+    $text .= sprintf "*%s, %s*: %s\n",
+      $report->{from_user},
+      $when,
+      Encode::decode('UTF-8', $report->{report});
+  }
+
+  chomp $text;
+
+  $event->reply(
+    $text
+      ? "*Recent Clockings Out*\n$text"
+      : "There have been no recent clockings out!"
+  );
 }
 
 has last_report_time => (
