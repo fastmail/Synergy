@@ -24,7 +24,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return $e->text =~ /\Aclock (?:out|off)\b/;
+        return $e->text =~ /\Aclock (?:out|off):/;
       },
       help_entries => [
         {
