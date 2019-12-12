@@ -3469,7 +3469,8 @@ sub _handle_timer_done ($self, $event, $text) {
       if ($_ eq 'next')  { $next  = 1; next }
       if ($_ eq 'chill') { $chill = 1; next }
 
-      return -1;
+      $event->mark_unhandled;
+      return;
     }
 
     return $event->error_reply("No, it's nonsense to chill /and/ start a new task!")
