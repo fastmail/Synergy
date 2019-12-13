@@ -189,6 +189,30 @@ sub handle_recent_clockouts ($self, $event) {
   );
 }
 
+sub has_clocked_out_report ($self, $who, $arg = {}) {
+  my $recent = $self->_timeclock_dbh->selectall_arrayref(
+    "SELECT reported_at, report FROM reports
+    WHERE reported_at >= ? AND from_user = ?
+    ORDER BY reported_at DESC",
+    { Slice => {} },
+    time  -  3600 * 12,
+    $who->username,
+  );
+
+  unless (@$recent) {
+    return Future->done([
+      "🕔❓ You haven't clocked out yet today.",
+      { slack => "🕔❓ You haven't clocked out yet today." },
+    ]);
+  }
+
+  my $time = $who->format_timestamp($recent->[0]{reported_at});
+  return Future->done([
+    "🕔✅ You already clocked out at $time!",
+    { slack => "🕔✅ You already clocked out at $time!" },
+  ]);
+}
+
 has last_report_time => (
   is   => 'rw',
   isa  => 'Int',
