@@ -1,5 +1,6 @@
 use v5.24.0;
 use warnings;
+use utf8;
 package Synergy::Reactor::HighFive;
 
 use Moose;
@@ -129,8 +130,9 @@ sub listener_specs {
     name      => 'highfive',
     method    => 'highfive',
     predicate => sub ($, $e) {
+      my $emoji = "\N{PERSON RAISING BOTH HANDS IN CELEBRATION}";
       $e->was_targeted &&
-      $e->text =~ /^highfive\s/i;
+      $e->text =~ /^(highfive|:raised_hands:|$emoji)\s/in;
     },
   };
 }
