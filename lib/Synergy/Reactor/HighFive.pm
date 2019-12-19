@@ -75,6 +75,8 @@ has _highfive_dbh => (
   },
 );
 
+my $HIGHFIVE_EMOJI = "\N{PERSON RAISING BOTH HANDS IN CELEBRATION}";
+
 sub http_app ($self, $env) {
   unless ($self->highfive_token) {
     $Logger->log("No highfive_token configured. Ignoring highfive");
@@ -130,9 +132,8 @@ sub listener_specs {
     name      => 'highfive',
     method    => 'highfive',
     predicate => sub ($, $e) {
-      my $emoji = "\N{PERSON RAISING BOTH HANDS IN CELEBRATION}";
       $e->was_targeted &&
-      $e->text =~ /^(highfive|:raised_hands:|$emoji)\s/in;
+      $e->text =~ /^(highfive|:raised_hands:(?::skin-tone-\d:)?|$HIGHFIVE_EMOJI)\s/in;
     },
   };
 }
@@ -185,9 +186,13 @@ sub do_highfive ($self, $event, %arg) {
   my $success = $arg{success} || sub {};
   my $failure = $arg{failure} || sub {};
 
+  # This skin tone won't work yet for real emoji, but this is ok for slack.
+  # -- michael, 2019-12-19
+  my $prefix = qr{(?:highfive|:raised_hands:(?::skin-tone-\d:)?|\Q$HIGHFIVE_EMOJI\E)}i;
+
   # "highfive to rjbs for eating pie" or "highfive for @rjbs for baking pie"
-  unless ($text =~ s/\Ahighfive\s*(to|for)\s+//i) {
-    $text =~ s/\Ahighfive\s*([^\s]+):?\s+/$1 /;
+  unless ($text =~ s/\A$prefix\s*(to|for)\s+//i) {
+    $text =~ s/\A$prefix\s*([^\s]+):?\s+/$1 /;
   }
 
   my ($target, $reason) = split /\s+/, $text, 2;
