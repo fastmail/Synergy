@@ -61,6 +61,11 @@ or at some future time, use the *duty* command.
 To tell Synergy that you're not available (or are available) on a given day,
 you can say either:
 
+• `{available,unavailable}` on `YYYY-MM-DD`
+• `{available,unavailable}` from `YYYY-MM-DD` to `YYYY-MM-DD`
+
+If you're an admin, you can set other user's availability:
+
 • `USER` is `{available,unavailable}` on `YYYY-MM-DD`
 • `USER` is `{available,unavailable}` from `YYYY-MM-DD` to `YYYY-MM-DD`
 
