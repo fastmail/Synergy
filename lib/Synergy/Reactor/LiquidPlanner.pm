@@ -326,6 +326,8 @@ EOH
   # SILLY NONSENSE
   good      =>  [ \&_handle_good   ],
   gruß      =>  [ \&_handle_good   ],
+  happy     =>  [ \&_handle_good   ],
+  merry     =>  [ \&_handle_good   ],
 
   # MISCELLANEOUS STUFF
   iteration =>  [ \&_handle_iteration,
@@ -537,6 +539,8 @@ sub dispatch_event ($self, $event) {
   $text =~ s/\Ashow’s\b/show's/i; # curly quote
   $text = "good day_au" if $text =~ /\A\s*g['’]day(?:,?\s+mate)?[1!.?]*\z/i;
   $text = "good day_de" if $text =~ /\Agruß gott[1!.]?\z/i;
+  $text = "good new_year"   if $text =~ /\Ahappy new year[1!.]?\z/i;
+  $text = "good christmas"  if $text =~ /\A(?:merry|happy) christmas[1!.]?\z/i;
   $text =~ s/\Ago{3,}d(?=\s)/good/;
   $text =~  s/^done, /done /;   # ugh
   $text =~ s/^> >/>>/;          # ugh again
@@ -2907,6 +2911,8 @@ sub _handle_good ($self, $event, $text) {
   my ($reply, $stop, $end_of_day);
 
   if    ($what eq 'morning')    { $reply  = "Good morning!"; }
+  elsif ($what eq 'christmas')  { $reply  = "Bless us, every one!"; }
+  elsif ($what eq 'new_year')   { $reply  = "\N{BOTTLE WITH POPPING CORK}"; }
   elsif ($what eq 'day_au')     { $reply  = "How ya goin'?"; }
   elsif ($what eq 'day_de')     { $reply  = "Doch, wenn du ihn siehst!"; }
   elsif ($what eq 'day')        { $reply  = "Long days and pleasant nights!"; }
