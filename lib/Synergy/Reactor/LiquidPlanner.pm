@@ -4628,11 +4628,56 @@ sub summarize_container ($iteration, $item, $summary, $member_id) {
   return;
 }
 
+sub _get_lp_account ($self, $token) {
+  # We do not use LiquidPlanner::Client here because that makes all the API
+  # calls to /workspaces/$id, and we need /account.
+  return $self->hub->http_get(
+    'https://app.liquidplanner.com/api/v1/account',
+    Authorization => "Bearer $token",
+    async => 1,
+  )->then(sub ($res){
+    my $rc = $res->code;
+
+    return Future->fail('That token seems invalid.')
+      if $rc == 401;
+
+    return Future->fail("Encountered error talking to LP: got HTTP $rc")
+      unless $res->is_success;
+
+    return Future->done($JSON->decode($res->decoded_content));
+  });
+}
+
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  validator => sub ($self, $value, @) { return $value },
   describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
   default   => undef,
+  validator => sub ($self, $value, $event) {
+    $value =~ s/^\s*|\s*$//g;
+
+    my ($actual_val, $ret_err);
+
+    $self->_get_lp_account($value)
+      ->then(sub ($account) {
+        $actual_val = $value;
+
+        my $id = $account->{id};
+        my $lp_name = $account->{user_name};
+        $event->reply(
+          "Great! I found the LP user named $lp_name, and will also set your LP user id to $id."
+        );
+        $event->from_user->set_lp_id($id);
+
+        return Future->done;
+      })
+      ->else(sub ($err) {
+        $ret_err = $err;
+        return Future->fail('bad auth');
+      })
+      ->block_until_ready;
+
+    return ($actual_val, $ret_err);
+  },
 );
 
 __PACKAGE__->add_preference(

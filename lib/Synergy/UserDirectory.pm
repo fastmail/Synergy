@@ -220,6 +220,17 @@ sub register_user ($self, $user) {
   return $ok;
 }
 
+sub set_lp_id_for_user ($self, $user, $lp_id) {
+  my $dbh = $self->hub->_state_dbh;
+  my $user_update_sth = $dbh->prepare(
+    q{UPDATE users SET lp_id = ? WHERE username = ?},
+  );
+
+  $Logger->log(['registering lp id %s for %s', $lp_id, $user->username]);
+  $user_update_sth->execute($lp_id, $user->username);
+  return;
+}
+
 sub reload_user ($self, $username, $data) {
   my $old = $self->_any_user_named($username);
 
