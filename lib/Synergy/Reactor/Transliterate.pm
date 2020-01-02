@@ -19,6 +19,14 @@ sub listener_specs {
       return 1 if $e->text =~ /\Atransliterate to (\S+):\s+/i;
       return;
     },
+    help_entries => [
+      {
+        title => 'transliterate',
+        text  => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg
+*transliterate to `SCRIPT`: `MESSAGE`*: rewrite a string with a different alphabet
+EOH
+      },
+    ]
   };
 }
 
