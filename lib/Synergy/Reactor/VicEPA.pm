@@ -30,6 +30,9 @@ sub listener_specs {
       return unless $e->was_targeted;
       return unless $e->text =~ /\Aairwatch\z/i;
     },
+    help_entries => [
+      { title => "airwatch", text => "airwatch: report on recent air quality" },
+    ],
   };
 }
 
