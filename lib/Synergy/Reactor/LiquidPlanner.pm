@@ -412,6 +412,10 @@ EOH
                   "*projects*: list all known project shortcuts",
                 ],
 
+  tags      =>  [ \&_handle_tags,
+                  "*tags [[STR] ... [STR]]*: list all known tags, or optionally tags that contain all STRs"
+                ],
+
   # TODO LISTS -- Can we remove this? -- rjbs, 2019-07-02
   todo      =>  [ \&_handle_todo,        ],
   todos     =>  [ \&_handle_todos,       ],
@@ -4113,6 +4117,49 @@ sub _handle_task_shortcuts ($self, $event, $text) {
   }
 
   $event->private_reply($reply, { slack => $slack });
+}
+
+sub _handle_tags ($self, $event, $text) {
+  my $user = $event->from_user;
+  my $lpc  = $self->lp_client_for_user($user);
+  my $tags_res = $lpc->tags;
+  unless ($tags_res->is_success) {
+    return $event->reply("Sorry I failed to fetch tags :(");
+  }
+
+  my @tags = $tags_res->payload_list;
+  my $total_count = @tags;
+
+  my @strs = split(/\s+/, $text // '');
+  for my $str (@strs) {
+    @tags = grep { /\Q$str\E/ } @tags;
+  }
+
+  @tags = sort @tags;
+
+  $event->reply("Responses to <todos> are sent privately.") if $event->is_public;
+
+  unless (@tags) {
+    if (@strs && $total_count) {
+      return $event->private_reply("No tags (out of $total_count) matched @strs, sorry");
+    } else {
+      return $event->private_reply("There are no tags, sorry");
+    }
+  }
+
+  if (@strs) {
+    my $count = @tags;
+
+    $event->private_reply("$count tags (out of $total_count) match all of @strs:");
+  } else {
+    $event->private_reply("Tags ($total_count):");
+  }
+
+  my $resp = "```\n\t";
+  $resp .= join("\n\t", @tags);
+  $resp .= "```";
+
+  $event->private_reply($resp);
 }
 
 sub _handle_todo ($self, $event, $text) {

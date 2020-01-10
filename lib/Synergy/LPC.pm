@@ -265,6 +265,9 @@ sub create_task ($self, $task) {
 }
 
 # get current iteration data
+sub tags ($self) {
+  return $self->http_get("/tags");
+}
 
 sub todo_items ($self) {
   return $self->http_get("/todo_items");
