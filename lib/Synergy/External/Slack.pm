@@ -237,6 +237,12 @@ sub send_message ($self, $channel, $text, $alts = {}) {
 }
 
 sub _send_plain_text ($self, $channel, $text) {
+  # chat.postMessage is quite happy to send to a USER address
+  # (U[...]), but we need to send to a DM address (D[...])
+  if ($channel =~ /^U/) {
+    $channel = $self->dm_channel_for_address($channel);
+  }
+
   my $f = $self->send_frame({
     type => 'message',
     channel => $channel,
