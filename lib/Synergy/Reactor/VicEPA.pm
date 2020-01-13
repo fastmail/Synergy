@@ -34,7 +34,6 @@ has longitude => (
   required => 1,
 );
 
-
 sub listener_specs {
   return {
     name      => 'airwatch',
@@ -48,6 +47,11 @@ sub listener_specs {
       { title => "airwatch", text => "airwatch: report on recent air quality" },
     ],
   };
+}
+
+sub distance ($p1, $p2) {
+  return sqrt abs( $p1->[0] - $p2->[0] )
+            + abs( $p1->[0] - $p2->[0] );
 }
 
 sub handle_airwatch ($self, $event) {
@@ -103,10 +107,16 @@ sub handle_airwatch ($self, $event) {
       }
 
       my $fcast   = JSON::MaybeXS->new->decode($forecast->get->decoded_content);
-      my @records = sort {;
-            $a->{regionName} cmp $b->{regionName}
-        ||  $a->{since}      cmp $b->{since}
-      } $fcast->{records}->@*;
+      my $here    = [ $self->latitude, $self->longitude ];
+      my @records =
+        sort {;
+              $a->{regionName} cmp $b->{regionName}
+          ||  $a->{since}      cmp $b->{since}
+        }
+        grep {;
+          ($_->{distance} = distance($here, $_->{geometry}{coordinates})) < 0.09
+        }
+        $fcast->{records}->@*;
 
       my $fcast_str = "I couldn't get a forecast for $where.";
 
@@ -122,8 +132,9 @@ sub handle_airwatch ($self, $event) {
                                                ->set_time_zone('Australia/Melbourne');
 
           my $AU = q{🇦🇺};
-          $fcast_str .= sprintf "\n%s, %s to %s $AU: %s",
+          $fcast_str .= sprintf "\n%s (distance = %s), %s to %s $AU: %s",
             $record->{regionName},
+            $record->{distance},
             $self->hub->format_friendly_date(
               $since,
               {
