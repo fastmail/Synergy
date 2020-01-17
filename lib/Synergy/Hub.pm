@@ -419,6 +419,10 @@ sub http_delete {
   return shift->http_request('DELETE' => @_);
 }
 
+sub http_patch {
+  return shift->http_request('PATCH' => @_);
+}
+
 sub http_request ($self, $method, $url, %args) {
   my $content = delete $args{Content};
   my $content_type = delete $args{Content_Type};

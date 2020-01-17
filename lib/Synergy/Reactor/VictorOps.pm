@@ -66,6 +66,21 @@ has _vo_to_slack_map => (
   },
 );
 
+has _slack_to_vo_map => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits => ['Hash'],
+  lazy => 1,
+  clearer => '_clear_slack_to_vo_map',
+  handles => {
+    vo_from_username => 'get',
+  },
+  default => sub ($self) {
+    my %map = reverse $self->_vo_to_slack_map->%*;
+    return \%map;
+  },
+);
+
 sub listener_specs {
   return (
     {
@@ -87,7 +102,7 @@ Conveniences for managing VictorOps "maintenance mode", aka "silence all the
 alerts because everything is on fire."
 
 • *maint*, *maint status*: show current maintenance state
-• *maint start*: enter maintenance mode. All alerts are now silenced!
+• *maint start*: enter maintenance mode. All alerts are now silenced! Also acks all unacked alerts, ain't no one got time for that.
 • *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
 EOH
       ],
@@ -305,7 +320,13 @@ sub handle_maint_start ($self, $event) {
       return $event->reply("I couldn't start maint. Sorry!");
     }
 
-    return $event->reply("🚨 VO now in maint! Good luck!");
+    $self->_ack_all($event->from_user->username);
+  })
+  ->then(sub ($nacked) {
+    my $ack_text = ' ';
+    $ack_text = " 🚑 $nacked alert".($nacked > 1 ? 's' : '')." acked!"
+      if $nacked;
+    return $event->reply("🚨 VO now in maint!$ack_text Good luck!");
   })
   ->else(sub (@fails) {
     return if $fails[0] eq 'not oncall';
@@ -375,9 +396,58 @@ sub handle_maint_end ($self, $event) {
   $f->retain;
 }
 
+sub _ack_all ($self, $username) {
+  my $f = $self->hub->http_get(
+    $self->_vo_api_endpoint('/incidents'),
+    $self->_vo_api_headers,
+    async => 1,
+  )
+  ->then(sub ($res) {
+    unless ($res->is_success) {
+      $Logger->log("VO: get incidents failed: ".$res->as_string);
+      return Future->fail('get incidents');
+    }
+
+    my $data = decode_json($res->content);
+    my @unacked =
+      map { $_->{currentPhase} eq 'UNACKED' ? $_->{incidentNumber} : () }
+      $data->{incidents}->@*;
+
+    return Future->done(0) unless @unacked;
+
+    $Logger->log("VO: acking incidents: @unacked");
+
+    $self->hub->http_patch(
+      $self->_vo_api_endpoint('/incidents/ack'),
+      $self->_vo_api_headers,
+      async => 1,
+      Content_Type => 'application/json',
+      Content => encode_json({
+        userName => $self->vo_from_username($username),
+        incidentNames => \@unacked,
+      }),
+    );
+  })->then(sub ($res) {
+    return Future->done($res) unless ref $res;
+
+    unless ($res->is_success) {
+      $Logger->log("VO: ack incidents failed: ".$res->as_string);
+      return Future->fail('ack incidents');
+    }
+
+    my $data = decode_json($res->content);
+    my $nacked = $data->{results}->@*;
+
+    return Future->done($nacked);
+  });
+}
+
 __PACKAGE__->add_preference(
   name      => 'username',
-  after_set => sub ($self, $username, $val) { $self->_clear_vo_to_slack_map },
+  after_set => sub ($self, $username, $val) {
+    $self->_clear_vo_to_slack_map,
+    $self->_clear_slack_to_vo_map,
+  },
   validator => sub ($self, $value, @) {
     return (undef, 'username cannot contain spaces') if $value =~ /\s/;
 
