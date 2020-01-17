@@ -356,12 +356,28 @@ sub _api_auth_header ($self) {
 # something like slack_call($method, {})->on_done(sub { do_something }).
 sub api_call ($self, $method, $arg = {}, %extra) {
   my $url = $self->_api_url($method);
+
+  return $self->_form_encoded_api_call($url, $arg, %extra)
+    if delete $arg->{form_encoded};
+
   my $json = encode_json($arg);
 
   return Future->wrap($self->hub->http_client->POST(
     URI->new($url),
     $json,
     content_type => 'application/json; charset=utf-8',
+    headers => [
+      $self->_api_auth_header,
+    ],
+  ));
+}
+
+# I mean honestly, slack.
+sub _form_encoded_api_call ($self, $url, $arg, %extra) {
+  return Future->wrap($self->hub->http_client->POST(
+    URI->new($url),
+    [ %$arg ],
+    # content_type => 'application/json; charset=utf-8',
     headers => [
       $self->_api_auth_header,
     ],
@@ -483,6 +499,7 @@ sub load_channels ($self) {
 sub load_group_conversations ($self) {
   $self->api_call('conversations.list', {
     types => 'mpim',
+    form_encoded => 1,
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
 
