@@ -281,6 +281,8 @@ sub handle_oncall ($self, $event) {
 sub handle_maint_start ($self, $event) {
   $event->mark_handled;
 
+  my $ALREADY_IN_MAINT = -42;
+
   my $force = $event->text =~ m{/force\s*$};
   my $f;
 
@@ -312,7 +314,8 @@ sub handle_maint_start ($self, $event) {
   })
   ->then(sub ($res) {
     if ($res->code == 409) {
-      return $event->reply("VO already in maint!");
+      $event->reply("VO already in maint!");
+      return Future->done($ALREADY_IN_MAINT);
     }
 
     unless ($res->is_success) {
@@ -323,6 +326,8 @@ sub handle_maint_start ($self, $event) {
     $self->_ack_all($event->from_user->username);
   })
   ->then(sub ($nacked) {
+    return Future->done if $nacked == $ALREADY_IN_MAINT;
+
     my $ack_text = ' ';
     $ack_text = " 🚑 $nacked alert".($nacked > 1 ? 's' : '')." acked!"
       if $nacked;
