@@ -498,7 +498,7 @@ sub load_channels ($self) {
 
 sub load_group_conversations ($self) {
   $self->api_call('conversations.list', {
-    types => 'mpim',
+    types => 'mpim,private_channel',
     form_encoded => 1,
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
