@@ -128,20 +128,13 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
 }
 
 sub send_message ($self, $target, $text, $alts) {
-  my $from;
+  my $from = $self->from;
 
-  unless ($from) {
-    $from = $self->from;
-    COUNTRY: for my $code (
-      sort { length $b <=> length $a } keys $self->numbers->%*
-    ) {
-      if (0 == index $target, $code) {
-        $from = $self->numbers->{$code};
-        last;
-      }
+  for my $code (sort { length $b <=> length $a } keys $self->numbers->%*) {
+    if ($target =~ /\A\+?\Q$code/) {
+      $from = $self->numbers->{$code};
+      last;
     }
-
-    $from = $self->numbers->{1};
   }
 
   my $sid = $self->sid;
