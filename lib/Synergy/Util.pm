@@ -118,7 +118,8 @@ sub parse_switches ($string) {
     } elsif ($string =~ s{ \A / (\s* | $) }{}x) {
       return (undef, "bogus input: / with no command!");
     } elsif ($string =~ s{ \A $qstring (\s* | $)}{}x) {
-      push @tokens, [ lit => $1 =~ s/\\(["“”])/$1/gr ];
+      my $match = $1;
+      push @tokens, [ lit => $match =~ s/\\(["“”])/$1/gr ];
       next;
     } elsif ($string =~ s{ \A (\S+) (\s* | $) }{}x) {
       my $token = $1;
