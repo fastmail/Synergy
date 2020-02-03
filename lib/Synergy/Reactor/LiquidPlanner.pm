@@ -615,6 +615,7 @@ sub provide_lp_link ($self, $event) {
     push @ids, $item->{id};
   }
 
+  @ids = uniq @ids;
   return unless @ids;
 
   my @gets = map {; $lpc->get_item($_)->else(sub { Future->fail("LP$_") }) } @ids;
