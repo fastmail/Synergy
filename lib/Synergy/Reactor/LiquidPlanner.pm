@@ -44,6 +44,16 @@ my $LINESEP = qr{(
   \n
 )}nxs;
 
+my %Phase_Pos = (
+  'Desired'   => 0,
+  'Planning'  => 1,
+  'Waiting'   => 2,
+  'In Flight' => 3,
+  'Long Haul' => 4,
+  'Circling'  => 5,
+  'Landing'   => 6,
+);
+
 my sub _split_lines ($input, $n = -1) {
   my @lines = split /$LINESEP/, $input, $n;
   s/\\---/---/ for @lines;
@@ -4081,7 +4091,7 @@ sub timesheet_report ($self, $who, $arg = {}) {
 }
 
 sub _handle_projects ($self, $event, $text) {
-  my @sorted = sort $self->project_shortcuts;
+  my @shortcuts = $self->project_shortcuts;
 
   $event->reply("Responses to <projects> are sent privately.")
     if $event->is_public;
@@ -4089,12 +4099,25 @@ sub _handle_projects ($self, $event, $text) {
   my $reply = "Known projects:\n";
   my $slack = "Known projects:\n";
 
-  for my $project (@sorted) {
-    my ($item, $error) = $self->project_for_shortcut($project);
-    next unless $item; # !?!? -- rjbs, 2018-06-30
+  my @projects = map {;
+    my ($item, $error) = $self->project_for_shortcut($_);
+    $item ? $item : ();
+  } @shortcuts;
 
-    $reply .= sprintf "\n%s (%s)", $project, $self->item_uri($item->{id});
-    $slack .= sprintf "\n%s", $self->_slack_item_link_with_name($item);
+  @projects =
+    map  {; $_->[2] }
+    sort {; $a->[0] <=> $b->[0]
+        || ($Phase_Pos{ $a->[1] } // 99) <=> ($Phase_Pos{ $b->[1] } // 99) }
+    map  {; [
+      ($_->{parent_id} == $self->project_portfolio_id ? 1 : 0),
+      $_->{custom_field_values}{'Project Phase'},
+      $_
+    ] }
+    @projects;
+
+  for my $project (@projects) {
+    $reply .= sprintf "\n%s (%s)", $project, $self->item_uri($project->{id});
+    $slack .= sprintf "\n%s", $self->_slack_item_link_with_name($project);
   }
 
   $event->private_reply($reply, { slack => $slack });
@@ -4375,16 +4398,6 @@ sub container_report ($self, $who, $arg = {}) {
 
   return Future->done([ $text, { slack => $text } ]);
 }
-
-my %Phase_Pos = (
-  'Desired'   => 0,
-  'Planning'  => 1,
-  'Waiting'   => 2,
-  'In Flight' => 3,
-  'Long Haul' => 4,
-  'Circling'  => 5,
-  'Landing'   => 6,
-);
 
 sub project_report ($self, $who, $arg = {}) {
   return unless my $lp_id = $who->lp_id;
