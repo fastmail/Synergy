@@ -1764,6 +1764,27 @@ sub _handle_update_for_project ($self, $event, $project, $cmd_line) {
   );
 }
 
+sub _handle_update_for_package ($self, $event, $package, $cmd_line) {
+  my ($first, $rest) = split /\s+/, $cmd_line, 2;
+
+  unless ($first eq '/done') {
+    return $event->error_reply(
+      "Sorry, the only thing I can do with packages is close them"
+    );
+  }
+
+  my $name = $package->{name};
+  my $plan = { package => { is_done => \1 } };
+
+  my $user = $event->from_user;
+  my $lpc = $self->f_lp_client_for_user($user);
+
+  $lpc->http_request(PUT => "/packages/$package->{id}", JSON->new->encode($plan))
+    ->then(sub { $event->reply("Package closed: $name") })
+    ->else(sub { $event->reply("Hmm, something went wrong closing $name") })
+    ->retain;
+}
+
 sub _execute_item_update_plan ($self, $event, $item, $plan) {
   my $user = $event->from_user;
   my $arg  = {};
