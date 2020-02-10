@@ -416,7 +416,10 @@ sub dm_channel_for_address ($self, $slack_id) {
   return $channel_id if $self->is_known_dm_channel($slack_id);
 
   # look it up!
-  my $res = $self->api_call('im.open', { user => $slack_id })->get;
+  my $res = $self->api_call('conversations.open', {
+    users => $slack_id,
+  })->get;
+
   return unless $res->is_success;
 
   my $json = decode_json($res->decoded_content);
@@ -482,8 +485,10 @@ sub load_users ($self) {
 }
 
 sub load_channels ($self) {
-  $self->api_call('channels.list', {
-    exclude_archived => 1,
+  $self->api_call('conversations.list', {
+    exclude_archived => 'true',
+    types => 'public_channel',
+    form_encoded => 1,
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
     $self->_set_channels({
@@ -530,7 +535,11 @@ sub group_conversation_name ($self, $id) {
 
 
 sub load_dm_channels ($self) {
-  $self->api_call('im.list', {})->on_done(sub ($http_res) {
+  $self->api_call('conversations.list', {
+    exclude_archived => 'true',
+    types => 'im',
+    form_encoded => 1,
+  })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
 
     $self->_set_dm_channels({
