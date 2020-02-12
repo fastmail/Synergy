@@ -41,6 +41,7 @@ requires 'Plack::Middleware::Auth::Basic';
 requires 'Plack::Request';
 requires 'Prometheus::Tiny', '0.002';
 requires 'Sub::Exporter';
+requires 'Sub::Override';
 requires 'TOML';
 requires 'Test::More';
 requires 'Text::Template';
