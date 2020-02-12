@@ -1835,6 +1835,10 @@ sub task_plan_from_spec ($self, $event, $spec) {
     push $plan{usernames}->@*, $spec->{usernames}->@*;
   }
 
+  if ($leader =~ /\Afeature request:? /i) {
+    $plan{custom_field_values}{'Task Type'} = 'Feature Request';
+  }
+
   $plan{rest} = $rest;
   $plan{name} = $leader;
   $plan{user} = $event->from_user;
@@ -3032,6 +3036,10 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
       assignments => \@assignments,
       description => $my_arg->{description},
       ( $task_is_for_triage ?  (tags => [ { text => 'triage' } ]) : () ),
+
+      ($my_arg->{custom_field_values}
+        ? (custom_field_values => $my_arg->{custom_field_values})
+        : ()),
 
       %container,
     }
