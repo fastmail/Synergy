@@ -419,6 +419,12 @@ sub describe_event ($self, $event) {
   }
 }
 
+sub describe_event_concise ($self, $event) {
+  my $slack = $self->name;
+  my $desc = $self->describe_conversation($event);
+  return qq{$slack message in $desc};
+}
+
 sub describe_conversation ($self, $event) {
   my $who = $event->from_user ? $event->from_user->username
                               : $self->slack->users->{$event->from_address}{name};

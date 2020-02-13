@@ -80,6 +80,14 @@ sub description ($self) {
   $self->from_channel->describe_event($self);
 }
 
+sub short_description ($self) {
+  if ($self->from_channel->can('describe_event_concise')) {
+    return $self->from_channel->describe_event_concise($self);
+  }
+
+  $self->from_channel->describe_event($self);
+}
+
 my %known_types = map {; $_ => 1 } qw(message edit);
 sub BUILD ($self, @) {
   confess "unknown event type " . $self->type

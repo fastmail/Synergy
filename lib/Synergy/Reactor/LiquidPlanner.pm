@@ -1468,7 +1468,7 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
   if ($uri) {
     $plan->{links} //= [];
     push $plan->{links}->@*, {
-      description => 'creation message',
+      description => $event->short_description,
       url         => $uri,
     };
   }
