@@ -1465,6 +1465,14 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     }
   }
 
+  if ($uri) {
+    $plan->{links} //= [];
+    push $plan->{links}->@*, {
+      description => 'creation message',
+      url         => $uri,
+    };
+  }
+
   $plan->{description} = sprintf '%screated by %s in response to %s%s',
     ($rest ? "$rest\n\n" : ""),
     $self->hub->name,
@@ -3036,6 +3044,8 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
       assignments => \@assignments,
       description => $my_arg->{description},
       ( $task_is_for_triage ?  (tags => [ { text => 'triage' } ]) : () ),
+
+      ($my_arg->{links} ? (links => $my_arg->{links}) : ()),
 
       ($my_arg->{custom_field_values}
         ? (custom_field_values => $my_arg->{custom_field_values})
