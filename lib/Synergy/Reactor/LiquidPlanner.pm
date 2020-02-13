@@ -1473,11 +1473,10 @@ sub _check_plan_rest ($self, $event, $plan, $error) {
     };
   }
 
-  $plan->{description} = sprintf '%screated by %s in response to %s%s',
+  $plan->{description} = sprintf '%screated by %s in response to %s',
     ($rest ? "$rest\n\n" : ""),
     $self->hub->name,
-    $via,
-    $uri ? "\n\n$uri" : "";
+    $via;
 }
 
 sub _handle_subcmds ($self, $phase, $cmd_line, $plan) {
