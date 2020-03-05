@@ -125,6 +125,10 @@ has expansion_record_reaper => (
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+
     my $repo_state = $state->{repos} // {};
     $self->_set_shortcuts($repo_state);
   }
@@ -154,6 +158,7 @@ sub start ($self) {
 sub state ($self) {
   return {
     repos => $self->project_shortcuts,
+    preferences => $self->user_preferences,
   };
 }
 

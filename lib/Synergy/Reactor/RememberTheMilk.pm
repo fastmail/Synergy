@@ -295,8 +295,20 @@ __PACKAGE__->add_preference(
   default   => undef,
 );
 
+sub state ($self) {
+  my $prefs = $self->user_preferences;
+
+  return {
+    preferences => $prefs,
+  };
+}
+
 after register_with_hub => sub ($self, @) {
-  $self->fetch_state;   # load prefs
+  if (my $state = $self->fetch_state) {
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+  }
 };
 
 1;

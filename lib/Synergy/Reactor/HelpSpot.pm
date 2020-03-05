@@ -18,8 +18,18 @@ sub listener_specs {
   return;
 }
 
+sub state ($self) {
+  return {
+    preferences => $self->user_preferences,
+  };
+}
+
 after register_with_hub => sub ($self, @) {
-  $self->fetch_state;   # load prefs
+  if (my $state = $self->fetch_state) {
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+  }
 };
 
 has auth_token => (

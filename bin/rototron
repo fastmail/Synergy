@@ -12,7 +12,6 @@ use Getopt::Long::Descriptive;
 use JSON::MaybeXS;
 
 use Synergy::Rototron;
-use Synergy::UserDirectory;
 
 binmode *STDOUT, 'encoding(:utf-8)';
 
@@ -23,19 +22,9 @@ my ($opt, $desc) = describe_options(
   [ 'really|r',   'really make changes',                                 ],
 );
 
-# This is silly, because we do this in the Rototron too, but.
-my $config = do {
-  open my $fh, '<', $opt->config or die "can't read config: $!";
-  my $json = do { local $/; <$fh> };
-  JSON::MaybeXS->new->utf8(1)->decode($json);
-};
-
-my $directory = Synergy::UserDirectory->new({ dbfile => $config->{dbfile} });
-$directory->load_users_from_database;
-
 my $rototron = Synergy::Rototron->new({
   config_path => $opt->config,
-  user_directory => $directory,
+  user_directory => undef, # This won't work for long! -- rjbs, 2019-11-14
 });
 
 # We want to populate out 90d, plus enough days to get us to a Friday.
