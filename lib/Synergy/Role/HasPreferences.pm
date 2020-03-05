@@ -18,6 +18,8 @@ parameter namespace => (
 role {
   my $p = shift;
 
+  requires 'save_state';
+
   has preference_namespace => (
     is => 'ro',
     isa => 'Str',

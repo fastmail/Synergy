@@ -230,7 +230,13 @@ sub synergize {
   #   reactors: name => config
   #   http_server: (port => id)
   #   state_directory: ...
-  my $directory = Synergy::UserDirectory->new({ name => '_user_directory' });
+
+  # silly!
+  my %db_config = (
+    defined_kv(dbfile => $config->{state_dbfile}),
+  );
+
+  my $directory = Synergy::UserDirectory->new({ %db_config });
 
   my $hub = $class->new({
     user_directory  => $directory,
@@ -238,10 +244,9 @@ sub synergize {
     defined_kv(server_port     => $config->{server_port}),
     defined_kv(tls_cert_file   => $config->{tls_cert_file}),
     defined_kv(tls_key_file    => $config->{tls_key_file}),
-    defined_kv(dbfile          => $config->{state_dbfile}),
+    %db_config,
   });
 
-  $directory->register_with_hub($hub);
   $directory->load_users_from_database;
 
   if ($config->{user_directory}) {

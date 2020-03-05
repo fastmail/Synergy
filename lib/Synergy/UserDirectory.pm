@@ -4,8 +4,8 @@ package Synergy::UserDirectory;
 use Moose;
 
 with (
-  'Synergy::Role::HubComponent',
   'Synergy::Role::HasDatabaseHandle',
+  'Synergy::Role::ManagesState',
   'Synergy::Role::HasPreferences' => {
     namespace => 'user',
   },
@@ -24,6 +24,14 @@ use DateTime;
 use Defined::KV;
 use Try::Tiny;
 use utf8;
+
+sub dbh; # provided by HasDatabaseHandle
+
+has name => (
+  is  => 'ro',
+  isa => 'Str',
+  default => '_user_directory',
+);
 
 has _users => (
   isa  => 'HashRef',
@@ -66,17 +74,15 @@ has _active_users => (
 after _set_user  => sub ($self, @) { $self->_clear_active_users };
 after _set_users => sub ($self, @) { $self->_clear_active_users };
 
-after register_with_hub => sub ($self, @) {
-  if (my $state = $self->fetch_state) {
-    if (my $prefs = $state->{preferences}) {
-      $self->_load_preferences($prefs);
-    }
-  }
-};
-
 sub state ($self) {
   return { preferences => $self->user_preferences };
 }
+
+# HasPreferences calls this as $self->save_state, because it's normally used
+# on hub componens, which handle all of that.
+around save_state => sub ($orig, $self) {
+  $self->$orig($self->name, $self->state);
+};
 
 sub master_users ($self) {
   return grep {; $_->is_master } $self->users;
@@ -108,6 +114,12 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
 sub load_users_from_database ($self) {
   my $dbh = $self->dbh;
   my %users;
+
+  if (my $state = $self->fetch_state($self->name)) {
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+  }
 
   my $user_sth = $dbh->prepare('SELECT * FROM users');
   $user_sth->execute;
