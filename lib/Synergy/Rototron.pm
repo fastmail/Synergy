@@ -87,6 +87,7 @@ has availability_checker => (
 has user_directory => (
   is => 'ro',
   required => 1,
+  isa => 'Synergy::UserDirectory',
 );
 
 has jmap_client => (
@@ -668,13 +669,8 @@ package Synergy::Rototron::AvailabilityChecker {
   sub user_is_available_on ($self, $username, $dt) {
     my $ymd = $dt->ymd;
 
-    # This is a total cop-out.  We should make the user directory available to
-    # the non-Synergy rototron… somehow.  But we haven't yet.
-    # -- rjbs, 2020-03-02
-    if ($self->user_directory) {
-      if (my $user = $self->user_directory->user_named($username)) {
-        return 0 unless $user->hours_for_dow($dt->day_of_week);
-      }
+    if (my $user = $self->user_directory->user_named($username)) {
+      return 0 unless $user->hours_for_dow($dt->day_of_week);
     }
 
     my $leave = $self->_leave_days;
