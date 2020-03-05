@@ -8,6 +8,11 @@ use MooseX::StrictConstructor;
 use experimental qw(signatures);
 use namespace::clean;
 
+with (
+  'Synergy::Role::HasDatabaseHandle',
+  'Synergy::Role::ManagesState',
+);
+
 use Synergy::Logger '$Logger';
 
 use DBI;
@@ -25,6 +30,8 @@ use URI;
 use Scalar::Util qw(blessed);
 use Defined::KV;
 
+sub dbh; # provided by HasDatabaseHandle
+
 has name => (
   is  => 'ro',
   isa => 'Str',
@@ -36,93 +43,6 @@ has user_directory => (
   isa => 'Object',
   required  => 1,
 );
-
-has state_dbfile => (
-  is  => 'ro',
-  isa => 'Str',
-  lazy => 1,
-  default => "synergy.sqlite",
-);
-
-has _state_dbh => (
-  is  => 'ro',
-  init_arg => undef,
-  lazy => 1,
-  default  => sub ($self, @) {
-    my $dbf = $self->state_dbfile;
-
-    my $dbh = DBI->connect(
-      "dbi:SQLite:dbname=$dbf",
-      undef,
-      undef,
-      { RaiseError => 1 },
-    );
-    die $DBI::errstr unless $dbh;
-
-    $dbh->do(q{
-      CREATE TABLE IF NOT EXISTS synergy_state (
-        reactor_name TEXT PRIMARY KEY,
-        stored_at INTEGER NOT NULL,
-        json TEXT NOT NULL
-      );
-    });
-
-    $dbh->do(q{
-      CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY,
-        lp_id TEXT,
-        is_master INTEGER DEFAULT 0,
-        is_virtual INTEGER DEFAULT 0,
-        is_deleted INTEGER DEFAULT 0
-      );
-    });
-
-    $dbh->do(q{
-      CREATE TABLE IF NOT EXISTS user_identities (
-        id INTEGER PRIMARY KEY,
-        username TEXT NOT NULL,
-        identity_name TEXT NOT NULL,
-        identity_value TEXT NOT NULL,
-        FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
-        CONSTRAINT constraint_username_identity UNIQUE (username, identity_name),
-        UNIQUE (identity_name, identity_value)
-      );
-    });
-
-    return $dbh;
-  },
-);
-
-sub save_state ($self, $reactor, $state) {
-  my $json = eval { JSON::MaybeXS->new->utf8->encode($state) };
-
-  unless ($json) {
-    $Logger->log([ "error serializing state for %s: %s", $reactor->name, $@ ]);
-    return;
-  }
-
-  $self->_state_dbh->do(
-    "INSERT OR REPLACE INTO synergy_state (reactor_name, stored_at, json)
-    VALUES (?, ?, ?)",
-    undef,
-    $reactor->name,
-    time,
-    $json,
-  );
-
-  return 1;
-}
-
-sub fetch_state ($self, $reactor) {
-  my ($json) = $self->_state_dbh->selectrow_array(
-    "SELECT json FROM synergy_state WHERE reactor_name = ?",
-    undef,
-    $reactor->name,
-  );
-
-  return unless $json;
-  return JSON::MaybeXS->new->utf8->decode($json);
-}
 
 has server_port => (
   is => 'ro',
@@ -310,7 +230,13 @@ sub synergize {
   #   reactors: name => config
   #   http_server: (port => id)
   #   state_directory: ...
-  my $directory = Synergy::UserDirectory->new({ name => '_user_directory' });
+
+  # silly!
+  my %db_config = (
+    defined_kv(dbfile => $config->{state_dbfile}),
+  );
+
+  my $directory = Synergy::UserDirectory->new({ %db_config });
 
   my $hub = $class->new({
     user_directory  => $directory,
@@ -318,10 +244,9 @@ sub synergize {
     defined_kv(server_port     => $config->{server_port}),
     defined_kv(tls_cert_file   => $config->{tls_cert_file}),
     defined_kv(tls_key_file    => $config->{tls_key_file}),
-    defined_kv(state_dbfile    => $config->{state_dbfile}),
+    %db_config,
   });
 
-  $directory->register_with_hub($hub);
   $directory->load_users_from_database;
 
   if ($config->{user_directory}) {

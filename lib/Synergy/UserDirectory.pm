@@ -3,10 +3,13 @@ use warnings;
 package Synergy::UserDirectory;
 use Moose;
 
-with 'Synergy::Role::HubComponent';
-with 'Synergy::Role::HasPreferences' => {
-  namespace => 'user',
-};
+with (
+  'Synergy::Role::HasDatabaseHandle',
+  'Synergy::Role::ManagesState',
+  'Synergy::Role::HasPreferences' => {
+    namespace => 'user',
+  },
+);
 
 use experimental qw(signatures lexical_subs);
 use namespace::autoclean;
@@ -21,6 +24,14 @@ use DateTime;
 use Defined::KV;
 use Try::Tiny;
 use utf8;
+
+sub dbh; # provided by HasDatabaseHandle
+
+has name => (
+  is  => 'ro',
+  isa => 'Str',
+  default => '_user_directory',
+);
 
 has _users => (
   isa  => 'HashRef',
@@ -63,17 +74,13 @@ has _active_users => (
 after _set_user  => sub ($self, @) { $self->_clear_active_users };
 after _set_users => sub ($self, @) { $self->_clear_active_users };
 
-after register_with_hub => sub ($self, @) {
-  if (my $state = $self->fetch_state) {
-    if (my $prefs = $state->{preferences}) {
-      $self->_load_preferences($prefs);
-    }
-  }
-};
+sub state ($self) { return {} }
 
-sub state ($self) {
-  return { preferences => $self->user_preferences };
-}
+# HasPreferences calls this as $self->save_state, because it's normally used
+# on hub components, which handle all of that.
+around save_state => sub ($orig, $self) {
+  $self->$orig($self->name, $self->state);
+};
 
 sub master_users ($self) {
   return grep {; $_->is_master } $self->users;
@@ -103,8 +110,11 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
 }
 
 sub load_users_from_database ($self) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->dbh;
   my %users;
+
+  # load prefs
+  $self->fetch_state($self->name);
 
   my $user_sth = $dbh->prepare('SELECT * FROM users');
   $user_sth->execute;
@@ -176,7 +186,7 @@ sub load_users_from_file ($self, $file) {
 
 # Save them in memory, and also insert them into the database.
 sub register_user ($self, $user) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->dbh;
   state $user_insert_sth = $dbh->prepare(join(q{ },
     q{INSERT INTO users},
     q{   (username, lp_id, is_master, is_virtual, is_deleted)},
@@ -221,7 +231,7 @@ sub register_user ($self, $user) {
 }
 
 sub set_lp_id_for_user ($self, $user, $lp_id) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->dbh;
   my $user_update_sth = $dbh->prepare(
     q{UPDATE users SET lp_id = ? WHERE username = ?},
   );
