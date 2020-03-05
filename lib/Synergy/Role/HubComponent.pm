@@ -43,11 +43,11 @@ sub register_with_hub ($self, $hub) {
 sub state { return {} }
 
 sub save_state ($self, $state = $self->state) {
-  $self->hub->save_state($self, $state);
+  $self->hub->save_state($self->name, $state);
 }
 
 sub fetch_state ($self) {
-  $self->hub->fetch_state($self);
+  $self->hub->fetch_state($self->name);
 }
 
 sub has_preferences ($self) {

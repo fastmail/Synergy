@@ -8,7 +8,10 @@ use MooseX::StrictConstructor;
 use experimental qw(signatures);
 use namespace::clean;
 
-with 'Synergy::Role::HasDatabaseHandle';
+with (
+  'Synergy::Role::HasDatabaseHandle',
+  'Synergy::Role::ManagesState',
+);
 
 use Synergy::Logger '$Logger';
 
@@ -27,6 +30,8 @@ use URI;
 use Scalar::Util qw(blessed);
 use Defined::KV;
 
+sub dbh; # provided by HasDatabaseHandle
+
 has name => (
   is  => 'ro',
   isa => 'Str',
@@ -38,38 +43,6 @@ has user_directory => (
   isa => 'Object',
   required  => 1,
 );
-
-
-sub save_state ($self, $reactor, $state) {
-  my $json = eval { JSON::MaybeXS->new->utf8->encode($state) };
-
-  unless ($json) {
-    $Logger->log([ "error serializing state for %s: %s", $reactor->name, $@ ]);
-    return;
-  }
-
-  $self->dbh->do(
-    "INSERT OR REPLACE INTO synergy_state (reactor_name, stored_at, json)
-    VALUES (?, ?, ?)",
-    undef,
-    $reactor->name,
-    time,
-    $json,
-  );
-
-  return 1;
-}
-
-sub fetch_state ($self, $reactor) {
-  my ($json) = $self->dbh->selectrow_array(
-    "SELECT json FROM synergy_state WHERE reactor_name = ?",
-    undef,
-    $reactor->name,
-  );
-
-  return unless $json;
-  return JSON::MaybeXS->new->utf8->decode($json);
-}
 
 has server_port => (
   is => 'ro',
