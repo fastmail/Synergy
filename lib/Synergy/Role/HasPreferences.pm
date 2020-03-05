@@ -18,7 +18,9 @@ parameter namespace => (
 role {
   my $p = shift;
 
+  requires 'state';
   requires 'save_state';
+  requires 'fetch_state';
 
   has preference_namespace => (
     is => 'ro',
@@ -165,6 +167,22 @@ role {
     $self->save_state;
 
     return $value;
+  };
+
+  around state => sub ($orig, $self, @rest) {
+    my $state = $self->$orig(@rest);
+    $state->{preferences} = $self->user_preferences;
+    return $state;
+  };
+
+  around fetch_state => sub ($orig, $self, @rest) {
+    my $state = $self->$orig(@rest);
+
+    if (my $prefs = $state->{preferences}) {
+      $self->_load_preferences($prefs);
+    }
+
+    return $state;
   };
 };
 

@@ -176,18 +176,8 @@ sub _vo_api_headers ($self) {
   );
 }
 
-sub state ($self) {
-  return {
-    preferences => $self->user_preferences,
-  };
-}
-
 after register_with_hub => sub ($self, @) {
-  if (my $state = $self->fetch_state) {
-    if (my $prefs = $state->{preferences}) {
-      $self->_load_preferences($prefs);
-    }
-  }
+  $self->fetch_state;   # load prefs
 };
 
 sub handle_maint_query ($self, $event) {

@@ -74,12 +74,10 @@ has _active_users => (
 after _set_user  => sub ($self, @) { $self->_clear_active_users };
 after _set_users => sub ($self, @) { $self->_clear_active_users };
 
-sub state ($self) {
-  return { preferences => $self->user_preferences };
-}
+sub state ($self) { return {} }
 
 # HasPreferences calls this as $self->save_state, because it's normally used
-# on hub componens, which handle all of that.
+# on hub components, which handle all of that.
 around save_state => sub ($orig, $self) {
   $self->$orig($self->name, $self->state);
 };
@@ -115,11 +113,8 @@ sub load_users_from_database ($self) {
   my $dbh = $self->dbh;
   my %users;
 
-  if (my $state = $self->fetch_state($self->name)) {
-    if (my $prefs = $state->{preferences}) {
-      $self->_load_preferences($prefs);
-    }
-  }
+  # load prefs
+  $self->fetch_state($self->name);
 
   my $user_sth = $dbh->prepare('SELECT * FROM users');
   $user_sth->execute;
