@@ -3,10 +3,13 @@ use warnings;
 package Synergy::UserDirectory;
 use Moose;
 
-with 'Synergy::Role::HubComponent';
-with 'Synergy::Role::HasPreferences' => {
-  namespace => 'user',
-};
+with (
+  'Synergy::Role::HubComponent',
+  'Synergy::Role::HasDatabaseHandle',
+  'Synergy::Role::HasPreferences' => {
+    namespace => 'user',
+  },
+);
 
 use experimental qw(signatures lexical_subs);
 use namespace::autoclean;
@@ -103,7 +106,7 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
 }
 
 sub load_users_from_database ($self) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->dbh;
   my %users;
 
   my $user_sth = $dbh->prepare('SELECT * FROM users');
@@ -176,7 +179,7 @@ sub load_users_from_file ($self, $file) {
 
 # Save them in memory, and also insert them into the database.
 sub register_user ($self, $user) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->dbh;
   state $user_insert_sth = $dbh->prepare(join(q{ },
     q{INSERT INTO users},
     q{   (username, lp_id, is_master, is_virtual, is_deleted)},
@@ -221,7 +224,7 @@ sub register_user ($self, $user) {
 }
 
 sub set_lp_id_for_user ($self, $user, $lp_id) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->dbh;
   my $user_update_sth = $dbh->prepare(
     q{UPDATE users SET lp_id = ? WHERE username = ?},
   );
