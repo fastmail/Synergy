@@ -12,11 +12,9 @@ with (
 
 use experimental qw(signatures lexical_subs);
 use namespace::autoclean;
-use JSON::MaybeXS ();
-use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
-use Synergy::Util qw(known_alphabets);
+use Synergy::Util qw(known_alphabets read_config_file);
 use Synergy::Logger '$Logger';
 use List::Util qw(first shuffle all);
 use DateTime;
@@ -158,15 +156,8 @@ sub load_users_from_database ($self) {
 # The source of truth will now be the sqlite database. But if we have a user
 # file anyway, we'll update the database (so we'll be right next time) and
 # load this user directly.
-sub load_users_from_file ($self, $file) {
-  my $user_config;
-  if ($file =~ /\.ya?ml\z/) {
-    $user_config = YAML::XS::LoadFile($file);
-  } elsif ($file =~ /\.json\z/) {
-    $user_config = JSON::MaybeXS->new->decode( Path::Tiny::path($file)->slurp );
-  } else {
-    Carp::confess("unknown filetype: $file");
-  }
+sub load_users_from_file ($self, $filename) {
+  my $user_config = read_config_file($filename);
 
   for my $username (keys %$user_config) {
     if ($self->user_named($username)) {

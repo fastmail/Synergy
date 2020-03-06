@@ -15,9 +15,6 @@ with (
 use Synergy::Logger '$Logger';
 
 use DBI;
-use JSON::MaybeXS;
-use YAML::XS;
-use TOML;
 use Module::Runtime qw(require_module);
 use Net::Async::HTTP;
 use Synergy::UserDirectory;
@@ -25,7 +22,7 @@ use Path::Tiny ();
 use Plack::App::URLMap;
 use Synergy::Environment;
 use Synergy::HTTPServer;
-use Synergy::Util;
+use Synergy::Util qw(read_config_file);
 use Try::Tiny;
 use URI;
 use Scalar::Util qw(blessed);
@@ -243,38 +240,15 @@ sub synergize {
   return $hub;
 }
 
-sub _slurp_json_file ($filename) {
-  my $file = Path::Tiny::path($filename);
-  confess "config file does not exist" unless -e $file;
-  my $json = $file->slurp_utf8;
-  return JSON::MaybeXS->new->decode($json);
-}
-
-sub _slurp_toml_file ($filename) {
-  my $file = Path::Tiny::path($filename);
-  confess "config file does not exist" unless -e $file;
-  my $toml = $file->slurp_utf8;
-  my ($data, $err) = from_toml($toml);
-  unless ($data) {
-    die "Error parsing toml file $filename: $err\n";
-  }
-  return $data;
-}
-
 sub synergize_file {
   my $class = shift;
   my ($loop, $filename) = @_ == 2 ? @_
                         : @_ == 1 ? (undef, @_)
                         : confess("weird arguments passed to synergize_file");
 
-  my $reader  = $filename =~ /\.ya?ml\z/ ? sub { YAML::XS::LoadFile($_[0]) }
-              : $filename =~ /\.json\z/  ? \&_slurp_json_file
-              : $filename =~ /\.toml\z/  ? \&_slurp_toml_file
-              : confess "don't know how to synergize_file $filename";
-
   return $class->synergize(
     ($loop ? $loop : ()),
-    $reader->($filename),
+    read_config_file($filename),
   );
 }
 

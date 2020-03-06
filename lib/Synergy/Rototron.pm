@@ -12,6 +12,7 @@ use DateTime ();
 use File::stat;
 use JMAP::Tester;
 use Params::Util qw(_HASH0);
+use Synergy::Util qw(read_config_file);
 
 my $PROGRAM_ID = 'Synergy::Rototron/20190131.001';
 
@@ -39,11 +40,7 @@ sub config ($self) {
       if @fields == grep { $cached->{$_} == $stat->$_ } @fields;
   }
 
-  my $config = do {
-    open my $fh, '<', $path or die "can't read $path: $!";
-    my $json = do { local $/; <$fh> };
-    JSON::MaybeXS->new->utf8(1)->decode($json);
-  };
+  my $config = read_config_file($path);
 
   %$cached = map {; $_ => $stat->$_ } @fields;
   $cached->{config} = $config;
