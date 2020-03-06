@@ -35,6 +35,7 @@ has env => (
   is  => 'ro',
   isa => 'Synergy::Environment',
   required => 1,
+  weak_ref => 1,
 );
 
 has _users => (

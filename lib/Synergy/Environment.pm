@@ -5,6 +5,16 @@ package Synergy::Environment;
 use Moose;
 use experimental qw(signatures);
 
+sub BUILD ($self, @) {
+  $self->_maybe_create_state_tables;
+
+  $self->user_directory->load_users_from_database;
+
+  if ($self->has_user_directory_file) {
+    $self->user_directory->load_users_from_file($self->user_directory_file);
+  }
+}
+
 has name => (
   is  => 'ro',
   isa => 'Str',
@@ -45,10 +55,17 @@ has tls_key_file => (
 has user_directory_file => (
   is => 'ro',
   isa => 'Str',
-  init_arg => 'user_directory',
+  init_arg => 'user_directory',   # backcompat
   predicate => 'has_user_directory_file',
 );
 
+has user_directory => (
+  is => 'ro',
+  isa => 'Synergy::UserDirectory',
+  lazy => 1,
+  init_arg => undef,
+  default => sub ($self) { Synergy::UserDirectory->new({ env => $self }) },
+);
 
 has state_dbh => (
   is  => 'ro',
@@ -74,14 +91,12 @@ has state_dbh => (
       die $DBI::errstr;
     }
 
-    $self->_maybe_create_tables($dbh);
-
     return $dbh;
   },
 );
 
-sub _maybe_create_tables ($self, $dbh) {
-  $dbh->do(q{
+sub _maybe_create_state_tables ($self) {
+  $self->state_dbh->do(q{
     CREATE TABLE IF NOT EXISTS synergy_state (
       reactor_name TEXT PRIMARY KEY,
       stored_at INTEGER NOT NULL,
@@ -89,7 +104,7 @@ sub _maybe_create_tables ($self, $dbh) {
     );
   });
 
-  $dbh->do(q{
+  $self->state_dbh->do(q{
     CREATE TABLE IF NOT EXISTS users (
       username TEXT PRIMARY KEY,
       lp_id TEXT,
@@ -99,7 +114,7 @@ sub _maybe_create_tables ($self, $dbh) {
     );
   });
 
-  $dbh->do(q{
+  $self->state_dbh->do(q{
     CREATE TABLE IF NOT EXISTS user_identities (
       id INTEGER PRIMARY KEY,
       username TEXT NOT NULL,

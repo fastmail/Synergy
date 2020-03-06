@@ -40,13 +40,8 @@ has env => (
     name
     server_port
     format_friendly_date
+    user_directory
   )],
-);
-
-has user_directory => (
-  is  => 'ro',
-  isa => 'Object',
-  required  => 1,
 );
 
 has server => (
@@ -216,18 +211,8 @@ sub synergize {
     IO::Async::Loop->new;
   };
 
-  my $directory = Synergy::UserDirectory->new({ env => $env });
+  my $hub = $class->new({ env => $env });
 
-  my $hub = $class->new({
-    env => $env,
-    user_directory  => $directory,
-  });
-
-  $directory->load_users_from_database;
-
-  if ($env->has_user_directory_file) {
-    $directory->load_users_from_file($env->user_directory_file);
-  }
   for my $pair (
     [ channel => $channels ],
     [ reactor => $reactors ],
