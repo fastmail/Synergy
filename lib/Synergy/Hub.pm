@@ -206,6 +206,9 @@ sub synergize {
                       : @_ == 1 ? (undef, @_)
                       : confess("weird arguments passed to synergize");
 
+  my $channels = delete $config->{channels};
+  my $reactors = delete $config->{reactors};
+
   my $env = Synergy::Environment->new($config);
 
   $loop //= do {
@@ -225,23 +228,28 @@ sub synergize {
   if ($env->has_user_directory_file) {
     $directory->load_users_from_file($env->user_directory_file);
   }
+  for my $pair (
+    [ channel => $channels ],
+    [ reactor => $reactors ],
+  ) {
+    my ($thing, $cfg) = @$pair;
 
-  for my $thing (qw( channel reactor )) {
+    my $plural    = "${thing}s";
     my $register  = "register_$thing";
 
-    for my $name ($env->component_names_for($thing)) {
-      my $thing_config = dclone($env->component_config_for($thing, $name));
+    for my $name (keys %$cfg) {
+      my $thing_config = $cfg->{$name};
       my $thing_class  = delete $thing_config->{class};
 
       confess "no class given for $thing" unless $thing_class;
       require_module($thing_class);
 
-      my $thing = $thing_class->new({
+      my $component = $thing_class->new({
         %$thing_config,
         name => $name,
       });
 
-      $hub->$register($thing);
+      $hub->$register($component);
     }
   }
 

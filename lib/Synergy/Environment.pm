@@ -49,31 +49,6 @@ has user_directory_file => (
   predicate => 'has_user_directory_file',
 );
 
-for my $thing (qw( channel reactor )) {
-  my $plural = "${thing}s";
-
-  has "${thing}_config" => (
-    is       => 'ro',
-    isa      => 'HashRef',
-    traits   => ['Hash'],
-    init_arg => $plural,
-    handles  => {
-      "${thing}_names"    => 'keys',
-      "config_for_$thing" => 'get',
-    },
-  );
-}
-
-# $thing_type is 'channel' or 'reactor'
-sub component_names_for ($self, $thing_type) {
-  my $method = "${thing_type}_names";
-  return $self->$method;
-}
-
-sub component_config_for ($self, $thing_type, $name) {
-  my $method = "config_for_${thing_type}";
-  return $self->$method($name);
-}
 
 has state_dbh => (
   is  => 'ro',
