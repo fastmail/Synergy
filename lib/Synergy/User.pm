@@ -103,7 +103,7 @@ sub format_datetime ($self, $dt, $format = undef) {
     return $dt->strftime($format);
   }
 
-  return $self->directory->format_friendly_date($dt);
+  return $self->directory->env->format_friendly_date($dt);
 }
 
 has identities => (

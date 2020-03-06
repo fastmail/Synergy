@@ -23,7 +23,7 @@ use Net::Async::HTTP;
 use Synergy::UserDirectory;
 use Path::Tiny ();
 use Plack::App::URLMap;
-use Synergy::Config;
+use Synergy::Environment;
 use Synergy::HTTPServer;
 use Synergy::Util;
 use Try::Tiny;
@@ -32,15 +32,14 @@ use Scalar::Util qw(blessed);
 use Storable qw(dclone);
 use Defined::KV;
 
-sub config;
-has config => (
+sub env;
+has env => (
   is => 'ro',
-  isa => 'Synergy::Config',
+  isa => 'Synergy::Environment',
   handles => [qw(
     name
     server_port
-    tls_cert_file
-    tls_key_file
+    format_friendly_date
   )],
 );
 
@@ -57,9 +56,9 @@ has server => (
   default => sub ($self) {
     my $s = Synergy::HTTPServer->new({
       name          => '_http_server',
-      server_port   => $self->server_port,
-      tls_cert_file => $self->tls_cert_file,
-      tls_key_file  => $self->tls_key_file,
+      server_port   => $self->env->server_port,
+      tls_cert_file => $self->env->tls_cert_file,
+      tls_key_file  => $self->env->tls_key_file,
     });
 
     $s->register_with_hub($self);
@@ -203,35 +202,35 @@ sub set_loop ($self, $loop) {
 
 sub synergize {
   my $class = shift;
-  my ($loop, $raw_config) = @_ == 2 ? @_
-                          : @_ == 1 ? (undef, @_)
-                          : confess("weird arguments passed to synergize");
+  my ($loop, $config) = @_ == 2 ? @_
+                      : @_ == 1 ? (undef, @_)
+                      : confess("weird arguments passed to synergize");
 
-  my $config = Synergy::Config->new($raw_config);
+  my $env = Synergy::Environment->new($config);
 
   $loop //= do {
     require IO::Async::Loop;
     IO::Async::Loop->new;
   };
 
-  my $directory = Synergy::UserDirectory->new({ config => $config });
+  my $directory = Synergy::UserDirectory->new({ env => $env });
 
   my $hub = $class->new({
-    config => $config,
+    env => $env,
     user_directory  => $directory,
   });
 
   $directory->load_users_from_database;
 
-  if ($config->has_user_directory_file) {
-    $directory->load_users_from_file($config->user_directory_file);
+  if ($env->has_user_directory_file) {
+    $directory->load_users_from_file($env->user_directory_file);
   }
 
   for my $thing (qw( channel reactor )) {
     my $register  = "register_$thing";
 
-    for my $name ($config->component_names_for($thing)) {
-      my $thing_config = dclone($config->component_config_for($thing, $name));
+    for my $name ($env->component_names_for($thing)) {
+      my $thing_config = dclone($env->component_config_for($thing, $name));
       my $thing_class  = delete $thing_config->{class};
 
       confess "no class given for $thing" unless $thing_class;
@@ -356,11 +355,6 @@ sub http_request ($self, $method, $url, %args) {
   } );
 
   return $async ? $future : $future->get;
-}
-
-sub format_friendly_date ($self, $dt, $arg = {}) {
-  my $tznames = $self->config->time_zone_names;
-  return Synergy::Util::format_friendly_date($dt, $tznames, $arg);
 }
 
 1;

@@ -30,10 +30,10 @@ has name => (
   default => '_user_directory',
 );
 
-sub config;
-has config => (
+sub env;
+has env => (
   is  => 'ro',
-  isa => 'Synergy::Config',
+  isa => 'Synergy::Environment',
   required => 1,
 );
 
@@ -100,11 +100,6 @@ sub master_user_string ($self, $conj = 'or') {
   return join(', ', @masters);
 }
 
-sub format_friendly_date ($self, $dt, $arg = {}) {
-  my $tznames = $self->config->time_zone_names;
-  return Synergy::Util::format_friendly_date($dt, $tznames, $arg);
-}
-
 sub user_by_channel_and_address ($self, $channel_name, $address) {
   $channel_name = $channel_name->name
     if blessed $channel_name && $channel_name->does('Synergy::Role::Channel');
@@ -119,7 +114,7 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
 }
 
 sub load_users_from_database ($self) {
-  my $dbh = $self->config->state_dbh;
+  my $dbh = $self->env->state_dbh;
   my %users;
 
   # load prefs
@@ -195,7 +190,7 @@ sub load_users_from_file ($self, $file) {
 
 # Save them in memory, and also insert them into the database.
 sub register_user ($self, $user) {
-  my $dbh = $self->config->state_dbh;
+  my $dbh = $self->env->state_dbh;
   state $user_insert_sth = $dbh->prepare(join(q{ },
     q{INSERT INTO users},
     q{   (username, lp_id, is_master, is_virtual, is_deleted)},
@@ -240,7 +235,7 @@ sub register_user ($self, $user) {
 }
 
 sub set_lp_id_for_user ($self, $user, $lp_id) {
-  my $dbh = $self->config->state_dbh;
+  my $dbh = $self->env->state_dbh;
   my $user_update_sth = $dbh->prepare(
     q{UPDATE users SET lp_id = ? WHERE username = ?},
   );
