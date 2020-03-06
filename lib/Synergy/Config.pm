@@ -1,20 +1,81 @@
 use v5.24.0;
 use warnings;
-package Synergy::Role::HasDatabaseHandle;
+package Synergy::Config;
 
-use Moose::Role;
+use Moose;
+use experimental qw(signatures);
 
-use experimental qw(signatures lexical_subs);
-use namespace::clean;
+has name => (
+  is  => 'ro',
+  isa => 'Str',
+  default => 'Synergy',
+);
 
-has dbfile => (
+has time_zone_names => (
+  is  => 'ro',
+  isa => 'HashRef',
+  default => sub {  {}  },
+);
+
+has state_dbfile => (
   is  => 'ro',
   isa => 'Str',
   lazy => 1,
   default => "synergy.sqlite",
 );
 
-has dbh => (
+has server_port => (
+  is => 'ro',
+  isa => 'Int',
+  default => 8118,
+);
+
+has tls_cert_file => (
+  is => 'ro',
+  isa => 'Str',
+  default => '',
+);
+
+has tls_key_file => (
+  is => 'ro',
+  isa => 'Str',
+  default => '',
+);
+
+has user_directory_file => (
+  is => 'ro',
+  isa => 'Str',
+  init_arg => 'user_directory',
+  predicate => 'has_user_directory_file',
+);
+
+for my $thing (qw( channel reactor )) {
+  my $plural = "${thing}s";
+
+  has "${thing}_config" => (
+    is       => 'ro',
+    isa      => 'HashRef',
+    traits   => ['Hash'],
+    init_arg => $plural,
+    handles  => {
+      "${thing}_names"    => 'keys',
+      "config_for_$thing" => 'get',
+    },
+  );
+}
+
+# $thing_type is 'channel' or 'reactor'
+sub component_names_for ($self, $thing_type) {
+  my $method = "${thing_type}_names";
+  return $self->$method;
+}
+
+sub component_config_for ($self, $thing_type, $name) {
+  my $method = "config_for_${thing_type}";
+  return $self->$method($name);
+}
+
+has state_dbh => (
   is  => 'ro',
   init_arg => undef,
   lazy => 1,
@@ -24,7 +85,7 @@ has dbh => (
     state $dbh;
     return $dbh if $dbh;
 
-    my $dbf = $self->dbfile;
+    my $dbf = $self->state_dbfile;
 
     $dbh = DBI->connect(
       "dbi:SQLite:dbname=$dbf",

@@ -10,7 +10,7 @@ use namespace::clean;
 use JSON::MaybeXS;
 use Synergy::Logger '$Logger';
 
-requires 'dbh';
+requires 'config';
 
 sub save_state ($self, $namespace, $state) {
   my $json = eval { JSON::MaybeXS->new->utf8->encode($state) };
@@ -20,7 +20,7 @@ sub save_state ($self, $namespace, $state) {
     return;
   }
 
-  $self->dbh->do(
+  $self->config->state_dbh->do(
     "INSERT OR REPLACE INTO synergy_state (reactor_name, stored_at, json)
     VALUES (?, ?, ?)",
     undef,
@@ -33,7 +33,7 @@ sub save_state ($self, $namespace, $state) {
 }
 
 sub fetch_state ($self, $namespace) {
-  my ($json) = $self->dbh->selectrow_array(
+  my ($json) = $self->config->state_dbh->selectrow_array(
     "SELECT json FROM synergy_state WHERE reactor_name = ?",
     undef,
     $namespace,

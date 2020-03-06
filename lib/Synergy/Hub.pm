@@ -9,7 +9,6 @@ use experimental qw(signatures);
 use namespace::clean;
 
 with (
-  'Synergy::Role::HasDatabaseHandle',
   'Synergy::Role::ManagesState',
 );
 
@@ -24,42 +23,31 @@ use Net::Async::HTTP;
 use Synergy::UserDirectory;
 use Path::Tiny ();
 use Plack::App::URLMap;
+use Synergy::Config;
 use Synergy::HTTPServer;
 use Try::Tiny;
 use URI;
 use Scalar::Util qw(blessed);
+use Storable qw(dclone);
 use Defined::KV;
 
-sub dbh; # provided by HasDatabaseHandle
-
-has name => (
-  is  => 'ro',
-  isa => 'Str',
-  default => 'Synergy',
+sub config;
+has config => (
+  is => 'ro',
+  isa => 'Synergy::Config',
+  handles => [qw(
+    name
+    server_port
+    tls_cert_file
+    tls_key_file
+    time_zone_names
+  )],
 );
 
 has user_directory => (
   is  => 'ro',
   isa => 'Object',
   required  => 1,
-);
-
-has server_port => (
-  is => 'ro',
-  isa => 'Int',
-  default => 8118,
-);
-
-has tls_cert_file => (
-  is => 'ro',
-  isa => 'Str',
-  default => '',
-);
-
-has tls_key_file => (
-  is => 'ro',
-  isa => 'Str',
-  default => '',
 );
 
 has server => (
@@ -215,58 +203,43 @@ sub set_loop ($self, $loop) {
 
 sub synergize {
   my $class = shift;
-  my ($loop, $config) = @_ == 2 ? @_
-                      : @_ == 1 ? (undef, @_)
-                      : confess("weird arguments passed to synergize");
+  my ($loop, $raw_config) = @_ == 2 ? @_
+                          : @_ == 1 ? (undef, @_)
+                          : confess("weird arguments passed to synergize");
+
+  my $config = Synergy::Config->new($raw_config);
 
   $loop //= do {
     require IO::Async::Loop;
     IO::Async::Loop->new;
   };
 
-  # config:
-  #   directory: source file
-  #   channels: name => config
-  #   reactors: name => config
-  #   http_server: (port => id)
-  #   state_directory: ...
-
-  # silly!
-  my %db_config = (
-    defined_kv(dbfile => $config->{state_dbfile}),
-  );
-
-  my $directory = Synergy::UserDirectory->new({ %db_config });
+  my $directory = Synergy::UserDirectory->new({ config => $config });
 
   my $hub = $class->new({
+    config => $config,
     user_directory  => $directory,
-    defined_kv(time_zone_names => $config->{time_zone_names}),
-    defined_kv(server_port     => $config->{server_port}),
-    defined_kv(tls_cert_file   => $config->{tls_cert_file}),
-    defined_kv(tls_key_file    => $config->{tls_key_file}),
-    %db_config,
   });
 
   $directory->load_users_from_database;
 
-  if ($config->{user_directory}) {
-    $directory->load_users_from_file($config->{user_directory});
+  if ($config->has_user_directory_file) {
+    $directory->load_users_from_file($config->user_directory_file);
   }
 
   for my $thing (qw( channel reactor )) {
-    my $plural    = "${thing}s";
     my $register  = "register_$thing";
 
-    for my $thing_name (keys %{ $config->{$plural} }) {
-      my $thing_config = $config->{$plural}{$thing_name};
+    for my $name ($config->component_names_for($thing)) {
+      my $thing_config = dclone($config->component_config_for($thing, $name));
       my $thing_class  = delete $thing_config->{class};
 
       confess "no class given for $thing" unless $thing_class;
       require_module($thing_class);
 
       my $thing = $thing_class->new({
-        %{ $thing_config },
-        name => $thing_name,
+        %$thing_config,
+        name => $name,
       });
 
       $hub->$register($thing);
@@ -384,12 +357,6 @@ sub http_request ($self, $method, $url, %args) {
 
   return $async ? $future : $future->get;
 }
-
-has time_zone_names => (
-  is  => 'ro',
-  isa => 'HashRef',
-  default => sub {  {}  },
-);
 
 sub format_friendly_date ($self, $dt, $arg = {}) {
   # arg:

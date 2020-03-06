@@ -4,7 +4,6 @@ package Synergy::UserDirectory;
 use Moose;
 
 with (
-  'Synergy::Role::HasDatabaseHandle',
   'Synergy::Role::ManagesState',
   'Synergy::Role::HasPreferences' => {
     namespace => 'user',
@@ -25,12 +24,17 @@ use Defined::KV;
 use Try::Tiny;
 use utf8;
 
-sub dbh; # provided by HasDatabaseHandle
-
 has name => (
   is  => 'ro',
   isa => 'Str',
   default => '_user_directory',
+);
+
+sub config;
+has config => (
+  is  => 'ro',
+  isa => 'Synergy::Config',
+  required => 1,
 );
 
 has _users => (
@@ -110,7 +114,7 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
 }
 
 sub load_users_from_database ($self) {
-  my $dbh = $self->dbh;
+  my $dbh = $self->config->state_dbh;
   my %users;
 
   # load prefs
@@ -186,7 +190,7 @@ sub load_users_from_file ($self, $file) {
 
 # Save them in memory, and also insert them into the database.
 sub register_user ($self, $user) {
-  my $dbh = $self->dbh;
+  my $dbh = $self->config->state_dbh;
   state $user_insert_sth = $dbh->prepare(join(q{ },
     q{INSERT INTO users},
     q{   (username, lp_id, is_master, is_virtual, is_deleted)},
@@ -231,7 +235,7 @@ sub register_user ($self, $user) {
 }
 
 sub set_lp_id_for_user ($self, $user, $lp_id) {
-  my $dbh = $self->dbh;
+  my $dbh = $self->config->state_dbh;
   my $user_update_sth = $dbh->prepare(
     q{UPDATE users SET lp_id = ? WHERE username = ?},
   );
