@@ -100,6 +100,11 @@ sub master_user_string ($self, $conj = 'or') {
   return join(', ', @masters);
 }
 
+sub format_friendly_date ($self, $dt, $arg = {}) {
+  my $tznames = $self->config->time_zone_names;
+  return Synergy::Util::format_friendly_date($dt, $tznames, $arg);
+}
+
 sub user_by_channel_and_address ($self, $channel_name, $address) {
   $channel_name = $channel_name->name
     if blessed $channel_name && $channel_name->does('Synergy::Role::Channel');
