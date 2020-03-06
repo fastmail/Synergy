@@ -72,7 +72,7 @@ sub begin_report ($self, $report, $target) {
   for my $section ($report->{sections}->@*) {
     my ($reactor_name, $method, $arg) = @$section;
 
-    next if $arg->{triage_only} && ! $target->is_on_triage;
+    next if $arg->{triage_only} && ! $target->is_on_triage($self->hub);
 
     my $reactor = $hub->reactor_named($reactor_name);
 

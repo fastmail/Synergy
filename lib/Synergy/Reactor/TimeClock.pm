@@ -259,7 +259,7 @@ sub check_for_shift_changes ($self) {
   USER: for my $user ($self->hub->user_directory->users) {
     next unless $user->has_identity_for($channel->name);
 
-    next unless my $shift = $user->shift_for_day($now_dt);
+    next unless my $shift = $user->shift_for_day($self->hub, $now_dt);
 
     for my $which (sort keys %if) {
       my $will_send = $if{$which}->($shift->@{ qw(start end) });
