@@ -8,6 +8,7 @@ use utf8;
 use Test::More;
 use Test::Deep;
 
+use Net::EmptyPort qw(empty_port);
 use Path::Tiny ();
 use Synergy::Logger::Test '$Logger';
 use Synergy::Hub;
@@ -16,6 +17,7 @@ my $tmpfile = Path::Tiny->tempfile;
 my $synergy = Synergy::Hub->synergize(
   {
     user_directory => "t/data/users-lp.yaml",
+    server_port => empty_port(),
     channels => {
       'test-channel' => {
         class     => 'Synergy::Channel::Test',

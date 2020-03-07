@@ -154,7 +154,7 @@ sub _compile_send ($self, $arg) {
 
 sub _compile_wait ($self, $arg) {
   my $timer = IO::Async::Timer::Countdown->new(
-    delay => $arg->{seconds} // 1,
+    delay => $arg->{seconds} // 0.05,
     on_expire => sub {
       my ($timer) = @_;
       $self->hub->loop->remove($timer);

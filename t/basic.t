@@ -20,9 +20,9 @@ my $result = Synergy::Tester->testergize({
   },
   todo => [
     [ send    => { text => "synergy: Hi." }  ],
-    [ wait    => { seconds => 1  }  ],
+    [ wait    => { seconds => 0.1  }  ],
     [ repeat  => { text => "synergy: Hello?", times => 3, sleep => 0.34 } ],
-    [ wait    => { seconds => 1  }  ],
+    [ wait    => { seconds => 0.1  }  ],
     [ send    => { text => "synergy: Bye." } ],
   ],
 });

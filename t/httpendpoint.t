@@ -13,6 +13,7 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Net::EmptyPort qw(empty_port);
 use Plack::Response;
 use MIME::Base64 'encode_base64';
 use Synergy::Hub;
@@ -44,6 +45,7 @@ package Synergy::Channel::Test::HTTPEndpointAuth {
 my $synergy = Synergy::Hub->synergize(
   {
     user_directory => "t/data/users.yaml",
+    server_port => empty_port(),
     channels => {
       'test-channel-endpoint' => {
         class => 'Synergy::Channel::Test::HTTPEndpoint',

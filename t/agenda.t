@@ -19,7 +19,7 @@ my $result = Synergy::Tester->testergize({
   },
   todo => [
     [ send    => { text => "synergy: agenda list" } ],
-    [ wait    => { seconds => 1  }  ],
+    [ wait    => { seconds => 0.1  }  ],
   ],
 });
 

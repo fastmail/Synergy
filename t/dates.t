@@ -15,12 +15,14 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Net::EmptyPort qw(empty_port);
 use Synergy::Hub;
 
 # Initialize Synergy.
 my $synergy = Synergy::Hub->synergize(
   {
     user_directory  => "t/data/users.yaml",
+    server_port     => empty_port(),
     time_zone_names => {
       "America/New_York"  => "🇺🇸",
       "Australia/Sydney"  => "🇦🇺",

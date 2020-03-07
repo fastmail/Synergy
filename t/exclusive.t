@@ -12,18 +12,20 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Net::EmptyPort qw(empty_port);
 use Synergy::Hub;
 
 # Initialize Synergy.
 my $synergy = Synergy::Hub->synergize(
   {
     user_directory => "t/data/users.yaml",
+    server_port => empty_port(),
     channels => {
       'test-channel' => {
         class     => 'Synergy::Channel::Test',
         todo      => [
           [ send    => { text => "synergy: help" }  ],
-          [ wait    => { seconds => 0.25  }  ],
+          [ wait    => { seconds => 0.1  }  ],
         ],
       }
     },

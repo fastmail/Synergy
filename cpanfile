@@ -34,6 +34,7 @@ requires 'MooseX::StrictConstructor';
 requires 'Net::Async::HTTP', '0.44';
 requires 'Net::Async::HTTP::Server::PSGI';
 requires 'Net::Async::WebSocket::Client';
+requires 'Net::EmptyPort';
 requires 'Path::Tiny';
 requires 'Plack::App::URLMap';
 requires 'Plack::Middleware::AccessLog';

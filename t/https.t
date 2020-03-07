@@ -13,6 +13,7 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Net::EmptyPort qw(empty_port);
 use Plack::Response;
 use Synergy::Hub;
 
@@ -27,6 +28,7 @@ my $synergy = Synergy::Hub->synergize(
     },
     tls_cert_file => "t/data/synergy.crt",
     tls_key_file => "t/data/synergy.key",
+    server_port => empty_port(),
   }
 );
 

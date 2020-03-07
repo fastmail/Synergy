@@ -12,6 +12,7 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Net::EmptyPort qw(empty_port);
 use Path::Tiny ();
 use Synergy::Hub;
 
@@ -28,7 +29,7 @@ my $synergy = Synergy::Hub->synergize(
         class     => 'Synergy::Channel::Test',
         todo      => [
           [ send    => { text => "synergy: page roxy: $PAGE" }  ],
-          [ wait    => { seconds => 1  }  ],
+          [ wait    => { seconds => 0.1  }  ],
         ],
       },
       'test-2' => {
@@ -48,6 +49,7 @@ my $synergy = Synergy::Hub->synergize(
       },
     },
     state_dbfile => "$tmpfile",
+    server_port => empty_port(),
   }
 );
 

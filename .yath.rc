@@ -1,0 +1,4 @@
+[test]
+-I lib
+-j8
+-P Synergy::Hub

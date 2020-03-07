@@ -8,6 +8,7 @@ use Synergy::Logger::Test '$Logger';
 
 use IO::Async::Test;
 use Synergy::Hub;
+use Net::EmptyPort qw(empty_port);
 
 package Synergy::Tester::Result {
 
@@ -45,6 +46,7 @@ sub testergize {
         }
       },
       reactors => $arg->{reactors},
+      server_port => empty_port(),
     }
   );
 
