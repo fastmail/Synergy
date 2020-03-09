@@ -8,138 +8,37 @@ use MooseX::StrictConstructor;
 use experimental qw(signatures);
 use namespace::clean;
 
+with (
+  'Synergy::Role::ManagesState',
+);
+
 use Synergy::Logger '$Logger';
 
 use DBI;
-use JSON::MaybeXS;
-use YAML::XS;
-use TOML;
 use Module::Runtime qw(require_module);
 use Net::Async::HTTP;
 use Synergy::UserDirectory;
 use Path::Tiny ();
 use Plack::App::URLMap;
+use Synergy::Environment;
 use Synergy::HTTPServer;
+use Synergy::Util qw(read_config_file);
 use Try::Tiny;
 use URI;
 use Scalar::Util qw(blessed);
+use Storable qw(dclone);
 use Defined::KV;
 
-has name => (
-  is  => 'ro',
-  isa => 'Str',
-  default => 'Synergy',
-);
-
-has user_directory => (
-  is  => 'ro',
-  isa => 'Object',
-  required  => 1,
-);
-
-has state_dbfile => (
-  is  => 'ro',
-  isa => 'Str',
-  lazy => 1,
-  default => "synergy.sqlite",
-);
-
-has _state_dbh => (
-  is  => 'ro',
-  init_arg => undef,
-  lazy => 1,
-  default  => sub ($self, @) {
-    my $dbf = $self->state_dbfile;
-
-    my $dbh = DBI->connect(
-      "dbi:SQLite:dbname=$dbf",
-      undef,
-      undef,
-      { RaiseError => 1 },
-    );
-    die $DBI::errstr unless $dbh;
-
-    $dbh->do(q{
-      CREATE TABLE IF NOT EXISTS synergy_state (
-        reactor_name TEXT PRIMARY KEY,
-        stored_at INTEGER NOT NULL,
-        json TEXT NOT NULL
-      );
-    });
-
-    $dbh->do(q{
-      CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY,
-        lp_id TEXT,
-        is_master INTEGER DEFAULT 0,
-        is_virtual INTEGER DEFAULT 0,
-        is_deleted INTEGER DEFAULT 0
-      );
-    });
-
-    $dbh->do(q{
-      CREATE TABLE IF NOT EXISTS user_identities (
-        id INTEGER PRIMARY KEY,
-        username TEXT NOT NULL,
-        identity_name TEXT NOT NULL,
-        identity_value TEXT NOT NULL,
-        FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
-        CONSTRAINT constraint_username_identity UNIQUE (username, identity_name),
-        UNIQUE (identity_name, identity_value)
-      );
-    });
-
-    return $dbh;
-  },
-);
-
-sub save_state ($self, $reactor, $state) {
-  my $json = eval { JSON::MaybeXS->new->utf8->encode($state) };
-
-  unless ($json) {
-    $Logger->log([ "error serializing state for %s: %s", $reactor->name, $@ ]);
-    return;
-  }
-
-  $self->_state_dbh->do(
-    "INSERT OR REPLACE INTO synergy_state (reactor_name, stored_at, json)
-    VALUES (?, ?, ?)",
-    undef,
-    $reactor->name,
-    time,
-    $json,
-  );
-
-  return 1;
-}
-
-sub fetch_state ($self, $reactor) {
-  my ($json) = $self->_state_dbh->selectrow_array(
-    "SELECT json FROM synergy_state WHERE reactor_name = ?",
-    undef,
-    $reactor->name,
-  );
-
-  return unless $json;
-  return JSON::MaybeXS->new->utf8->decode($json);
-}
-
-has server_port => (
+sub env;
+has env => (
   is => 'ro',
-  isa => 'Int',
-  default => 8118,
-);
-
-has tls_cert_file => (
-  is => 'ro',
-  isa => 'Str',
-  default => '',
-);
-
-has tls_key_file => (
-  is => 'ro',
-  isa => 'Str',
-  default => '',
+  isa => 'Synergy::Environment',
+  handles => [qw(
+    name
+    server_port
+    format_friendly_date
+    user_directory
+  )],
 );
 
 has server => (
@@ -149,9 +48,9 @@ has server => (
   default => sub ($self) {
     my $s = Synergy::HTTPServer->new({
       name          => '_http_server',
-      server_port   => $self->server_port,
-      tls_cert_file => $self->tls_cert_file,
-      tls_key_file  => $self->tls_key_file,
+      server_port   => $self->env->server_port,
+      tls_cert_file => $self->env->tls_cert_file,
+      tls_key_file  => $self->env->tls_key_file,
     });
 
     $s->register_with_hub($self);
@@ -299,52 +198,40 @@ sub synergize {
                       : @_ == 1 ? (undef, @_)
                       : confess("weird arguments passed to synergize");
 
+  my $channels = delete $config->{channels};
+  my $reactors = delete $config->{reactors};
+
+  my $env = Synergy::Environment->new($config);
+
   $loop //= do {
     require IO::Async::Loop;
     IO::Async::Loop->new;
   };
 
-  # config:
-  #   directory: source file
-  #   channels: name => config
-  #   reactors: name => config
-  #   http_server: (port => id)
-  #   state_directory: ...
-  my $directory = Synergy::UserDirectory->new({ name => '_user_directory' });
+  my $hub = $class->new({ env => $env });
 
-  my $hub = $class->new({
-    user_directory  => $directory,
-    defined_kv(time_zone_names => $config->{time_zone_names}),
-    defined_kv(server_port     => $config->{server_port}),
-    defined_kv(tls_cert_file   => $config->{tls_cert_file}),
-    defined_kv(tls_key_file    => $config->{tls_key_file}),
-    defined_kv(state_dbfile    => $config->{state_dbfile}),
-  });
+  for my $pair (
+    [ channel => $channels ],
+    [ reactor => $reactors ],
+  ) {
+    my ($thing, $cfg) = @$pair;
 
-  $directory->register_with_hub($hub);
-  $directory->load_users_from_database;
-
-  if ($config->{user_directory}) {
-    $directory->load_users_from_file($config->{user_directory});
-  }
-
-  for my $thing (qw( channel reactor )) {
     my $plural    = "${thing}s";
     my $register  = "register_$thing";
 
-    for my $thing_name (keys %{ $config->{$plural} }) {
-      my $thing_config = $config->{$plural}{$thing_name};
+    for my $name (keys %$cfg) {
+      my $thing_config = $cfg->{$name};
       my $thing_class  = delete $thing_config->{class};
 
       confess "no class given for $thing" unless $thing_class;
       require_module($thing_class);
 
-      my $thing = $thing_class->new({
-        %{ $thing_config },
-        name => $thing_name,
+      my $component = $thing_class->new({
+        %$thing_config,
+        name => $name,
       });
 
-      $hub->$register($thing);
+      $hub->$register($component);
     }
   }
 
@@ -353,38 +240,15 @@ sub synergize {
   return $hub;
 }
 
-sub _slurp_json_file ($filename) {
-  my $file = Path::Tiny::path($filename);
-  confess "config file does not exist" unless -e $file;
-  my $json = $file->slurp_utf8;
-  return JSON::MaybeXS->new->decode($json);
-}
-
-sub _slurp_toml_file ($filename) {
-  my $file = Path::Tiny::path($filename);
-  confess "config file does not exist" unless -e $file;
-  my $toml = $file->slurp_utf8;
-  my ($data, $err) = from_toml($toml);
-  unless ($data) {
-    die "Error parsing toml file $filename: $err\n";
-  }
-  return $data;
-}
-
 sub synergize_file {
   my $class = shift;
   my ($loop, $filename) = @_ == 2 ? @_
                         : @_ == 1 ? (undef, @_)
                         : confess("weird arguments passed to synergize_file");
 
-  my $reader  = $filename =~ /\.ya?ml\z/ ? sub { YAML::XS::LoadFile($_[0]) }
-              : $filename =~ /\.json\z/  ? \&_slurp_json_file
-              : $filename =~ /\.toml\z/  ? \&_slurp_toml_file
-              : confess "don't know how to synergize_file $filename";
-
   return $class->synergize(
     ($loop ? $loop : ()),
-    $reader->($filename),
+    read_config_file($filename),
   );
 }
 
@@ -458,70 +322,6 @@ sub http_request ($self, $method, $url, %args) {
   } );
 
   return $async ? $future : $future->get;
-}
-
-has time_zone_names => (
-  is  => 'ro',
-  isa => 'HashRef',
-  default => sub {  {}  },
-);
-
-sub format_friendly_date ($self, $dt, $arg = {}) {
-  # arg:
-  #   now               - a DateTime to use for now, instead of actually now
-  #   allow_relative    - can we use relative stuff? default true
-  #   include_time_zone - default true
-  #   maybe_omit_day    - default false; if true, skip "today at" on today
-  #   target_time_zone  - format into this time zone; default, $dt's TZ
-
-  if ($arg->{target_time_zone} && $arg->{target_time_zone} ne $dt->time_zone->name) {
-    $dt = DateTime->from_epoch(
-      time_zone => $arg->{target_time_zone},
-      epoch => $dt->epoch,
-    );
-  }
-
-  my $now = $arg->{now}
-          ? $arg->{now}->clone->set_time_zone($dt->time_zone)
-          : DateTime->now(time_zone => $dt->time_zone);
-
-  my $dur = $now->subtract_datetime($dt);
-  my $tz_str = $self->time_zone_names->{ $dt->time_zone->name }
-            // $dt->format_cldr('vvv');
-
-  my $at_time = "at "
-              . $dt->format_cldr('HH:mm')
-              . (($arg->{include_time_zone}//1) ? " $tz_str" : "");
-
-  if (abs($dur->delta_months) > 11) {
-    return $dt->format_cldr('MMMM d, YYYY') . " $at_time";
-  }
-
-  if ($dur->delta_months) {
-    return $dt->format_cldr('MMMM d') . " $at_time";
-  }
-
-  my $days = $dur->delta_days;
-
-  if (abs $days >= 7 or ! ($arg->{allow_relative}//1)) {
-    return $dt->format_cldr('MMMM d') . " $at_time";
-  }
-
-  my %by_day = (
-    -2 => "the day before yesterday $at_time",
-    -1 => "yesterday $at_time",
-    +0 => "today $at_time",
-    +1 => "tomorrow $at_time",
-    +2 => "the day after tomorrow $at_time",
-  );
-
-  for my $offset (sort { $a <=> $b } keys %by_day) {
-    return $by_day{$offset}
-      if $dt->ymd eq $now->clone->add(days => $offset)->ymd;
-  }
-
-  my $which = $dur->is_positive ? "this past" : "this coming";
-  return join q{ }, $which, $dt->format_cldr('EEEE'), $at_time;
 }
 
 1;

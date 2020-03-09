@@ -827,7 +827,6 @@ has user_timers => (
 sub state ($self) {
   my $timers = $self->user_timers;
   my $last_timer_ids = $self->_last_lp_timer_task_ids;
-  my $prefs = $self->user_preferences;
 
   return {
     user_timers => {
@@ -835,7 +834,6 @@ sub state ($self) {
         keys $self->user_timers->%*
     },
     last_timer_ids => $last_timer_ids,
-    preferences    => $prefs,
   };
 }
 
@@ -1026,13 +1024,6 @@ sub start ($self) {
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
-
-    # Must load these first, otherwise timer_for_user will return
-    # undef since user won't have an api-token...
-    if (my $prefs = $state->{preferences}) {
-      $self->_load_preferences($prefs);
-    }
-
     if (my $timer_state = $state->{user_timers}) {
       for my $username (keys %$timer_state) {
         next unless my $user = $self->hub->user_directory
@@ -4341,7 +4332,7 @@ sub container_report ($self, $who, $arg = {}) {
   return unless my $lp_id = $who->lp_id;
 
   my $rototron = $self->_rototron;
-  my $user_is_triage = $who->is_on_triage;
+  my $user_is_triage = $who->is_on_triage($self->hub);
 
   my $triage_user = $rototron
                   ? $self->hub->user_directory->user_named('triage')

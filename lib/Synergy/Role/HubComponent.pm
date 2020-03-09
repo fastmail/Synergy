@@ -43,16 +43,11 @@ sub register_with_hub ($self, $hub) {
 sub state { return {} }
 
 sub save_state ($self, $state = $self->state) {
-  $self->hub->save_state($self, $state);
+  $self->hub->save_state($self->name, $state);
 }
 
 sub fetch_state ($self) {
-  $self->hub->fetch_state($self);
-}
-
-sub has_preferences ($self) {
-  return 0 unless $self->does('Synergy::Role::HasPreferences');
-  return !! ($self->preference_names)[0];
+  $self->hub->fetch_state($self->name);
 }
 
 no Moose::Role;

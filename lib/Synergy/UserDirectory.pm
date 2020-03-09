@@ -3,24 +3,38 @@ use warnings;
 package Synergy::UserDirectory;
 use Moose;
 
-with 'Synergy::Role::HubComponent';
-with 'Synergy::Role::HasPreferences' => {
-  namespace => 'user',
-};
+with (
+  'Synergy::Role::ManagesState',
+  'Synergy::Role::HasPreferences' => {
+    namespace => 'user',
+  },
+);
 
 use experimental qw(signatures lexical_subs);
 use namespace::autoclean;
-use JSON::MaybeXS ();
-use YAML::XS;
 use Path::Tiny;
 use Synergy::User;
-use Synergy::Util qw(known_alphabets);
+use Synergy::Util qw(known_alphabets read_config_file);
 use Synergy::Logger '$Logger';
 use List::Util qw(first shuffle all);
 use DateTime;
 use Defined::KV;
 use Try::Tiny;
 use utf8;
+
+has name => (
+  is  => 'ro',
+  isa => 'Str',
+  default => '_user_directory',
+);
+
+sub env;
+has env => (
+  is  => 'ro',
+  isa => 'Synergy::Environment',
+  required => 1,
+  weak_ref => 1,
+);
 
 has _users => (
   isa  => 'HashRef',
@@ -63,17 +77,13 @@ has _active_users => (
 after _set_user  => sub ($self, @) { $self->_clear_active_users };
 after _set_users => sub ($self, @) { $self->_clear_active_users };
 
-after register_with_hub => sub ($self, @) {
-  if (my $state = $self->fetch_state) {
-    if (my $prefs = $state->{preferences}) {
-      $self->_load_preferences($prefs);
-    }
-  }
-};
+sub state ($self) { return {} }
 
-sub state ($self) {
-  return { preferences => $self->user_preferences };
-}
+# HasPreferences calls this as $self->save_state, because it's normally used
+# on hub components, which handle all of that.
+around save_state => sub ($orig, $self) {
+  $self->$orig($self->name, $self->state);
+};
 
 sub master_users ($self) {
   return grep {; $_->is_master } $self->users;
@@ -103,8 +113,11 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
 }
 
 sub load_users_from_database ($self) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->env->state_dbh;
   my %users;
+
+  # load prefs
+  $self->fetch_state($self->name);
 
   my $user_sth = $dbh->prepare('SELECT * FROM users');
   $user_sth->execute;
@@ -143,15 +156,8 @@ sub load_users_from_database ($self) {
 # The source of truth will now be the sqlite database. But if we have a user
 # file anyway, we'll update the database (so we'll be right next time) and
 # load this user directly.
-sub load_users_from_file ($self, $file) {
-  my $user_config;
-  if ($file =~ /\.ya?ml\z/) {
-    $user_config = YAML::XS::LoadFile($file);
-  } elsif ($file =~ /\.json\z/) {
-    $user_config = JSON::MaybeXS->new->decode( Path::Tiny::path($file)->slurp );
-  } else {
-    Carp::confess("unknown filetype: $file");
-  }
+sub load_users_from_file ($self, $filename) {
+  my $user_config = read_config_file($filename);
 
   for my $username (keys %$user_config) {
     if ($self->user_named($username)) {
@@ -176,7 +182,7 @@ sub load_users_from_file ($self, $file) {
 
 # Save them in memory, and also insert them into the database.
 sub register_user ($self, $user) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->env->state_dbh;
   state $user_insert_sth = $dbh->prepare(join(q{ },
     q{INSERT INTO users},
     q{   (username, lp_id, is_master, is_virtual, is_deleted)},
@@ -221,7 +227,7 @@ sub register_user ($self, $user) {
 }
 
 sub set_lp_id_for_user ($self, $user, $lp_id) {
-  my $dbh = $self->hub->_state_dbh;
+  my $dbh = $self->env->state_dbh;
   my $user_update_sth = $dbh->prepare(
     q{UPDATE users SET lp_id = ? WHERE username = ?},
   );

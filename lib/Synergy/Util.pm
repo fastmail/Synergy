@@ -7,12 +7,20 @@ use experimental qw(lexical_subs signatures);
 
 use charnames ();
 use Acme::Zalgo ();
+use Carp;
+use DateTime;
 use DateTime::Format::Natural;
+use JSON::MaybeXS;
 use List::Util qw(first);
+use Path::Tiny ();
 use Time::Duration::Parse;
 use Time::Duration;
+use TOML;
+use YAML::XS;
 
 use Sub::Exporter -setup => [ qw(
+  read_config_file
+
   bool_from_text
   parse_date_for_user
   parse_time_hunk
@@ -28,6 +36,33 @@ use Sub::Exporter -setup => [ qw(
   known_alphabets
   transliterate
 ) ];
+
+sub read_config_file ($filename) {
+  my $reader  = $filename =~ /\.ya?ml\z/ ? sub { YAML::XS::LoadFile($_[0]) }
+              : $filename =~ /\.json\z/  ? \&_slurp_json_file
+              : $filename =~ /\.toml\z/  ? \&_slurp_toml_file
+              : confess "don't know how to read config file $filename";
+
+  return $reader->($filename),
+}
+
+sub _slurp_json_file ($filename) {
+  my $file = Path::Tiny::path($filename);
+  confess "config file does not exist" unless -e $file;
+  my $json = $file->slurp_utf8;
+  return JSON::MaybeXS->new->decode($json);
+}
+
+sub _slurp_toml_file ($filename) {
+  my $file = Path::Tiny::path($filename);
+  confess "config file does not exist" unless -e $file;
+  my $toml = $file->slurp_utf8;
+  my ($data, $err) = from_toml($toml);
+  unless ($data) {
+    die "Error parsing toml file $filename: $err\n";
+  }
+  return $data;
+}
 
 # Handles yes/no, y/n, 1/0, true/false, t/f, on/off
 sub bool_from_text ($text) {

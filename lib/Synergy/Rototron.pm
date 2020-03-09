@@ -12,6 +12,7 @@ use DateTime ();
 use File::stat;
 use JMAP::Tester;
 use Params::Util qw(_HASH0);
+use Synergy::Util qw(read_config_file);
 
 my $PROGRAM_ID = 'Synergy::Rototron/20190131.001';
 
@@ -39,11 +40,7 @@ sub config ($self) {
       if @fields == grep { $cached->{$_} == $stat->$_ } @fields;
   }
 
-  my $config = do {
-    open my $fh, '<', $path or die "can't read $path: $!";
-    my $json = do { local $/; <$fh> };
-    JSON::MaybeXS->new->utf8(1)->decode($json);
-  };
+  my $config = read_config_file($path);
 
   %$cached = map {; $_ => $stat->$_ } @fields;
   $cached->{config} = $config;
@@ -87,6 +84,7 @@ has availability_checker => (
 has user_directory => (
   is => 'ro',
   required => 1,
+  isa => 'Synergy::UserDirectory',
 );
 
 has jmap_client => (
@@ -668,13 +666,8 @@ package Synergy::Rototron::AvailabilityChecker {
   sub user_is_available_on ($self, $username, $dt) {
     my $ymd = $dt->ymd;
 
-    # This is a total cop-out.  We should make the user directory available to
-    # the non-Synergy rototron… somehow.  But we haven't yet.
-    # -- rjbs, 2020-03-02
-    if ($self->user_directory) {
-      if (my $user = $self->user_directory->user_named($username)) {
-        return 0 unless $user->hours_for_dow($dt->day_of_week);
-      }
+    if (my $user = $self->user_directory->user_named($username)) {
+      return 0 unless $user->hours_for_dow($dt->day_of_week);
     }
 
     my $leave = $self->_leave_days;

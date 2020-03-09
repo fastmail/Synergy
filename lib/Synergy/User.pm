@@ -103,7 +103,7 @@ sub format_datetime ($self, $dt, $format = undef) {
     return $dt->strftime($format);
   }
 
-  return $self->directory->hub->format_friendly_date($dt);
+  return $self->directory->env->format_friendly_date($dt);
 }
 
 has identities => (
@@ -171,7 +171,9 @@ sub hours_for_dow ($self, $dow) {
   return $hours;
 }
 
-sub shift_for_day ($self, $moment) {
+# We must now inject $hub, because the directory is not necessarily attached
+# to one.
+sub shift_for_day ($self, $hub, $moment) {
   my $when  = DateTime->from_epoch(
     time_zone => $self->time_zone,
     epoch     => $moment->epoch,
@@ -179,7 +181,7 @@ sub shift_for_day ($self, $moment) {
 
   return unless my $hours = $self->hours_for_dow($when->day_of_week);
 
-  if (my $roto = $self->directory->hub->reactor_named('rototron')) {
+  if (my $roto = $hub->reactor_named('rototron')) {
     return unless $roto->rototron->user_is_available_on($self->username, $when);
   }
 
@@ -200,8 +202,8 @@ sub shift_for_day ($self, $moment) {
   return \%shift;
 }
 
-sub is_on_triage ($self) {
-  return unless my $roto = $self->directory->hub->reactor_named('rototron');
+sub is_on_triage ($self, $hub) {
+  return unless my $roto = $hub->reactor_named('rototron');
 
   my $username = $self->username;
 

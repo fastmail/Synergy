@@ -90,7 +90,7 @@ date_ok(fmt_epoch($zero  - 86400 * 30), 'June 13 at 21:51 UTC');
 date_ok(fmt_epoch($zero  + 86400 * 365), 'July 13, 2019 at 21:51 UTC');
 date_ok(fmt_epoch($zero  - 86400 * 365), 'July 13, 2017 at 21:51 UTC');
 
-$synergy->time_zone_names->{UTC} = "!";
+$synergy->env->time_zone_names->{UTC} = "!";
 date_ok(fmt($now), 'today at 21:51 !');
 
 done_testing;

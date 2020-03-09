@@ -11,20 +11,24 @@ use DateTime;
 use Getopt::Long::Descriptive;
 use JSON::MaybeXS;
 
+use Synergy::Environment;
 use Synergy::Rototron;
 
 binmode *STDOUT, 'encoding(:utf-8)';
 
 my ($opt, $desc) = describe_options(
   '%c %o',
-  [ 'config|c=s', 'config file path',     { default => 'rototron.json' } ],
+  [ 'config|c=s', 'config file path',      { default => 'rototron.json' } ],
+  [ 'env|e=s',    'environment file path', { default => 'synergy.json'  } ],
   [ 'debug|d',    'print more stuff',                                    ],
   [ 'really|r',   'really make changes',                                 ],
 );
 
+my $env = Synergy::Environment->new(read_config_file($opt->env));
+
 my $rototron = Synergy::Rototron->new({
   config_path => $opt->config,
-  user_directory => undef, # This won't work for long! -- rjbs, 2019-11-14
+  user_directory => $env->user_directory,
 });
 
 # We want to populate out 90d, plus enough days to get us to a Friday.
