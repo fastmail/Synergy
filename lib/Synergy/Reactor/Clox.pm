@@ -28,10 +28,7 @@ has always_include => (
 
 listener 'clox' => (
   exclusive => 1,
-  predicate => sub ($self, $e) {
-    return unless $e->was_targeted;
-    return unless $e->text =~ /\Aclo(?:x|cks)(?:\s+.+)?/i;
-  },
+  match => qr{\Aclo(?:x|cks)(?:\s+.+)?}i,
   handler => sub ($self, $event) {
     $event->mark_handled;
 

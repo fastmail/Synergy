@@ -4,6 +4,7 @@ use Moose;
 use Moose::Exporter;
 
 use experimental qw(postderef signatures);
+use Carp ();
 use Synergy::Listener;
 
 Moose::Exporter->setup_import_methods(
@@ -65,10 +66,28 @@ sub add_listener ($self, $name, $spec) {
   die "listener $name registered more than once"
     if $self->has_listener_named($name);
 
+  # build a predicate
+  my $predicate = delete $spec->{predicate};
+
+  if (! $predicate && $spec->{match}) {
+    my $require_targeted = $spec->{always} ? 0 : 1;
+    my $re = $spec->{match};
+
+    $predicate = sub ($listener, $event) {
+      return 0 if $require_targeted && ! $event->was_targeted;
+      return $event->text =~ /$re/i;
+    };
+  }
+
+  unless ($predicate) {
+    Carp::confess("need 'predicate' or 'match' for listener $name");
+  }
+
   # We store specs, not Listener objects (which need a reactor).
   $self->set_listener($name, {
     name => $name,
     method => delete $spec->{handler},
+    predicate => $predicate,
     %$spec,
   });
 }
