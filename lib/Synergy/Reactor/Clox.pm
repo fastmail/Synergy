@@ -27,9 +27,9 @@ has always_include => (
 );
 
 listener 'clox' => (
+  aliases   => [ 'clocks' ],
   exclusive => 1,
-  match => qr{\Aclo(?:x|cks)(?:\s+.+)?}i,
-  handler => sub ($self, $event) {
+  handler   => sub ($self, $event) {
     $event->mark_handled;
 
     my (undef, $spec) = split /\s+/, $event->text, 2;

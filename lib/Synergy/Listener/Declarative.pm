@@ -69,18 +69,29 @@ sub add_listener ($self, $name, $spec) {
   # build a predicate
   my $predicate = delete $spec->{predicate};
 
-  if (! $predicate && $spec->{match}) {
+  my $require_targeted = $spec->{always} ? 0 : 1;
+
+  my @matchers;
+  push @matchers, $spec->{match} if $spec->{match};
+
+  # For all of our names, we'll match our name at the beginning of the command
+  my @names = ($name);
+  push @names, $spec->{aliases}->@* if $spec->{aliases};
+
+  push @matchers, qr{\A\Q$_\E\b} for @names;
+
+  if (! $predicate) {
     my $require_targeted = $spec->{always} ? 0 : 1;
-    my $re = $spec->{match};
 
     $predicate = sub ($listener, $event) {
       return 0 if $require_targeted && ! $event->was_targeted;
-      return $event->text =~ /$re/i;
-    };
-  }
 
-  unless ($predicate) {
-    Carp::confess("need 'predicate' or 'match' for listener $name");
+      for my $re (@matchers) {
+        return 1 if $event->text =~ /$re/i;
+      }
+
+      return 0;
+    };
   }
 
   # We store specs, not Listener objects (which need a reactor).
