@@ -69,7 +69,7 @@ sub add_listener ($self, $name, $spec) {
     my @names = ($name);
     push @names, $spec->{aliases}->@* if $spec->{aliases};
 
-    push @match_regexes, qr{\A\Q$_\E\b} for @names;
+    push @match_regexes, qr{\A\Q$_\E(\b|\s)} for @names;
   }
 
   unless ($predicate) {
