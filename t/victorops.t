@@ -74,7 +74,10 @@ sub send_message ($text, $from = $channel->default_from) {
 
 sub single_message_text {
   my @texts = map {; $_->{text} } $channel->sent_messages;
-  fail("expected only one message, but got " . @texts) if @texts > 1;
+  if (@texts > 1) {
+    fail("expected only one message, but got " . @texts);
+    note("  - $_") for @texts;
+  }
   $channel->clear_messages;
   return $texts[0];
 }
@@ -142,7 +145,7 @@ subtest 'exit maint' => sub {
     gen_response(200, {}),
   );
 
-  send_message('synergy: demaint', 'alice');
+  send_message('synergy: maint stop', 'alice');
   like(
     single_message_text(),
     qr{maint cleared}i,
@@ -155,7 +158,7 @@ subtest 'exit maint' => sub {
     gen_response(400, {}),
   );
 
-  send_message('synergy: demaint', 'alice');
+  send_message('synergy: unmaint', 'alice');
   like(
     single_message_text(),
     qr{couldn't clear the VO maint}i,

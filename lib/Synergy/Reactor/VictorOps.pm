@@ -8,6 +8,8 @@ use DateTime;
 with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::HasPreferences';
 
+use Synergy::Listener::Declarative;
+
 use experimental qw(signatures);
 use namespace::clean;
 use JSON::MaybeXS;
@@ -81,88 +83,45 @@ has _slack_to_vo_map => (
   },
 );
 
-sub listener_specs {
-  return (
-    {
-      name      => 'alert',
-      method    => 'handle_alert',
-      exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^alert\s+/i },
-      help_entries => [
-        { title => 'alert', text => "alert TEXT: get help from staff on call" },
-      ],
-    },
-    {
-      name      => 'maint-query',
-      method    => 'handle_maint_query',
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint(\s+status)?\s*$/in },
-      help_entries => [
-        { title => 'maint', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
-Conveniences for managing VictorOps "maintenance mode", aka "silence all the
-alerts because everything is on fire."
+sub listener_specs {}
 
-• *maint*, *maint status*: show current maintenance state
-• *maint start*: enter maintenance mode. All alerts are now silenced! Also acks all unacked alerts, ain't no one got time for that.
-• *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
-EOH
-      ],
-    },
-    {
-      name      => 'maint-start',
-      method    => 'handle_maint_start',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ m{^maint\s+start\s*(/force)?\s*$}i },
-    },
-    {
-      name      => 'maint-end',
-      method    => 'handle_maint_end',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return 1 if $e->text =~ /^maint\s+(end|stop)\s*$/i;
-        return 1 if $e->text =~ /^unmaint\s*$/i;
-        return 1 if $e->text =~ /^demaint\s*$/i;
-      },
-    },
-    {
-      name      => 'oncall',
-      method    => 'handle_oncall',
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
-    },
-  );
-}
+listener alert => (
+  exclusive => 1,
+  help_entries => [
+    { title => 'alert', text => "alert TEXT: get help from staff on call" },
+  ],
+  handler => sub ($self, $event) {
+    $event->mark_handled;
 
-sub handle_alert ($self, $event) {
-  $event->mark_handled;
+    my $text = $event->text =~ s{^alert\s+}{}r;
 
-  my $text = $event->text =~ s{^alert\s+}{}r;
+    my $username = $event->from_user->username;
 
-  my $username = $event->from_user->username;
+    my $future = $self->hub->http_post(
+      $self->alert_endpoint_uri,
+      async => 1,
+      Content_Type  => 'application/json',
+      Content       => encode_json({
+        message_type  => 'CRITICAL',
+        entity_id     => "synergy.via-$username",
+        entity_display_name => "$text",
+        state_start_time    => time,
 
-  my $future = $self->hub->http_post(
-    $self->alert_endpoint_uri,
-    async => 1,
-    Content_Type  => 'application/json',
-    Content       => encode_json({
-      message_type  => 'CRITICAL',
-      entity_id     => "synergy.via-$username",
-      entity_display_name => "$text",
-      state_start_time    => time,
+        state_message => "$username has requested assistance through Synergy:\n$text\n",
+      }),
+    );
 
-      state_message => "$username has requested assistance through Synergy:\n$text\n",
-    }),
-  );
+    $future->on_fail(sub {
+      $event->reply("I couldn't send this alert.  Sorry!");
+    });
 
-  $future->on_fail(sub {
-    $event->reply("I couldn't send this alert.  Sorry!");
-  });
+    $future->on_ready(sub {
+      $event->reply("I've sent the alert.  Good luck!");
+    });
 
-  $future->on_ready(sub {
-    $event->reply("I've sent the alert.  Good luck!");
-  });
-
-  return;
-}
+    return;
+  },
+);
 
 sub _vo_api_endpoint ($self, $endpoint) {
   return $self->api_endpoint_uri . $endpoint;
@@ -180,47 +139,60 @@ after register_with_hub => sub ($self, @) {
   $self->fetch_state;   # load prefs
 };
 
-sub handle_maint_query ($self, $event) {
-  $event->mark_handled;
+listener maint => (
+  match => qr{^maint(\s+status)?\s*$}i,   # the $ is important, here!
+  help_entries => [
+    { title => 'maint', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
+Conveniences for managing VictorOps "maintenance mode", aka "silence all the
+alerts because everything is on fire."
 
-  my $f = $self->hub->http_get(
-    $self->_vo_api_endpoint('/maintenancemode'),
-    $self->_vo_api_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log("VO: get maintenancemode failed: ".$res->as_string);
-        return $event->reply("I couldn't look up VO maint state. Sorry!");
+• *maint*, *maint status*: show current maintenance state
+• *maint start*: enter maintenance mode. All alerts are now silenced! Also acks all unacked alerts, ain't no one got time for that.
+• *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
+EOH
+  ],
+  handler => sub ($self, $event) {
+    $event->mark_handled;
+
+    my $f = $self->hub->http_get(
+      $self->_vo_api_endpoint('/maintenancemode'),
+      $self->_vo_api_headers,
+      async => 1,
+    )->then(
+      sub ($res) {
+        unless ($res->is_success) {
+          $Logger->log("VO: get maintenancemode failed: ".$res->as_string);
+          return $event->reply("I couldn't look up VO maint state. Sorry!");
+        }
+
+        my $data = decode_json($res->content);
+        my $maint = $data->{activeInstances} // [];
+        unless (@$maint) {
+          return $event->reply("VO not in maint right now. Everything is fine maybe!");
+        }
+
+        state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
+
+        # the way we use VO there's probably not more than one, but at least this
+        # way if there are we won't just drop the rest on the floor -- robn, 2019-08-16
+        my $maint_text = join ', ', map {
+          my $start = DateTime->from_epoch(epoch => int($_->{startedAt} / 1000));
+          my $ago = $ago_formatter->format_datetime($start);
+          "$ago by $_->{startedBy}"
+        } @$maint;
+
+        return $event->reply("🚨 VO in maint: $maint_text");
       }
-
-      my $data = decode_json($res->content);
-      my $maint = $data->{activeInstances} // [];
-      unless (@$maint) {
-        return $event->reply("VO not in maint right now. Everything is fine maybe!");
+    )->else(
+      sub (@fails) {
+        $Logger->log("VO: handle_maint_query failed: @fails");
+        return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
       }
+    );
 
-      state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
-
-      # the way we use VO there's probably not more than one, but at least this
-      # way if there are we won't just drop the rest on the floor -- robn, 2019-08-16
-      my $maint_text = join ', ', map {
-        my $start = DateTime->from_epoch(epoch => int($_->{startedAt} / 1000));
-        my $ago = $ago_formatter->format_datetime($start);
-        "$ago by $_->{startedBy}"
-      } @$maint;
-
-      return $event->reply("🚨 VO in maint: $maint_text");
-    }
-  )->else(
-    sub (@fails) {
-      $Logger->log("VO: handle_maint_query failed: @fails");
-      return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
-    }
-  );
-
-  $f->retain;
-}
+    $f->retain;
+  },
+);
 
 sub _current_oncall_names ($self) {
   return $self->hub->http_get(
@@ -256,140 +228,145 @@ sub _user_is_oncall ($self, $who) {
     });
 }
 
-sub handle_oncall ($self, $event) {
-  $event->mark_handled;
+listener oncall => (
+  handler => sub ($self, $event) {
+    $event->mark_handled;
 
-  $self->_current_oncall_names
-    ->then(sub (@names) {
-        my @users = map {; $self->username_from_vo($_) // $_ } @names;
-        return $event->reply('current oncall: ' . join(', ', sort @users));
-    })
-    ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
-    ->retain;
-}
-
-sub handle_maint_start ($self, $event) {
-  $event->mark_handled;
-
-  my $ALREADY_IN_MAINT = -42;
-
-  my $force = $event->text =~ m{/force\s*$};
-  my $f;
-
-  if ($force) {
-    # don't bother checking
-    $f = Future->done;
-  } else {
-    $f = $self->_user_is_oncall($event->from_user)->then(sub ($is_oncall) {
-      return Future->done if $is_oncall;
-
-      $event->error_reply(join(q{ },
-        "You don't seem to be on call right now.",
-        "Usually, the person oncall is getting the alerts, so they should be",
-        "the one to decide whether or not to shut them up.",
-        "If you really want to do this, try again with /force."
-      ));
-      return Future->fail('not oncall');
-    });
+    $self->_current_oncall_names
+      ->then(sub (@names) {
+          my @users = map {; $self->username_from_vo($_) // $_ } @names;
+          return $event->reply('current oncall: ' . join(', ', sort @users));
+      })
+      ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
+      ->retain;
   }
+);
 
-  $f->then(sub {
-    return $self->hub->http_post(
-      $self->_vo_api_endpoint('/maintenancemode/start'),
-      $self->_vo_api_headers,
-      async => 1,
-      Content_Type => 'application/json',
-      Content      => encode_json( { names => [] } ), # nothing, global mode
-    );
-  })
-  ->then(sub ($res) {
-    if ($res->code == 409) {
-      $event->reply("VO already in maint!");
-      return Future->done($ALREADY_IN_MAINT);
+listener 'maint start' => (
+  handler => sub ($self, $event) {
+    $event->mark_handled;
+
+    my $ALREADY_IN_MAINT = -42;
+
+    my $force = $event->text =~ m{/force\s*$};
+    my $f;
+
+    if ($force) {
+      # don't bother checking
+      $f = Future->done;
+    } else {
+      $f = $self->_user_is_oncall($event->from_user)->then(sub ($is_oncall) {
+        return Future->done if $is_oncall;
+
+        $event->error_reply(join(q{ },
+          "You don't seem to be on call right now.",
+          "Usually, the person oncall is getting the alerts, so they should be",
+          "the one to decide whether or not to shut them up.",
+          "If you really want to do this, try again with /force."
+        ));
+        return Future->fail('not oncall');
+      });
     }
 
-    unless ($res->is_success) {
-      $Logger->log("VO: post maint failed: ".$res->as_string);
-      return $event->reply("I couldn't start maint. Sorry!");
-    }
-
-    $self->_ack_all($event->from_user->username);
-  })
-  ->then(sub ($nacked) {
-    return Future->done if $nacked == $ALREADY_IN_MAINT;
-
-    my $ack_text = ' ';
-    $ack_text = " 🚑 $nacked alert".($nacked > 1 ? 's' : '')." acked!"
-      if $nacked;
-    return $event->reply("🚨 VO now in maint!$ack_text Good luck!");
-  })
-  ->else(sub (@fails) {
-    return if $fails[0] eq 'not oncall';
-
-    $Logger->log("VO: handle_maint_start failed: @fails");
-    return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
-  })
-  ->retain;
-
-  return;
-}
-
-sub handle_maint_end ($self, $event) {
-  $event->mark_handled;
-
-  my $f = $self->hub->http_get(
-    $self->_vo_api_endpoint('/maintenancemode'),
-    $self->_vo_api_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log("VO: get maintenancemode failed: ".$res->as_string);
-        return $event->reply("I couldn't look up the current VO maint state. Sorry!");
-      }
-
-      my $data = decode_json($res->content);
-      my $maint = $data->{activeInstances} // [];
-      unless (@$maint) {
-        $event->reply("VO not in maint right now. Everything is fine maybe!");
-        return Future->fail('no maint');
-      }
-
-      my ($global_maint) = grep { $_->{isGlobal} } @$maint;
-      unless ($global_maint) {
-        return $event->reply(
-          "I couldn't find the VO global maint, but there were other maint modes set. ".
-          "This isn't something I know how to deal with. ".
-          "You'll need to go and sort it out in the VO web UI.");
-      }
-
-      my $instance_id = $global_maint->{instanceId};
-
-      return $self->hub->http_put(
-        $self->_vo_api_endpoint("/maintenancemode/$instance_id/end"),
+    $f->then(sub {
+      return $self->hub->http_post(
+        $self->_vo_api_endpoint('/maintenancemode/start'),
         $self->_vo_api_headers,
         async => 1,
+        Content_Type => 'application/json',
+        Content      => encode_json( { names => [] } ), # nothing, global mode
       );
-    }
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log("VO: put maintenancemode failed: ".$res->as_string);
-        return $event->reply("I couldn't clear the VO maint state. Sorry!");
+    })
+    ->then(sub ($res) {
+      if ($res->code == 409) {
+        $event->reply("VO already in maint!");
+        return Future->done($ALREADY_IN_MAINT);
       }
 
-      return $event->reply("🚨 VO maint cleared. Good job everyone!");
-    }
-  )->else(
-    sub (@fails) {
-      return if $fails[0] eq 'no maint';
-      $Logger->log("VO: handle_maint_end failed: @fails");
-      return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
-    }
-  );
+      unless ($res->is_success) {
+        $Logger->log("VO: post maint failed: ".$res->as_string);
+        return $event->reply("I couldn't start maint. Sorry!");
+      }
 
-  $f->retain;
-}
+      $self->_ack_all($event->from_user->username);
+    })
+    ->then(sub ($nacked) {
+      return Future->done if $nacked == $ALREADY_IN_MAINT;
+
+      my $ack_text = ' ';
+      $ack_text = " 🚑 $nacked alert".($nacked > 1 ? 's' : '')." acked!"
+        if $nacked;
+      return $event->reply("🚨 VO now in maint!$ack_text Good luck!");
+    })
+    ->else(sub (@fails) {
+      return if $fails[0] eq 'not oncall';
+
+      $Logger->log("VO: handle_maint_start failed: @fails");
+      return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
+    })
+    ->retain;
+  },
+);
+
+listener 'maint end' => (
+  aliases => [ 'maint stop', 'demaint', 'unmaint' ],
+  handler => sub ($self, $event) {
+    $event->mark_handled;
+
+    my $f = $self->hub->http_get(
+      $self->_vo_api_endpoint('/maintenancemode'),
+      $self->_vo_api_headers,
+      async => 1,
+    )->then(
+      sub ($res) {
+        unless ($res->is_success) {
+          $Logger->log("VO: get maintenancemode failed: ".$res->as_string);
+          return $event->reply("I couldn't look up the current VO maint state. Sorry!");
+        }
+
+        my $data = decode_json($res->content);
+        my $maint = $data->{activeInstances} // [];
+        unless (@$maint) {
+          $event->reply("VO not in maint right now. Everything is fine maybe!");
+          return Future->fail('no maint');
+        }
+
+        my ($global_maint) = grep { $_->{isGlobal} } @$maint;
+        unless ($global_maint) {
+          return $event->reply(
+            "I couldn't find the VO global maint, but there were other maint modes set. ".
+            "This isn't something I know how to deal with. ".
+            "You'll need to go and sort it out in the VO web UI.");
+        }
+
+        my $instance_id = $global_maint->{instanceId};
+
+        return $self->hub->http_put(
+          $self->_vo_api_endpoint("/maintenancemode/$instance_id/end"),
+          $self->_vo_api_headers,
+          async => 1,
+        );
+      }
+    )->then(
+      sub ($res) {
+        unless ($res->is_success) {
+          $Logger->log("VO: put maintenancemode failed: ".$res->as_string);
+          return $event->reply("I couldn't clear the VO maint state. Sorry!");
+        }
+
+        return $event->reply("🚨 VO maint cleared. Good job everyone!");
+      }
+    )->else(
+      sub (@fails) {
+        return if $fails[0] eq 'no maint';
+        $Logger->log("VO: handle_maint_end failed: @fails");
+        return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
+      }
+    );
+
+    $f->retain;
+  },
+);
 
 sub _ack_all ($self, $username) {
   my $f = $self->hub->http_get(
