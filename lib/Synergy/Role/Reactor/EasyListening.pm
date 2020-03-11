@@ -17,7 +17,12 @@ has listeners => (
   handles => { listeners => 'elements' },
   default => sub ($self, @) {
     my @listeners;
-    for my $spec ($self->listener_specs) {
+    my @specs = $self->listener_specs;
+
+    push @specs, $self->commando->listener_specs
+      if $self->can('commando');
+
+    for my $spec (@specs) {
       push @listeners, Synergy::Listener->new({
         reactor => $self,
         $spec->%{ qw( exclusive name predicate method ) },
