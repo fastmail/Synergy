@@ -52,26 +52,33 @@ sub add_listener ($self, $name, $spec) {
     if $self->has_listener_named($name);
 
   # build a predicate
-  my $predicate = delete $spec->{predicate};
+  my $predicate;
+  my @match_regexes;
 
-  my $require_targeted = $spec->{always} ? 0 : 1;
+  my $match = $spec->{match};
 
-  my @matchers;
-  push @matchers, $spec->{match} if $spec->{match};
+  # Explicit subroutine; just use that
+  $predicate = $match if $match && ref $match eq 'CODE';
 
-  # For all of our names, we'll match our name at the beginning of the command
-  my @names = ($name);
-  push @names, $spec->{aliases}->@* if $spec->{aliases};
+  if ($match) {
+    # Explicit match regex; only use that
+    push @match_regexes, $match;
+  } else {
+    # Nothing explicit: we'll generate one, and match our names at the
+    # beginning of the command.
+    my @names = ($name);
+    push @names, $spec->{aliases}->@* if $spec->{aliases};
 
-  push @matchers, qr{\A\Q$_\E\b} for @names;
+    push @match_regexes, qr{\A\Q$_\E\b} for @names;
+  }
 
-  if (! $predicate) {
-    my $require_targeted = $spec->{always} ? 0 : 1;
+  unless ($predicate) {
+    my $require_targeted = $spec->{passive} ? 0 : 1;
 
     $predicate = sub ($listener, $event) {
       return 0 if $require_targeted && ! $event->was_targeted;
 
-      for my $re (@matchers) {
+      for my $re (@match_regexes) {
         return 1 if $event->text =~ /$re/i;
       }
 
