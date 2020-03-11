@@ -8,6 +8,8 @@ with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::ProvidesUserStatus',
      ;
 
+use Synergy::Listener::Declarative;
+
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
 use Lingua::EN::Inflect qw(PL_N);
@@ -278,14 +280,6 @@ has [ qw( inbox_package_id interrupts_package_id urgent_package_id project_portf
 );
 
 my %KNOWN = (
-  # SHORTCUTS
-  '++'      =>  [ \&_handle_plus_plus,
-                  "++ TASK: short for `task for me: TASK`, so see `help task`"],
-  '<<'      =>  [ \&_handle_angle_angle ], # To Neil, with love.
-  '> >'     =>  [ \&_handle_angle_angle ], # ayfkm, slack.
-  '>>'      =>  [ \&_handle_angle_angle,
-                  ">> PERSON REST: short for `task for PERSON: REST`, so see `help task`"],
-
   # TIMER COMMANDS
   timer     =>  [ \&_handle_timer,
     <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg
@@ -485,10 +479,6 @@ sub listener_specs {
       predicate => sub ($self, $event) {
         return unless $event->type eq 'message';
         return unless $event->was_targeted;
-
-        # Slack now "helpfully" corrects '>>' in DM to '> >', which means our
-        # regex doesn't match. -- michael, 2019-10-27
-        return 1 if $event->text =~ /^> >/;
 
         my ($what) = $event->text =~ /^(\S+)(?: \z | \s)/x;
         $what &&= lc $what;
@@ -2888,41 +2878,62 @@ sub _handle_quick_search ($self, $event, $text, $cmd, $munger) {
   $self->_send_search_result($event, $future, \%display);
 }
 
-sub _handle_plus_plus ($self, $event, $text) {
-  my $user = $event->from_user;
+listener '++' => (
+  help_entries => [{
+    title => '++',
+    text => "++ TASK: short for `task for me: TASK`, so see `help task`",
+  }],
+  handler => sub ($self, $event) {
+    $event->mark_handled;
 
-  return $event->error_reply($ERR_NO_LP)
-    unless $user && $self->auth_header_for($user);
+    my $user = $event->from_user;
 
-  unless (length $text) {
-    return $event->reply("Thanks, but I'm only as awesome as my creators.");
-  }
+    return $event->error_reply($ERR_NO_LP)
+      unless $user && $self->auth_header_for($user);
 
-  my $who     = $event->from_user->username;
-  my $pretend = "task for $who: $text";
+    my $text = $event->text =~ s/^\+\+\s*//r;
 
-  if ($text =~ /\A\s*that\s*\z/) {
-    my $last  = $self->get_last_utterance($event->source_identifier);
-
-    unless (length $last) {
-      return $event->error_reply("I don't know what 'that' refers to.");
+    unless (length $text) {
+      return $event->reply("Thanks, but I'm only as awesome as my creators.");
     }
 
-    $pretend = "task for $who: $last";
-  }
+    my $who     = $event->from_user->username;
+    my $pretend = "task for $who: $text";
 
-  return $self->_handle_task($event, $pretend);
-}
+    if ($text =~ /\A\s*that\s*\z/) {
+      my $last  = $self->get_last_utterance($event->source_identifier);
 
-sub _handle_angle_angle ($self, $event, $text) {
-  my ($target, $rest) = split /\s+/, $text, 2;
+      unless (length $last) {
+        return $event->error_reply("I don't know what 'that' refers to.");
+      }
 
-  $target =~ s/:$//;
+      $pretend = "task for $who: $last";
+    }
 
-  my $pretend = "task for $target: $rest";
+    return $self->_handle_task($event, $pretend);
+  },
+);
 
-  return $self->_handle_task($event, $pretend);
-}
+listener '>>' => (
+  aliases => [ '<<', '> >' ],
+  help_entries => [ {
+    title => '>>',
+    text => ">> PERSON REST: short for `task for PERSON: REST`, so see `help task`",
+  } ],
+  handler => sub ($self, $event) {
+    my $text = $event->text;
+    $text =~ s/^> >/>>/;  # slack formatting is terrible
+
+    my ($target, $rest) = split /\s+/, $text, 2;
+
+    $target =~ s/:$//;
+
+    my $pretend = "task for $target: $rest";
+
+    $event->mark_handled;
+    return $self->_handle_task($event, $pretend);
+  },
+);
 
 my @BYE = (
   "See you later, alligator.",
