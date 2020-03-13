@@ -396,12 +396,12 @@ sub _short_name_for_mr ($self, $mr) {
   # So, this is pretty annoying.  The structure we get back for an MR doesn't
   # give us much about the project other than an id, but we do have the web_url
   # field, which is:
-  #   http://gitlab.example.com/my-group/my-project/merge_requests/1
+  #   https://gitlab.example.com/fastmail/hm/-/merge_requests/5094
   #
   # So, we extract the my-group/my-project and see whether we have a shortcut
   # from (say) repos.yaml.
 
-  my ($g_slash_p, $id) = $mr->{web_url} =~ m{([^/]+/[^/]+)/merge_requests/([0-9]+)\z};
+  my ($g_slash_p, $id) = $mr->{web_url} =~ m{([^/]+/[^/]+)/-/merge_requests/([0-9]+)\z};
 
   my %shortcuts = $self->project_shortcuts->%*;
   my @found = sort { length $a <=> length $b }
