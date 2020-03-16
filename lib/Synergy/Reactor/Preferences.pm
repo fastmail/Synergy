@@ -31,6 +31,7 @@ the vital (like your real name) to the … less vital.
 To know what preferences you can or have already set, try:
 
 • *list all preferences*: this, obviously, lists all preferences you can set
+• *help preference `PREF`*: show help for the preference
 • *dump my preferences*: this shows you all your preferences
 • *dump `USER`'s preferences*: see another user's prefs
 

@@ -372,6 +372,7 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name => 'business-hours',
+  help      => q{when you work; you can use "weekdays, 09:00-17:00" or "Mon: 09:00-17:00, Tue: 10:00-12:00, (etc.)"},
   describer => sub ($value) {
     my @wdays = qw(mon tue wed thu fri);
     my @wends = qw(sat sun);
