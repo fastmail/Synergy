@@ -3784,7 +3784,7 @@ sub _handle_spent ($self, $event, $text) {
     (my $shortcut, $rest) = ($1, $2);
 
     my ($task, $error) = $self->task_for_shortcut($shortcut);
-    return $event->reply($error) unless $task;
+    return $event->error_reply($error) unless $task;
 
     $task_id = $task->{id};
   }
