@@ -743,7 +743,7 @@ sub handle_commit ($self, $event) {
   my @commits = $event->text =~ /(?:^|\s)([-_a-z]+\@[0-9a-fA-F]{7,40})(?=\W|$)/gi;
 
   state $base = $self->url_base;
-  my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)/commit/([0-9a-f]{6,40})}i;
+  my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/commit/([0-9a-f]{6,40})}i;
 
   for my $key (keys %found) {
     my $sha = $found{$key};
