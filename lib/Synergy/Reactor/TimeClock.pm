@@ -126,7 +126,7 @@ has _timeclock_dbh => (
 sub handle_clock_out ($self, $event) {
   $event->mark_handled;
 
-  my ($w2, $comment) = $event->text =~ /^clock (out|off):\s*(\S.+)\z/i;
+  my ($w2, $comment) = $event->text =~ /^clock (out|off):\s*(\S.+)\z/is;
 
   unless ($comment) {
     $event->error_reply("To clock \L$w2\E, it's: *clock \L$w2\E: `SUMMARY`*.");
