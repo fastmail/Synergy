@@ -5,7 +5,9 @@ package Synergy::Reactor::InABox;
 use utf8;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::EasyListening',
+     'Synergy::Role::HasPreferences',
+    ;
 
 use experimental qw(signatures);
 use namespace::clean;
@@ -87,6 +89,10 @@ my %command_handler = (
   vpn      => \&_handle_vpn,
 );
 
+after register_with_hub => sub ($self, @) {
+  $self->fetch_state;   # load prefs
+};
+
 sub handle_box ($self, $event) {
   $event->mark_handled;
 
@@ -121,10 +127,21 @@ sub _handle_create ($self, $event, @args) {
     return;
   }
 
-  $event->reply("Creating box, this will take a minute or two.");
+  my $version;
+  my %args = @args;
+  if (@args == 0) {
+    $version = $self->get_user_preference($event->from_user->username, 'version');
+  } elsif (defined($args{'/version'})) {
+    $version = $args{'/version'};
+  } else {
+    $event->error_reply("Error: Syntax is \"box create /version <version>\"");
+    return;
+  }
+
+  $event->reply("Creating $version box, this will take a minute or two.");
 
   my ($snapshot_id, $ssh_key_id) = Future->wait_all(
-    $self->_get_snapshot,
+    $self->_get_snapshot($version),
     $self->_get_ssh_key,
   )->then(
     sub (@futures) {
@@ -133,7 +150,7 @@ sub _handle_create ($self, $event, @args) {
   )->get;
 
   unless ($snapshot_id && $ssh_key_id) {
-    $event->error_reply("Couldn't find snapshot or SSH key, can't create box. Try again.");
+    $event->error_reply("Couldn't find snapshot of $version or SSH key, can't create box. Try again.");
     return;
   }
 
@@ -479,7 +496,7 @@ sub _format_droplet ($self, $droplet) {
     $droplet->{status};
 }
 
-sub _get_snapshot ($self) {
+sub _get_snapshot ($self, $version) {
   $self->hub->http_get(
     $self->_do_endpoint('/snapshots?per_page=200'),
     $self->_do_headers,
@@ -493,7 +510,7 @@ sub _get_snapshot ($self) {
       my $data = decode_json($res->content);
       my ($snapshot) =
         sort { $b->{name} cmp $a->{name} }
-        grep { $_->{name} =~ m/^fminabox-/ }
+        grep { $_->{name} =~ m/^fminabox-$version/ }
           $data->{snapshots}->@*;
       if ($snapshot) {
         $Logger->log([ "Found snapshot: %s (%s)", $snapshot->{id}, $snapshot->{name} ]);
@@ -603,5 +620,16 @@ sub _update_dns_for_user ($self, $user, $ip) {
     }
   )->get;
 }
+
+__PACKAGE__->add_preference(
+  name      => 'version',
+  validator => sub ($self, $value, @) {
+    return (undef, 'version must be jessie or buster') if $value ne 'buster' && $value ne 'jessie';
+
+    return lc $value;
+  },
+  default   => 'jessie',
+  description => 'Default Debian version for your fminabox',
+);
 
 1;
