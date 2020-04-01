@@ -628,8 +628,7 @@ sub _update_dns_for_user ($self, $user, $ip) {
 __PACKAGE__->add_preference(
   name      => 'version',
   validator => sub ($self, $value, @) {
-    return (undef, 'version must be jessie or buster') if $value ne 'buster' && $value ne 'jessie';
-
+    return (undef, 'version must be jessie or buster') unless grep { lc $value eq $_ } qw(jessie buster);
     return lc $value;
   },
   default   => 'jessie',
