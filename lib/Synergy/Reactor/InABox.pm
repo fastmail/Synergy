@@ -145,7 +145,8 @@ sub _handle_create ($self, $event, @args) {
     $self->_get_ssh_key,
   )->then(
     sub (@futures) {
-      Future->done(map { $_->get->{id} } @futures)
+      my @got = grep {; defined } map {; $_->get } @futures;
+      return Future->done(map { $_->{id} } @got);
     }
   )->get;
 
