@@ -110,17 +110,29 @@ sub handle_box ($self, $event) {
   $handler->($self, $event, @args);
 }
 
-sub _do_request ($self, $method, $endpoint, $content = undef) {
+sub _do_request ($self, $method, $endpoint, $data = undef) {
+  my %content;
+
+  if ($data) {
+    %content = (
+      Content_Type => 'application/json',
+      Content      => encode_json($data),
+    );
+  }
+
   return $self->hub->http_request(
     $method,
     $self->_do_endpoint($endpoint),
     $self->_do_headers,
+    %content,
     async => 1,
   )->then(sub ($res) {
     unless ($res->is_success) {
       $Logger->log([ "error talking to DO: %s", $res->as_string ]);
       return Future->fail('Error talking to DO', 'http', { http_res => $res });
     }
+
+    return Future->done(1) if $method eq 'DELETE';
 
     my $data = decode_json($res->content);
     return Future->done($data);
@@ -189,22 +201,11 @@ sub _handle_create ($self, $event, @args) {
 
   $Logger->log([ "Creating droplet: %s", encode_json(\%droplet_create_args) ]);
 
-  ($droplet, my $action_id) = $self->hub->http_post(
-    $self->_do_endpoint('/droplets'),
-    $self->_do_headers,
-    async        => 1,
-    Content_Type => 'application/json',
-    Content      => encode_json(\%droplet_create_args),
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error creating droplet: %s", $res->as_string]);
-        return Future->done;
-      }
-      my $data = decode_json($res->content);
+  ($droplet, my $action_id) = $self->_do_request(
+    POST => '/droplets', \%droplet_create_args,
+  )->then(sub ($data) {
       return Future->done($data->{droplet}, $data->{links}{actions}[0]{id});
-    }
-  )->get;
+  })->get;
 
   unless ($droplet) {
     $event->error_reply("There was an error creating the box. Try again.");
@@ -249,19 +250,7 @@ sub _handle_destroy ($self, $event, @args) {
 
   $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
 
-  my $destroyed = $self->hub->http_delete(
-    $self->_do_endpoint("/droplets/$droplet->{id}"),
-    $self->_do_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error deleting droplet %s", $res->as_string]);
-        return Future->done;
-      }
-      return Future->done(1);
-    }
-  )->get;
+  my $destroyed = $self->_do_request(DELETE => "/droplets/$droplet->{id}")->get;
 
   unless ($destroyed) {
     $event->error_reply("There was an error destroying the box. Try again.");
@@ -450,22 +439,11 @@ sub _handle_vpn ($self, $event, @args) {
 }
 
 sub _do_droplet_action_f ($self, $droplet_id, $type) {
-  $self->hub->http_post(
-    $self->_do_endpoint("/droplets/$droplet_id/actions"),
-    $self->_do_headers,
-    async        => 1,
-    Content_Type => 'application/json',
-    Content      => encode_json({ type => $type }),
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error taking '%s' action on droplet %s: %s", $type, $droplet_id, $res->as_string]);
-        return Future->done;
-      }
-      my $data = decode_json($res->content);
-      return Future->done($data->{action});
-    }
-  )->get;
+  return $self->_do_request(
+    POST => "/droplets/$droplet_id/actions", { type => $type },
+  )->then(sub ($data) {
+    return Future->done($data->{action});
+  })->get;
 }
 
 sub _do_action_status_f ($self, $actionurl) {
@@ -554,9 +532,9 @@ sub _region_for_user ($self, $user) {
 sub _update_dns_for_user ($self, $user, $ip) {
   my $username = $user->username;
 
-  my $endpoint = '/domains/' . $self->box_domain . '/records?per_page=200';
+  my $base = '/domains/' . $self->box_domain . '/records';
 
-  my $record = $self->_do_request(GET => $endpoint)
+  my $record = $self->_do_request(GET => "$base?per_page=200")
     ->then(sub ($data) {
       my ($record) = grep { $_->{name} eq "$username.box" } $data->{domain_records}->@*;
       Future->done($record);
@@ -564,38 +542,19 @@ sub _update_dns_for_user ($self, $user, $ip) {
 
   my $update_f;
   if ($record) {
-    $update_f = $self->hub->http_put(
-      $self->_do_endpoint('/domains/' . $self->box_domain . "/records/$record->{id}"),
-      $self->_do_headers,
-      async        => 1,
-      Content_Type => 'application/json',
-      Content      => encode_json({ data => $ip }),
-    );
-  }
-  else {
-    my $record = {
+    $update_f = $self->_do_request(PUT => "$base/$record->{id}", {
+      data => $ip
+    });
+  } else {
+    $update_f = $self->_do_request(POST => "$base", {
       type => 'A',
       name => "$username.box",
       data => $ip,
       ttl  => 30,
-    };
-    $update_f = $self->hub->http_post(
-      $self->_do_endpoint('/domains/' . $self->box_domain . '/records'),
-      $self->_do_headers,
-      async        => 1,
-      Content_Type => 'application/json',
-      Content      => encode_json($record),
-    );
+    });
   }
 
-  $update_f->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error creating/update DNS record: %s", $res->as_string]);
-      }
-      return Future->done;
-    }
-  )->get;
+  $update_f->then(sub ($data) { return Future->done })->get;
 }
 
 __PACKAGE__->add_preference(
