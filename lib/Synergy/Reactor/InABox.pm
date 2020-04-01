@@ -6,8 +6,7 @@ use utf8;
 
 use Moose;
 with 'Synergy::Role::Reactor::EasyListening',
-     'Synergy::Role::HasPreferences',
-    ;
+     'Synergy::Role::HasPreferences';
 
 use experimental qw(signatures);
 use namespace::clean;
@@ -128,6 +127,8 @@ sub _handle_create ($self, $event, @args) {
   }
 
   my $version;
+
+  # This feels icky to me for some reason, but totally works.
   my %args = @args;
   if (@args == 0) {
     $version = $self->get_user_preference($event->from_user->username, 'version');
@@ -145,8 +146,12 @@ sub _handle_create ($self, $event, @args) {
     $self->_get_ssh_key,
   )->then(
     sub (@futures) {
-      my @got = grep {; defined } map {; $_->get } @futures;
-      return Future->done(map { $_->{id} } @got);
+      my @results = map  {; $_->{id} }
+                    grep {; defined }
+                    map  {; $_->get }
+                    @futures;
+
+      return Future->done(@results);
     }
   )->get;
 
@@ -511,7 +516,7 @@ sub _get_snapshot ($self, $version) {
       my $data = decode_json($res->content);
       my ($snapshot) =
         sort { $b->{name} cmp $a->{name} }
-        grep { $_->{name} =~ m/^fminabox-$version/ }
+        grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
           $data->{snapshots}->@*;
       if ($snapshot) {
         $Logger->log([ "Found snapshot: %s (%s)", $snapshot->{id}, $snapshot->{name} ]);
@@ -555,13 +560,13 @@ sub _box_name_for_user ($self, $user) {
 }
 
 sub _region_for_user ($self, $user) {
-  my $area = $self->get_user_preference($user->username, 'datacentre');
-  return $area if $area;
+  my $dc = $self->get_user_preference($user, 'datacentre');
+  return $dc if $dc;
 
   # this is incredibly stupid, but will do the right thing for the home
   # location of FM plumbing staff without a preference set
   my $tz = $user->time_zone;
-  ($area) = split '/', $tz;
+  my ($area) = split '/', $tz;
   return
     $area eq 'Australia' ? 'sfo2' :
     $area eq 'Europe'    ? 'ams3' :
@@ -628,8 +633,16 @@ sub _update_dns_for_user ($self, $user, $ip) {
 __PACKAGE__->add_preference(
   name      => 'version',
   validator => sub ($self, $value, @) {
-    return (undef, 'version must be jessie or buster') unless grep { lc $value eq $_ } qw(jessie buster);
-    return lc $value;
+    my %known = map {; $_ => 1 } qw( jessie buster );
+
+    $value = lc $value;
+
+    unless ($known{$value}) {
+      my $versions = join q{, }, sort keys %known;
+      return (undef, "unknown version $value; known versions are: $versions");
+    }
+
+    return $value;
   },
   default   => 'jessie',
   description => 'Default Debian version for your fminabox',
@@ -638,7 +651,13 @@ __PACKAGE__->add_preference(
 __PACKAGE__->add_preference(
   name      => 'datacentre',
   validator => sub ($self, $value, @) {
-    return lc $value;
+    $value = lc $value;
+
+    unless ($value =~ /\A[a-z0-9]+\z/) {
+      return (undef, "Hmm, $value doesn't seem like a valid datacentre name.");
+    }
+
+    return $value;
   },
   default   => undef,
   description => 'The Digital Ocean data centre to spin up fminabox in',
