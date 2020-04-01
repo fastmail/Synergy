@@ -110,6 +110,23 @@ sub handle_box ($self, $event) {
   $handler->($self, $event, @args);
 }
 
+sub _do_request ($self, $method, $endpoint, $content = undef) {
+  return $self->hub->http_request(
+    $method,
+    $self->_do_endpoint($endpoint),
+    $self->_do_headers,
+    async => 1,
+  )->then(sub ($res) {
+    unless ($res->is_success) {
+      $Logger->log([ "error talking to DO: %s", $res->as_string ]);
+      return Future->fail('Error talking to DO', 'http', { http_res => $res });
+    }
+
+    my $data = decode_json($res->content);
+    return Future->done($data);
+  });
+}
+
 sub _handle_status ($self, $event, @args) {
   my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
   unless ($droplet) {
@@ -453,44 +470,24 @@ sub _do_droplet_action_f ($self, $droplet_id, $type) {
 
 sub _do_action_status_f ($self, $actionurl) {
   repeat {
-    $self->hub->http_get(
-      $self->_do_endpoint($actionurl),
-      $self->_do_headers,
-      async => 1,
-    )->then(
-      sub ($res) {
-        unless ($res->is_success) {
-          $Logger->log(["error getting action: %s: %s", $actionurl, $res->as_string]);
-          return Future->done;
-        }
-        my $data = decode_json($res->content);
+    $self->_do_request(GET => $actionurl)
+      ->then(sub ($data) {
         my $status = $data->{action}{status};
-        return $status eq 'in-progress' ?
-          $self->hub->loop->delay_future(after => 5)->then_done($status) :
-          Future->done($status);
-      }
-    )
-  } until => sub ($f) {
-    $f->get ne 'in-progress';
-  };
+        return $status eq 'in-progress'
+          ? $self->hub->loop->delay_future(after => 5)->then_done($status)
+          : Future->done($status);
+      })
+  } until => sub ($f) { $f->get ne 'in-progress' };
 }
 
 sub _get_droplet_for ($self, $who) {
-  $self->hub->http_get(
-    $self->_do_endpoint('/droplets?per_page=200'),
-    $self->_do_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error getting droplet list: %s", $res->as_string]);
-        return Future->done;
-      }
-      my $data = decode_json($res->content);
-      my ($droplet) = grep { $_->{name} eq $self->_box_name_for_user($who) } $data->{droplets}->@*;
+  return $self->_do_request(GET => '/droplets?per_page=200')
+    ->then(sub ($data) {
+      my ($droplet) = grep {; $_->{name} eq $self->_box_name_for_user($who) }
+                      $data->{droplets}->@*;
+
       Future->done($droplet);
-    }
-  );
+    });
 }
 
 sub _format_droplet ($self, $droplet) {
@@ -504,53 +501,33 @@ sub _format_droplet ($self, $droplet) {
 }
 
 sub _get_snapshot ($self, $version) {
-  $self->hub->http_get(
-    $self->_do_endpoint('/snapshots?per_page=200'),
-    $self->_do_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error getting snapshot list: %s", $res->as_string]);
-        return Future->done;
-      }
-      my $data = decode_json($res->content);
-      my ($snapshot) =
-        sort { $b->{name} cmp $a->{name} }
-        grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
-          $data->{snapshots}->@*;
+  return $self->_do_request(GET => '/snapshots?per_page=200')
+    ->then(sub ($data) {
+      my ($snapshot) = sort { $b->{name} cmp $a->{name} }
+                       grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
+                       $data->{snapshots}->@*;
+
       if ($snapshot) {
         $Logger->log([ "Found snapshot: %s (%s)", $snapshot->{id}, $snapshot->{name} ]);
-      }
-      else {
+      } else {
         $Logger->log([ "fminabox snapshot not found?!" ]);
       }
+
       Future->done($snapshot);
-    }
-  );
+    });
 }
 
 sub _get_ssh_key ($self) {
-  $self->hub->http_get(
-    $self->_do_endpoint('/account/keys?per_page=200'),
-    $self->_do_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error getting ssh key list: %s", $res->as_string]);
-        return Future->done;
-      }
-      my $data = decode_json($res->content);
-      my ($ssh_key) =
-        grep { $_->{name} eq 'fminabox' }
-          $data->{ssh_keys}->@*;
+  return $self->_do_request(GET => '/account/keys?per_page=200')
+    ->then(sub ($data) {
+      my ($ssh_key) = grep {; $_->{name} eq 'fminabox' } $data->{ssh_keys}->@*;
+
       if ($ssh_key) {
         $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->{id}, $ssh_key->{name} ]);
-      }
-      else {
+      } else {
         $Logger->log([ "fminabox SSH key not found?!" ]);
       }
+
       Future->done($ssh_key);
     }
   );
@@ -577,23 +554,13 @@ sub _region_for_user ($self, $user) {
 sub _update_dns_for_user ($self, $user, $ip) {
   my $username = $user->username;
 
-  my $record = $self->hub->http_get(
-    $self->_do_endpoint('/domains/' . $self->box_domain . '/records?per_page=200'),
-    $self->_do_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log(["error getting DNS record list: %s", $res->as_string]);
-        return Future->done;
-      }
-      my $data = decode_json($res->content);
-      my ($record) =
-        grep { $_->{name} eq "$username.box" }
-          $data->{domain_records}->@*;
+  my $endpoint = '/domains/' . $self->box_domain . '/records?per_page=200';
+
+  my $record = $self->_do_request(GET => $endpoint)
+    ->then(sub ($data) {
+      my ($record) = grep { $_->{name} eq "$username.box" } $data->{domain_records}->@*;
       Future->done($record);
-    }
-  )->get;
+    })->get;
 
   my $update_f;
   if ($record) {
