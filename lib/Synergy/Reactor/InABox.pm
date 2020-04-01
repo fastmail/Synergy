@@ -127,6 +127,7 @@ sub _handle_create ($self, $event, @args) {
   }
 
   my $version;
+  my $region = $self->_region_for_user($event->from_user);
 
   # This feels icky to me for some reason, but totally works.
   my %args = @args;
@@ -139,7 +140,7 @@ sub _handle_create ($self, $event, @args) {
     return;
   }
 
-  $event->reply("Creating $version box, this will take a minute or two.");
+  $event->reply("Creating $version box in $region, this will take a minute or two.");
 
   my ($snapshot_id, $ssh_key_id) = Future->wait_all(
     $self->_get_snapshot($version),
@@ -162,7 +163,7 @@ sub _handle_create ($self, $event, @args) {
 
   my %droplet_create_args = (
     name     => $self->_box_name_for_user($event->from_user->username),
-    region   => $self->_region_for_user($event->from_user),
+    region   => $region,
     size     => 's-4vcpu-8gb',
     image    => $snapshot_id,
     ssh_keys => [$ssh_key_id],
