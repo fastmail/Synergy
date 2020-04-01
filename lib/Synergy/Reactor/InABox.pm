@@ -555,10 +555,13 @@ sub _box_name_for_user ($self, $user) {
 }
 
 sub _region_for_user ($self, $user) {
+  my $area = $self->get_user_preference($user->username, 'datacentre');
+  return $area if $area;
+
   # this is incredibly stupid, but will do the right thing for the home
-  # location of FM plumbing staff
+  # location of FM plumbing staff without a preference set
   my $tz = $user->time_zone;
-  my ($area) = split '/', $tz;
+  ($area) = split '/', $tz;
   return
     $area eq 'Australia' ? 'sfo2' :
     $area eq 'Europe'    ? 'ams3' :
@@ -631,6 +634,15 @@ __PACKAGE__->add_preference(
   },
   default   => 'jessie',
   description => 'Default Debian version for your fminabox',
+);
+
+__PACKAGE__->add_preference(
+  name      => 'datacentre',
+  validator => sub ($self, $value, @) {
+    return lc $value;
+  },
+  default   => undef,
+  description => 'The Digital Ocean data centre to spin up fminabox in',
 );
 
 1;
