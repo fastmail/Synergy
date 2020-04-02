@@ -168,7 +168,7 @@ sub handle_create ($self, $event, %args) {
     );
   }
 
-  $self->_get_droplet_for($event->from_user)
+  return $self->_get_droplet_for($event->from_user)
     ->then(sub ($maybe_droplet) {
       if ($maybe_droplet) {
         return Future->fail(
@@ -180,10 +180,16 @@ sub handle_create ($self, $event, %args) {
       return Future->done;
     })
     ->then(sub {
-      return Future->needs_all(
-        $self->_get_snapshot($version),
-        $self->_get_ssh_key,
-      );
+      # It would be nice to do this and the SSH key in parallel, but in
+      # testing that causes *super* strange errors deep down in IO::Async if
+      # one of the calls fails and the other does not, so here we'll just
+      # admit defeat and do them in sequence. -- michael, 2020-04-02
+      return $self->_get_snapshot($version);
+    })
+    ->then(sub ($snapshot) {
+      return $self->_get_ssh_key->transform(done => sub ($ssh_key) {
+        return ($snapshot, $ssh_key);
+      });
     })
     ->then(sub ($snapshot, $ssh_key) {
       my $region = $self->_region_for_user($event->from_user);
@@ -478,30 +484,32 @@ sub _update_dns_for_user ($self, $user, $ip) {
 
   my $base = '/domains/' . $self->box_domain . '/records';
 
-  # There is still a ->get here. I factored it out, and then it made the tests
-  # fail in *truly* bizarre ways that I spent far too long tracking down, so
-  # for today, I am admitting defeat. -- michael, 2020-04-02
-  my $record = $self->_do_request(GET => "$base?per_page=200")
+  $self->_do_request(GET => "$base?per_page=200")
     ->then(sub ($data) {
       my ($record) = grep { $_->{name} eq "$username.box" } $data->{domain_records}->@*;
       Future->done($record);
-    })->get;
+    })
+    ->then(sub ($record) {
+      if ($record) {
+        return $self->_do_request(PUT => "$base/$record->{id}", {
+          data => $ip
+        });
+      }
 
-  my $update_f;
-  if ($record) {
-    $update_f = $self->_do_request(PUT => "$base/$record->{id}", {
-      data => $ip
+      return $self->_do_request(POST => "$base", {
+        type => 'A',
+        name => "$username.box",
+        data => $ip,
+        ttl  => 30,
+      });
+    })
+    ->then(sub { return Future->done })
+    ->else(sub {
+      # We don't actually care if this fails (what can we do?), so we
+      # transform a failure into a success.
+      $Logger->log("ignoring error when updating DNS with DO");
+      return Future->done;
     });
-  } else {
-    $update_f = $self->_do_request(POST => "$base", {
-      type => 'A',
-      name => "$username.box",
-      data => $ip,
-      ttl  => 30,
-    });
-  }
-
-  return $update_f->then(sub ($data) { return Future->done });
 }
 
 __PACKAGE__->add_preference(

@@ -1,5 +1,3 @@
-# HARNESS-CATEGORY-ISOLATION
-# ^ admission of failure.
 use v5.24.0;
 use warnings;
 use experimental 'signatures';
