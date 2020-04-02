@@ -140,7 +140,7 @@ sub _do_request ($self, $method, $endpoint, $data = undef) {
 }
 
 sub _handle_status ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  my $droplet = $self->_get_droplet_for($event->from_user)->get;
   unless ($droplet) {
     $event->error_reply("You don't have a box.");
     return;
@@ -149,7 +149,7 @@ sub _handle_status ($self, $event, @args) {
 }
 
 sub _handle_create ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  my $droplet = $self->_get_droplet_for($event->from_user)->get;
   if ($droplet) {
     $event->error_reply("You already have a box: " . $self->_format_droplet($droplet));
     return;
@@ -161,7 +161,7 @@ sub _handle_create ($self, $event, @args) {
   # This feels icky to me for some reason, but totally works.
   my %args = @args;
   if (@args == 0) {
-    $version = $self->get_user_preference($event->from_user->username, 'version');
+    $version = $self->get_user_preference($event->from_user, 'version');
   } elsif (defined($args{'/version'})) {
     $version = $args{'/version'};
   } else {
@@ -191,7 +191,7 @@ sub _handle_create ($self, $event, @args) {
   }
 
   my %droplet_create_args = (
-    name     => $self->_box_name_for_user($event->from_user->username),
+    name     => $self->_box_name_for_user($event->from_user),
     region   => $region,
     size     => 's-4vcpu-8gb',
     image    => $snapshot_id,
@@ -223,7 +223,7 @@ sub _handle_create ($self, $event, @args) {
     }
   }
 
-  $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  $droplet = $self->_get_droplet_for($event->from_user)->get;
   if ($droplet) {
     $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
     $event->reply("Box created: ".$self->_format_droplet($droplet));
@@ -238,7 +238,7 @@ sub _handle_create ($self, $event, @args) {
 }
 
 sub _handle_destroy ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  my $droplet = $self->_get_droplet_for($event->from_user)->get;
   unless ($droplet) {
     $event->error_reply("You don't have a box.");
     return;
@@ -262,7 +262,7 @@ sub _handle_destroy ($self, $event, @args) {
 }
 
 sub _handle_shutdown ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  my $droplet = $self->_get_droplet_for($event->from_user)->get;
   unless ($droplet) {
     $event->error_reply("You don't have a box.");
     return;
@@ -315,7 +315,7 @@ sub _handle_shutdown ($self, $event, @args) {
 }
 
 sub _handle_poweroff ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  my $droplet = $self->_get_droplet_for($event->from_user)->get;
   unless ($droplet) {
     $event->error_reply("You don't have a box.");
     return;
@@ -368,7 +368,7 @@ sub _handle_poweroff ($self, $event, @args) {
 }
 
 sub _handle_poweron ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user->username)->get;
+  my $droplet = $self->_get_droplet_for($event->from_user)->get;
   unless ($droplet) {
     $event->error_reply("You don't have a box.");
     return;
@@ -430,7 +430,7 @@ sub _handle_vpn ($self, $event, @args) {
   my $user = $event->from_user;
 
   my $config = $template->fill_in(HASH => {
-    droplet_host => $user->username . '.box.' . $self->box_domain,
+    droplet_host => $self->_box_name_for_user($user),
   });
 
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
@@ -458,14 +458,14 @@ sub _do_action_status_f ($self, $actionurl) {
   } until => sub ($f) { $f->get ne 'in-progress' };
 }
 
-sub _get_droplet_for ($self, $who) {
+sub _get_droplet_for ($self, $user) {
   return $self->_do_request(GET => '/droplets?per_page=200')
     ->then(sub ($data) {
-      my ($droplet) = grep {; $_->{name} eq $self->_box_name_for_user($who) }
+      my ($droplet) = grep {; $_->{name} eq $self->_box_name_for_user($user) }
                       $data->{droplets}->@*;
 
       Future->done($droplet);
-    });
+    })->get;
 }
 
 sub _format_droplet ($self, $droplet) {
@@ -512,7 +512,7 @@ sub _get_ssh_key ($self) {
 }
 
 sub _box_name_for_user ($self, $user) {
-  return $user.'.box.'.$self->box_domain;
+  return sprintf("%s.box.%s", $user->username, $self->box_domain);
 }
 
 sub _region_for_user ($self, $user) {
