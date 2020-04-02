@@ -14,7 +14,9 @@ use namespace::clean;
 use Synergy::Logger '$Logger';
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
+use Safe::Isa '$_isa';
 use Text::Template;
+use Try::Tiny;
 
 sub listener_specs {
   return {
@@ -78,14 +80,14 @@ has box_domain => (
 );
 
 my %command_handler = (
-  info     => \&_handle_status,
-  status   => \&_handle_status,
-  create   => \&_handle_create,
-  destroy  => \&_handle_destroy,
-  shutdown => \&_handle_shutdown,
-  poweroff => \&_handle_poweroff,
-  poweron  => \&_handle_poweron,
-  vpn      => \&_handle_vpn,
+  info     => \&handle_status,
+  status   => \&handle_status,
+  create   => \&handle_create,
+  destroy  => \&handle_destroy,
+  shutdown => \&handle_shutdown,
+  poweroff => \&handle_poweroff,
+  poweron  => \&handle_poweron,
+  vpn      => \&handle_vpn,
 );
 
 after register_with_hub => sub ($self, @) {
@@ -107,7 +109,11 @@ sub handle_box ($self, $event) {
     return $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
   }
 
-  $handler->($self, $event, @args);
+  $handler->($self, $event, @args)
+    ->else(sub ($reply, $category, @rest) {
+      $event->error_reply($reply);
+    })
+    ->retain;
 }
 
 sub _do_request ($self, $method, $endpoint, $data = undef) {
@@ -139,150 +145,135 @@ sub _do_request ($self, $method, $endpoint, $data = undef) {
   });
 }
 
-sub _handle_status ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user)->get;
-  unless ($droplet) {
-    $event->error_reply("You don't have a box.");
-    return;
-  }
-  $event->reply("Your box: " . $self->_format_droplet($droplet));
-}
-
-sub _handle_create ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user)->get;
-  if ($droplet) {
-    $event->error_reply("You already have a box: " . $self->_format_droplet($droplet));
-    return;
-  }
-
-  my $version;
-  my $region = $self->_region_for_user($event->from_user);
-
-  # This feels icky to me for some reason, but totally works.
-  my %args = @args;
-  if (@args == 0) {
-    $version = $self->get_user_preference($event->from_user, 'version');
-  } elsif (defined($args{'/version'})) {
-    $version = $args{'/version'};
-  } else {
-    $event->error_reply("Error: Syntax is \"box create /version <version>\"");
-    return;
-  }
-
-  $event->reply("Creating $version box in $region, this will take a minute or two.");
-
-  my ($snapshot_id, $ssh_key_id) = Future->wait_all(
-    $self->_get_snapshot($version),
-    $self->_get_ssh_key,
-  )->then(
-    sub (@futures) {
-      my @results = map  {; $_->{id} }
-                    grep {; defined }
-                    map  {; $_->get }
-                    @futures;
-
-      return Future->done(@results);
-    }
-  )->get;
-
-  unless ($snapshot_id && $ssh_key_id) {
-    $event->error_reply("Couldn't find snapshot of $version or SSH key, can't create box. Try again.");
-    return;
-  }
-
-  my %droplet_create_args = (
-    name     => $self->_box_name_for_user($event->from_user),
-    region   => $region,
-    size     => 's-4vcpu-8gb',
-    image    => $snapshot_id,
-    ssh_keys => [$ssh_key_id],
-    tags     => ['fminabox'],
-  );
-
-  $Logger->log([ "Creating droplet: %s", encode_json(\%droplet_create_args) ]);
-
-  ($droplet, my $action_id) = $self->_do_request(
-    POST => '/droplets', \%droplet_create_args,
-  )->then(sub ($data) {
-      return Future->done($data->{droplet}, $data->{links}{actions}[0]{id});
-  })->get;
-
-  unless ($droplet) {
-    $event->error_reply("There was an error creating the box. Try again.");
-    return;
-  }
-
-  my $status = $self->_do_action_status_f("/actions/$action_id")->get;
-
-  # action status checks have been seen to time out or crash but the droplet
-  # still turns up fine, so only consider it if we got a real response
-  if ($status) {
-    if ($status ne 'completed') {
-      $event->error_reply("Something went wrong while creating the box, check the DigitalOcean console and maybe try again.");
-      return;
-    }
-  }
-
-  $droplet = $self->_get_droplet_for($event->from_user)->get;
-  if ($droplet) {
-    $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-    $event->reply("Box created: ".$self->_format_droplet($droplet));
-  }
-  else {
-    $event->error_reply("Box was created, but now I can't find it! Check the DigitalOcean console and maybe try again.");
-  }
-
-  # we're assuming this succeeds. if not, well, the DNS is out of date. what
-  # else can we do?
-  $self->_update_dns_for_user($event->from_user, $droplet->{networks}{v4}[0]{ip_address});
-}
-
-sub _handle_destroy ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user)->get;
-  unless ($droplet) {
-    $event->error_reply("You don't have a box.");
-    return;
-  }
-  if ($droplet->{status} eq 'active' && !grep { m{^/force$} } @args) {
-    $event->error_reply("Your box is powered on. Shut it down first, or use /force to destroy it anyway.");
-    return;
-  }
-
-  $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-
-  my $destroyed = $self->_do_request(DELETE => "/droplets/$droplet->{id}")->get;
-
-  unless ($destroyed) {
-    $event->error_reply("There was an error destroying the box. Try again.");
-    return;
-  }
-
-  $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
-  $event->reply("Box destroyed.");
-}
-
-sub _handle_shutdown ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user)->get;
-  unless ($droplet) {
-    $event->error_reply("You don't have a box.");
-    return;
-  }
-  if ($droplet->{status} ne 'active') {
-    $event->error_reply("Your box is already powered off!");
-    return;
-  }
-
-  $Logger->log([ "Shutting down droplet: %s", $droplet->{id} ]);
-  $event->reply(
-    "I'm pulling the levers, it'll be just a moment",
-    {
-      slack_reaction => {
-        event => $event,
-        reaction => 'vertical_traffic_light',
+sub handle_status ($self, $event, @args) {
+  $self->_get_droplet_for($event->from_user)
+    ->then(sub ($droplet = undef) {
+      if ($droplet) {
+        return $event->reply("Your box: " . $self->_format_droplet($droplet));
       }
-    },
-  );
 
+      return $event->reply("You don't seem to have a box.");
+    });
+}
+
+sub handle_create ($self, $event, %args) {
+  # do sanity checks before HTTP requests
+  my $version = delete $args{'/version'}
+             // $self->get_user_preference($event->from_user, 'version');
+
+  if (keys %args) {
+    return Future->fail(
+      'error: syntax is "box create [ /version <version> ]"',
+      'stop-processing',
+    );
+  }
+
+  $self->_get_droplet_for($event->from_user)
+    ->then(sub ($maybe_droplet) {
+      if ($maybe_droplet) {
+        return Future->fail(
+          "You already have a box: " . $self->_format_droplet($maybe_droplet),
+          'stop-processing'
+        );
+      }
+
+      return Future->done;
+    })
+    ->then(sub {
+      return Future->needs_all(
+        $self->_get_snapshot($version),
+        $self->_get_ssh_key,
+      );
+    })
+    ->then(sub ($snapshot, $ssh_key) {
+      my $region = $self->_region_for_user($event->from_user);
+      $event->reply("Creating $version box in $region, this will take a minute or two.");
+
+      my %droplet_create_args = (
+        name     => $self->_box_name_for_user($event->from_user),
+        region   => $region,
+        size     => 's-4vcpu-8gb',
+        image    => $snapshot->{id},
+        ssh_keys => [ $ssh_key->{id} ],
+        tags     => [ 'fminabox' ],
+      );
+
+      $Logger->log([ "Creating droplet: %s", \%droplet_create_args ]);
+
+      return $self->_do_request(POST => '/droplets', \%droplet_create_args);
+    })
+    ->then(sub ($data) {
+      my $droplet = $data->{droplet};
+      my $action_id = $data->{links}{actions}[0]{id};
+
+      unless ($droplet) {
+        return Future->fail(
+          'There was an error creating the box. Try again.',
+          'stop-processing'
+        );
+      }
+
+      return $self->_do_action_status_f("/actions/$action_id");
+    })
+    ->then(sub ($status = undef) {
+      # action status checks have been seen to time out or crash but the droplet
+      # still turns up fine, so only consider it if we got a real response
+      if ($status && $status ne 'completed') {
+        return Future->fail(
+          "Something went wrong while creating box, check the DigitalOcean console and maybe try again.",
+          'stop-processing',
+        );
+      }
+
+      return Future->done;
+    })
+    ->then(sub { $self->_get_droplet_for($event->from_user) })
+    ->then(sub ($droplet) {
+      if ($droplet) {
+        $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+        $event->reply("Box created: " . $self->_format_droplet($droplet));
+      } else {
+        # We don't fail here, because we want to try to update DNS regardless.
+        $event->error_reply(
+          "Box was created, but now I can't find it! Check the DigitalOcean console and maybe try again."
+        );
+      }
+
+      # we're assuming this succeeds. if not, well, the DNS is out of date. what
+      # else can we do?
+      return $self->_update_dns_for_user($event->from_user, $droplet->{networks}{v4}[0]{ip_address});
+    });
+}
+
+sub handle_destroy ($self, $event, @args) {
+  my $droplet;
+
+  return $self->_get_droplet_for($event->from_user)
+    ->then(sub ($maybe_droplet) {
+      return Future->fail("You don't have a box.", 'stop-processing')
+        unless $maybe_droplet;
+
+      if ($maybe_droplet->{status} eq 'active' && ! grep { m{^/force$} } @args) {
+        return Future->fail(
+         "Your box is powered on. Shut it down first, or use /force to destroy it anyway.",
+         'stop-processing'
+       );
+      }
+
+      $droplet = $maybe_droplet;
+      return Future->done($maybe_droplet)
+    })
+    ->then(sub ($droplet) {
+      $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+      return $self->_do_request(DELETE => "/droplets/$droplet->{id}");
+    })
+    ->then(sub {
+      $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
+      $event->reply("Box destroyed.");
+    });
+}
+
+sub _handle_power ($self, $event, $action) {
   my $remove_reactji = sub ($alt_text) {
     $event->private_reply($alt_text, {
       slack_reaction => {
@@ -292,135 +283,90 @@ sub _handle_shutdown ($self, $event, @args) {
     });
   };
 
-  my $action = $self->_do_droplet_action_f($droplet->{id}, 'shutdown');
-  unless ($action) {
-    $remove_reactji->('Error!');
-    $event->error_reply('There was an error shutting down the box. Try again.');
-    return;
-  }
-  my $status = $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$action->{id}")->get;
+  my $droplet;  # we could thread this through, but that's kind of tedious
+  my $gerund = $action eq 'on'       ? 'powering on'
+             : $action eq 'off'      ? 'powering off'
+             : $action eq 'shutdown' ? 'shutting down'
+             : die "unknown power action $action!";
 
-  # action status checks have been seen to time out or crash but the droplet
-  # still turns up fine, so only consider it if we got a real response
-  if ($status) {
-    if ($status ne 'completed') {
-      $remove_reactji->('Error!');
-      $event->error_reply("Something went wrong while shutting down the box, check the DigitalOcean console and maybe try again.");
-      return;
-    }
-  }
+  my $past_tense = $action eq 'shutdown' ? 'shut down' : "powered $action";
 
-  $remove_reactji->('Shut down!');
-  $event->reply("Your box has been shut down.");
-}
+  $self->_get_droplet_for($event->from_user)
+    ->then(sub ($maybe_droplet) {
+      return Future->fail("You don't have a box.", 'stop-processing')
+        unless $maybe_droplet;
 
-sub _handle_poweroff ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user)->get;
-  unless ($droplet) {
-    $event->error_reply("You don't have a box.");
-    return;
-  }
-  if ($droplet->{status} ne 'active') {
-    $event->error_reply("Your box is already powered off!");
-    return;
-  }
+      $droplet = $maybe_droplet;
 
-  $Logger->log([ "Powering off droplet: %s", $droplet->{id} ]);
-  $event->reply(
-    "I'm pulling the levers, it'll be just a moment",
-    {
-      slack_reaction => {
-        event => $event,
-        reaction => 'vertical_traffic_light',
+      my $expect_off = $action eq 'on';
+
+      if ( (  $expect_off && $droplet->{status} eq 'active')
+        || (! $expect_off && $droplet->{status} ne 'active')
+      ) {
+        return Future->fail("Your box is already $past_tense!", 'stop-processing')
       }
-    },
-  );
 
-  my $remove_reactji = sub ($alt_text) {
-    $event->private_reply($alt_text, {
-      slack_reaction => {
-        event => $event,
-        reaction => '-vertical_traffic_light',
-      },
-    });
-  };
+      return Future->done($droplet);
+    })
+    ->then(sub ($droplet) {
+      $Logger->log([ "$gerund droplet: %s", $droplet->{id} ]);
+      $event->reply(
+        "I'm pulling the levers, it'll be just a moment",
+        {
+          slack_reaction => {
+            event => $event,
+            reaction => 'vertical_traffic_light',
+          }
+        },
+      );
 
-  my $action = $self->_do_droplet_action_f($droplet->{id}, 'power_off');
-  unless ($action) {
-    $remove_reactji->('Error!');
-    $event->error_reply('There was an error powering off the box. Try again.');
-    return;
-  }
-  my $status = $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$action->{id}")->get;
+      my $method = $action eq 'shutdown' ? 'shutdown' : "power_$action";
 
-  # action status checks have been seen to time out or crash but the droplet
-  # still turns up fine, so only consider it if we got a real response
-  if ($status) {
-    if ($status ne 'completed') {
-      $remove_reactji->('Error!');
-      $event->error_reply("Something went wrong while powering off the box, check the DigitalOcean console and maybe try again.");
-      return;
-    }
-  }
-
-  $remove_reactji->('Powered off!');
-  $event->reply("Your box has been powered off.");
-}
-
-sub _handle_poweron ($self, $event, @args) {
-  my $droplet = $self->_get_droplet_for($event->from_user)->get;
-  unless ($droplet) {
-    $event->error_reply("You don't have a box.");
-    return;
-  }
-  if ($droplet->{status} eq 'active') {
-    $event->error_reply("Your box is already powered on!");
-    return;
-  }
-
-  $Logger->log([ "Powering on droplet: %s", $droplet->{id} ]);
-  $event->reply(
-    "I'm pulling the levers, it'll be just a moment",
-    {
-      slack_reaction => {
-        event => $event,
-        reaction => 'vertical_traffic_light',
+      return $self->_do_request(
+        POST => "/droplets/$droplet->{id}/actions", { type => $method },
+      );
+    })
+    ->then(sub ($data) { return Future->done($data->{action}) })
+    ->then(sub ($do_action) {
+      unless ($do_action) {
+        $remove_reactji->('Error!');
+        return Future->fail(
+          "There was an error $gerund the box. Try again.",
+          'stop-processing'
+        );
       }
-    },
-  );
 
-  my $remove_reactji = sub ($alt_text) {
-    $event->private_reply($alt_text, {
-      slack_reaction => {
-        event => $event,
-        reaction => '-vertical_traffic_light',
-      },
+      return $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$do_action->{id}");
+    })
+    ->then(sub ($status = undef) {
+      # action status checks have been seen to time out or crash but the droplet
+      # still turns up fine, so only consider it if we got a real response
+      if ($status && $status ne 'completed') {
+        $remove_reactji->('Error!');
+        return Future->fail(
+          "Something went wrong while $gerund box, check the DigitalOcean console and maybe try again.",
+          'stop-processing',
+        );
+      }
+
+      $remove_reactji->("$past_tense!");
+      $event->reply("Your box has been $past_tense.");
     });
-  };
-
-  my $action = $self->_do_droplet_action_f($droplet->{id}, 'power_on');
-  unless ($action) {
-    $remove_reactji->('Error!');
-    $event->error_reply('There was an error powering on the box. Try again.');
-    return;
-  }
-  my $status = $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$action->{id}")->get;
-
-  # action status checks have been seen to time out or crash but the droplet
-  # still turns up fine, so only consider it if we got a real response
-  if ($status) {
-    if ($status ne 'completed') {
-      $remove_reactji->('Error!');
-      $event->error_reply("Something went wrong while powering on box, check the DigitalOcean console and maybe try again.");
-      return;
-    }
-  }
-
-  $remove_reactji->('Powered on!');
-  $event->reply("Your box has been powered on.");
 }
 
-sub _handle_vpn ($self, $event, @args) {
+sub handle_shutdown ($self, $event, @args) {
+  return $self->_handle_power($event, 'shutdown');
+}
+
+sub handle_poweroff ($self, $event, @args) {
+  $self->_handle_power($event, 'off');
+}
+
+sub handle_poweron ($self, $event, @args) {
+  return $self->_handle_power($event, 'on');
+}
+
+sub handle_vpn ($self, $event, @args) {
   my $template = Text::Template->new(
     TYPE       => 'FILE',
     SOURCE     => $self->vpn_config_file,
@@ -436,14 +382,6 @@ sub _handle_vpn ($self, $event, @args) {
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
 
   $event->reply("I sent you a VPN config in a direct message. Download it and import it into your OpenVPN client.");
-}
-
-sub _do_droplet_action_f ($self, $droplet_id, $type) {
-  return $self->_do_request(
-    POST => "/droplets/$droplet_id/actions", { type => $type },
-  )->then(sub ($data) {
-    return Future->done($data->{action});
-  })->get;
 }
 
 sub _do_action_status_f ($self, $actionurl) {
@@ -465,7 +403,7 @@ sub _get_droplet_for ($self, $user) {
                       $data->{droplets}->@*;
 
       Future->done($droplet);
-    })->get;
+    });
 }
 
 sub _format_droplet ($self, $droplet) {
@@ -487,11 +425,14 @@ sub _get_snapshot ($self, $version) {
 
       if ($snapshot) {
         $Logger->log([ "Found snapshot: %s (%s)", $snapshot->{id}, $snapshot->{name} ]);
-      } else {
-        $Logger->log([ "fminabox snapshot not found?!" ]);
+        return Future->done($snapshot);
       }
 
-      Future->done($snapshot);
+      $Logger->log([ "fminabox snapshot not found?!" ]);
+      return Future->fail(
+        "Hmm, I couldn't find a DO snapshot for fminabox-$version",
+        'stop-processing'
+      );
     });
 }
 
@@ -502,11 +443,14 @@ sub _get_ssh_key ($self) {
 
       if ($ssh_key) {
         $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->{id}, $ssh_key->{name} ]);
-      } else {
-        $Logger->log([ "fminabox SSH key not found?!" ]);
+        return Future->done($ssh_key);
       }
 
-      Future->done($ssh_key);
+      $Logger->log([ "fminabox SSH key not found?!" ]);
+      return Future->fail(
+        "Hmm, I couldn't find a DO ssh key to use for fminabox",
+        'stop-processing',
+      );
     }
   );
 }
@@ -534,6 +478,9 @@ sub _update_dns_for_user ($self, $user, $ip) {
 
   my $base = '/domains/' . $self->box_domain . '/records';
 
+  # There is still a ->get here. I factored it out, and then it made the tests
+  # fail in *truly* bizarre ways that I spent far too long tracking down, so
+  # for today, I am admitting defeat. -- michael, 2020-04-02
   my $record = $self->_do_request(GET => "$base?per_page=200")
     ->then(sub ($data) {
       my ($record) = grep { $_->{name} eq "$username.box" } $data->{domain_records}->@*;
@@ -554,7 +501,7 @@ sub _update_dns_for_user ($self, $user, $ip) {
     });
   }
 
-  $update_f->then(sub ($data) { return Future->done })->get;
+  return $update_f->then(sub ($data) { return Future->done });
 }
 
 __PACKAGE__->add_preference(

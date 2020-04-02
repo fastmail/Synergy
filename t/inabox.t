@@ -1,3 +1,5 @@
+# HARNESS-CATEGORY-ISOLATION
+# ^ admission of failure.
 use v5.24.0;
 use warnings;
 use experimental 'signatures';
@@ -108,7 +110,7 @@ subtest 'status' => sub {
   send_message('synergy: box status', 'bob');
   is(
     single_message_text(),
-    "You don't have a box.",
+    "You don't seem to have a box.",
     'bob has no box and synergy says so'
   );
 };
@@ -289,27 +291,15 @@ subtest 'create' => sub {
       snapshot_fetch => gen_response(200 => { snapshots => [] }),
     );
 
-    cmp_deeply(
-      \@texts,
-      [
-        re(qr{Creating \w+ box in nyc3}),
-        re(qr{Couldn't find snapshot of \w+ or SSH key}),
-      ],
-      'normal create with defaults seems fine'
-    );
+    is(@texts, 1, 'sent a single failure message');
+    like($texts[0], qr{find a DO (snapshot|ssh key)}, 'no snapshot, message ok');
 
     @texts = $do_create->(
       ssh_key_fetch => gen_response(200 => { ssh_keys => [] }),
     );
 
-    cmp_deeply(
-      \@texts,
-      [
-        re(qr{Creating \w+ box in nyc3}),
-        re(qr{Couldn't find snapshot of \w+ or SSH key}),
-      ],
-      'normal create with defaults seems fine'
-    );
+    is(@texts, 1, 'sent a single failure message');
+    like($texts[0], qr{find a DO (snapshot|ssh key)}, 'no ssh key, message ok');
   };
 
   subtest 'failed create' => sub {
@@ -333,7 +323,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating \w+ box}),
-        re(qr{Something went wrong while creating the box}),
+        re(qr{Something went wrong while creating box}),
       ],
       'sent one will create, one error'
     );
