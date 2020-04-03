@@ -129,6 +129,11 @@ EOH
       method    => 'handle_oncall',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
     },
+    {
+      name      => 'ack-all',
+      method    => 'handle_ack_all',
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^ack all\s*$/i },
+    },
   );
 }
 
@@ -389,6 +394,20 @@ sub handle_maint_end ($self, $event) {
   );
 
   $f->retain;
+}
+
+sub handle_ack_all ($self, $event) {
+  $event->mark_handled;
+
+  $self->_ack_all($event->from_user->username)
+    ->then(sub ($n_acked) {
+      my $noun = $n_acked == 1 ? 'incident' : 'incidents';
+      $event->reply("Successfully acked $n_acked $noun. Good luck!");
+    })
+    ->else(sub {
+      $event->reply("Something went wrong acking incidents. Sorry!");
+    })
+    ->retain;
 }
 
 sub _ack_all ($self, $username) {
