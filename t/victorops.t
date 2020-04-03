@@ -163,4 +163,58 @@ subtest 'exit maint' => sub {
   );
 };
 
+subtest 'ack all' => sub {
+  my $incidents = {
+    incidents => [
+      {
+        incidentNumber => 42,
+        currentPhase => 'UNACKED',
+      },
+      {
+        incidentNumber => 37,
+        currentPhase => 'RESOLVED',
+      }
+    ],
+  };
+
+  # list of incidents, successful ack
+  @VO_RESPONSES = (
+    gen_response(200, $incidents),
+    gen_response(200, { results => [ {} ] }),
+  );
+
+  send_message('synergy: ack all');
+  like(
+    single_message_text(),
+    qr{acked 1 incident},
+    'successful ack all, n = 1'
+  );
+
+  # two incidents
+  @VO_RESPONSES = (
+    gen_response(200, $incidents),
+    gen_response(200, { results => [ {}, {} ] }),
+  );
+
+  send_message('synergy: ack all');
+  like(
+    single_message_text(),
+    qr{acked 2 incidents},
+    'successful ack all, n > 1'
+  );
+
+  # failed ack
+  @VO_RESPONSES = (
+    gen_response(200, $incidents),
+    gen_response(500, {}),
+  );
+
+  send_message('synergy: ack all');
+  like(
+    single_message_text(),
+    qr{Something went wrong acking incidents},
+    'on a failed ack, we get a reasonable error'
+  );
+};
+
 done_testing;
