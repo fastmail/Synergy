@@ -240,6 +240,9 @@ sub decode_slack_formatting ($self, $text) {
   # those
   $text =~ s/[<>]//g;
 
+  # kill zero-width-space so copy/paste works ok
+  $text =~ s/\x{0200B}//g;
+
   $text =~ s/&lt;/</g;
   $text =~ s/&gt;/>/g;
   $text =~ s/&amp;/&/g;
