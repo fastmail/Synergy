@@ -134,6 +134,20 @@ EOH
       method    => 'handle_ack_all',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^ack all\s*$/i },
     },
+    {
+      name      => 'resolve-all',
+      method    => 'handle_resolve_all',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ m{^resolve\s+all\s*$}i },
+    },
+    {
+      name      => 'resolve-mine',
+      method    => 'handle_resolve_mine',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ m{^resolve\s+mine\s*$}i },
+    },
   );
 }
 
@@ -226,6 +240,86 @@ sub handle_maint_query ($self, $event) {
 
   $f->retain;
 }
+
+sub handle_resolve_mine ($self, $event) {
+  $event->mark_handled;
+
+  $self->_resolve_acked($event->from_user->username, 'own')->then(sub ($n_acked) {
+      my $noun = $n_acked == 1 ? 'incident' : 'incidents';
+      $event->reply("Successfully resolved your $n_acked $noun");
+    })
+    ->else(sub {
+      $event->reply("Something went wrong resolving incidents. Sorry!");
+    })
+    ->retain;
+}
+
+sub handle_resolve_all ($self, $event) {
+  $event->mark_handled;
+
+  $self->_resolve_acked($event->from_user->username, 'all')->then(sub ($n_acked) {
+      my $noun = $n_acked == 1 ? 'incident' : 'incidents';
+      $event->reply("Successfully resolved $n_acked $noun");
+    })
+    ->else(sub {
+      $event->reply("Something went wrong resolving incidents. Sorry!");
+    })
+    ->retain;
+}
+sub _resolve_acked($self, $username, $whose) {
+   my $f = $self->_get_incidents
+   ->then (sub ($data) {
+    my @acked = grep { $_->{currentPhase} eq 'ACKED' } $data->{incidents}->@*;
+
+    return Future->done(0) unless @acked;
+
+    @acked = grep { $_->{transitions}[-1]->{by} eq $self->vo_from_username($username) } @acked if $whose eq 'own';
+
+    my @unresolved =
+      map { $_ ? $_->{incidentNumber} : () }
+      @acked;
+
+    $self->hub->http_patch(
+      $self->_vo_api_endpoint('/incidents/resolve'),
+      $self->_vo_api_headers,
+      async => 1,
+      Content_Type => 'application/json',
+      Content => encode_json({
+        userName => $self->vo_from_username($username),
+        incidentNames => \@unresolved,
+      }),
+    );
+  })->then(sub ($res) {
+    return Future->done($res) unless ref $res;
+
+    unless ($res->is_success) {
+      $Logger->log("VO: resolve incidents failed: ".$res->as_string);
+      return Future->fail('resolve incidents');
+    }
+    my $data = decode_json($res->content);
+    my $nresolved = $data->{results}->@*;
+
+    return Future->done($nresolved);
+  });
+  return $f;
+}
+
+sub _get_incidents($self) {
+  my $f = $self->hub->http_get(
+    $self->_vo_api_endpoint('/incidents'),
+    $self->_vo_api_headers,
+    async => 1,
+  )->then (sub ($res) {
+    unless ($res->is_success) {
+      $Logger->log("VO: get incidents failed: ".$res->as_string);
+      return Future->fail('get incidents');
+    }
+    my $data = decode_json($res->content);
+    return Future->done($data);
+  });
+  return $f;
+}
+
 
 sub _current_oncall_names ($self) {
   return $self->hub->http_get(
