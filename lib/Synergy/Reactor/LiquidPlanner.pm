@@ -3753,7 +3753,9 @@ sub _handle_spent ($self, $event, $text) {
   return $event->error_reply($ERR_NO_LP)
     unless $user && $self->auth_header_for($user);
 
-  my ($dur_str, $name) = $text =~ /\A(\V+?)(?:\s*:|\s*\son)\s+(\S.+)\z/s;
+  # We allow "spent on" and "spent in" because of autocorrect.
+  # -- rjbs, 2020-04-06
+  my ($dur_str, $name) = $text =~ /\A(\V+?)(?:\s*:|\s*\s[oi]n)\s+(\S.+)\z/s;
   unless ($dur_str && $name) {
     return $event->error_reply("Does not compute.  Usage:  spent DURATION on DESC-or-ID-or-URL");
   }
