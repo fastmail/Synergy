@@ -134,8 +134,13 @@ sub _do_request ($self, $method, $endpoint, $data = undef) {
     async => 1,
   )->then(sub ($res) {
     unless ($res->is_success) {
+      my $code = $res->code;
       $Logger->log([ "error talking to DO: %s", $res->as_string ]);
-      return Future->fail('Error talking to DO', 'http', { http_res => $res });
+      return Future->fail(
+        "Error talking to DO (got $code trying to $method $endpoint)",
+        'http',
+        { http_res => $res }
+      );
     }
 
     return Future->done(1) if $method eq 'DELETE';
