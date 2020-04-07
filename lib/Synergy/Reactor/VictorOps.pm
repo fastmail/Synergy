@@ -158,29 +158,18 @@ sub handle_alert ($self, $event) {
 
   my $username = $event->from_user->username;
 
-  my $future = $self->hub->http_post(
-    $self->alert_endpoint_uri,
-    async => 1,
-    Content_Type  => 'application/json',
-    Content       => encode_json({
-      message_type  => 'CRITICAL',
-      entity_id     => "synergy.via-$username",
-      entity_display_name => "$text",
-      state_start_time    => time,
+  $self->_vo_request(POST => $self->alert_endpoint_uri, {
+    message_type  => 'CRITICAL',
+    entity_id     => "synergy.via-$username",
+    entity_display_name => "$text",
+    state_start_time    => time,
 
-      state_message => "$username has requested assistance through Synergy:\n$text\n",
-    }),
-  );
-
-  $future->on_fail(sub {
+    state_message => "$username has requested assistance through Synergy:\n$text\n",
+  })->then(sub {
     $event->reply("I couldn't send this alert.  Sorry!");
-  });
-
-  $future->on_ready(sub {
+  })->else(sub {
     $event->reply("I've sent the alert.  Good luck!");
-  });
-
-  return;
+  })->retain;
 }
 
 sub _vo_api_endpoint ($self, $endpoint) {
@@ -195,6 +184,34 @@ sub _vo_api_headers ($self) {
   );
 }
 
+sub _vo_request ($self, $method, $endpoint, $data = undef) {
+  my %content;
+
+  if ($data) {
+    %content = (
+      Content_Type => 'application/json',
+      Content      => encode_json($data),
+    );
+  }
+
+  return $self->hub->http_request(
+    $method,
+    $self->_vo_api_endpoint($endpoint),
+    $self->_vo_api_headers,
+    %content,
+    async => 1,
+  )->then(sub ($res) {
+    unless ($res->is_success) {
+      my $code = $res->code;
+      $Logger->log([ "error talking to VictorOps: %s", $res->as_string ]);
+      return Future->fail('http', { http_res => $res });
+    }
+
+    my $data = decode_json($res->content);
+    return Future->done($data);
+  });
+}
+
 after register_with_hub => sub ($self, @) {
   $self->fetch_state;   # load prefs
 };
@@ -202,18 +219,8 @@ after register_with_hub => sub ($self, @) {
 sub handle_maint_query ($self, $event) {
   $event->mark_handled;
 
-  my $f = $self->hub->http_get(
-    $self->_vo_api_endpoint('/maintenancemode'),
-    $self->_vo_api_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log("VO: get maintenancemode failed: ".$res->as_string);
-        return $event->reply("I couldn't look up VO maint state. Sorry!");
-      }
-
-      my $data = decode_json($res->content);
+  my $f = $self->_vo_request('GET' => '/maintenancemode')
+    ->then(sub ($data) {
       my $maint = $data->{activeInstances} // [];
       unless (@$maint) {
         return $event->reply("VO not in maint right now. Everything is fine maybe!");
@@ -230,13 +237,11 @@ sub handle_maint_query ($self, $event) {
       } @$maint;
 
       return $event->reply("🚨 VO in maint: $maint_text");
-    }
-  )->else(
-    sub (@fails) {
+    })
+    ->else(sub (@fails) {
       $Logger->log("VO: handle_maint_query failed: @fails");
       return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
-    }
-  );
+    });
 
   $f->retain;
 }
@@ -267,7 +272,7 @@ sub handle_resolve_all ($self, $event) {
     ->retain;
 }
 sub _resolve_acked($self, $username, $whose) {
-   my $f = $self->_get_incidents
+   my $f = $self->_vo_request(GET => '/incidents')
    ->then (sub ($data) {
     my @acked = grep { $_->{currentPhase} eq 'ACKED' } $data->{incidents}->@*;
 
@@ -275,73 +280,31 @@ sub _resolve_acked($self, $username, $whose) {
 
     @acked = grep { $_->{transitions}[-1]->{by} eq $self->vo_from_username($username) } @acked if $whose eq 'own';
 
-    my @unresolved =
-      map { $_ ? $_->{incidentNumber} : () }
-      @acked;
+    my @unresolved = map {; $_->{incidentNumber} } @acked;
 
-    $self->hub->http_patch(
-      $self->_vo_api_endpoint('/incidents/resolve'),
-      $self->_vo_api_headers,
-      async => 1,
-      Content_Type => 'application/json',
-      Content => encode_json({
-        userName => $self->vo_from_username($username),
-        incidentNames => \@unresolved,
-      }),
-    );
-  })->then(sub ($res) {
-    return Future->done($res) unless ref $res;
-
-    unless ($res->is_success) {
-      $Logger->log("VO: resolve incidents failed: ".$res->as_string);
-      return Future->fail('resolve incidents');
-    }
-    my $data = decode_json($res->content);
+    return $self->_vo_request(PATCH => "/incidents/resolve", {
+      userName => $self->vo_from_username($username),
+      incidentNames => \@unresolved,
+    });
+  })->then(sub ($data) {
     my $nresolved = $data->{results}->@*;
-
     return Future->done($nresolved);
   });
+
   return $f;
 }
-
-sub _get_incidents($self) {
-  my $f = $self->hub->http_get(
-    $self->_vo_api_endpoint('/incidents'),
-    $self->_vo_api_headers,
-    async => 1,
-  )->then (sub ($res) {
-    unless ($res->is_success) {
-      $Logger->log("VO: get incidents failed: ".$res->as_string);
-      return Future->fail('get incidents');
-    }
-    my $data = decode_json($res->content);
-    return Future->done($data);
-  });
-  return $f;
-}
-
 
 sub _current_oncall_names ($self) {
-  return $self->hub->http_get(
-    $self->_vo_api_endpoint('/oncall/current'),
-    $self->_vo_api_headers,
-    async => 1,
-  )
-  ->then(sub ($http_res) {
-    unless ($http_res->is_success) {
-      $Logger->log("VO: get oncall failed: " . $http_res->as_string);
-      return Future->fail('http get');
-    }
+  $self->_vo_request(GET => '/oncall/current')
+    ->then(sub ($data) {
+      my ($team) = grep {; $_->{team}{slug} eq $self->team_name } $data->{teamsOnCall}->@*;
 
-    my $data = decode_json($http_res->content);
-    my ($team) = grep {; $_->{team}{slug} eq $self->team_name } $data->{teamsOnCall}->@*;
+      return Future->fail('no team') unless $team;
 
-    return Future->fail('no team') unless $team;
-
-    # XXX probably not generic enough
-    my @names = map {; $_->{onCalluser}{username} } $team->{oncallNow}[0]{users}->@*;
-    return Future->done(@names);
-  });
+      # XXX probably not generic enough
+      my @names = map {; $_->{onCalluser}{username} } $team->{oncallNow}[0]{users}->@*;
+      return Future->done(@names);
+    });
 }
 
 # This returns a Future that, when done, gives a boolean as to whether or not
@@ -370,8 +333,6 @@ sub handle_oncall ($self, $event) {
 sub handle_maint_start ($self, $event) {
   $event->mark_handled;
 
-  my $ALREADY_IN_MAINT = -42;
-
   my $force = $event->text =~ m{/force\s*$};
   my $f;
 
@@ -393,39 +354,34 @@ sub handle_maint_start ($self, $event) {
   }
 
   $f->then(sub {
-    return $self->hub->http_post(
-      $self->_vo_api_endpoint('/maintenancemode/start'),
-      $self->_vo_api_headers,
-      async => 1,
-      Content_Type => 'application/json',
-      Content      => encode_json( { names => [] } ), # nothing, global mode
-    );
+    return $self->_vo_request(POST => '/maintenancemode/start', {
+      names => [], # nothing, global mode
+    });
   })
-  ->then(sub ($res) {
-    if ($res->code == 409) {
-      $event->reply("VO already in maint!");
-      return Future->done($ALREADY_IN_MAINT);
-    }
-
-    unless ($res->is_success) {
-      $Logger->log("VO: post maint failed: ".$res->as_string);
-      return $event->reply("I couldn't start maint. Sorry!");
-    }
-
+  ->then(sub ($data) {
     $self->_ack_all($event->from_user->username);
   })
   ->then(sub ($nacked) {
-    return Future->done if $nacked == $ALREADY_IN_MAINT;
-
     my $ack_text = ' ';
     $ack_text = " 🚑 $nacked alert".($nacked > 1 ? 's' : '')." acked!"
       if $nacked;
+
     return $event->reply("🚨 VO now in maint!$ack_text Good luck!");
   })
-  ->else(sub (@fails) {
-    return if $fails[0] eq 'not oncall';
+  ->else(sub ($category, $extra = {}) {
+    return if $category eq 'not oncall';
 
-    $Logger->log("VO: handle_maint_start failed: @fails");
+    if ($category eq 'http') {
+      my $res = $extra->{http_res};
+
+      # Special-case "we're already in maint"
+      if ($res->code == 409) {
+        $event->reply("VO already in maint!");
+        return Future->done;
+      }
+    }
+
+    $Logger->log("VO: handle_maint_start failed: $category");
     return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
   })
   ->retain;
@@ -436,18 +392,8 @@ sub handle_maint_start ($self, $event) {
 sub handle_maint_end ($self, $event) {
   $event->mark_handled;
 
-  my $f = $self->hub->http_get(
-    $self->_vo_api_endpoint('/maintenancemode'),
-    $self->_vo_api_headers,
-    async => 1,
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log("VO: get maintenancemode failed: ".$res->as_string);
-        return $event->reply("I couldn't look up the current VO maint state. Sorry!");
-      }
-
-      my $data = decode_json($res->content);
+  my $f = $self->_vo_request(GET => '/maintenancemode')
+    ->then(sub ($data) {
       my $maint = $data->{activeInstances} // [];
       unless (@$maint) {
         $event->reply("VO not in maint right now. Everything is fine maybe!");
@@ -464,28 +410,22 @@ sub handle_maint_end ($self, $event) {
 
       my $instance_id = $global_maint->{instanceId};
 
-      return $self->hub->http_put(
-        $self->_vo_api_endpoint("/maintenancemode/$instance_id/end"),
-        $self->_vo_api_headers,
-        async => 1,
-      );
-    }
-  )->then(
-    sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log("VO: put maintenancemode failed: ".$res->as_string);
-        return $event->reply("I couldn't clear the VO maint state. Sorry!");
-      }
-
+      return $self->_vo_request(PUT => "/maintenancemode/$instance_id/end");
+    })
+    ->then(sub ($data) {
       return $event->reply("🚨 VO maint cleared. Good job everyone!");
     }
-  )->else(
-    sub (@fails) {
-      return if $fails[0] eq 'no maint';
-      $Logger->log("VO: handle_maint_end failed: @fails");
+    )->else(sub ($category, $extra = {}) {
+      return if $category eq 'no maint';
+
+      if ($category eq 'http') {
+        $event->reply("I couldn't clear the VO maint state. Sorry!");
+        return Future->done;
+      }
+
+      $Logger->log("VO: handle_maint_end failed: $category");
       return $event->reply("Something went wrong while fiddling with VO maint state. Sorry!");
-    }
-  );
+    });
 
   $f->retain;
 }
@@ -505,49 +445,25 @@ sub handle_ack_all ($self, $event) {
 }
 
 sub _ack_all ($self, $username) {
-  my $f = $self->hub->http_get(
-    $self->_vo_api_endpoint('/incidents'),
-    $self->_vo_api_headers,
-    async => 1,
-  )
-  ->then(sub ($res) {
-    unless ($res->is_success) {
-      $Logger->log("VO: get incidents failed: ".$res->as_string);
-      return Future->fail('get incidents');
-    }
+  return $self->_vo_request(GET => '/incidents')
+    ->then(sub ($data) {
+      my @unacked = map  {; $_->{incidentNumber} }
+                    grep {; $_->{currentPhase} eq 'UNACKED' }
+                    $data->{incidents}->@*;
 
-    my $data = decode_json($res->content);
-    my @unacked =
-      map { $_->{currentPhase} eq 'UNACKED' ? $_->{incidentNumber} : () }
-      $data->{incidents}->@*;
+      return Future->done({ results => [] }) unless @unacked;
 
-    return Future->done(0) unless @unacked;
+      $Logger->log("VO: acking incidents: @unacked");
 
-    $Logger->log("VO: acking incidents: @unacked");
-
-    $self->hub->http_patch(
-      $self->_vo_api_endpoint('/incidents/ack'),
-      $self->_vo_api_headers,
-      async => 1,
-      Content_Type => 'application/json',
-      Content => encode_json({
+      return $self->_vo_request(PATCH => '/incidents/ack', {
         userName => $self->vo_from_username($username),
         incidentNames => \@unacked,
-      }),
-    );
-  })->then(sub ($res) {
-    return Future->done($res) unless ref $res;
-
-    unless ($res->is_success) {
-      $Logger->log("VO: ack incidents failed: ".$res->as_string);
-      return Future->fail('ack incidents');
-    }
-
-    my $data = decode_json($res->content);
-    my $nacked = $data->{results}->@*;
-
-    return Future->done($nacked);
-  });
+      });
+    })->then(sub ($data) {
+      # XXX something smarter here?
+      my $nacked = $data->{results}->@*;
+      return Future->done($nacked);
+    });
 }
 
 __PACKAGE__->add_preference(
