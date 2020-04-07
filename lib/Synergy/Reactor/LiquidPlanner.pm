@@ -3825,13 +3825,30 @@ sub _handle_spent ($self, $event, $text) {
 sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
   my $user = $event->from_user;
   my $lpc = $self->f_lp_client_for_user($user);
+
+  my $item;
+
   $lpc
-    ->get_activity_id($task_id, $user->lp_id)
-    ->else(sub {
-      # XXX it would be nice if we had a thing that automatically replied and
-      # failed this.
-      $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
-      Future->fail('no activity id');
+    ->get_item($task_id)
+    ->then(sub ($got) {
+      unless ($item = $got) {
+        return $event
+          ->error_reply("I couldn't log that time because I couldn't find that item!")
+          ->followed_by(sub { Future->fail("no such item") });
+      };
+
+      unless ($item->{type} eq 'Task') {
+        return $event
+          ->error_reply("I couldn't log that time.  The item isn't a task, it's a \L$item->{type}!")
+          ->followed_by(sub { Future->fail("item is not a task") });
+      }
+
+      return $lpc
+        ->get_activity_id($task_id, $user->lp_id)
+        ->else(sub {
+          $event->reply("I couldn't log the work because the task doesn't have a defined activity.");
+          Future->fail('no activity id');
+        });
     })
     ->then(sub ($activity_id) {
       $lpc->track_time({
@@ -3839,36 +3856,28 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
         work    => $duration / 3600,
         member_id   => $user->lp_id,
         activity_id => $activity_id,
+      })->else(sub {
+        $event->reply("I couldn't log your time, sorry.");
+        Future->fail('bad track_time response');
       })
     })
-    ->else(sub {
-      $event->reply("I couldn't log your time, sorry.");
-      Future->fail('bad track_time response');
-    })
-    ->then(sub { $lpc->get_item($task_id) })
-    ->else_with_f(sub ($f, $failure, @) {
-      return $f if $failure eq 'bad track_time response';
-
-      $event->reply("I logged that time, but something went wrong trying to describe it!");
-      Future->fail('bad task get');
-    })
-    ->then(sub ($task) {
+    ->then(sub {
       if ($start) {
-        return $lpc->start_timer_for_task_id($task->{id})
-           ->then(sub { Future->done($task, " and started your timer.") })
-           ->else(sub { Future->done($task, ", but I couldn't start your timer.") });
+        return $lpc->start_timer_for_task_id($item->{id})
+           ->then(sub { Future->done(" and started your timer.") })
+           ->else(sub { Future->done(", but I couldn't start your timer.") });
       }
 
       return $self->_maybe_logged_today_text($user)
         ->transform(done => sub ($text) {
           $text = " $text" if $text;
-          return ($task, $text);
+          return ($text);
         });
     })
-    ->then(sub ($task, $more = '') {
+    ->then(sub ($more = '') {
       my $uri  = $self->item_uri($task_id);
 
-      my $plain_base = qq{I logged that time on "$task->{name}."};
+      my $plain_base = qq{I logged that time on "$item->{name}."};
       my $slack_base = qq{I logged that time.};
 
       # A user has told us what they're up to; that's just as good as tracking
@@ -3880,7 +3889,7 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
       $slack_base .= $more;
 
       $slack_base .= sprintf qq{  The task is: %s},
-        $self->_slack_item_link_with_name($task);
+        $self->_slack_item_link_with_name($item);
 
       return $event->reply(
         "$plain_base.\n$uri",
