@@ -3519,7 +3519,7 @@ sub _handle_timer_done ($self, $event, $text) {
       if ($_ eq 'next')  { $next  = 1; next }
       if ($_ eq 'chill') { $chill = 1; next }
 
-      $event->mark_unhandled;
+      $event->error_reply(q{It's "done" or you can say "next" or "chill" or "next, chill" after that, but that's it!});
       return;
     }
 
