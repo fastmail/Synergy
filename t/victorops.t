@@ -41,10 +41,17 @@ local $Logger = $result->logger;
 my $s = $result->synergy;
 my $channel = $s->channel_named('test-channel');
 
+# prefs
+my $vo = $s->reactor_named('vo');
+for my $who (qw(alice bob)) {
+  my $user = $s->user_directory->user_named($who);
+  $vo->set_user_preference($user, 'username', $who);
+}
+
 # Fake up responses from VO.
 my @VO_RESPONSES;
 my $VO_RESPONSE = gen_response(200, {});
-$s->server->register_path('/vo', sub {
+$s->server->register_path('/vo', sub ($env) {
   return shift @VO_RESPONSES if @VO_RESPONSES;
   return $VO_RESPONSE;
 });
@@ -214,6 +221,48 @@ subtest 'ack all' => sub {
     single_message_text(),
     qr{Something went wrong acking incidents},
     'on a failed ack, we get a reasonable error'
+  );
+};
+
+subtest 'resolve' => sub {
+  my $incidents = {
+    incidents => [
+      {
+        incidentNumber => 42,
+        currentPhase => 'ACKED',
+        transitions => [{ by => 'alice' }],
+      },
+      {
+        incidentNumber => 37,
+        currentPhase => 'ACKED',
+        transitions => [{ by => 'bob' }],
+      }
+    ],
+  };
+
+  # TODO: test this better
+  @VO_RESPONSES = (
+    gen_response(200, $incidents),
+    gen_response(200, { results => [ {}, {} ] }),
+  );
+
+  send_message('synergy: resolve all');
+  like(
+    single_message_text(),
+    qr{resolved 2 incidents},
+    'we did not totally die resolving all'
+  );
+
+  @VO_RESPONSES = (
+    gen_response(200, $incidents),
+    gen_response(200, { results => [ {} ] }),
+  );
+
+  send_message('synergy: resolve mine');
+  like(
+    single_message_text(),
+    qr{resolved 1 incident},
+    'we did not totally die resolving mine'
   );
 };
 
