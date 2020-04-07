@@ -247,51 +247,40 @@ sub handle_maint_query ($self, $event) {
 }
 
 sub handle_resolve_mine ($self, $event) {
-  $event->mark_handled;
-
-  $self->_resolve_acked($event->from_user->username, 'own')->then(sub ($n_acked) {
-      my $noun = $n_acked == 1 ? 'incident' : 'incidents';
-      $event->reply("Successfully resolved your $n_acked $noun");
-    })
-    ->else(sub {
-      $event->reply("Something went wrong resolving incidents. Sorry!");
-    })
-    ->retain;
+  return $self->_resolve_acked($event, 'mine');
 }
 
 sub handle_resolve_all ($self, $event) {
+  return $self->_resolve_acked($event, 'all');
+}
+
+sub _resolve_acked($self, $event, $whose) {
   $event->mark_handled;
 
-  $self->_resolve_acked($event->from_user->username, 'all')->then(sub ($n_acked) {
-      my $noun = $n_acked == 1 ? 'incident' : 'incidents';
-      $event->reply("Successfully resolved $n_acked $noun");
-    })
-    ->else(sub {
+  $self->_vo_request(GET => '/incidents')
+    ->then (sub ($data) {
+      my @acked = grep {; $_->{currentPhase} eq 'ACKED' } $data->{incidents}->@*;
+      return Future->done({ results => []}) unless @acked;
+
+      my $vo_username = $self->vo_from_username($event->from_user->username);
+
+      if ($whose eq 'mine') {
+        @acked = grep {; $_->{transitions}[-1]->{by} eq $vo_username } @acked;
+      }
+
+      my @unresolved = map {; $_->{incidentNumber} } @acked;
+
+      return $self->_vo_request(PATCH => "/incidents/resolve", {
+        userName => $vo_username,
+        incidentNames => \@unresolved,
+      });
+    })->then(sub ($data) {
+      my $n = $data->{results}->@*;
+      my $noun = $n == 1 ? 'incident' : 'incidents';
+      $event->reply("Successfully resolved $n $noun");
+    })->else(sub {
       $event->reply("Something went wrong resolving incidents. Sorry!");
-    })
-    ->retain;
-}
-sub _resolve_acked($self, $username, $whose) {
-   my $f = $self->_vo_request(GET => '/incidents')
-   ->then (sub ($data) {
-    my @acked = grep { $_->{currentPhase} eq 'ACKED' } $data->{incidents}->@*;
-
-    return Future->done(0) unless @acked;
-
-    @acked = grep { $_->{transitions}[-1]->{by} eq $self->vo_from_username($username) } @acked if $whose eq 'own';
-
-    my @unresolved = map {; $_->{incidentNumber} } @acked;
-
-    return $self->_vo_request(PATCH => "/incidents/resolve", {
-      userName => $self->vo_from_username($username),
-      incidentNames => \@unresolved,
-    });
-  })->then(sub ($data) {
-    my $nresolved = $data->{results}->@*;
-    return Future->done($nresolved);
-  });
-
-  return $f;
+    })->retain;
 }
 
 sub _current_oncall_names ($self) {
