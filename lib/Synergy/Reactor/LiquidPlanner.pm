@@ -3846,7 +3846,9 @@ sub _spent_on_existing ($self, $event, $task_id, $duration, $start = 0) {
       Future->fail('bad track_time response');
     })
     ->then(sub { $lpc->get_item($task_id) })
-    ->else(sub {
+    ->else_with_f(sub ($f, $failure, @) {
+      return $f if $failure eq 'bad track_time response';
+
       $event->reply("I logged that time, but something went wrong trying to describe it!");
       Future->fail('bad task get');
     })
