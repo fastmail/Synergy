@@ -23,7 +23,7 @@ my $result = Synergy::Tester->testergize({
   reactors => {
     vo => {
       class              => 'Synergy::Reactor::VictorOps',
-      alert_endpoint_uri => '',
+      alert_endpoint_uri => '',   # rewritten later
       api_id             => '1234',
       api_key            => 'secrets',
       team_name          => 'plumbing',
@@ -66,13 +66,24 @@ $s->server->register_path('/vo', sub ($env) {
 
   return $VO_RESPONSE;
 });
-my $url = sprintf("http://localhost:%s/vo", $s->server->server_port);
+
+my $ALERT_RESPONSE = gen_response(200, {});
+$s->server->register_path('/alerts', sub ($env) { return $ALERT_RESPONSE });
+
+my $api_url   = sprintf("http://localhost:%s/vo", $s->server->server_port);
+my $alert_url = sprintf("http://localhost:%s/alerts", $s->server->server_port);
 
 # Muck with the guts of VO reactor to catch our fakes.
 my $endpoint = Sub::Override->new(
   'Synergy::Reactor::VictorOps::_vo_api_endpoint',
-  sub { return $url },
+  sub { return $api_url },
 );
+
+my $alert_endpoint = Sub::Override->new(
+  'Synergy::Reactor::VictorOps::alert_endpoint_uri',
+  sub { return $alert_url },
+);
+
 my $oncall = Sub::Override->new(
   'Synergy::Reactor::VictorOps::_current_oncall_names',
   sub { return Future->done('alice') },
@@ -297,6 +308,24 @@ subtest 'resolve' => sub {
     single_message_text(),
     qr{resolved 1 incident},
     'we successfully patched and resolved our own acked'
+  );
+};
+
+subtest 'alert' => sub {
+  send_message('synergy: alert the toast is on fire');
+  like(
+    single_message_text(),
+    qr{sent the alert\.\s+Good luck},
+    'successful alert send'
+  );
+
+  $ALERT_RESPONSE = gen_response(403, {});
+
+  send_message('synergy: alert the toast is on fire');
+  like(
+    single_message_text(),
+    qr{couldn't send this alert},
+    'good message on failed send'
   );
 };
 

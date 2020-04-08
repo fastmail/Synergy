@@ -158,17 +158,26 @@ sub handle_alert ($self, $event) {
 
   my $username = $event->from_user->username;
 
-  $self->_vo_request(POST => $self->alert_endpoint_uri, {
-    message_type  => 'CRITICAL',
-    entity_id     => "synergy.via-$username",
-    entity_display_name => "$text",
-    state_start_time    => time,
+  # We don't use _vo_request here because this isn't an API call, and so uses
+  # it own URI and doesn't need the headers!
+  $self->hub->http_post(
+    $self->alert_endpoint_uri,
+    async => 1,
+    Content_Type  => 'application/json',
+    Content       => encode_json({
+      message_type  => 'CRITICAL',
+      entity_id     => "synergy.via-$username",
+      entity_display_name => "$text",
+      state_start_time    => time,
 
-    state_message => "$username has requested assistance through Synergy:\n$text\n",
-  })->then(sub {
-    $event->reply("I couldn't send this alert.  Sorry!");
-  })->else(sub {
+      state_message => "$username has requested assistance through Synergy:\n$text\n",
+    }),
+  )->then(sub ($res) {
+    return Future->fail('http') unless $res->is_success;
+
     $event->reply("I've sent the alert.  Good luck!");
+  })->else(sub {
+    $event->reply("I couldn't send this alert.  Sorry!");
   })->retain;
 }
 
