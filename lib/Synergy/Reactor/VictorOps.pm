@@ -286,7 +286,10 @@ sub _resolve_acked($self, $event, $whose) {
     })->then(sub ($data) {
       my $n = $data->{results}->@*;
       my $noun = $n == 1 ? 'incident' : 'incidents';
-      $event->reply("Successfully resolved $n $noun");
+
+      my $exclamation = $whose eq 'all' ? "The board is clear!" : "Phew!";
+
+      $event->reply("Successfully resolved $n $noun. $exclamation");
     })->else(sub {
       $event->reply("Something went wrong resolving incidents. Sorry!");
     })->retain;
