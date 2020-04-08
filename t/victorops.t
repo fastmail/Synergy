@@ -7,7 +7,8 @@ use lib 'lib', 't/lib';
 
 use Future;
 use IO::Async::Test;
-use JSON::MaybeXS qw(encode_json);
+use JSON::MaybeXS qw(encode_json decode_json);
+use Plack::Request;
 use Plack::Response;
 use Sub::Override;
 use Test::More;
@@ -52,7 +53,17 @@ for my $who (qw(alice bob)) {
 my @VO_RESPONSES;
 my $VO_RESPONSE = gen_response(200, {});
 $s->server->register_path('/vo', sub ($env) {
-  return shift @VO_RESPONSES if @VO_RESPONSES;
+  if (@VO_RESPONSES) {
+    my $next = shift @VO_RESPONSES;
+
+    if (ref $next eq 'CODE') {
+      my $req = Plack::Request->new($env);
+      return $next->($req);
+    }
+
+    return $next;
+  }
+
   return $VO_RESPONSE;
 });
 my $url = sprintf("http://localhost:%s/vo", $s->server->server_port);
@@ -170,6 +181,20 @@ subtest 'exit maint' => sub {
   );
 };
 
+# We want to test, for our PATCH requests, that we only request the ones we
+# expect. So here, we return as many successful results as there were
+# incidents. Later, if we make the assertions in the VO reactor stronger
+# (rather than just returning a count of the results without checking their
+# content), this will be easier to extend.
+my $patch_responder = sub ($req) {
+  note("got JSON data: " . $req->content);
+  my $patch_data = decode_json($req->content);
+
+  my @incidents = $patch_data->{incidentNames}->@*;
+
+  return gen_response(200, { results => \@incidents });
+};
+
 subtest 'ack all' => sub {
   my $incidents = {
     incidents => [
@@ -187,7 +212,7 @@ subtest 'ack all' => sub {
   # list of incidents, successful ack
   @VO_RESPONSES = (
     gen_response(200, $incidents),
-    gen_response(200, { results => [ {} ] }),
+    $patch_responder,
   );
 
   send_message('synergy: ack all');
@@ -198,9 +223,10 @@ subtest 'ack all' => sub {
   );
 
   # two incidents
+  $incidents->{incidents}[1]{currentPhase} = 'UNACKED';
   @VO_RESPONSES = (
     gen_response(200, $incidents),
-    gen_response(200, { results => [ {}, {} ] }),
+    $patch_responder,
   );
 
   send_message('synergy: ack all');
@@ -240,29 +266,37 @@ subtest 'resolve' => sub {
     ],
   };
 
-  # TODO: test this better
+  # For a patch, we want to return only the number of results actually
+  # requested.
+  my $patch_responder = sub ($req) {
+    note("got JSON data: " . $req->content);
+    my $patch_data = decode_json($req->content);
+    my @incidents = $patch_data->{incidentNames}->@*;
+    return gen_response(200, { results => \@incidents });
+  };
+
   @VO_RESPONSES = (
     gen_response(200, $incidents),
-    gen_response(200, { results => [ {}, {} ] }),
+    $patch_responder,
   );
 
   send_message('synergy: resolve all');
   like(
     single_message_text(),
     qr{resolved 2 incidents},
-    'we did not totally die resolving all'
+    'we successfully patched and resolved all acked'
   );
 
   @VO_RESPONSES = (
     gen_response(200, $incidents),
-    gen_response(200, { results => [ {} ] }),
+    $patch_responder,
   );
 
   send_message('synergy: resolve mine');
   like(
     single_message_text(),
     qr{resolved 1 incident},
-    'we did not totally die resolving mine'
+    'we successfully patched and resolved our own acked'
   );
 };
 
