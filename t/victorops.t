@@ -108,6 +108,13 @@ sub single_message_text {
   return $texts[0];
 }
 
+sub multiple_message_text($num, $index) {
+  my @texts = map {; $_->{text} } $channel->sent_messages;
+  fail("expected $num messages, but got " . @texts) if @texts != $num;
+  $channel->clear_messages;
+  return $texts[$index];
+}
+
 # ok, let's test.
 
 subtest 'info' => sub {
@@ -154,6 +161,20 @@ subtest "enter maint" => sub {
   );
 };
 
+# We want to test, for our PATCH requests, that we only request the ones we
+# expect. So here, we return as many successful results as there were
+# incidents. Later, if we make the assertions in the VO reactor stronger
+# (rather than just returning a count of the results without checking their
+# content), this will be easier to extend.
+my $patch_responder = sub ($req) {
+  note("got JSON data: " . $req->content);
+  my $patch_data = decode_json($req->content);
+
+  my @incidents = $patch_data->{incidentNames}->@*;
+
+  return gen_response(200, { results => \@incidents });
+};
+
 subtest 'exit maint' => sub {
   # not in maint
   $VO_RESPONSE = gen_response(200, { activeInstances => [] });
@@ -190,20 +211,53 @@ subtest 'exit maint' => sub {
     qr{couldn't clear the VO maint}i,
     'reasonable error on demaint failure'
   );
-};
 
-# We want to test, for our PATCH requests, that we only request the ones we
-# expect. So here, we return as many successful results as there were
-# incidents. Later, if we make the assertions in the VO reactor stronger
-# (rather than just returning a count of the results without checking their
-# content), this will be easier to extend.
-my $patch_responder = sub ($req) {
-  note("got JSON data: " . $req->content);
-  my $patch_data = decode_json($req->content);
+  # exit maint and /resolve
+  # 55, 56 should resolve
+  # 42, 43 predate maint startedAt
+    my $incidents = {
+    incidents => [
+      {
+        incidentNumber => 69,
+        currentPhase => 'UNACKED',
+        startTime => '1970-01-01T00:00:10Z',
+      },
+      {
+        incidentNumber => 79,
+        currentPhase => 'ACKED',
+        startTime => '1970-01-01T00:00:11Z',
+      },
+      {
+        incidentNumber => 89,
+        currentPhase => 'UNACKED',
+        startTime => '1970-01-02T00:54:11Z',
+      },
+      {
+        incidentNumber => 99,
+        currentPhase => 'ACKED',
+        startTime => '1970-01-02T00:54:11Z',
+      },
+      {
+        incidentNumber => 109,
+        currentPhase => 'RESOLVED',
+        startTime => '1971-01-02T00:54:11Z',
+      }
+    ],
+  };
 
-  my @incidents = $patch_data->{incidentNames}->@*;
+  @VO_RESPONSES = (
+    gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42, startedAt => 86400 }] }),
+    gen_response(200, {}),
+    gen_response(200, $incidents),
+    $patch_responder,
+  );
 
-  return gen_response(200, { results => \@incidents });
+    send_message('synergy: demaint /resolve', 'alice');
+    like(
+      multiple_message_text(2, 0),
+      qr{Successfully resolved 2 incidents. The board is clear!}i,
+      'demaint /resolve'
+    );
 };
 
 subtest 'ack all' => sub {

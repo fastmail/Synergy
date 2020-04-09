@@ -14,6 +14,7 @@ use JSON::MaybeXS;
 use List::Util qw(first);
 use DateTimeX::Format::Ago;
 use Synergy::Logger '$Logger';
+use Date::Parse;
 
 has alert_endpoint_uri => (
   is => 'ro',
@@ -119,9 +120,9 @@ EOH
       method    => 'handle_maint_end',
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return 1 if $e->text =~ /^maint\s+(end|stop)\s*$/i;
-        return 1 if $e->text =~ /^unmaint\s*$/i;
-        return 1 if $e->text =~ /^demaint\s*$/i;
+        return 1 if $e->text =~ /^maint\s+(end|stop)\b/i;
+        return 1 if $e->text =~ /^unmaint\b/i;
+        return 1 if $e->text =~ /^demaint\b/i;
       },
     },
     {
@@ -140,6 +141,13 @@ EOH
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
         return $e->text =~ m{^resolve\s+all\s*$}i },
+    },
+    {
+      name      => 'resolve-acked',
+      method    => 'handle_resolve_acked',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ m{^resolve\s+acked\s*$}i },
     },
     {
       name      => 'resolve-mine',
@@ -256,43 +264,27 @@ sub handle_maint_query ($self, $event) {
 }
 
 sub handle_resolve_mine ($self, $event) {
-  return $self->_resolve_acked($event, 'mine');
+  $event->mark_handled;
+  $self->_resolve_incidents($event, {
+    type => 'acked',
+    whose => 'own'
+  })->retain;
 }
 
 sub handle_resolve_all ($self, $event) {
-  return $self->_resolve_acked($event, 'all');
+  $event->mark_handled;
+  $self->_resolve_incidents($event, {
+    type => 'all',
+    whose => 'all'
+  })->retain;
 }
 
-sub _resolve_acked($self, $event, $whose) {
+sub handle_resolve_acked ($self, $event) {
   $event->mark_handled;
-
-  $self->_vo_request(GET => '/incidents')
-    ->then (sub ($data) {
-      my @acked = grep {; $_->{currentPhase} eq 'ACKED' } $data->{incidents}->@*;
-      return Future->done({ results => []}) unless @acked;
-
-      my $vo_username = $self->vo_from_username($event->from_user->username);
-
-      if ($whose eq 'mine') {
-        @acked = grep {; $_->{transitions}[-1]->{by} eq $vo_username } @acked;
-      }
-
-      my @unresolved = map {; $_->{incidentNumber} } @acked;
-
-      return $self->_vo_request(PATCH => "/incidents/resolve", {
-        userName => $vo_username,
-        incidentNames => \@unresolved,
-      });
-    })->then(sub ($data) {
-      my $n = $data->{results}->@*;
-      my $noun = $n == 1 ? 'incident' : 'incidents';
-
-      my $exclamation = $whose eq 'all' ? "The board is clear!" : "Phew!";
-
-      $event->reply("Successfully resolved $n $noun. $exclamation");
-    })->else(sub {
-      $event->reply("Something went wrong resolving incidents. Sorry!");
-    })->retain;
+  $self->_resolve_incidents($event, {
+    type => 'acked',
+    whose => 'all'
+  })->retain;
 }
 
 sub _current_oncall_names ($self) {
@@ -390,8 +382,53 @@ sub handle_maint_start ($self, $event) {
   return;
 }
 
+sub _resolve_incidents($self, $event, $args) {
+  return $self->_vo_request(GET => '/incidents')
+    ->then(sub($data){
+      my $vo_username = $self->vo_from_username($event->from_user->username);
+      my @unresolved;
+
+      for my $incident ($data->{incidents}->@*) {
+        next if $incident->{currentPhase} eq 'RESOLVED';
+
+        if (my $since = $args->{since}) {
+          next unless (str2time($incident->{startTime}) * 1000) > $since;
+        }
+
+        unless ($args->{type} eq 'all') {
+          # skip unacked incidents unless we've asked for all
+          next unless $incident->{currentPhase} eq 'ACKED';
+        }
+
+        if ($args->{whose} eq 'own' && $args->{type} ne 'all') {
+          next unless $incident->{transitions}[-1]->{by} eq $vo_username;
+        }
+
+        push @unresolved, $incident->{incidentNumber};
+      }
+
+      return $self->_vo_request(PATCH => "/incidents/resolve", {
+        userName => $vo_username,
+        incidentNames => \@unresolved,
+      });
+    })->then(sub ($data) {
+      my $n = $data->{results}->@*;
+      my $noun = $n == 1 ? 'incident' : 'incidents';
+
+      my $exclamation = $args->{whose} eq 'all' ? "The board is clear!" : "Phew!";
+
+      $event->reply("Successfully resolved $n $noun. $exclamation");
+      return Future->done(0)
+    })->else(sub {
+      $event->reply("Something went wrong resolving incidents. Sorry!");
+    });
+}
+
 sub handle_maint_end ($self, $event) {
   $event->mark_handled;
+
+  my (@args) = split /\s+/, $event->text;
+  my $resolve = grep {; $_ eq '/resolve' } @args;
 
   my $f = $self->_vo_request(GET => '/maintenancemode')
     ->then(sub ($data) {
@@ -409,9 +446,22 @@ sub handle_maint_end ($self, $event) {
           "You'll need to go and sort it out in the VO web UI.");
       }
 
+
+      my $timestamp = $maint->[0]->{startedAt};
       my $instance_id = $global_maint->{instanceId};
 
-      return $self->_vo_request(PUT => "/maintenancemode/$instance_id/end");
+      return $self->_vo_request(PUT => "/maintenancemode/$instance_id/end")
+        ->transform(done => sub { $timestamp })
+    })
+    ->then(sub ($timestamp) {
+      if ($resolve) {
+        return $self->_resolve_incidents($event, {
+          type => 'all',
+          since => $timestamp,
+          whose => 'all'
+        });
+      }
+      return Future->done(0);
     })
     ->then(sub ($data) {
       return $event->reply("🚨 VO maint cleared. Good job everyone!");
