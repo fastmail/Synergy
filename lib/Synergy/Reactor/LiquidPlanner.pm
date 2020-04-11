@@ -2135,7 +2135,11 @@ sub _parse_search ($self, $text) {
   state $prefix_re  = qr{!?\^?};
 
   my $fallback = sub ($text_ref) {
-    if ($$text_ref =~ s/^\#($Synergy::Util::ident_re)(?: \s | \z)//x) {
+    if ($$text_ref =~ s/^\#\#?($Synergy::Util::ident_re)(?: \s | \z)//x) {
+      my $text = $1;
+      if (my $tag = $IS_TAG{ lc $text }) {
+        return [ tags => $tag ];
+      }
       return [ project => "#$1" ],
     }
 
