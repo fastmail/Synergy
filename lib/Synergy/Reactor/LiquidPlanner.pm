@@ -1293,6 +1293,14 @@ sub _handle_last ($self, $event, $text) {
   }
 }
 
+my %IS_TAG = map {; $_ => $_ }
+             qw(pobox fastmail cyrus topicbox corp marketing plumbing
+             ui ops platform debian triton jmap);
+
+$IS_TAG{pb} = 'pobox';
+$IS_TAG{tx} = 'topicbox';
+$IS_TAG{fm} = 'fastmail';
+
 sub _extract_flags_from_task_text ($self, $text) {
   my %flag;
 
@@ -1306,11 +1314,15 @@ sub _extract_flags_from_task_text ($self, $text) {
 
   while ($text =~ s/\s*\(([!>]+)\)\s*\z//
      ||  $text =~ s/\s*($start_emoji|$urgent_emoji)\s*\z//
-     ||  $text =~ s/\s+(#[a-z0-9]+)\s*\z//i
+     ||  $text =~ s/\s+(##?[a-z0-9]+)\s*\z//i
   ) {
     my $hunk = $1;
-    if ($hunk =~ s/^#//) {
-      $flag{project}{$hunk} = 1;
+    if ($hunk =~ s/^##?//) {
+      if (my $tag = $IS_TAG{ lc $hunk }) {
+        $flag{tags}{$tag} = 1;
+      } else {
+        $flag{project}{$hunk} = 1;
+      }
       next;
     } elsif ($hunk =~ /[!>]/) {
       $flag{start} ++                               if $hunk =~ />/;
@@ -3001,13 +3013,13 @@ sub _handle_good ($self, $event, $text) {
   }
 }
 
-sub _create_lp_task ($self, $event, $my_arg, $arg) {
+sub _create_lp_task ($self, $event, $plan, $arg) {
   my %container = (
-    package_id  => $my_arg->{package_id}
-                ?  $my_arg->{package_id}
+    package_id  => $plan->{package_id}
+                ?  $plan->{package_id}
                 :  $self->inbox_package_id,
-    parent_id   => $my_arg->{project_id}
-                ?  $my_arg->{project_id}
+    parent_id   => $plan->{project_id}
+                ?  $plan->{project_id}
                 :  undef,
   );
 
@@ -3017,11 +3029,11 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
   my sub assignment ($who) {
     return {
       person_id => $who->lp_id,
-      ($my_arg->{estimate} ? (estimate => $my_arg->{estimate}) : ()),
+      ($plan->{estimate} ? (estimate => $plan->{estimate}) : ()),
     }
   }
 
-  my @assignments = map {; assignment($_) } $my_arg->{owners}->@*;
+  my @assignments = map {; assignment($_) } $plan->{owners}->@*;
 
   my $triage_user = $self->hub->user_directory->user_named('triage');
   my $task_is_for_triage =
@@ -3030,22 +3042,26 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
 
   my $payload = {
     task => {
-      name        => $my_arg->{name},
+      name        => $plan->{name},
       assignments => \@assignments,
-      description => $my_arg->{description},
-      ( $task_is_for_triage ?  (tags => [ { text => 'triage' } ]) : () ),
+      description => $plan->{description},
+      tags        => [
+        map {; +{ text => $_ } }
+          (($plan->{tags} ? (keys $plan->{tags}->%*) : ()),
+          ($task_is_for_triage ? 'triage' : ()))
+      ],
 
-      ($my_arg->{links} ? (links => $my_arg->{links}) : ()),
+      ($plan->{links} ? (links => $plan->{links}) : ()),
 
-      ($my_arg->{custom_field_values}
-        ? (custom_field_values => $my_arg->{custom_field_values})
+      ($plan->{custom_field_values}
+        ? (custom_field_values => $plan->{custom_field_values})
         : ()),
 
       %container,
     }
   };
 
-  my $as_user = $my_arg->{user} // $self->master_lp_user;
+  my $as_user = $plan->{user} // $self->master_lp_user;
   my $lpc = $self->f_lp_client_for_user($as_user);
 
   my $chan_desc = $event->from_channel->describe_conversation($event);
@@ -3055,7 +3071,7 @@ sub _create_lp_task ($self, $event, $my_arg, $arg) {
     # If the task is assigned to the triage user, inform them.
     # -- rjbs, 2019-02-28
     if ($task_is_for_triage) {
-      my $who = $my_arg->{user} ? $my_arg->{user}->username : "some weirdo";
+      my $who = $plan->{user} ? $plan->{user}->username : "some weirdo";
 
       my $text = sprintf
         "$TRIAGE_EMOJI New task created for triage by %s in %s: %s (%s)",
