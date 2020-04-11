@@ -1431,16 +1431,10 @@ sub _check_plan_usernames ($self, $event, $plan, $error) {
     }
   }
 
-  unless ($plan->{project}) {
-    my @projects  = uniq
-                    grep { defined }
-                    map  {; $self->get_user_preference($_, 'default-project-shortcut') }
-                    @owners;
-
-    if (@projects == 1) {
-      $plan->{project}{ $projects[0] } = 1;
-    }
-  }
+  $plan->{tags}{ lc $_ } = 1
+    for grep { defined }
+        map  {; $self->get_user_preference($_, 'default-project-shortcut') }
+        @owners;
 
   $plan->{owners} = \@owners;
   return;

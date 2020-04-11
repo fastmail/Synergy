@@ -230,8 +230,8 @@ plan_ok(
   "/estimate with only one number"
 );
 
-for my $pair ([ riot => 1 ], [ jetta => 2 ]) {
-  my ($username, $p_id) = @$pair;
+for my $pair ([ riot => 'gorp' ], [ jetta => 'pies' ]) {
+  my ($username, $tag) = @$pair;
 
   plan_ok(
     {
@@ -239,9 +239,9 @@ for my $pair ([ riot => 1 ], [ jetta => 2 ]) {
       usernames => [ $username ],
     },
     {
-      name        => "Eat more pie",
-      project_id  => $p_id,
-      owners      => [ methods(username => $username) ],
+      name    => "Eat more pie",
+      tags    => { $tag => 1 },
+      owners  => [ methods(username => $username) ],
     },
     "project id from a user's default project ($username)"
   );
@@ -254,12 +254,13 @@ plan_ok(
   },
   {
     name        => "Eat more pie",
+    tags        => { gorp => 1, pies => 1 },
     owners      => bag(
       methods(username => 'jetta'),
       methods(username => 'riot'),
     )
   },
-  "when users have conflicting default projects, choose none"
+  "use all tags for multiple users"
 );
 
 plan_ok(
@@ -270,6 +271,7 @@ plan_ok(
   {
     name        => "Eat more pie",
     project_id  => 1,
+    tags        => { pies => 1 },
     owners      => [ methods(username => 'jetta') ],
   },
   "explicit project overrides user default"
@@ -381,7 +383,7 @@ is_deeply(
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search(q{#tx bar}),
   [
-    { field => 'project',                   value => '#tx' },
+    { field => 'tags',                      value => 'topicbox' },
     { field => 'name',    op => 'contains', value => 'bar' },
   ],
   "leading with #shortcut",
