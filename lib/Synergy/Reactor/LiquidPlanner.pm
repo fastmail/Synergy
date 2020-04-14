@@ -4927,15 +4927,43 @@ sub _handle_contents ($self, $event, $rest) {
   my ($what, $more) = split /\s+/, $rest, 2;
 
   my $page = 1;
+  my @done_filter = [ is_done => 'is', 'false' ];
   if (length $more) {
-    unless ($more =~ m{\Apage:([0-9]+)\z}) {
+    my $hunks = Synergy::Util::parse_colonstrings($more, {
+      fallback => sub { [ "\0" => $_[0] ] }
+    });
+
+    my %param;
+    HUNK: for my $hunk (@$hunks) {
+      my ($k, $v) = @$hunk;
+      if ($k eq "\0") {
+        return $event->error_reply(q{You can only say "contents THING" optionally followed by "page:N".});
+      }
+
+      if (exists $param{$k}) {
+        return $event->error_reply(q{You provided duplicated parameters to "contents".});
+      }
+
+      if ($k eq 'page') {
+        unless ($v =~ m{\A([0-9]+)\z} && $v > 0 && $v < 10_000) {
+          return $event->error_reply(q{That page number didn't make sense to me.});
+        }
+
+        $param{page} = $v;
+        next HUNK;
+      }
+
+      if ($k eq 'done') {
+        $param{done} = $v;
+
+        if ($v eq 'yes')  { @done_filter = [ is_done => 'is', 'true' ]; next HUNK; }
+        if ($v eq 'no')   { @done_filter = [ is_done => 'is', 'false' ]; next HUNK; }
+        if ($v eq 'both') { @done_filter = (); next HUNK; }
+
+        return $event->error_reply(q{The "done" parameter has to be yes, no, or both.});
+      }
+
       return $event->error_reply(q{You can only say "contents THING" optionally followed by "page:N".});
-    }
-
-    $page = 0 + $1;
-
-    unless ($page > 0 and $page < 10_000) {
-      return $event->error_reply(q{That page number didn't make sense to me.});
     }
   }
 
@@ -4960,7 +4988,7 @@ sub _handle_contents ($self, $event, $rest) {
       depth => 1,
     },
     filters => [
-      [ is_done => 'is', 'false' ],
+      @done_filter,
     ],
   });
 
