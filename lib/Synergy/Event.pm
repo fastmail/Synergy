@@ -123,6 +123,10 @@ sub error_reply ($self, $text, $alts = {}) {
   return $self->reply($text, $alts, { was_error => 1 });
 }
 
+sub reply_error ($self, $text, $alts = {}) {
+  return $self->reply($text, $alts, { was_error => 1 });
+}
+
 sub reply ($self, $text, $alts = {}, $args = {}) {
   $Logger->log_debug("sending $text to someone");
 
