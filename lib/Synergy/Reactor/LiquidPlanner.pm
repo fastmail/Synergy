@@ -3391,7 +3391,7 @@ sub _handle_timer_commit ($self, $event, $comment) {
   while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL|$time_re)\s*\z//) {
     my $got = $1;
     if ($got =~ $time_re) {
-      $timer_override = $1 * (($2 || 'h') eq 'h' ? 1 : 60);
+      $timer_override = $1 / (($2 || 'h') eq 'h' ? 1 : 60);
     } else {
       $meta{$got}++;
     }
