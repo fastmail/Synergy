@@ -419,7 +419,7 @@ EOH
                 ],
 
   projects  =>  [ \&_handle_projects,
-                  "*projects*: list all known project shortcuts",
+                  "*projects*: list all known project shortcuts; can pass *sort:`{due,owner,phase}`*",
                 ],
 
   tags      =>  [ \&_handle_tags,
@@ -4146,7 +4146,23 @@ sub timesheet_report ($self, $who, $arg = {}) {
   });
 }
 
+my %PROJECT_SORTER;
+%PROJECT_SORTER = (
+  phase => sub { ($Phase_Pos{ $a->[2] } // 99) <=> ($Phase_Pos{ $b->[2] } // 99) },
+  owner => sub { $a->[3] cmp $b->[3] || $PROJECT_SORTER{phase}->() },
+  due   => sub { ($a->[0]{promise_by}//'9') cmp ($b->[0]{promise_by}//'9')
+              || $PROJECT_SORTER{phase}->() }
+);
+
 sub _handle_projects ($self, $event, $text) {
+  my $sort = 'phase';
+  if (length $text) {
+    return $self->error_reply("I don't understand.  Try `help projects`.")
+      unless $text =~ /\Asort:(phase|due|owner)\s*\z/i;
+
+    $sort = fc $1;
+  }
+
   my @shortcuts = $self->project_shortcuts;
 
   $event->reply("Responses to <projects> are sent privately.")
@@ -4160,20 +4176,28 @@ sub _handle_projects ($self, $event, $text) {
     $item ? $item : ();
   } @shortcuts;
 
+  my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+              $self->hub->user_directory->users;
+
   @projects =
-    map  {; $_->[2] }
-    sort {; $a->[0] <=> $b->[0]
-        || ($Phase_Pos{ $a->[1] } // 99) <=> ($Phase_Pos{ $b->[1] } // 99) }
+    map  {; $_->[0] }
+    sort {; $a->[1] <=> $b->[1] || $PROJECT_SORTER{$sort}->() }
     map  {; [
+      $_,
       ($_->{parent_id} == $self->project_portfolio_id ? 1 : 0),
       $_->{custom_field_values}{'Project Phase'},
-      $_
+      ($by_lp{ $_->{assignments}[0]{person_id} } // "(unknown user)"),
     ] }
     @projects;
 
   for my $project (@projects) {
     $reply .= sprintf "\n%s (%s)", $project, $self->item_uri($project->{id});
-    $slack .= sprintf "\n%s", $self->_slack_item_link_with_name($project);
+    $slack .= sprintf "\n%s", $self->_slack_item_link_with_name(
+      $project,
+      {
+        ($sort eq 'owner' ? (assignees => 1) : ()),
+      },
+    );
   }
 
   $event->private_reply($reply, { slack => $slack });
