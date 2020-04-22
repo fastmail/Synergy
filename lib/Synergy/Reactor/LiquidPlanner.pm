@@ -1855,7 +1855,7 @@ sub task_plan_from_spec ($self, $event, $spec) {
   # make ticket numbers easier to copy
   my %ptn;
   for (qw(name description)) {
-    $ptn{$2}++ if $plan{$_} =~ s/\b(ptn)\s*([0-9]+)\b/\U$1 $2/gi;
+    $ptn{$2}++ if $plan{$_} =~ s/\b(ptn)\s*\*?([0-9]+)\b\*?/\U$1 $2/gi;
   }
 
   if (%ptn and $self->has_ptn_expansion_format) {
