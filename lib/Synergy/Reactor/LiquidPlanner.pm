@@ -582,8 +582,8 @@ sub provide_lp_link ($self, $event) {
   my $user = $event->from_user;
   return unless $user && $self->auth_header_for($user);
 
-  state $lp_id_re       = qr/\bLP\s*([1-9][0-9]{5,10})\b/i;
-  state $lp_shortcut_re = qr/\bLP\s*([*#][-_a-z0-9]+)\b/i;
+  state $lp_id_re       = qr/\bLP\h*([1-9][0-9]{5,10})\b/i;
+  state $lp_shortcut_re = qr/\bLP\h*([*#][-_a-z0-9]+)\b/i;
 
   # This is a stupid hack to replace later. -- rjbs, 2019-02-22
   state $lp_flags = qr{\/desc(?:ription)?};
