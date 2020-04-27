@@ -648,7 +648,11 @@ sub provide_lp_link ($self, $event) {
 
       my $reply;
 
-      if ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
+      if (! defined $item) {
+        # No such item.
+        push @replies, [ "LP$item_id doesn't seem to exist." ];
+        next;
+      } elsif ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
         my $icon = $item->{custom_field_values}{Emoji}
                 // ($item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
                   : $item->{type} eq 'Package' ? "📦"
