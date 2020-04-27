@@ -24,7 +24,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return $e->text =~ /\Aclock (?:out|off):/;
+        return $e->text =~ /\Aclock\s*(?:out|off):/;
       },
       help_entries => [
         {
@@ -126,7 +126,7 @@ has _timeclock_dbh => (
 sub handle_clock_out ($self, $event) {
   $event->mark_handled;
 
-  my ($w2, $comment) = $event->text =~ /^clock (out|off):\s*(\S.+)\z/is;
+  my ($w2, $comment) = $event->text =~ /^clock\s*(out|off):\s*(\S.+)\z/is;
 
   unless ($comment) {
     $event->error_reply("To clock \L$w2\E, it's: *clock \L$w2\E: `SUMMARY`*.");
