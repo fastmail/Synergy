@@ -212,15 +212,20 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
       October November  December
     ) ];
 
-    my $str = $d >  20 ? 'late '
-            : $d <= 10 ? 'early '
-            :            'mid-';
-    $str .= $month->[$m];
-
     my $now = DateTime->now;
-    $str .= ", $y" unless $y == $now->year;
+    my $due = parse_lp_datetime($item->{promise_by});
+    my $tmr = DateTime->now->add(days => 1);
 
-    $text .= " \N{EN DASH} due $str";
+    my $mon = $month->[$m]
+            . ($y == $now->year ? ", $y" : q{});
+
+    my $str = $due->ymd eq $now->ymd  ? "\N{SOON WITH RIGHTWARDS ARROW ABOVE} due today"
+            : $due->ymd eq $tmr->ymd  ? "\N{SOON WITH RIGHTWARDS ARROW ABOVE} due tomorrow"
+            : $d >  20                ? "due late $mon"
+            : $d <= 10                ? "due early $mon"
+            :                           "due mid-$mon";
+
+    $text .= " \N{EN DASH} $str";
     $text .= " \N{ALARM CLOCK}" if $item->{promise_by} lt $now->ymd;
   }
 
