@@ -14,7 +14,7 @@ use JSON::MaybeXS;
 use List::Util qw(first);
 use DateTimeX::Format::Ago;
 use Synergy::Logger '$Logger';
-use Date::Parse;
+use Date::Parse 2.32;   # century time bugfix
 
 has alert_endpoint_uri => (
   is => 'ro',

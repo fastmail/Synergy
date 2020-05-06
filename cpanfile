@@ -46,6 +46,7 @@ requires 'Sub::Override';
 requires 'TOML';
 requires 'Test::More';
 requires 'Text::Template';
+requires 'Time::Date', '2.32';
 requires 'Time::Duration';
 requires 'Time::Duration::Parse';
 requires 'Try::Tiny';
