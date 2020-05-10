@@ -207,7 +207,7 @@ or `~` for "assigned to nobody"
 • *label:`LABEL`*: MRs with the given label; `*` for "has a label at all" or
 `~` for "has no labels"
 • *wip:`{yes,no,both}`*: whether or not to include works in progress
-• *backlogged:`{yes,no,both}`*: whether or not to include MRs with the "Backlogged" label
+• *backlogged:`{yes,no,both}`*: whether or not to include MRs with the "backlogged" label
 EOH
         },
       ],
