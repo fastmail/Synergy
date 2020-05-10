@@ -2707,7 +2707,7 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   }
 
   if (defined $flag{tags}) {
-    push @filters, [ 'tags', 'include', join q{,}, keys $flag{tags}->%* ];
+    push @filters, map {; [ 'tags', 'include', $_ ] } keys $flag{tags}->%*;
   }
 
   {
