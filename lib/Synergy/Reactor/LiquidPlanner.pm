@@ -999,9 +999,30 @@ has tag_config_f => (
   },
 );
 
+has _tag_resolver => (
+  is    => 'ro',
+  lazy  => 1,
+  init_arg  => undef,
+  traits    => [ 'Code' ],
+  handles   => { resolve_tag => 'execute' },
+  clearer   => '_clear_tag_resolver',
+  default   => sub ($self) {
+    $self->tag_config_f->then(sub ($config) {
+      my %lookup = map {; $_ => [ $config->{$_}{target}->@* ] } keys %$config;
+      Future->done(sub ($tag) {
+        return unless my $got = $lookup{ fc $tag };
+        return @$got;
+      });
+    })->get;
+  },
+);
+
 sub reload_tags ($self, $event) {
   $event->mark_handled;
+
   $self->clear_tag_config;
+  $self->_clear_tag_resolver;
+
   $self->tag_config_f
     ->then(sub ($config) {
       my $got = keys %$config;
@@ -1379,14 +1400,6 @@ sub _handle_last ($self, $event, $text) {
   }
 }
 
-my %IS_TAG = map {; $_ => $_ }
-             qw(pobox fastmail cyrus topicbox corp marketing plumbing
-             ui ops platform debian triton jmap);
-
-$IS_TAG{pb} = 'pobox';
-$IS_TAG{tx} = 'topicbox';
-$IS_TAG{fm} = 'fastmail';
-
 sub _extract_flags_from_task_text ($self, $text) {
   my %flag;
 
@@ -1404,8 +1417,8 @@ sub _extract_flags_from_task_text ($self, $text) {
   ) {
     my $hunk = $1;
     if ($hunk =~ s/^##?//) {
-      if (my $tag = $IS_TAG{ lc $hunk }) {
-        $flag{tags}{$tag} = 1;
+      if (my @tags = $self->resolve_tag($hunk)) {
+        $flag{tags}{$_} = 1 for @tags;
       } else {
         $flag{project}{$hunk} = 1;
       }
@@ -2217,8 +2230,8 @@ sub _parse_search ($self, $text) {
   my $fallback = sub ($text_ref) {
     if ($$text_ref =~ s/^\#\#?($Synergy::Util::ident_re)(?: \s | \z)//x) {
       my $text = $1;
-      if (my $tag = $IS_TAG{ lc $text }) {
-        return [ tags => $tag ];
+      if (my @tags = $self->resolve_tag($text)) {
+        return map {; [ tags => $_ ] } @tags;
       }
       return [ project => "#$1" ],
     }
