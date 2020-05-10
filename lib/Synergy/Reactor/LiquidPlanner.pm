@@ -10,6 +10,7 @@ with 'Synergy::Role::Reactor::EasyListening',
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
+
 use Lingua::EN::Inflect qw(PL_N);
 use LiquidPlanner::Client;
 use List::Util qw(first sum0 uniq);
@@ -524,6 +525,15 @@ sub listener_specs {
       },
     },
     {
+      name      => "reload-tags",
+      method    => "reload_tags",
+      exclusive => 1,
+      predicate => sub ($, $e) {
+        $e->was_targeted &&
+        $e->text =~ /^reload-tags\s*$/i;
+      },
+    },
+    {
       name      => "reload-shortcuts",
       method    => "reload_shortcuts",
       exclusive => 1,
@@ -937,6 +947,73 @@ sub see_if_back ($self, $event) {
   })->retain;
 }
 
+has tags_archive_url => (
+  is => 'ro',
+  predicate => 'has_tags_archive_url',
+);
+
+has tag_config_f => (
+  is => 'ro',
+  lazy    => 1,
+  clearer => 'clear_tag_config',
+  default => sub ($self) {
+    return Future->done({}) unless $self->has_tags_archive_url;
+    my $f = $self->hub->http_get(
+      $self->tags_archive_url,
+      async => 1,
+    );
+
+    $f->then(sub ($res) {
+      unless ($res->is_success) {
+        $Logger->log("Failed to get tags archive");
+        return Future->done({});
+      }
+
+      my $config;
+
+      my $zip_bytes = $res->decoded_content(charset => 'none');
+      require Archive::Zip;
+      require Archive::Zip::MemberRead;
+      open my $bogus_fh, '+<', \$zip_bytes;
+
+      my $zip = Archive::Zip->new;
+      unless ($zip->readFromFileHandle($bogus_fh) == Archive::Zip::AZ_OK()) {
+        $Logger->log("Failed to process tag archive zip content");
+        return Future->done({});
+      }
+
+      my $reader = Archive::Zip::MemberRead->new($zip, 'Tags/approved-tags.json');
+      my $json = q{};
+      while (my $str = $reader->getline) {
+        $json .= $str;
+      }
+
+      my $data = eval { $JSON->decode($json); };
+      unless ($data) {
+        $Logger->log("failed to get JSON from tag config");
+        return Future->done({});
+      }
+
+      return Future->done($data)
+    });
+  },
+);
+
+sub reload_tags ($self, $event) {
+  $event->mark_handled;
+  $self->clear_tag_config;
+  $self->tag_config_f
+    ->then(sub ($config) {
+      my $got = keys %$config;
+      $event->reply("Tags reloaded.  Entry count: " . $got);
+    })
+    ->else(sub (@error) {
+      $Logger->log([ "error getting tag config: %s", \@error ]);
+      $event->reply("Sorry, something went wrong reloading tags.");
+    })
+    ->retain;
+}
+
 has projects => (
   isa => 'HashRef',
   traits => [ 'Hash' ],
@@ -955,7 +1032,7 @@ has tasks => (
   isa => 'HashRef',
   traits => [ 'Hash' ],
   handles => {
-    task_shortcuts     => 'keys',
+    task_shortcuts    => 'keys',
     _task_by_shortcut => 'get',
   },
   lazy => 1,
@@ -4250,7 +4327,7 @@ sub _handle_tags ($self, $event, $text) {
 
   @tags = sort @tags;
 
-  $event->reply("Responses to <todos> are sent privately.") if $event->is_public;
+  $event->reply("Responses to `tags` are sent privately.") if $event->is_public;
 
   unless (@tags) {
     if (@strs && $total_count) {
