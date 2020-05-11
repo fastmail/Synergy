@@ -132,6 +132,7 @@ my %Showable_Attribute = (
   project     => 0,
   age         => 0,
   staleness   => 0,
+  tags        => 0,
   due         => 1,
   emoji       => 1,
   assignees   => 0,
@@ -202,6 +203,12 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
     $item->{id},
     $bullet,
     $title;
+
+  if ($arg{tags}) {
+    if (my @tags = map {; $_->{text} } $item->{tags}->@*) {
+      $text .= " — " . (join q{, }, map {; "_#${_}_" } sort @tags);
+    }
+  }
 
   if ($arg{due} && $item->{promise_by}) {
     my ($y, $m, $d) = split /-/, $item->{promise_by};
