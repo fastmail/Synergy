@@ -5108,7 +5108,7 @@ sub _handle_contents ($self, $event, $rest) {
 
   my $item;
 
-  if ($what =~ /\A#(.+)/) {
+  if ($what =~ /\A##?(.+)/) {
     ($item, my $err) = $self->project_for_shortcut("$1");
 
     return $event->error_reply($err) if $err;
