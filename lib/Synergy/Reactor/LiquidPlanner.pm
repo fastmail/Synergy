@@ -1430,7 +1430,10 @@ sub _extract_flags_from_task_text ($self, $text) {
     my $hunk = $1;
     if ($hunk =~ s/^##?//) {
       my ($got_p) = $self->project_for_shortcut($hunk);
-      $flag{project}{$hunk} = 1 if $got_p;
+      if ($got_p) {
+        $flag{project}{$hunk} = 1;
+        next;
+      }
 
       if (my @tags = $self->resolve_tag($hunk)) {
         $flag{tags}{$_} = 1 for @tags;
