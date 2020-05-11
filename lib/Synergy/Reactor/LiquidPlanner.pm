@@ -2249,10 +2249,17 @@ sub _parse_search ($self, $text) {
   my $fallback = sub ($text_ref) {
     if ($$text_ref =~ s/^\#\#?($Synergy::Util::ident_re)(?: \s | \z)//x) {
       my $text = $1;
+
+      my ($got_p) = $self->project_for_shortcut($text);
+      if ($got_p) {
+        return [ project => "#$text" ]
+      }
+
       if (my @tags = $self->resolve_tag($text)) {
         return map {; [ tags => $_ ] } @tags;
+      } else {
+        return [ tags => fc $text ],
       }
-      return [ project => "#$1" ],
     }
 
     if ($$text_ref =~ s/^($prefix_re)$Synergy::Util::qstring\s*//x) {
