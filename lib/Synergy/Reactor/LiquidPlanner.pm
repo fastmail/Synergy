@@ -1429,11 +1429,15 @@ sub _extract_flags_from_task_text ($self, $text) {
   ) {
     my $hunk = $1;
     if ($hunk =~ s/^##?//) {
+      my ($got_p) = $self->project_for_shortcut($hunk);
+      $flag{project}{$hunk} = 1 if $got_p;
+
       if (my @tags = $self->resolve_tag($hunk)) {
         $flag{tags}{$_} = 1 for @tags;
       } else {
-        $flag{project}{$hunk} = 1;
+        $flag{tags}{ fc $hunk } = 1;
       }
+
       next;
     } elsif ($hunk =~ /[!>]/) {
       $flag{start} ++                               if $hunk =~ />/;
