@@ -714,6 +714,11 @@ sub provide_lp_link ($self, $event) {
                    .  "\n";
           }
 
+          if (my @tags = map {; $_->{text} } $item->{tags}->@*) {
+            $slack .= sprintf "*Tags*: %s\n",
+              (join q{, }, map {; "_#${_}_" } sort @tags);
+          }
+
           if ($item->{custom_field_values}{Escalation}) {
             $slack .= "*Escalation Point*: $item->{custom_field_values}{Escalation}\n";
           }
