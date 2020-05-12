@@ -192,11 +192,12 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   }
 
   my $emoji   = $item->{custom_field_values}{Emoji};
-  my $bullet  = $item->{is_done}                                    ? "✓"
-              : $arg{emoji} && $emoji                               ? $emoji
+  my $bullet  = $item->{is_done}                                      ? "✓"
+              : $arg{emoji} && $emoji                                 ? $emoji
               : ($arg{urgency} && $item->{type} eq 'Task'
-                               && $self->_is_urgent($item))         ? "🔥"
-              :                                                       "•";
+                               && $self->_is_urgent($item))           ? "🔥"
+              : $item->{custom_field_values}{'Synergy Task Shortcut'} ? "∞"
+              :                                                         "•";
 
   my $text = sprintf "<%s|LP>\N{THIN SPACE}%s %s %s",
     $self->item_uri($item->{id}),
