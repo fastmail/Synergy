@@ -57,7 +57,7 @@ sub handle_discord_event ($self, $name, $event) {
     $Logger->log("discord: ignoring message, we aren't ready yet");
     return;
   }
-  
+
   my $synergy_event = $self->synergy_event_from_discord_event($event);
   $self->hub->handle_event($synergy_event);
 }
@@ -75,7 +75,7 @@ sub synergy_event_from_discord_event ($self, $discord_event) {
 
   my $was_targeted;
   my $me = $self->discord->own_name;
-  if ($text =~ s/\A \@?($me)(?=\W):?\s*//ix) {
+  if ($text =~ s/\A \@?(\Q$me\E)(?=\W):?\s*//ix) {
     $was_targeted = !! $1;
   }
   $was_targeted = 1 if $self->discord->is_dm_channel($discord_event->{channel_id});
