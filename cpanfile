@@ -24,6 +24,7 @@ requires 'IO::Async::Timer::Periodic';
 requires 'JSON', '2';
 requires 'JSON::MaybeXS';
 requires 'Lingua::EN::Inflect';
+requires 'List::AllUtils';
 requires 'List::Util';
 requires 'Log::Dispatchouli', '2.002';
 requires 'Log::Dispatchouli::Global';
