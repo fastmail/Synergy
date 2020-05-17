@@ -324,6 +324,45 @@ sub send_heartbeat {
 }
 
 sub send_message ($self, $channel_id, $text, $alts = {}) {
+  if (my $r = $alts->{discord_reaction}) {
+    # This code is mostly stolen from the Slack external.
+    # -- rjbs, 2020-05-17
+    my $e = $r->{event};
+
+    if ( $e
+      && $e->from_channel->isa('Synergy::Channel::Discord')
+      && $e->from_channel->discord == $self
+    ) {
+      my $remove = $r->{reaction} =~ s/^-//;
+
+      my $http_future;
+      if ($remove) {
+        $http_future = $self->api_delete(
+            '/channels/' . $e->conversation_address
+          . '/messages/' . $e->transport_data->{id}
+          . '/reactions/' . URI::Escape::uri_escape_utf8($r->{reaction}) . '/@me'
+        );
+      } else {
+        $http_future = $self->api_put(
+            '/channels/' . $e->conversation_address
+          . '/messages/' . $e->transport_data->{id}
+          . '/reactions/' . URI::Escape::uri_escape_utf8($r->{reaction}) . '/@me'
+        );
+      }
+
+      my $f = $self->loop->new_future;
+      $http_future->on_done(sub ($http_res) {
+        my $res = {};
+        $f->done({
+          type => 'discord',
+          transport_data => $res
+        });
+      });
+
+      return $f;
+    }
+  }
+
   my $http_future = $self->api_post("/channels/$channel_id/messages", {
     content => $text,
     # XXX attachments and stuff
@@ -349,6 +388,31 @@ sub api_get ($self, $endpoint, $arg = {}) {
   return Future->wrap(
     $self->hub->http_client->GET(
       $u,
+      headers => {
+        'Authorization' => 'Bot '.$self->bot_token,
+      },
+    )
+  );
+}
+
+sub api_delete ($self, $endpoint, $arg = {}) {
+  my $u = URI->new("https://discordapp.com/api$endpoint");
+  return Future->wrap(
+    $self->hub->http_client->DELETE(
+      $u,
+      headers => {
+        'Authorization' => 'Bot '.$self->bot_token,
+      },
+    )
+  );
+}
+
+sub api_put ($self, $endpoint, $arg = {}) {
+  my $u = URI->new("https://discordapp.com/api$endpoint");
+  return Future->wrap(
+    $self->hub->http_client->PUT(
+      $u,
+      q{},
       headers => {
         'Authorization' => 'Bot '.$self->bot_token,
       },
