@@ -274,6 +274,16 @@ sub handle_misc_pic ($self, $event) {
       );
     }
 
+    if ($event->from_channel->isa('Synergy::Channel::Discord')) {
+      $Logger->log("discord");
+      return $event->reply(
+        $emoji,
+        {
+          discord_reaction => { event => $event, reaction => $emoji },
+        },
+      );
+    }
+
     # This is sort of a mess.  If someone addresses us from not-Slack, we don't
     # want to play dumb, but we don't want to give stupid replies to SMS
     # because they contained "cat pic" embedded in them.  So if we're not Slack
