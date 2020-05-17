@@ -152,7 +152,7 @@ has guild_id => (
 sub connect ($self) {
   $self->connected(0);
 
-  $self->hub->http
+  $self->hub->http_client
             ->GET("https://discordapp.com/api/gateway")
             ->on_done(sub ($res) { $self->_register_discord_rtg($res) })
             ->on_fail(sub ($err) { die "couldn't start RTG API: $err" })
@@ -204,7 +204,7 @@ sub handle_event ($self, $event) {
 
 sub handle_dispatch {
   my ($self, $data, $name) = @_;
-  
+
   if ($name eq 'READY') {
     $self->_set_own_id($data->{user}{id});
     $self->_set_own_name($data->{user}{username});
@@ -333,7 +333,7 @@ sub send_message ($self, $channel_id, $text, $alts = {}) {
 sub api_post ($self, $endpoint, $arg = {}) {
   my $url = "https://discordapp.com/api$endpoint";
   return Future->wrap(
-    $self->hub->http->POST(
+    $self->hub->http_client->POST(
       URI->new($url), 
       $arg,
       headers => {
@@ -347,7 +347,7 @@ sub api_get ($self, $endpoint, $arg = {}) {
   my $u = URI->new("https://discordapp.com/api$endpoint");
   $u->query_param($_ => $arg->{$_}) for sort keys %$arg;
   return Future->wrap(
-    $self->hub->http->GET(
+    $self->hub->http_client->GET(
       $u,
       headers => {
         'Authorization' => 'Bot '.$self->bot_token,
