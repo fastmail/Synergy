@@ -36,6 +36,7 @@ my $synergy = Synergy::Hub->synergize(
         project_portfolio_id => 5,
 
         interrupts_package_id => 6,
+        discussion_package_id => 7,
 
         primary_nag_channel_name => "test-channel",
       },

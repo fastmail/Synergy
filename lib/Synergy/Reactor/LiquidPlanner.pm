@@ -285,7 +285,14 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   return $text;
 }
 
-has [ qw( inbox_package_id interrupts_package_id urgent_package_id project_portfolio_id recurring_package_id ) ] => (
+has [ qw(
+  inbox_package_id
+  interrupts_package_id
+  urgent_package_id
+  project_portfolio_id
+  recurring_package_id
+  discussion_package_id
+) ] => (
   is  => 'ro',
   isa => 'Int',
   required => 1,
@@ -368,7 +375,7 @@ EOH
       "*search `SEARCH`*: find items in LiquidPlanner matching term",
       "Additional search fields include:",
       "• *done:`{yes,no,both}`*, search for completed items",
-      "• *in:`{inbox,urgent,recurring,LP-ID}`*, search for scheduled items",
+      "• *in:`{inbox,urgent,discuss,recurring,LP-ID}`*, search for scheduled items",
       "• *onhold:`{yes,no,both}`*, search for items on hold",
       "• *page:`N`*, get the Nth page of 10 results",
       "• *phase:`P`*, only find work in projects in phase P",
@@ -2385,10 +2392,11 @@ sub _compile_search ($self, $conds, $from_user) {
       bad_op($field, $op) unless ($op//'is') eq 'is';
 
       $value = fc $value;
-      my $to_set = $value eq 'inbox'      ? $self->inbox_package_id
-                 : $value eq 'interrupts' ? $self->interrupts_package_id
-                 : $value eq 'urgent'     ? $self->urgent_package_id
-                 : $value =~ /\A[0-9]+\z/ ? $value
+      my $to_set = $value eq 'inbox'              ? $self->inbox_package_id
+                 : $value eq 'interrupts'         ? $self->interrupts_package_id
+                 : $value eq 'urgent'             ? $self->urgent_package_id
+                 : $value =~ /\Adiscuss(ion)?\z/n ? $self->discussion_package_id
+                 : $value =~ /\A[0-9]+\z/         ? $value
                  : undef;
 
       bad_value($field) unless defined $to_set;
@@ -4524,7 +4532,8 @@ sub container_report ($self, $who, $arg = {}) {
       ? [ triage => "⛑" => undef,  $triage_user->lp_id ]
       : ()),
 
-    [ inbox  => "📫" => $self->inbox_package_id   ],
+    [ inbox       => "📫" => $self->inbox_package_id   ],
+    [ discussion  => "🗣" => $self->discussion_package_id   ],
 
     (! $arg->{exclude}{scheduled}
       ? [ scheduled => "📉" => undef, undef,
