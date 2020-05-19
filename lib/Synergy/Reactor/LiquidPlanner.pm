@@ -1019,23 +1019,54 @@ has tag_config_f => (
   },
 );
 
-has _tag_resolver => (
-  is    => 'ro',
-  lazy  => 1,
-  init_arg  => undef,
-  traits    => [ 'Code' ],
-  handles   => { resolve_tag => 'execute' },
-  clearer   => '_clear_tag_resolver',
-  default   => sub ($self) {
-    $self->tag_config_f->then(sub ($config) {
-      my %lookup = map {; $_ => [ $config->{$_}{target}->@* ] } keys %$config;
-      Future->done(sub ($tag) {
-        return unless my $got = $lookup{ fc $tag };
-        return @$got;
-      });
-    })->get;
-  },
-);
+sub _tag_to_plan ($self, $tag) {
+  # Given a tag returns a record like this:
+  # {
+  #   project => $project_identifer,
+  #   tags    => [ tags to apply ],
+  #   fields  => { custom => fields-to-set },
+  # }
+  #
+  # This may be expanded, especially to add requires-x or conflicts-y type
+  # values.
+  #
+  # The semantics of $project_identifier are suboptimal.  For now, it's just
+  # the tag back over again.  Better would be an identifier, but that's going
+  # to require more changes than I can cram in right this second.
+  my ($got_p) = $self->project_for_shortcut($tag);
+  return { project => $tag } if $got_p;
+
+  my $got = $self->tag_config_f->get->{$tag};
+
+  unless ($got) {
+    return { tags => [ fc $tag ] };
+  }
+
+  return {
+    ($got->{target} ? (tags   => [ $got->{target}->@* ]) : ()),
+    ($got->{fields} ? (fields => { $got->{fields}->%* }) : ()),
+  };
+}
+
+sub _tag_to_search ($self, $tag) {
+  my ($got_p) = $self->project_for_shortcut($tag);
+  return [ [ project => "#$tag" ] ] if $got_p;
+
+  my $got = $self->tag_config_f->get->{$tag};
+
+  unless ($got) {
+    return [ [ tags => fc $tag ] ];
+  }
+
+  if ($got->{target} && $got->{target}->@*) {
+    return [ map {; [ tags => $_ ] } $got->{target}->@* ];
+  }
+
+  # TODO: support specials?
+
+  # ???
+  return;
+}
 
 sub reload_tags ($self, $event) {
   $event->mark_handled;
@@ -1437,16 +1468,18 @@ sub _extract_flags_from_task_text ($self, $text) {
   ) {
     my $hunk = $1;
     if ($hunk =~ s/^##?//) {
-      my ($got_p) = $self->project_for_shortcut($hunk);
-      if ($got_p) {
-        $flag{project}{$hunk} = 1;
-        next;
+      my $plan = $self->_tag_to_plan($hunk);
+
+      if ($plan->{project}) {
+        $flag{project}{$plan->{project}} = 1;
       }
 
-      if (my @tags = $self->resolve_tag($hunk)) {
-        $flag{tags}{$_} = 1 for @tags;
-      } else {
-        $flag{tags}{ fc $hunk } = 1;
+      if ($plan->{tags}) {
+        $flag{tags}{$_} = 1 for $plan->{tags}->@*;
+      }
+
+      if ($plan->{fields}) {
+        $flag{fields}{$_} = $plan->{fields}{$_} for keys $plan->{fields}->%*;
       }
 
       next;
@@ -1969,6 +2002,10 @@ sub task_plan_from_spec ($self, $event, $spec) {
     $plan{custom_field_values}{'Task Type'} = 'Feature Request';
   }
 
+  if ($plan{fields}) {
+    $plan{custom_field_values}{$_} = $plan{fields}{$_} for keys $plan{fields}->%*;
+  }
+
   $plan{rest} = $rest;
   $plan{name} = $leader;
   $plan{user} = $event->from_user;
@@ -2256,18 +2293,10 @@ sub _parse_search ($self, $text) {
 
   my $fallback = sub ($text_ref) {
     if ($$text_ref =~ s/^\#\#?($Synergy::Util::ident_re)(?: \s | \z)//x) {
-      my $text = $1;
+      my $tag = $1;
 
-      my ($got_p) = $self->project_for_shortcut($text);
-      if ($got_p) {
-        return [ project => "#$text" ]
-      }
-
-      if (my @tags = $self->resolve_tag($text)) {
-        return map {; [ tags => $_ ] } @tags;
-      } else {
-        return [ tags => fc $text ],
-      }
+      my $instr = $self->_tag_to_search($tag);
+      return @$instr;
     }
 
     if ($$text_ref =~ s/^($prefix_re)$Synergy::Util::qstring\s*//x) {
