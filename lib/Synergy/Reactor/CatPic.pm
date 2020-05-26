@@ -307,7 +307,6 @@ sub handle_dog_pic ($self, $event) {
 
   my $http_future = $self->hub->http_get(
     "https://dog.ceo/api/breeds/image/random",
-    async => 1,
   );
 
   $http_future->on_done(sub ($res) {

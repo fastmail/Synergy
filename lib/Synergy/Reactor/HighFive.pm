@@ -233,7 +233,7 @@ sub do_highfive ($self, $event, %arg) {
           channel   => $channel,
           username  => $from,
         }),
-      );
+      )->get;
 
       unless ($http_res->is_success) {
         $ok = 0;

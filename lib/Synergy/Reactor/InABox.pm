@@ -131,7 +131,6 @@ sub _do_request ($self, $method, $endpoint, $data = undef) {
     $self->_do_endpoint($endpoint),
     $self->_do_headers,
     %content,
-    async => 1,
   )->then(sub ($res) {
     unless ($res->is_success) {
       my $code = $res->code;

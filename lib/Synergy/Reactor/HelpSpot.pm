@@ -41,7 +41,6 @@ sub _http_get ($self, $param) {
 
   my $res = $self->hub->http_get(
     $uri,
-    async => 1,
     Authorization => 'Basic ' . $self->auth_token,
     'User-Agent'  => __PACKAGE__,
   );

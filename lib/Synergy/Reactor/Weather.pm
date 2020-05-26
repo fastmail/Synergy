@@ -79,7 +79,9 @@ sub handle_weather ($self, $event) {
 
 sub format_weather ($self, $location) {
   my $res = $self->hub->http_get(
-    "https://api.openweathermap.org/data/2.5/weather?q=".uri_escape($location)."&APPID=".$self->api_token);
+    "https://api.openweathermap.org/data/2.5/weather?q=".uri_escape($location)."&APPID=".$self->api_token
+  )->get;
+
   unless ($res->is_success) {
     $Logger->log([ "error fetching weather for $location: %s", $res->as_string ]);
     return;

@@ -270,7 +270,6 @@ sub _reload_repos ($self) {
   my $http_future = $self->hub->http_get(
     $url,
     'PRIVATE-TOKEN' => $self->api_token,
-    async => 1,
   );
 
   $http_future->on_done(sub ($http_res) {
@@ -313,7 +312,6 @@ sub _load_auto_shortcuts ($self) {
 
     my $http_future = $self->hub->http_get($url,
       'PRIVATE-TOKEN' => $self->api_token,
-      async => 1
     );
     push @futures, $http_future;
 
@@ -536,7 +534,6 @@ sub _handle_mr_search_string ($self, $text, $event) {
   my $http_future = $self->hub->http_get(
     $uri,
     'PRIVATE-TOKEN' => $self->api_token,
-    async => 1,
   );
 
   $http_future->on_done(sub ($res) {
@@ -638,7 +635,6 @@ sub handle_merge_request ($self, $event) {
     my $http_future = $self->hub->http_get(
       $url,
       'PRIVATE-TOKEN' => $self->api_token,
-      async => 1,
     );
     push @futures, $http_future;
 
@@ -772,7 +768,6 @@ sub handle_commit ($self, $event) {
     my $http_future = $self->hub->http_get(
       $url,
       'PRIVATE-TOKEN' => $self->api_token,
-      async => 1,
     );
     push @futures, $http_future;
 
@@ -865,7 +860,6 @@ sub mr_report ($self, $who, $arg = {}) {
     my $http_future = $self->hub->http_get(
       $uri,
       'PRIVATE-TOKEN' => $self->api_token,
-      async => 1,
     );
 
     push @futures, $http_future->then(sub ($res) {

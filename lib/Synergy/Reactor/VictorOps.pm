@@ -170,7 +170,6 @@ sub handle_alert ($self, $event) {
   # it own URI and doesn't need the headers!
   $self->hub->http_post(
     $self->alert_endpoint_uri,
-    async => 1,
     Content_Type  => 'application/json',
     Content       => encode_json({
       message_type  => 'CRITICAL',
@@ -216,7 +215,6 @@ sub _vo_request ($self, $method, $endpoint, $data = undef) {
     $self->_vo_api_endpoint($endpoint),
     $self->_vo_api_headers,
     %content,
-    async => 1,
   )->then(sub ($res) {
     unless ($res->is_success) {
       my $code = $res->code;

@@ -54,7 +54,7 @@ sub send_message ($self, $target, $text, $alts) {
       user    => $target,
       message => $text,
     ],
-  );
+  )->get;
 
   unless ($res->is_success) {
     $Logger->log("failed to send pushover to $target: " . $res->as_string);

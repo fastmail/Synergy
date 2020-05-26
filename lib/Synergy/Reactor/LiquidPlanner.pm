@@ -978,10 +978,7 @@ has tag_config_f => (
   clearer => 'clear_tag_config',
   default => sub ($self) {
     return Future->done({}) unless $self->has_tags_archive_url;
-    my $f = $self->hub->http_get(
-      $self->tags_archive_url,
-      async => 1,
-    );
+    my $f = $self->hub->http_get($self->tags_archive_url);
 
     $f->then(sub ($res) {
       unless ($res->is_success) {
@@ -1391,13 +1388,13 @@ sub lp_client_for_user ($self, $user) {
     ($self->activity_id ? (single_activity_id => $self->activity_id) : ()),
 
     http_get_callback => sub ($, $uri, @arg) {
-      $self->hub->http_get($uri, @arg);
+      $self->hub->http_get($uri, @arg)->get;
     },
     http_post_callback => sub ($, $uri, @arg) {
-      $self->hub->http_post($uri, @arg);
+      $self->hub->http_post($uri, @arg)->get;
     },
     http_put_callback => sub ($, $uri, @arg) {
-      $self->hub->http_put($uri, @arg);
+      $self->hub->http_put($uri, @arg)->get;
     },
   });
 }
@@ -4939,7 +4936,6 @@ sub _get_lp_account ($self, $token) {
   return $self->hub->http_get(
     'https://app.liquidplanner.com/api/v1/account',
     Authorization => "Bearer $token",
-    async => 1,
   )->then(sub ($res){
     my $rc = $res->code;
 

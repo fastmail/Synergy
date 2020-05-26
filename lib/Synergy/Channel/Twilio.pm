@@ -146,7 +146,7 @@ sub send_message ($self, $target, $text, $alts) {
       Body => $text,
     ],
     Authorization => "Basic " . $self->auth,
-  );
+  )->get;
 
   unless ($res->is_success) {
     $Logger->log("failed to send sms to $target: " . $res->as_string);

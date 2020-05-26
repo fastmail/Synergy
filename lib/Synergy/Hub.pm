@@ -290,7 +290,6 @@ sub http_patch {
 sub http_request ($self, $method, $url, %args) {
   my $content = delete $args{Content};
   my $content_type = delete $args{Content_Type};
-  my $async = delete $args{async};
 
   my $uri = URI->new($url);
 
@@ -321,7 +320,7 @@ sub http_request ($self, $method, $url, %args) {
     $Logger->log("Failed to $method $url: $failure");
   } );
 
-  return $async ? $future : $future->get;
+  return $future;
 }
 
 1;
