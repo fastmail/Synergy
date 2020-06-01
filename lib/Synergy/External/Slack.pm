@@ -7,7 +7,7 @@ use experimental qw(lexical_subs signatures);
 use namespace::autoclean;
 use utf8;
 
-use Cpanel::JSON::XS qw(decode_json encode_json);
+use JSON::MaybeXS qw(decode_json encode_json);
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Net::Async::WebSocket::Client;
