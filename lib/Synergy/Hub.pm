@@ -31,6 +31,7 @@ use URI;
 use Scalar::Util qw(blessed);
 use Storable qw(dclone);
 use Defined::KV;
+use IO::Async::Process;
 
 sub env;
 has env => (
@@ -419,6 +420,23 @@ sub http_request ($self, $method, $url, %args) {
   });
 
   return $future;
+}
+
+sub run_process ($self, $command) {
+  my ($stdout, $stderr);
+
+  my $process = IO::Async::Process->new(
+    command => $command,
+    on_finish => sub {},
+    stdout => { into => \$stdout },
+    stderr => { into => \$stderr },
+  );
+
+  $self->loop->add($process);
+
+  return $process->finish_future->transform(
+    done => sub ($exit) { return ($exit, $stdout, $stderr) },
+  );
 }
 
 1;
