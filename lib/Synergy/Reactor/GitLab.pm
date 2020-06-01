@@ -13,7 +13,6 @@ with 'Synergy::Role::Reactor::EasyListening',
 use experimental qw(lexical_subs signatures);
 use namespace::clean;
 use DateTime::Format::ISO8601;
-use DateTimeX::Format::Ago;
 use Digest::MD5 qw(md5_hex);
 use Future 0.36;  # for ->retain
 use IO::Async::Timer::Periodic;
@@ -23,6 +22,7 @@ use List::Util qw(all uniq);
 use MIME::Base64;
 use POSIX qw(ceil);
 use Synergy::Logger '$Logger';
+use Time::Duration qw(ago);
 use URI::Escape;
 use YAML::XS;
 
@@ -700,8 +700,6 @@ sub handle_merge_request ($self, $event) {
 
   $event->mark_handled if $event->was_targeted && $text !~ /\S/;
 
-  state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
-
   my $base = $self->url_base;
   my @found = $event->text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/merge_requests/([0-9]+)}g;
 
@@ -790,7 +788,7 @@ sub handle_merge_request ($self, $event) {
 
         push @fields, {
           title => "Opened",
-          value => $dt_formatter->format_datetime($created),
+          value => ago(time - $created->epoch),
           short => \1,
         };
       } else {
@@ -801,7 +799,7 @@ sub handle_merge_request ($self, $event) {
           my $dt = DateTime::Format::ISO8601->parse_datetime($date);
           push @fields, {
             title => ucfirst $state,
-            value => $dt_formatter->format_datetime($dt),
+            value => ago(time - $dt->epoch),
             short => \1,
           };
         }

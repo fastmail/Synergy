@@ -14,15 +14,14 @@ use Carp ();
 use Data::Dumper::Concise;
 use DateTime;
 use DateTime::Format::ISO8601;
-use DateTimeX::Format::Ago;
 use Future;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use List::Util qw(first);
 use Synergy::Logger '$Logger';
+use Time::Duration qw(ago);
 
 my $ISO8601 = DateTime::Format::ISO8601->new;
-my $AGO_FORMATTER = DateTimeX::Format::Ago->new(language => 'en');
 
 has api_endpoint_uri => (
   is => 'ro',
@@ -367,7 +366,7 @@ sub _format_maints ($self, @maints) {
 sub _format_maint_window ($self, $window) {
   my $services = join q{, }, map {; $_->{summary} } $window->{services}->@*;
   my $start = $ISO8601->parse_datetime($window->{start_time});
-  my $ago = $AGO_FORMATTER->format_datetime($start);
+  my $ago = ago(time - $start->epoch);
   my $who = $window->{created_by}->{summary};   # XXX map to our usernames
 
   return "$services ($ago, started by $who)";
@@ -919,9 +918,8 @@ sub _active_incidents_summary($self) {
       my (@text, @slack);
 
       for my $incident (@incidents) {
-        my $ago = $AGO_FORMATTER->format_datetime(
-          $ISO8601->parse_datetime($incident->{created_at})
-        );
+        my $created = $ISO8601->parse_datetime($incident->{created_at});
+        my $ago = ago(time - $created->epoch);
 
         push @text, "  - $incident->{description} (fired $ago)";
         push @slack, sprintf("• <%s|#%s> (fired %s): %s",
