@@ -386,12 +386,12 @@ my %Trans = (
   fraktur => _wonky_style('fraktur'),
   sans    => _wonky_style('ss'),
   double  => _wonky_style('double'),
-
-  zalgo   => sub ($s) {
-    require Acme::Zalgo;
-    Acme::Zalgo::zalgo($s, 0, 2, 0, 0, 0, 2);
-  },
 );
+
+eval "require Acme::Zalgo";
+if (!$@) {
+  $Trans{zalgo} = sub ($s) { Acme::Zalgo::zalgo($s, 0, 2, 0, 0, 0, 2); };
+}
 
 sub _wonky_style ($style) {
   my $i = 0;
