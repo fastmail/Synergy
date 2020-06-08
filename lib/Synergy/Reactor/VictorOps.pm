@@ -567,13 +567,20 @@ sub _check_at_oncall ($self) {
   my $channel = $self->hub->channel_named($self->oncall_channel_name);
   return unless $channel->isa('Synergy::Channel::Slack');
 
+  $Logger->log("checking VO for oncall updates");
+
   return $self->_current_oncall_names
     ->then(sub (@names) {
       my @new = sort @names;
       my @have = sort $self->oncall_list->@*;
-      return Future->done if join(',', @have) eq join(',', @new);
 
-      # update a thing
+      if (join(',', @have) eq join(',', @new)) {
+        $Logger->log("no changes in oncall list detected");
+        return Future->done;
+      }
+
+      $Logger->log([ "will update oncall list; is now %s", join(', ', @new) ]);
+
       my @userids = map  {; $_->identity_for($channel->name) }
                     map  {; $self->hub->user_directory->user_named($_) }
                     grep {; defined }
@@ -590,6 +597,11 @@ sub _check_at_oncall ($self) {
       );
 
       $self->_set_oncall_list(\@new);
+
+      $f->on_done(sub ($http_res) {
+        my $data = decode_json($http_res->decoded_content);
+        $Logger->log(["%s", $data]);
+      });
 
       return $f;
     })->retain;
