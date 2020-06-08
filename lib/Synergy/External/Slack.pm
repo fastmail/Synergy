@@ -380,7 +380,7 @@ sub api_call ($self, $method, $arg = {}, %extra) {
     $json,
     content_type => 'application/json; charset=utf-8',
     headers => [
-      $self->_api_auth_header,
+      @auth,
     ],
   ));
 }
