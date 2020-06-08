@@ -82,6 +82,42 @@ has _slack_to_vo_map => (
   },
 );
 
+has oncall_channel_name => (
+  is => 'ro',
+  isa => 'Str',
+);
+
+has oncall_group_address => (
+  is => 'ro',
+  isa => 'Str',
+);
+
+has oncall_list => (
+  is => 'ro',
+  isa => 'ArrayRef',
+  writer => '_set_oncall_list',
+  lazy => 1,
+  default => sub { [] },
+);
+
+around '_set_oncall_list' => sub ($orig, $self, @rest) {
+  $self->$orig(@rest);
+  $self->save_state;
+};
+
+sub start ($self) {
+  return unless $self->oncall_channel_name;
+
+  my $timer = IO::Async::Timer::Periodic->new(
+    first_interval => 30,   # don't start immediately
+    interval       => 150,
+    on_tick        => sub { $self->_check_at_oncall },
+  );
+
+  $timer->start;
+  $self->hub->loop->add($timer);
+}
+
 sub listener_specs {
   return (
     {
@@ -159,6 +195,12 @@ EOH
   );
 }
 
+sub state ($self) {
+  return {
+    oncall_list => $self->oncall_list,
+  };
+}
+
 sub handle_alert ($self, $event) {
   $event->mark_handled;
 
@@ -228,7 +270,10 @@ sub _vo_request ($self, $method, $endpoint, $data = undef) {
 }
 
 after register_with_hub => sub ($self, @) {
-  $self->fetch_state;   # load prefs
+  my $state = $self->fetch_state // {};   # load prefs
+  if (my $list = $state->{oncall_list}) {
+    $self->_set_oncall_list($list);
+  }
 };
 
 sub handle_maint_query ($self, $event) {
@@ -513,6 +558,41 @@ sub _ack_all ($self, $username) {
       my $nacked = $data->{results}->@*;
       return Future->done($nacked);
     });
+}
+
+
+sub _check_at_oncall ($self) {
+  return unless $self->oncall_channel_name;
+
+  my $channel = $self->hub->channel_named($self->oncall_channel_name);
+  return unless $channel->isa('Synergy::Channel::Slack');
+
+  return $self->_current_oncall_names
+    ->then(sub (@names) {
+      my @new = sort @names;
+      my @have = sort $self->oncall_list->@*;
+      return Future->done if join(',', @have) eq join(',', @new);
+
+      # update a thing
+      my @userids = map  {; $_->identity_for($channel->name) }
+                    map  {; $self->hub->user_directory->user_named($_) }
+                    grep {; defined }
+                    map  {; $self->username_from_vo($_) }
+                    @new;
+
+      my $f = $channel->slack->api_call(
+        'usergroups.users.update',
+        {
+          usergroup => $self->oncall_group_address,
+          users => join(q{,}, @userids),
+        },
+        privileged => 1,
+      );
+
+      $self->_set_oncall_list(\@new);
+
+      return $f;
+    })->retain;
 }
 
 __PACKAGE__->add_preference(

@@ -19,6 +19,12 @@ with 'Synergy::Role::HubComponent';
 
 has api_key => ( is => 'ro', required => 1 );
 
+has privileged_api_key => (
+  is => 'ro',
+  lazy => 1,
+  default => sub { $_[0]->api_key },
+);
+
 has connected => (
   is => 'rw',
   isa => 'Bool',
@@ -350,6 +356,9 @@ sub _api_url ($self, $method) {
 sub _api_auth_header ($self) {
   return (Authorization => 'Bearer ' . $self->api_key);
 }
+sub _privileged_api_auth_header ($self) {
+  return (Authorization => 'Bearer ' . $self->privileged_api_key);
+}
 
 # This returns a Future. If you're just posting or something, you can just let
 # it complete whenever. If you're retrieving data, you probably want to do
@@ -361,6 +370,10 @@ sub api_call ($self, $method, $arg = {}, %extra) {
     if delete $arg->{form_encoded};
 
   my $json = encode_json($arg);
+
+  my @auth = $extra{privileged}
+           ? $self->_privileged_api_auth_header
+           : $self->_api_auth_header;
 
   return Future->wrap($self->hub->http_client->POST(
     URI->new($url),
