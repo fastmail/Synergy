@@ -26,6 +26,12 @@ has api_key => (
   required => 1,
 );
 
+has privileged_api_key => (
+  is => 'ro',
+  lazy => 1,
+  default => sub { $_[0]->api_key },
+);
+
 has slack => (
   is => 'ro',
   isa => 'Synergy::External::Slack',
@@ -35,6 +41,7 @@ has slack => (
       loop    => $self->loop,
       api_key => $self->api_key,
       name    => '_external_slack',
+      privileged_api_key => $self->privileged_api_key,
     );
 
     $slack->register_with_hub($self->hub);
