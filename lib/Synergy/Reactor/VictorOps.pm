@@ -600,7 +600,9 @@ sub _check_at_oncall ($self) {
 
       $f->on_done(sub ($http_res) {
         my $data = decode_json($http_res->decoded_content);
-        $Logger->log(["%s", $data]);
+        unless ($data->{ok}) {
+          $Logger->log(["error updating oncall slack group: %s", $data]);
+        }
       });
 
       return $f;
