@@ -213,9 +213,10 @@ subtest 'exit maint' => sub {
   );
 
   # exit maint and /resolve
-  # 55, 56 should resolve
-  # 42, 43 predate maint startedAt
-    my $incidents = {
+  # 89, 99 should resolve
+  # 69, 79 predate maint startedAt
+  # 109 is already resolved, so should do nothing
+  my $incidents = {
     incidents => [
       {
         incidentNumber => 69,
@@ -247,17 +248,17 @@ subtest 'exit maint' => sub {
 
   @VO_RESPONSES = (
     gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42, startedAt => 86400 }] }),
-    gen_response(200, {}),
     gen_response(200, $incidents),
     $patch_responder,
+    gen_response(200, {}),
   );
 
-    send_message('synergy: demaint /resolve', 'alice');
-    like(
-      multiple_message_text(2, 0),
-      qr{Successfully resolved 2 incidents. The board is clear!}i,
-      'demaint /resolve'
-    );
+  send_message('synergy: demaint /resolve', 'alice');
+  like(
+    multiple_message_text(2, 0),
+    qr{Successfully resolved 2 incidents. The board is clear!}i,
+    'demaint /resolve'
+  );
 };
 
 subtest 'ack all' => sub {

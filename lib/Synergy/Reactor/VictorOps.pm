@@ -483,30 +483,37 @@ sub handle_maint_end ($self, $event) {
 
       my ($global_maint) = grep { $_->{isGlobal} } @$maint;
       unless ($global_maint) {
-        return $event->reply(
+        $event->reply(
           "I couldn't find the VO global maint, but there were other maint modes set. ".
           "This isn't something I know how to deal with. ".
           "You'll need to go and sort it out in the VO web UI.");
+        return Future->fail('no maint');
       }
 
 
       my $timestamp = $maint->[0]->{startedAt};
       my $instance_id = $global_maint->{instanceId};
 
-      return $self->_vo_request(PUT => "/maintenancemode/$instance_id/end")
-        ->transform(done => sub { $timestamp })
+      return Future->done($timestamp, $instance_id);
     })
-    ->then(sub ($timestamp) {
-      if ($resolve) {
-        return $self->_resolve_incidents($event, {
-          type => 'all',
-          since => $timestamp,
-          whose => 'all'
-        });
-      }
-      return Future->done(0);
+    ->then(sub ($timestamp, $instance_id) {
+      return Future->done($instance_id) unless $resolve;
+
+      # We resolve before demainting because there's a race: if you exit
+      # maint, VO immediately sends phone alerts for everything that's active,
+      # even if they're going to be resolved in a quarter-second. That's
+      # really annoying, so we resolve everything, then tell VO to stop maint,
+      # at which point there shouldn't be anything left to buzz.
+      return $self->_resolve_incidents($event, {
+        type => 'all',
+        since => $timestamp,
+        whose => 'all'
+      })->transform(done => sub { $instance_id });
     })
-    ->then(sub ($data) {
+    ->then(sub ($instance_id) {
+      return $self->_vo_request(PUT => "/maintenancemode/$instance_id/end");
+    })
+    ->then(sub {
       return $event->reply("🚨 VO maint cleared. Good job everyone!");
     }
     )->else(sub ($category, $extra = {}) {
