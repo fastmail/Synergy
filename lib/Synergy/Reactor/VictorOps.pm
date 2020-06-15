@@ -126,7 +126,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^alert\s+/i },
       help_entries => [
-        { title => 'alert', text => "alert TEXT: get help from staff on call" },
+        { title => 'alert', text => "*alert `TEXT`*: get help from staff on call" },
       ],
     },
     {
@@ -134,13 +134,19 @@ sub listener_specs {
       method    => 'handle_maint_query',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint(\s+status)?\s*$/in },
       help_entries => [
+        # start /force is not documented here because it will mention itself to
+        # the user when needed -- rjbs, 2020-06-15
         { title => 'maint', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
 Conveniences for managing VictorOps "maintenance mode", aka "silence all the
 alerts because everything is on fire."
 
-• *maint*, *maint status*: show current maintenance state
-• *maint start*: enter maintenance mode. All alerts are now silenced! Also acks all unacked alerts, ain't no one got time for that.
+• *maint status*: show current maintenance state
+• *maint start*: enter maintenance mode. All alerts are now silenced! Also acks
 • *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
+
+When leaving maintenance mode, it's possible you'll want to resolve all the
+alerts that happened while you were in it.  That's easy!  Use: *maint end
+/resolve* to resolve all current alerts before ending maintenance mode.
 EOH
       ],
     },
@@ -165,18 +171,36 @@ EOH
       name      => 'oncall',
       method    => 'handle_oncall',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
+      help_entries => [
+        { title => 'oncall', text => '*oncall*: show a list of who is on call in VictorOps right now' },
+      ],
     },
     {
       name      => 'ack-all',
       method    => 'handle_ack_all',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^ack all\s*$/i },
+      help_entries => [
+        { title => 'ack', text => '*ack all*: acknowledge all triggered alerts in VictorOps' },
+      ],
     },
     {
       name      => 'resolve-all',
       method    => 'handle_resolve_all',
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return $e->text =~ m{^resolve\s+all\s*$}i },
+        return $e->text =~ m{^resolve\s+all\s*$}i
+      },
+      help_entries => [
+        { title => 'resolve', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
+*resolve*: manage resolving alerts in VictorOps
+
+You can run this in one of several ways:
+
+• *resolve all*: resolve all triggered and acknowledged alerts in VictorOps
+• *resolve acked*: resolve the acknowledged alerts in VictorOps
+• *resolve mine*: resolve the acknowledged alerts assigned to you in VictorOps
+EOH
+      ],
     },
     {
       name      => 'resolve-acked',
