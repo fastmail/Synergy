@@ -48,6 +48,12 @@ sub listener_specs {
         return 1 if $e->text =~ /\Afortune\s*\z/i;
         return;
       },
+      help_entries => [
+        { title => 'fortune', text => <<'END', },
+• *fortune*: get a random statement of wisdom, wit, or whatever
+• *add fortune: `TEXT`*: add a new fortune to the database
+END
+      ],
     },
     {
       name => 'add fortune',
