@@ -13,6 +13,7 @@ use JSON::MaybeXS;
 
 use Synergy::Environment;
 use Synergy::Rototron;
+use Synergy::Util qw(read_config_file);
 
 binmode *STDOUT, 'encoding(:utf-8)';
 
