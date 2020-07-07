@@ -64,7 +64,10 @@ has user_directory => (
   isa => 'Synergy::UserDirectory',
   lazy => 1,
   init_arg => undef,
-  default => sub ($self) { Synergy::UserDirectory->new({ env => $self }) },
+  default => sub ($self) {
+    require Synergy::UserDirectory;
+    Synergy::UserDirectory->new({ env => $self });
+  },
 );
 
 has state_dbh => (
