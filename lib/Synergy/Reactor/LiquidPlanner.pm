@@ -51,7 +51,6 @@ my %Phase_Pos = (
   'Waiting'   => 2,
   'In Flight' => 3,
   'Long Haul' => 4,
-  'Circling'  => 5,
   'Landing'   => 6,
 );
 
@@ -2565,7 +2564,7 @@ sub _compile_search ($self, $conds, $from_user) {
         none      => 'none',
         flight    => 'In Flight',
         longhaul  => 'Long Haul',
-        map {; $_ => ucfirst } qw(desired planning waiting circling landing)
+        map {; $_ => ucfirst } qw(desired planning waiting landing)
       );
 
       my $to_set = $Phase{ fc $value };
@@ -4671,7 +4670,7 @@ sub project_report ($self, $who, $arg = {}) {
     my $phase = $project->{custom_field_values}{'Project Phase'};
 
     # Nothing to do here, generally..? -- rjbs, 2019-03-22
-    next if $phase eq 'Desired' or $phase eq 'Waiting' or $phase eq 'Circling';
+    next if $phase eq 'Desired' or $phase eq 'Waiting';
 
     my $shortcut = $project->{custom_field_values}{"Synergy Project Shortcut"};
 
