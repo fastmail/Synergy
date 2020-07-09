@@ -216,7 +216,7 @@ EOH
       name => 'mention-mr',
       method => 'handle_merge_request',
       predicate => sub ($self, $e) {
-        return 1 if $e->text =~ /(^|\s)[-_a-z]+!\d+(\W|$)/in;
+        return 1 if $e->text =~ /\b[-_a-z]+!\d+(\W|$)/in;
 
         my $base = $self->reactor->url_base;
         return 1 if $e->text =~ /\Q$base\E.*?merge_requests/;
@@ -602,7 +602,7 @@ sub _handle_mr_search_string ($self, $text, $event) {
 sub handle_merge_request ($self, $event) {
   $event->mark_handled if $event->was_targeted;
 
-  my @mrs = $event->text =~ /(?:^|\s)([-_a-z]+!\d+)(?=\W|$)/gi;
+  my @mrs = $event->text =~ /\b([-_a-z]+!\d+)(?=\W|$)/gi;
   state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
 
   state $base = $self->url_base;
