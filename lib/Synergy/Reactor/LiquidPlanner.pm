@@ -463,7 +463,7 @@ EOH
 In the simplest form, this creates a new task with the given name, assigned to
 the given user.  (You can also give multiple users, separated by commas, for
 the `USER`.)  More information can be provided on new lines, or split up by
-triple dashes (`---`).  Every new line that start with a `/` is taken as a
+triple dashes (`---`).  Every new line that starts with a `/` is taken as a
 series of slash commands, documented below.  After those slash command lines,
 the rest of the lines are taken as the long description for the task.
 
