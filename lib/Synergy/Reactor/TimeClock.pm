@@ -11,6 +11,7 @@ use experimental qw(signatures lexical_subs);
 use namespace::clean;
 
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(bool_from_text);
 
 use List::Util qw(max);
 
@@ -261,6 +262,8 @@ sub check_for_shift_changes ($self) {
 
     next unless my $shift = $user->shift_for_day($self->hub, $now_dt);
 
+    next if $self->get_user_preference($user, 'suppress-reports');
+
     for my $which (sort keys %if) {
       my $will_send = $if{$which}->($shift->@{ qw(start end) });
 
@@ -294,5 +297,11 @@ sub check_for_shift_changes ($self) {
   $self->last_report_time($now);
   $self->save_state;
 }
+
+__PACKAGE__->add_preference(
+  name      => 'suppress-reports',
+  validator => sub ($self, $value, @) { return bool_from_text($value) },
+  default   => 0,
+);
 
 1;
