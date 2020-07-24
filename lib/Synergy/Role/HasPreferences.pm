@@ -5,6 +5,7 @@ package Synergy::Role::HasPreferences;
 use MooseX::Role::Parameterized;
 
 use Scalar::Util qw(blessed);
+use Synergy::Logger '$Logger';
 use Try::Tiny;
 use utf8;
 
@@ -45,11 +46,15 @@ role {
   method is_known_preference => sub ($, $name)  { exists $pref_specs{$name} };
 
   method describe_user_preference => sub ($self, $user, $pref_name) {
-    my $val = try { $self->get_user_preference($user, $pref_name) };
+    my $val;
 
-    my $full_name = $self->preference_namespace . q{.} . $pref_name;
-    my $desc = $pref_specs{$pref_name}->{describer}->( $val );
-    return "$full_name: $desc";
+    my $ok = try { $val = $self->get_user_preference($user, $pref_name); 1 };
+
+    unless ($ok) {
+      $Logger->log("couldn't get value for preference $pref_name: $@");
+    }
+
+    return $pref_specs{$pref_name}->{describer}->( $val );
   };
 
   method preference_help => sub ($self) {

@@ -161,8 +161,12 @@ sub handle_dump ($self, $event) {
   for my $component ($hub->user_directory, $hub->channels, $hub->reactors) {
     next unless $component->does('Synergy::Role::HasPreferences');
 
-    push @pref_strings, $component->describe_user_preference($for_user, $_)
-      for $component->preference_names;
+    for my $pref_name ($component->preference_names) {
+      my $full_name = $component->preference_namespace . q{.} . $pref_name;
+
+      push @pref_strings,
+        "$full_name: " .  $component->describe_user_preference($for_user, $_)
+    }
   }
 
   my $prefs = join "\n", @pref_strings;
