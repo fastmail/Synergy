@@ -144,10 +144,14 @@ sub handle_hours_for ($self, $event) {
     return $event->reply_error("Sorry, I don't know who that is.");
   }
 
+  my $tz = $target->time_zone;
+  my $tz_nick = $self->hub->env->time_zone_names->{ $tz } // $tz;
+
   return $event->reply(
-    sprintf "%s's usual hours: %s",
+    sprintf "%s's usual hours: %s, %s",
       $target->username,
-      $self->hub->user_directory->describe_user_preference($target, 'business-hours')
+      $self->hub->user_directory->describe_user_preference($target, 'business-hours'),
+      $tz_nick,
   );
 }
 
