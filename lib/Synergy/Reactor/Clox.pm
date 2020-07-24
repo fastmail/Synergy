@@ -46,7 +46,7 @@ sub handle_clox ($self, $event) {
     $time = $NOW_FACTORY->();
   }
 
-  # Some of our australian colleagues feel very strongly about being able to
+  # Some of our Australian colleagues feel very strongly about being able to
   # write 'Australian/Melbourne' rather than 'Australia/Sydney'.
   my sub mel_to_syd ($tzname) {
     return $tzname eq 'Australia/Melbourne' ? 'Australia/Sydney' : $tzname;

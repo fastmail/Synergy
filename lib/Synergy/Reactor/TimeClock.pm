@@ -145,7 +145,7 @@ sub handle_hours_for ($self, $event) {
   }
 
   return $event->reply(
-    sprintf "%s's %s",
+    sprintf "%s's usual hours: %s",
       $target->username,
       $self->hub->user_directory->describe_user_preference($target, 'business-hours')
   );
