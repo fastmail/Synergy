@@ -165,7 +165,7 @@ sub handle_dump ($self, $event) {
       my $full_name = $component->preference_namespace . q{.} . $pref_name;
 
       push @pref_strings,
-        "$full_name: " .  $component->describe_user_preference($for_user, $_)
+        "$full_name: " .  $component->describe_user_preference($for_user, $pref_name)
     }
   }
 
