@@ -20,6 +20,15 @@ use utf8;
 sub listener_specs {
   return (
     {
+      name      => 'hours_for',
+      method    => 'handle_hours_for',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ /\Ahours(\s+for)?\s+/;
+      }
+    },
+    {
       name      => 'clock_out',
       method    => 'handle_clock_out',
       exclusive => 1,
@@ -123,6 +132,24 @@ has _timeclock_dbh => (
     return $dbh;
   },
 );
+
+sub handle_hours_for ($self, $event) {
+  $event->mark_handled;
+
+  my ($who) = $event->text =~ /\Ahours(?:\s+for)?\s+(\S+)\s*\z/;
+
+  my $target = $self->resolve_name($who, $event->from_user);
+
+  unless ($target) {
+    return $event->reply_error("Sorry, I don't know who that is.");
+  }
+
+  return $event->reply(
+    sprintf "%s's %s",
+      $target->username,
+      $self->hub->user_directory->describe_user_preference($target, 'business-hours')
+  );
+}
 
 sub handle_clock_out ($self, $event) {
   $event->mark_handled;
