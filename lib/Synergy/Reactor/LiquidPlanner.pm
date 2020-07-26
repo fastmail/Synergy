@@ -894,7 +894,7 @@ sub timer_for_user ($self, $user) {
 
   $timer = Synergy::Timer->new({
     time_zone      => $user->time_zone,
-    business_hours => $user->business_hours,
+    business_hours => $self->nagging_hours_for_user($user),
   });
 
   $self->_add_timer_for_user($user->username, $timer);
@@ -5017,6 +5017,23 @@ EOH
     return $n;
   },
 );
+
+__PACKAGE__->add_preference(
+  name => 'nagging-hours',
+  help      => q{when you'd like to be reminded about LP timers; same format as business hours},
+  default   => undef,
+  describer => \&Synergy::Util::describe_business_hours,
+  validator => sub ($self, $value, @) {
+    return undef if ! defined $value;   # allow none
+
+    return Synergy::Util::validate_business_hours($value);
+  },
+);
+
+sub nagging_hours_for_user ($self, $user) {
+  return $self->get_user_preference($user, 'nagging-hours')
+      // $user->business_hours;
+}
 
 __PACKAGE__->add_preference(
   name        => 'tracking-goal',
