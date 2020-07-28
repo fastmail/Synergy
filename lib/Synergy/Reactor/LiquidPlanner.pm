@@ -5182,6 +5182,13 @@ sub _handle_contents ($self, $event, $rest) {
     return $event->error_reply(q{You can only say "contents ID" or "contents #shortcut".});
   }
 
+  unless ( $item->{type} eq 'Package'
+        || $item->{type} eq 'Project'
+        || $item->{type} eq 'Inbox'
+  ) {
+    return $event->error_reply(sprintf "You can't get the contents of a non-container.  That item is a \l$item->{type}.")
+  }
+
   my $res = $lpc->query_items({
     in    => $item->{id},
     flags => {
