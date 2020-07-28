@@ -23,7 +23,7 @@ sub listener_specs {
     help_entries => [
       {
         title => 'remind',
-        text  => "remind `[USER]` `{in, at, on}` `{TIME or DURATION}`: `[REMINDER TEXT]`",
+        text  => "remind `{USER}` `{in, at, on}` `{TIME or DURATION}`: `{REMINDER TEXT}`",
       }
     ],
   };
