@@ -267,6 +267,15 @@ sub _replan_range ($self, $from_dt, $to_dt) {
 # We should cache this, but I'd rather be a little slow and correct, for now.
 # -- rjbs, 2019-03-26
 sub current_triage_officers ($self) {
+  my @users = (
+    $self->current_officers_for_duty('triage_us'),
+    $self->current_officers_for_duty('triage_au'),
+  );
+
+  return @users;
+}
+
+sub current_officers_for_duty ($self, $duty_name) {
   my $rototron = $self->rototron;
 
   my @tzs = sort {; $a cmp $b }
@@ -278,16 +287,9 @@ sub current_triage_officers ($self) {
   my @users;
 
   for my $tz (@tzs) {
-    my $keyword = $tz =~ m{^America/New_York} ? 'triage_us'
-                : $tz =~ m{^Australia/}       ? 'triage_au'
-                : undef;
-
-    next unless $keyword;
-
-
     push @users, grep {; defined && $_->is_working_now }
                  map  {; $self->_user_from_duty($_) }
-                 grep {; $_->{keywords}{"rotor:$keyword"} }
+                 grep {; $_->{keywords}{"rotor:$duty_name"} }
                  $rototron->duties_on( DateTime->now(time_zone => $tz) )->@*;
   }
 
