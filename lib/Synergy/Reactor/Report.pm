@@ -72,7 +72,8 @@ sub begin_report ($self, $report, $target) {
   for my $section ($report->{sections}->@*) {
     my ($reactor_name, $method, $arg) = @$section;
 
-    next if $arg->{triage_only} && ! $target->is_on_duty($self->hub, 'triage');
+    my $duty = $arg->{only_on_duty};
+    next if $duty && ! $target->is_on_duty($self->hub, $duty);
 
     my $reactor = $hub->reactor_named($reactor_name);
 
