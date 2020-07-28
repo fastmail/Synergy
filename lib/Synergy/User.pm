@@ -202,12 +202,18 @@ sub shift_for_day ($self, $hub, $moment) {
   return \%shift;
 }
 
-sub is_on_triage ($self, $hub) {
+sub is_on_duty ($self, $hub, $duty_name) {
   return unless my $roto = $hub->reactor_named('rototron');
 
   my $username = $self->username;
 
-  return grep { $_->username eq $username } $roto->current_triage_officers;
+  if ($duty_name eq 'triage') {
+    # Special-cased because it duplexes triage_au & triage_us.
+    return grep { $_->username eq $username } $roto->current_triage_officers;
+  }
+
+  return grep { $_->username eq $username }
+         $roto->current_officers_for_duty($duty_name);
 }
 
 has lp_id => (

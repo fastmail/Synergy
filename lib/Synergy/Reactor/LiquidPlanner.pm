@@ -4542,7 +4542,7 @@ sub container_report ($self, $who, $arg = {}) {
   return unless my $lp_id = $who->lp_id;
 
   my $rototron = $self->_rototron;
-  my $user_is_triage = $who->is_on_triage($self->hub);
+  my $user_is_triage = $who->is_on_duty($self->hub, 'triage');
 
   my $triage_user = $rototron
                   ? $self->hub->user_directory->user_named('triage')
