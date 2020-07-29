@@ -880,6 +880,8 @@ sub timer_for_user ($self, $user) {
 
   my $timer = $self->_timer_for_user($user->username);
 
+  my $hours = $self->nagging_hours_for_user($user);
+
   if ($timer) {
     # This is a bit daft, but otherwise we could initialize the cached timer
     # before the user's time zone has loaded from GitHub.  Then we'd be stuck
@@ -887,14 +889,14 @@ sub timer_for_user ($self, $user) {
     $timer->time_zone($user->time_zone);
 
     # equally daft -- michael, 2018-04-17
-    $timer->business_hours($user->business_hours);
+    $timer->business_hours($hours);
 
     return $timer;
   }
 
   $timer = Synergy::Timer->new({
     time_zone      => $user->time_zone,
-    business_hours => $self->nagging_hours_for_user($user),
+    business_hours => $hours,
   });
 
   $self->_add_timer_for_user($user->username, $timer);
