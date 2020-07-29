@@ -293,7 +293,7 @@ sub current_officers_for_duty ($self, $duty_name) {
                  $rototron->duties_on( DateTime->now(time_zone => $tz) )->@*;
   }
 
-  return @users;
+  return uniq sort @users;
 }
 
 sub _user_from_duty ($self, $duty) {
