@@ -3261,6 +3261,7 @@ sub _inform_triage ($self, $text, $alt = {}) {
     my $roto_reactor = $self->hub->reactor_named('rototron');
 
     for my $officer ($roto_reactor->current_triage_officers) {
+      $Logger->log(["notifying %s of new triage task", $officer->username ]);
       $channel->send_message_to_user($officer, $text, $alt);
     }
   }
