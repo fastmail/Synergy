@@ -434,6 +434,7 @@ EOH
   triage    =>  [ \&_handle_triage,
                   "*triage `[PAGE]`*: list the tasks awaiting triage",
                 ],
+  triang    =>  [ \&_handle_triage ], # to Calvin, with love
   urgent    =>  [ \&_handle_urgent,
                   "*urgent `[PAGE]`*: list your urgent tasks",
                 ],
