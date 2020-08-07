@@ -23,6 +23,34 @@ documented yet.  Run the program like this, more or less:
 
     $ carton exec perl synergy -c /path/to/config/file.json
 
+### Slack permissions
+
+(Caveat: this is as of early August 2020. The Slack API changes pretty
+frequently, and in weird ways, so your mileage may vary.)
+
+If you want to make your own Synergy clone:
+
+1. Go to https://api.slack.com/rtm, scroll all the way to the bottom, click
+   "Create a classic app." Synergy is built on top of Slack's Real-Time
+   Messaging API, which uses a websocket connection. Slack is now discouraging
+   this for new apps, which is too bad because eventually I suspect they'll
+   get rid of it and we'll have to rewrite hunks of Synergy again.
+2. On the app page, click "Bots," then "Add a legacy bot user." Give it a
+   name.
+3. Maybe: update scopes. *Important*: you _must_ do this from the "OAuth &
+   Permissions" page, _not_ the bot user page. Go there, click "add an OAuth
+   scope" (_not_ "Update Scopes"), and add what you need. At time of writing,
+   Synergy only needs the `usergroups:write` scope, for exactly one thing: the
+   VictorOps reactor uses it to update the oncall Slack usergroup. If you're
+   not messing with that code, you shouldn't need to add this.
+4. Once the app is installed, the OAuth & Permissions page should have two
+   tokens. The "bot user access token" (starts with `xoxb-`) is used for the
+   slack channel's `api_key`. The "OAuth Access Token" (starts with `xoxp-`,
+   and is probably longer) is the `privileged_api_key`.
+
+There may be other, slightly more obscure things, but the above should be
+enough to get you up and running.
+
 ### Commands for Everyone
 
 (Warning: this section is probably out of date, especially after the v2
