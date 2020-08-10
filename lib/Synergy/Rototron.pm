@@ -404,10 +404,12 @@ package Synergy::Rototron::Rotor {
       my @staff = $self->_full_staff->@*;
       return [@staff] unless my $filter = $self->_staff_filter;
 
+      my $name = $self->name;
+
       @staff = grep {;
         (! $filter->{region} or $_->{region} eq $filter->{region})
         &&
-        (! $filter->{team}   or $_->{team}   eq $filter->{team})
+        (! $filter->{team}   or (grep { $_ eq $filter->{team} } $_->{teams}->@*))
       } @staff;
 
       return [@staff];
