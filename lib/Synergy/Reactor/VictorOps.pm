@@ -474,11 +474,18 @@ sub _resolve_incidents($self, $event, $args) {
         push @unresolved, $incident->{incidentNumber};
       }
 
+      unless (@unresolved) {
+        $event->reply("Looks like there's no incidents to resolve. Lucky!");
+        return Future->done({ no_incidents => 1 });  # hack
+      }
+
       return $self->_vo_request(PATCH => "/incidents/resolve", {
         userName => $vo_username,
         incidentNames => \@unresolved,
       });
     })->then(sub ($data) {
+      return Future->done(0) if $data->{no_incidents};
+
       my $n = $data->{results}->@*;
       my $noun = $n == 1 ? 'incident' : 'incidents';
 
