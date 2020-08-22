@@ -457,14 +457,24 @@ package Synergy::Rototron::Rotor {
 
     if (my $username = $self->manual_assignment_for($rotor, $day)) {
       my ($user) = grep {; $_->{username} eq $username } $self->_full_staff->@*;
-      return $user if $user;
 
-      $Logger->log([
-        "no user named %s, but that name is assigned for %s on %s",
-        $username,
-        $rotor->name,
-        $day->ymd,
-      ]);
+      if ($user && $self->user_is_blocked_on($user->{username}, $day)) {
+        $Logger->log([
+          "user %s manually assigned but they are marked unavailable for %s on %s, skipping",
+          $user->{username},
+          $rotor->name,
+          $day->ymd,
+        ]);
+      } elsif ($user) {
+        return $user;
+      } else {
+        $Logger->log([
+          "no user named %s, but that name is assigned for %s on %s",
+          $username,
+          $rotor->name,
+          $day->ymd,
+        ]);
+      }
     }
 
     my $weekn = _week_of_date($day);
@@ -665,16 +675,42 @@ package Synergy::Rototron::AvailabilityChecker {
     return;
   }
 
-  sub user_is_available_on ($self, $username, $dt) {
+  sub user_is_available_on ($self, $username, $dt, $debug = []) {
     my $ymd = $dt->ymd;
 
-    if (my $user = $self->user_directory->user_named($username)) {
-      return 0 unless $user->hours_for_dow($dt->day_of_week);
+    unless ($self->user_typically_works_on($username, $dt)) {
+      push @$debug, "$username does not work on " . $dt->ymd;
+      return 0;
     }
 
-    my $leave = $self->_leave_days;
-    return 0 if $leave->{$username}{$dt->ymd};
+    if ($self->user_has_leave_on($username, $dt)) {
+      push @$debug, "$username has leave scheduled on " . $dt->ymd;
+      return 0;
+    }
 
+    if ($self->user_is_blocked_on($username, $dt)) {
+      push @$debug, "$username is marked unavailable on " . $dt->ymd;
+      return 0;
+    }
+
+    return 1;
+  }
+
+  sub user_typically_works_on ($self, $username, $dt) {
+    if (my $user = $self->user_directory->user_named($username)) {
+      return 1 if $user->hours_for_dow($dt->day_of_week);
+    }
+
+    return 0;
+  }
+
+  sub user_has_leave_on ($self, $username, $dt) {
+    my $leave = $self->_leave_days;
+
+    return 1 if $leave->{$username}{$dt->ymd};
+  }
+
+  sub user_is_blocked_on ($self, $username, $dt) {
     my ($count) = $self->_dbh->selectrow_array(
       q{SELECT COUNT(*) FROM blocked_days WHERE username = ? AND date = ?},
       undef,
@@ -682,7 +718,7 @@ package Synergy::Rototron::AvailabilityChecker {
       $dt->ymd,
     );
 
-    return $count == 0;
+    return $count ? 1 : 0;
   }
 
   sub set_user_unavailable_on ($self, $username, $dt, $reason = undef) {

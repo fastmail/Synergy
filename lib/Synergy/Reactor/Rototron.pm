@@ -161,6 +161,29 @@ sub handle_manual_assignment ($self, $event) {
     $assign_to = $target->username;
   }
 
+  my (@okay, @errors);
+
+  for my $date (@dates) {
+    my $debug = [];
+    if ($self->availability_checker->user_is_available_on($assign_to, $date, $debug)) {
+      push @okay, $date;
+    } else {
+      push @errors, @$debug;
+    }
+  }
+
+  @dates = @okay;
+
+  unless (@dates) {
+    $event->reply("$username was not available for any of those dates:\n" . join("\n", @errors));
+
+    return;
+  }
+
+  if (@errors) {
+    $event->reply("$username was not available for these dates:\n" . join("\n", @errors));
+  }
+
   $self->availability_checker->update_manual_assignments({
     $rotor_name => { map {; $_->ymd => $assign_to } @dates },
   });
