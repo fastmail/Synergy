@@ -116,19 +116,21 @@ after register_with_hub => sub ($self, @) {
 };
 
 sub handle_manual_assignment ($self, $event) {
-  my ($username, $rotor_name, $from, $to);
+  my ($username, $rotor_name, $from, $to, $force);
 
   my $ymd_re = qr{ [0-9]{4} - [0-9]{2} - [0-9]{2} }x;
-  if ($event->text =~ /^assign rotor (\S+) to (\S+) on ($ymd_re)\z/) {
+  if ($event->text =~ /^assign rotor (\S+) to (\S+) on ($ymd_re) (\/f(?:orce))?\z/) {
     $rotor_name = $1;
     $username   = $2;
     $from       = parse_date_for_user($3, $event->from_user);
     $to         = parse_date_for_user($3, $event->from_user);
-  } elsif ($event->text =~ /^assign rotor (\S+) to (\S+) from ($ymd_re) to ($ymd_re)\z/) {
+    $force      = $4;
+  } elsif ($event->text =~ /^assign rotor (\S+) to (\S+) from ($ymd_re) to ($ymd_re) (\/f(?:orce))?\z/) {
     $rotor_name = $1;
     $username   = $2;
     $from       = parse_date_for_user($3, $event->from_user);
     $to         = parse_date_for_user($4, $event->from_user);
+    $force      = $5;
   } else {
     return;
   }
@@ -164,11 +166,19 @@ sub handle_manual_assignment ($self, $event) {
   my (@okay, @errors);
 
   for my $date (@dates) {
-    my $debug = [];
-    if ($self->availability_checker->user_is_available_on($assign_to, $date, $debug)) {
-      push @okay, $date;
+    if ($force) {
+      # Remove any 'unavailable on' overrides
+      $self->availability_checker->set_user_available_on(
+        $assign_to,
+        $date,
+      );
     } else {
-      push @errors, @$debug;
+      my $debug = [];
+      if ($self->availability_checker->user_is_available_on($assign_to, $date, $debug)) {
+        push @okay, $date;
+      } else {
+        push @errors, @$debug;
+      }
     }
   }
 
@@ -176,12 +186,14 @@ sub handle_manual_assignment ($self, $event) {
 
   unless (@dates) {
     $event->reply("$username was not available for any of those dates:\n" . join("\n", @errors));
+    $event->reply("retry with /force at the end to override");
 
     return;
   }
 
   if (@errors) {
     $event->reply("$username was not available for these dates:\n" . join("\n", @errors));
+    $event->reply("retry with /force at the end to override");
   }
 
   $self->availability_checker->update_manual_assignments({
