@@ -77,7 +77,7 @@ sub bool_from_text ($text) {
 sub parse_date_for_user ($str, $user) {
   my $tz = $user ? $user->time_zone : 'America/New_York';
 
-  my $format = $tz =~ m{\AAmerica/} ? 'm/d/y' : 'd/m/y';
+  my $format = $tz =~ m{\AAmerica/} ? 'm/d' : 'd/m';
 
   state %parser_for;
   $parser_for{$tz} //= DateTime::Format::Natural->new(
