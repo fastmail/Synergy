@@ -135,9 +135,9 @@ sub handle_when ($self, $event) {
   my $text = $event->text;
 
   return $event->reply_error("Sorry, I don't understand your *when* request.")
-    unless $text =~ s/\Awhen\s+is\s+now\s+//;
+    unless $text =~ s/\Awhen\s+is\s+//;
 
-  if ($text =~ s/\A(plus|\+|-|minus)\s+//) {
+  if ($text =~ s/\Anow\s+(plus|\+|-|minus)\s+//) {
     my $sign = ($1 eq '+' || $1 eq 'plus') ? 1 : -1;
     my $now  = time;
     my $dur  = parse_duration($text);
