@@ -10,17 +10,29 @@ use experimental qw(signatures lexical_subs);
 use namespace::clean;
 use List::Util qw(first uniq);
 use Synergy::Util qw(parse_date_for_user);
+use Time::Duration::Parse;
 
 sub listener_specs {
-  return {
-    name      => 'clox',
-    method    => 'handle_clox',
-    exclusive => 1,
-    predicate => sub ($self, $e) {
-      return unless $e->was_targeted;
-      return unless $e->text =~ /\Aclo(?:x|cks)(?:\s+.+)?/i;
+  return (
+    {
+      name      => 'clox',
+      method    => 'handle_clox',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text =~ /\Aclo(?:x|cks)(?:\s+.+)?/i;
+      },
     },
-  };
+    {
+      name      => 'when',
+      method    => 'handle_when',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text =~ /\Awhen\s+is\s+/i;
+      },
+    },
+  );
 }
 
 # For testing. -- rjbs, 2018-07-14
@@ -115,6 +127,50 @@ sub handle_clox ($self, $event) {
   $reply .= join q{}, map {; "> $_\n" } @strs;
 
   $event->reply($reply);
+}
+
+sub handle_when ($self, $event) {
+  $event->mark_handled;
+
+  my $text = $event->text;
+
+  return $event->reply_error("Sorry, I don't understand your *when* request.")
+    unless $text =~ s/\Awhen\s+is\s+now\s+//;
+
+  if ($text =~ s/\A(plus|\+|-|minus)\s+//) {
+    my $sign = ($1 eq '+' || $1 eq 'plus') ? 1 : -1;
+    my $now  = time;
+    my $dur  = parse_duration($text);
+
+    return $event->reply_error("Sorry, I don't understand that duration.")
+      unless defined $dur;
+
+    my $time = $now + ($sign * $dur);
+
+    my $str = $self->hub->format_friendly_date(
+      DateTime->from_epoch(epoch => $time, time_zone => 'UTC'),
+      {
+        target_time_zone  => $event->from_user->time_zone,
+      }
+    );
+
+    return $event->reply("That would be: $str");
+  }
+
+  my $time = parse_date_for_user($text, $event->from_user);
+
+  return $event->reply("Sorry, I didn't understand that time.")
+    unless $time;
+
+
+  my $str = $self->hub->format_friendly_date(
+    $time,
+    {
+      target_time_zone  => $event->from_user->time_zone,
+    }
+  );
+
+  return $event->reply("That would be: $str");
 }
 
 1;
