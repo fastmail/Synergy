@@ -541,9 +541,9 @@ package Synergy::Rototron::AvailabilityChecker {
           methodCalls => [
             [
               'CalendarEvent/query' => {
-                accountId   => $calendars[0]{accountId},
+                accountId   => $calendar->{accountId},
                 filter => {
-                  inCalendars => [ $calendars[0]{calendarId} ],
+                  inCalendars => [ $calendar->{calendarId} ],
                   after       => DateTime->now->ymd . "T00:00:00Z", # endAfter
                 },
               },
@@ -551,7 +551,7 @@ package Synergy::Rototron::AvailabilityChecker {
             ],
             [
               'CalendarEvent/get' => {
-                accountId   => $calendars[0]{accountId},
+                accountId   => $calendar->{accountId},
                 '#ids' => {
                   resultOf => 'a',
                   name => 'CalendarEvent/query',
