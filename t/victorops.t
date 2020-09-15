@@ -5,12 +5,15 @@ use experimental 'signatures';
 
 use lib 'lib', 't/lib';
 
+use utf8;
+
 use Future;
 use IO::Async::Test;
 use JSON::MaybeXS qw(encode_json decode_json);
 use Plack::Request;
 use Plack::Response;
 use Sub::Override;
+use Test::Deep;
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';
@@ -102,17 +105,19 @@ sub send_message ($text, $from = $channel->default_from) {
 }
 
 sub single_message_text {
+  local $Test::Builder::Level = $Test::Builder::Level + 1;
+
   my @texts = map {; $_->{text} } $channel->sent_messages;
   fail("expected only one message, but got " . @texts) if @texts > 1;
+
   $channel->clear_messages;
   return $texts[0];
 }
 
-sub multiple_message_text($num, $index) {
+sub clear_sent_message_queue {
   my @texts = map {; $_->{text} } $channel->sent_messages;
-  fail("expected $num messages, but got " . @texts) if @texts != $num;
   $channel->clear_messages;
-  return $texts[$index];
+  return [ @texts ];
 }
 
 # ok, let's test.
@@ -186,9 +191,14 @@ subtest 'exit maint' => sub {
     'get a warning from trying to demaint when not there'
   );
 
-  # first response for "yeah we're in maint," second for successful demaint
   @VO_RESPONSES = (
-    gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42 }] }),
+    # Yes, we are in maint.
+    gen_response(200, { activeInstances => [{ isGlobal => 1, startedAt => 0, instanceId => 42 }] }),
+
+    # No, nothing was alerting.
+    gen_response(200, { incidents => [] }),
+
+    # De-maint successful.
     gen_response(200, {}),
   );
 
@@ -199,9 +209,14 @@ subtest 'exit maint' => sub {
     'successful demaint from a mainted state'
   );
 
-  # first response for "yeah we're in maint," second for successful demaint
   @VO_RESPONSES = (
-    gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42 }] }),
+    # Yes, we are in maint.
+    gen_response(200, { activeInstances => [{ isGlobal => 1, startedAt => 0, instanceId => 42 }] }),
+
+    # No, nothing was alerting.
+    gen_response(200, { incidents => [] }),
+
+    # De-maint failed.
     gen_response(400, {}),
   );
 
@@ -254,9 +269,12 @@ subtest 'exit maint' => sub {
   );
 
   send_message('synergy: demaint /resolve', 'alice');
-  like(
-    multiple_message_text(2, 0),
-    qr{Successfully resolved 2 incidents. The board is clear!}i,
+  cmp_deeply(
+    clear_sent_message_queue(),
+    [
+      'Successfully resolved 2 incidents. The board is clear!',
+      '🚨 VO maint cleared. Good job everyone!'
+    ],
     'demaint /resolve'
   );
 };
