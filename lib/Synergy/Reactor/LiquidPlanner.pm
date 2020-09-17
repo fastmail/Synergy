@@ -288,6 +288,7 @@ has [ qw(
   inbox_package_id
   interrupts_package_id
   urgent_package_id
+  current_work_package_id
   project_portfolio_id
   recurring_package_id
   discussion_package_id
@@ -4566,10 +4567,14 @@ sub container_report ($self, $who, $arg = {}) {
 
     (! $arg->{exclude}{scheduled}
       ? [ scheduled => "📉" => undef, undef,
-          [ [ 'earliest_start', 'after', '2001-01-01' ],
-            [ 'parent_id',  '!=', $self->urgent_package_id ],
-            [ 'package_id', '!=', $self->urgent_package_id ],
-          ] ]
+          [ [ 'earliest_start', 'after', '2001-01-01' ] ],
+          sub ($item) {
+            my $urgent = $self->urgent_package_id;
+            ! grep {; $_ == $urgent } (
+              $item->{parent_ids}->@*,
+              $item->{package_ids}->@*,
+            );
+          } ]
       : ()),
   );
 
@@ -4578,7 +4583,7 @@ sub container_report ($self, $who, $arg = {}) {
   my $lpc = $self->lp_client_for_user($who);
 
   CHK: for my $check (@to_check) {
-    my ($label, $icon, $package_id, $want_lp_id, $more_filters) = @$check;
+    my ($label, $icon, $package_id, $want_lp_id, $more_filters, $grep) = @$check;
     $want_lp_id //= $lp_id;
 
     my $check_res = $lpc->query_items({
@@ -4609,6 +4614,7 @@ sub container_report ($self, $who, $arg = {}) {
     my %seen;
     for my $item ($check_res->payload_list) {
       next if $seen{$item->{id}}++; # Stupid duplicates! -- rjbs, 2019-06-08
+      next if $grep && ! $grep->($item);
       next unless $item->{type} eq 'Task'; # Whatever. -- rjbs, 2018-06-15
       my ($assign) = grep {; $_->{person_id} == $want_lp_id }
                      $item->{assignments}->@*;
