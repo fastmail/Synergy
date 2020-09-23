@@ -92,6 +92,23 @@ has oncall_group_address => (
   isa => 'Str',
 );
 
+has maint_warning_address => (
+  is  => 'ro',
+  isa => 'Str',
+);
+
+has maint_timer_interval => (
+  is => 'ro',
+  isa => 'Int',
+  default => 600,
+);
+
+has maint_started_by_user => (
+  is => 'rw',
+  isa => 'Str',
+  clearer => '_clear_maint_started_by_user',
+);
+
 has oncall_list => (
   is => 'ro',
   isa => 'ArrayRef',
@@ -108,14 +125,21 @@ around '_set_oncall_list' => sub ($orig, $self, @rest) {
 sub start ($self) {
   return unless $self->oncall_channel_name;
 
-  my $timer = IO::Async::Timer::Periodic->new(
+  my $check_oncall_timer = IO::Async::Timer::Periodic->new(
     first_interval => 30,   # don't start immediately
     interval       => 150,
     on_tick        => sub { $self->_check_at_oncall },
   );
 
-  $timer->start;
-  $self->hub->loop->add($timer);
+  $check_oncall_timer->start;
+  $self->hub->loop->add($check_oncall_timer);
+
+  my $maint_warning_timer = IO::Async::Timer::Periodic->new(
+    interval => $self->maint_timer_interval,
+    on_tick  => sub {  $self->_check_long_maint },
+  );
+  $maint_warning_timer->start;
+  $self->hub->loop->add($maint_warning_timer);
 }
 
 sub listener_specs {
@@ -354,6 +378,57 @@ sub handle_resolve_acked ($self, $event) {
   })->retain;
 }
 
+sub _check_long_maint ($self) {
+  my $maint;
+  my $current_time = time();
+  $self->_vo_request(GET => '/maintenancemode')
+  ->then(sub ($data) {
+    $maint = $data->{activeInstances} // [];
+    unless (@$maint) {
+      $self->_clear_maint_started_by_user();
+      return Future->fail('not in maint');
+    }
+    return $self->_vo_request(GET => '/incidents');
+  })->then(sub ($data) {
+    my $is_new_incident;
+
+    for my $incident ($data->{incidents}->@*) {
+      next if $incident->{currentPhase} eq 'RESOLVED';
+
+      my $incident_start_time = str2time($incident->{startTime});
+      my $incident_duration = $current_time - $incident_start_time;
+
+      $is_new_incident = 1, last if $incident_duration < (60 * 25);
+    }
+    return Future->fail('an incident newer than 25 minutes') if $is_new_incident;
+
+    # maint startedAt is unix time * 1000
+    my $maint_start_time = int($maint->[0]->{startedAt} / 1000);
+    my $maint_duration_s = $current_time - $maint_start_time;
+    return Future->fail('maint duration less than 30m') unless $maint_duration_s > (60 * 30);
+
+    return Future->fail('oncall_channel_name undefined') unless $self->oncall_channel_name;
+    return Future->fail('oncall_group_address undefined') unless my $group_address = $self->oncall_group_address;
+    return Future->fail('cannot create channel') unless my $channel = $self->hub->channel_named($self->oncall_channel_name);
+
+    if ($channel && $self->maint_warning_address) {
+      my $maint_duration_m = int($maint_duration_s / 60);
+      my $who = $maint->[0]->{startedBy} eq 'PUBLICAPI' ? $self->maint_started_by_user : $maint->[0]->{startedBy};
+      $channel->send_message(
+        $self->maint_warning_address,
+        "\@oncall Hey, by the way, VictorOps is in maintenance mode. (Started $maint_duration_m minutes ago by $who.)",
+        { slack => "<!subteam^$group_address> Hey, by the way, VictorOps is in maintenance mode. (Started $maint_duration_m minutes ago by $who.)" }
+      );
+    }
+  })
+  ->else(sub ($message, $extra = {}) {
+    return if $message eq 'not in maint';
+    return if $message eq 'an incident newer than 25 minutes';
+    return if $message eq 'maint duration less than 30m';
+    $Logger->log("VO: error _check_long_maint():  $message");
+  })->retain;
+}
+
 sub _current_oncall_names ($self) {
   $self->_vo_request(GET => '/oncall/current')
     ->then(sub ($data) {
@@ -419,6 +494,7 @@ sub handle_maint_start ($self, $event) {
     });
   })
   ->then(sub ($data) {
+    $self->maint_started_by_user($event->from_user->username);
     $self->_ack_all($event->from_user->username);
   })
   ->then(sub ($nacked) {
@@ -545,6 +621,7 @@ sub handle_maint_end ($self, $event) {
       return $self->_vo_request(PUT => "/maintenancemode/$instance_id/end");
     })
     ->then(sub {
+      $self->_clear_maint_started_by_user();
       return $event->reply("🚨 VO maint cleared. Good job everyone!");
     }
     )->else(sub ($category, $extra = {}) {
