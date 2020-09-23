@@ -12,6 +12,8 @@ use List::Util qw(first uniq);
 use Synergy::Util qw(parse_date_for_user);
 use Time::Duration::Parse;
 
+use utf8;
+
 sub listener_specs {
   return (
     {
@@ -22,6 +24,16 @@ sub listener_specs {
         return unless $e->was_targeted;
         return unless $e->text =~ /\Aclo(?:x|cks)(?:\s+.+)?/i;
       },
+      help_entries => [
+        # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2020-09-23
+        { title => 'clox', text => <<'END'
+*clox* tells you what time it is in any time zone with a user in it (or that
+has been set up to always show up in the clocks).  You can also write:
+
+• *clox `TIME`*: when it's the given time _for you_, see the time elsewhere
+END
+        },
+      ],
     },
     {
       name      => 'when',
@@ -31,6 +43,13 @@ sub listener_specs {
         return unless $e->was_targeted;
         return unless $e->text =~ /\Awhen\s+is\s+/i;
       },
+      help_entries => [
+        # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2020-09-23
+        { title => 'when', text => <<'END'
+*when is `WHEN`*: tells you how the given "when" string would be interpreted
+END
+        },
+      ],
     },
   );
 }
