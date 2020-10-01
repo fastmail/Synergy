@@ -3040,7 +3040,7 @@ sub _handle_agenda ($self, $event, $text) {
   return $event->error_reply("Sorry, they're not in LiquidPlanner.")
     unless $target->lp_id;
 
-  my %display = ();
+  my %display = (show => { assignees => 1 });
   my %search  = (
     page  => $1 // 1,
     owner => { $target->lp_id => 1 },
