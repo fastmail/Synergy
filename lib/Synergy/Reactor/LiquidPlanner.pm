@@ -439,6 +439,9 @@ EOH
   urgent    =>  [ \&_handle_urgent,
                   "*urgent `[PAGE]`*: list your urgent tasks",
                 ],
+  agenda    =>  [ \&_handle_agenda,
+                  "*agenda `[WHO]`*: list items marked for discussion by/with someone",
+                ],
 
   projects  =>  [ \&_handle_projects,
                   "*projects*: list all known project shortcuts; can pass *sort:`{due,owner,phase}`*",
@@ -3020,6 +3023,34 @@ for my $package (qw(inbox urgent recurring)) {
       );
     },
   });
+}
+
+sub _handle_agenda ($self, $event, $text) {
+  return $event->error_reply("Which agenda?")
+    unless length $text && $text =~ /\S/;
+
+  $text =~ s/\A\s+//;
+  $text =~ s/\s+\z//;
+
+  my $target = $self->resolve_name($text, $event->from_user);
+
+  return $event->error_reply("Sorry, I don't know what agenda you want.")
+    unless $target;
+
+  return $event->error_reply("Sorry, they're not in LiquidPlanner.")
+    unless $target->lp_id;
+
+  my %display = ();
+  my %search  = (
+    page  => $1 // 1,
+    owner => { $target->lp_id => 1 },
+    in    => $self->discussion_package_id,
+  );
+
+  my $lpc     = $self->f_lp_client_for_user($event->from_user);
+  my $future  = $self->_execute_search($lpc, \%search, {});
+
+  $self->_send_search_result($event, $future, \%display);
 }
 
 # add triage tag
