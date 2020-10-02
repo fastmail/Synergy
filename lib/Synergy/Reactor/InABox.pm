@@ -251,7 +251,7 @@ sub handle_create ($self, $event, %args) {
 
       # we're assuming this succeeds. if not, well, the DNS is out of date. what
       # else can we do?
-      return $self->_update_dns_for_user($event->from_user, $droplet->{networks}{v4}[0]{ip_address});
+      return $self->_update_dns_for_user($event->from_user, $self->_ip_address_for_droplet($droplet));
     });
 }
 
@@ -416,12 +416,21 @@ sub _get_droplet_for ($self, $user) {
     });
 }
 
+sub _ip_address_for_droplet ($self, $droplet) {
+  # we want the public address, not the internal VPC address that we don't use
+  my ($ip_address) =
+    map { $_->{ip_address} }
+    grep { $_->{type} eq 'public'}
+      $droplet->{networks}{v4}->@*;
+  return $ip_address;
+}
+
 sub _format_droplet ($self, $droplet) {
   return sprintf
     "name: %s  image: %s  ip: %s  region: %s  status: %s",
     $droplet->{name},
     $droplet->{image}{name},
-    $droplet->{networks}{v4}[0]{ip_address},
+    $self->_ip_address_for_droplet($droplet),
     "$droplet->{region}{name} ($droplet->{region}{slug})",
     $droplet->{status};
 }
