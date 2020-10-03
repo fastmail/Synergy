@@ -20,7 +20,7 @@ use JSON 2 ();
 use Time::Duration;
 use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
-use Synergy::LPC; # LiquidPlanner Client, the old synchronous one
+use Synergy::LiquidPlanner::Client; # the old synchronous one; to replace!!
 use Synergy::Timer;
 use Synergy::Util qw(
   parse_time_hunk pick_one bool_from_text
@@ -1386,7 +1386,7 @@ sub get_task_shortcuts    ($self) { $self->_get_treeitem_shortcuts('Task') }
 sub lp_client_for_user ($self, $user) {
   return unless my $auth = $self->auth_header_for($user);
 
-  Synergy::LPC->new({
+  Synergy::LiquidPlanner::Client->new({
     auth_token    => $self->auth_header_for($user),
     workspace_id  => $self->workspace_id,
     logger_callback   => sub { $Logger },

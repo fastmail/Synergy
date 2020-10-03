@@ -1,6 +1,6 @@
 use v5.24.0;
 use warnings;
-package Synergy::LPC;
+package Synergy::LiquidPlanner::Client;
 
 use Moose;
 
