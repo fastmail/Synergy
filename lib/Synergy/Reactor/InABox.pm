@@ -155,34 +155,43 @@ sub _do_request ($self, $method, $endpoint, $data = undef) {
   });
 }
 
+sub _determine_version_and_tag ($self, $event, $switches) {
+  # this convoluted mess is about figuring out:
+  # - the version, by request or from prefs or implied
+  # - the tag, by request or from the version
+  # - if this is the "default" box, which sets the "$username.box" DNS name
+  my $default_version = $self->get_user_preference($event->from_user, 'version');
+  my ($version, $tag) = $switches->@{qw(version tag)};
+  $version //= $default_version;
+  $tag //= $version;
+
+  # XXX check version and tag valid
+
+  return ($version, $tag);
+}
+
 sub handle_status ($self, $event, $switches) {
-  $self->_get_droplet_for($event->from_user)
-    ->then(sub ($droplet = undef) {
-      if ($droplet) {
-        return $event->reply("Your box: " . $self->_format_droplet($droplet));
+  $self->_get_droplets_for($event->from_user)
+    ->then(sub ($droplets = undef) {
+      if (@$droplets) {
+        return $event->reply(join "\n",
+          "Your boxes: ",
+          map { $self->_format_droplet($_) } @$droplets,
+        );
       }
 
-      return $event->reply("You don't seem to have a box.");
+      return $event->reply("You don't seem to have any boxes.");
     });
 }
 
 sub handle_create ($self, $event, $switches) {
-  # do sanity checks before HTTP requests
-  my $version = delete $switches->{version}
-             // $self->get_user_preference($event->from_user, 'version');
+  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
-  if (keys %$switches) {
-    return Future->fail(
-      'error: syntax is "box create [ /version <version> ]"',
-      'stop-processing',
-    );
-  }
-
-  return $self->_get_droplet_for($event->from_user)
+  return $self->_get_droplet_for($event->from_user, $tag)
     ->then(sub ($maybe_droplet) {
       if ($maybe_droplet) {
         return Future->fail(
-          "You already have a box: " . $self->_format_droplet($maybe_droplet),
+          "This box already exists: " . $self->_format_droplet($maybe_droplet),
           'stop-processing'
         );
       }
@@ -202,11 +211,13 @@ sub handle_create ($self, $event, $switches) {
       });
     })
     ->then(sub ($snapshot, $ssh_key) {
+      my $name = $self->_box_name_for($event->from_user, $tag);
+
       my $region = $self->_region_for_user($event->from_user);
-      $event->reply("Creating $version box in $region, this will take a minute or two.");
+      $event->reply("Creating $name in $region, this will take a minute or two.");
 
       my %droplet_create_args = (
-        name     => $self->_box_name_for($event->from_user),
+        name     => $name,
         region   => $region,
         size     => 's-4vcpu-8gb',
         image    => $snapshot->{id},
@@ -243,7 +254,7 @@ sub handle_create ($self, $event, $switches) {
 
       return Future->done;
     })
-    ->then(sub { $self->_get_droplet_for($event->from_user) })
+    ->then(sub { $self->_get_droplet_for($event->from_user, $tag) })
     ->then(sub ($droplet) {
       if ($droplet) {
         $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
@@ -258,21 +269,28 @@ sub handle_create ($self, $event, $switches) {
       # we're assuming this succeeds. if not, well, the DNS is out of date. what
       # else can we do?
       my $ip_address = $self->_ip_address_for_droplet($droplet);
-      return $self->_update_dns($self->_dns_name_for($event->from_user), $ip_address);
+
+      $self->_update_dns($self->_dns_name_for($event->from_user, $tag), $ip_address);
     });
 }
 
 sub handle_destroy ($self, $event, $switches) {
+  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
+
   my $droplet;
 
-  return $self->_get_droplet_for($event->from_user)
+  return $self->_get_droplet_for($event->from_user, $tag)
     ->then(sub ($maybe_droplet) {
-      return Future->fail("You don't have a box.", 'stop-processing')
-        unless $maybe_droplet;
+      unless ($maybe_droplet) {
+        return Future->fail(
+          "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag),
+          'stop-processing'
+        );
+      }
 
       if ($maybe_droplet->{status} eq 'active' && !$switches->{force}) {
         return Future->fail(
-         "Your box is powered on. Shut it down first, or use /force to destroy it anyway.",
+         "That box is powered on. Shut it down first, or use /force to destroy it anyway.",
          'stop-processing'
        );
       }
@@ -282,15 +300,15 @@ sub handle_destroy ($self, $event, $switches) {
     })
     ->then(sub ($droplet) {
       $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-      return $self->_do_request(DELETE => "/droplets/$droplet->{id}");
+      $self->_do_request(DELETE => "/droplets/$droplet->{id}");
     })
     ->then(sub {
       $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
-      $event->reply("Box destroyed.");
+      $event->reply("Box destroyed:" . $self->_box_name_for($event->user, $tag));
     });
 }
 
-sub _handle_power ($self, $event, $action) {
+sub _handle_power ($self, $event, $action, $tag = undef) {
   my $remove_reactji = sub ($alt_text) {
     $event->private_reply($alt_text, {
       slack_reaction => {
@@ -308,10 +326,14 @@ sub _handle_power ($self, $event, $action) {
 
   my $past_tense = $action eq 'shutdown' ? 'shut down' : "powered $action";
 
-  $self->_get_droplet_for($event->from_user)
+  $self->_get_droplet_for($event->from_user, $tag)
     ->then(sub ($maybe_droplet) {
-      return Future->fail("You don't have a box.", 'stop-processing')
-        unless $maybe_droplet;
+      unless ($maybe_droplet) {
+        return Future->fail(
+          "That box doesn't exist: " . $self->_box_name_for($event->user, $tag),
+          'stop-processing',
+        );
+      }
 
       $droplet = $maybe_droplet;
 
@@ -320,7 +342,7 @@ sub _handle_power ($self, $event, $action) {
       if ( (  $expect_off && $droplet->{status} eq 'active')
         || (! $expect_off && $droplet->{status} ne 'active')
       ) {
-        return Future->fail("Your box is already $past_tense!", 'stop-processing')
+        return Future->fail("That box is already $past_tense!", 'stop-processing')
       }
 
       return Future->done($droplet);
@@ -367,23 +389,31 @@ sub _handle_power ($self, $event, $action) {
       }
 
       $remove_reactji->("$past_tense!");
-      $event->reply("Your box has been $past_tense.");
+      $event->reply("That box has been $past_tense.");
     });
 }
 
 sub handle_shutdown ($self, $event, $switches) {
-  return $self->_handle_power($event, 'shutdown');
+  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
+
+  return $self->_handle_power($event, 'shutdown', $tag);
 }
 
 sub handle_poweroff ($self, $event, $switches) {
-  $self->_handle_power($event, 'off');
+  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
+
+  $self->_handle_power($event, 'off', $tag);
 }
 
 sub handle_poweron ($self, $event, $switches) {
-  return $self->_handle_power($event, 'on');
+  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
+
+  return $self->_handle_power($event, 'on', $tag);
 }
 
 sub handle_vpn ($self, $event, $switches) {
+  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
+
   my $template = Text::Template->new(
     TYPE       => 'FILE',
     SOURCE     => $self->vpn_config_file,
@@ -391,7 +421,7 @@ sub handle_vpn ($self, $event, $switches) {
   );
 
   my $config = $template->fill_in(HASH => {
-    droplet_host => $self->_box_name_for($event->from_user),
+    droplet_host => $self->_box_name_for($event->from_user, $tag),
   });
 
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
@@ -411,13 +441,27 @@ sub _do_action_status_f ($self, $actionurl) {
   } until => sub ($f) { $f->get ne 'in-progress' };
 }
 
-sub _get_droplet_for ($self, $user) {
+sub _get_droplet_for ($self, $user, $tag = undef) {
+  my $name = $self->_box_name_for($user, $tag);
+
   return $self->_do_request(GET => '/droplets?per_page=200')
     ->then(sub ($data) {
-      my ($droplet) = grep {; $_->{name} eq $self->_box_name_for($user) }
+      my ($droplet) = grep {; $_->{name} eq $name }
                       $data->{droplets}->@*;
 
       Future->done($droplet);
+    });
+}
+
+sub _get_droplets_for ($self, $user) {
+  my $username = $user->username;
+
+  return $self->_do_request(GET => '/droplets?per_page=200')
+    ->then(sub ($data) {
+      my @droplets = grep {; $_->{name} =~ m/^$username[\.\-]/ }
+                     $data->{droplets}->@*;
+
+      Future->done(\@droplets);
     });
 }
 
@@ -479,12 +523,13 @@ sub _get_ssh_key ($self) {
   );
 }
 
-sub _dns_name_for ($self, $user) {
-  return join '.', $user->username, 'box';
+sub _dns_name_for ($self, $user, $tag = undef) {
+  my $name = join '-', $user->username, ($tag ? $tag : ());
+  return join '.', $name, 'box';
 }
 
-sub _box_name_for ($self, $user) {
-  return join '.', $self->_dns_name_for($user), $self->box_domain;
+sub _box_name_for ($self, $user, $tag = undef) {
+  return join '.', $self->_dns_name_for($user, $tag), $self->box_domain;
 }
 
 sub _region_for_user ($self, $user) {
