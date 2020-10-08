@@ -206,7 +206,7 @@ sub handle_create ($self, $event, $switches) {
       $event->reply("Creating $version box in $region, this will take a minute or two.");
 
       my %droplet_create_args = (
-        name     => $self->_box_name_for_user($event->from_user),
+        name     => $self->_box_name_for($event->from_user),
         region   => $region,
         size     => 's-4vcpu-8gb',
         image    => $snapshot->{id},
@@ -257,7 +257,8 @@ sub handle_create ($self, $event, $switches) {
 
       # we're assuming this succeeds. if not, well, the DNS is out of date. what
       # else can we do?
-      return $self->_update_dns_for_user($event->from_user, $self->_ip_address_for_droplet($droplet));
+      my $ip_address = $self->_ip_address_for_droplet($droplet);
+      return $self->_update_dns($self->_dns_name_for($event->from_user), $ip_address);
     });
 }
 
@@ -389,10 +390,8 @@ sub handle_vpn ($self, $event, $switches) {
     DELIMITERS => [ '{{', '}}' ],
   );
 
-  my $user = $event->from_user;
-
   my $config = $template->fill_in(HASH => {
-    droplet_host => $self->_box_name_for_user($user),
+    droplet_host => $self->_box_name_for($event->from_user),
   });
 
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
@@ -415,7 +414,7 @@ sub _do_action_status_f ($self, $actionurl) {
 sub _get_droplet_for ($self, $user) {
   return $self->_do_request(GET => '/droplets?per_page=200')
     ->then(sub ($data) {
-      my ($droplet) = grep {; $_->{name} eq $self->_box_name_for_user($user) }
+      my ($droplet) = grep {; $_->{name} eq $self->_box_name_for($user) }
                       $data->{droplets}->@*;
 
       Future->done($droplet);
@@ -480,8 +479,12 @@ sub _get_ssh_key ($self) {
   );
 }
 
-sub _box_name_for_user ($self, $user) {
-  return sprintf("%s.box.%s", $user->username, $self->box_domain);
+sub _dns_name_for ($self, $user) {
+  return join '.', $user->username, 'box';
+}
+
+sub _box_name_for ($self, $user) {
+  return join '.', $self->_dns_name_for($user), $self->box_domain;
 }
 
 sub _region_for_user ($self, $user) {
@@ -498,14 +501,12 @@ sub _region_for_user ($self, $user) {
                            'nyc3';
 }
 
-sub _update_dns_for_user ($self, $user, $ip) {
-  my $username = $user->username;
-
+sub _update_dns ($self, $name, $ip) {
   my $base = '/domains/' . $self->box_domain . '/records';
 
   $self->_do_request(GET => "$base?per_page=200")
     ->then(sub ($data) {
-      my ($record) = grep { $_->{name} eq "$username.box" } $data->{domain_records}->@*;
+      my ($record) = grep { $_->{name} eq $name } $data->{domain_records}->@*;
       Future->done($record);
     })
     ->then(sub ($record) {
@@ -517,7 +518,7 @@ sub _update_dns_for_user ($self, $user, $ip) {
 
       return $self->_do_request(POST => "$base", {
         type => 'A',
-        name => "$username.box",
+        name => $name,
         data => $ip,
         ttl  => 30,
       });
@@ -526,7 +527,7 @@ sub _update_dns_for_user ($self, $user, $ip) {
     ->else(sub {
       # We don't actually care if this fails (what can we do?), so we
       # transform a failure into a success.
-      $Logger->log("ignoring error when updating DNS with DO");
+      $Logger->log("ignoring error when updating DNS with DO ($name)");
       return Future->done;
     });
 }
