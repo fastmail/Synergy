@@ -12,6 +12,7 @@ use experimental qw(signatures);
 use namespace::clean;
 
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Safe::Isa '$_isa';
@@ -102,14 +103,19 @@ sub handle_box ($self, $event) {
     return;
   }
 
-  my ($box, $cmd, @args) = split /\s+/, $event->text;
+  my ($box, $cmd, $args) = split /\s+/, $event->text, 3;
 
   my $handler = $cmd ? $command_handler{$cmd} : undef;
   unless ($handler) {
     return $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
   }
 
-  $handler->($self, $event, @args)
+  my ($switches, $error) = parse_switches($args);
+  return $event->error_reply("couldn't parse switches: $error") if $error;
+
+  my %switches = map { $_->[0] => ($_->[1] // []) } @$switches;
+
+  $handler->($self, $event, \%switches)
     ->else(sub ($reply, $category, @rest) {
       $event->error_reply($reply);
     })
@@ -149,7 +155,7 @@ sub _do_request ($self, $method, $endpoint, $data = undef) {
   });
 }
 
-sub handle_status ($self, $event, @args) {
+sub handle_status ($self, $event, $switches) {
   $self->_get_droplet_for($event->from_user)
     ->then(sub ($droplet = undef) {
       if ($droplet) {
@@ -160,21 +166,12 @@ sub handle_status ($self, $event, @args) {
     });
 }
 
-sub handle_create ($self, $event, @args) {
-  unless (@args % 2 == 0) {
-    return Future->fail(
-      "You gave me weird arguments to *box create* and I didn't understand them.",
-      'stop-processing'
-    );
-  }
-
-  my %args = @args;
-
+sub handle_create ($self, $event, $switches) {
   # do sanity checks before HTTP requests
-  my $version = delete $args{'/version'}
+  my $version = delete $switches->{version}
              // $self->get_user_preference($event->from_user, 'version');
 
-  if (keys %args) {
+  if (keys %$switches) {
     return Future->fail(
       'error: syntax is "box create [ /version <version> ]"',
       'stop-processing',
@@ -264,7 +261,7 @@ sub handle_create ($self, $event, @args) {
     });
 }
 
-sub handle_destroy ($self, $event, @args) {
+sub handle_destroy ($self, $event, $switches) {
   my $droplet;
 
   return $self->_get_droplet_for($event->from_user)
@@ -272,7 +269,7 @@ sub handle_destroy ($self, $event, @args) {
       return Future->fail("You don't have a box.", 'stop-processing')
         unless $maybe_droplet;
 
-      if ($maybe_droplet->{status} eq 'active' && ! grep { m{^/force$} } @args) {
+      if ($maybe_droplet->{status} eq 'active' && !$switches->{force}) {
         return Future->fail(
          "Your box is powered on. Shut it down first, or use /force to destroy it anyway.",
          'stop-processing'
@@ -373,19 +370,19 @@ sub _handle_power ($self, $event, $action) {
     });
 }
 
-sub handle_shutdown ($self, $event, @args) {
+sub handle_shutdown ($self, $event, $switches) {
   return $self->_handle_power($event, 'shutdown');
 }
 
-sub handle_poweroff ($self, $event, @args) {
+sub handle_poweroff ($self, $event, $switches) {
   $self->_handle_power($event, 'off');
 }
 
-sub handle_poweron ($self, $event, @args) {
+sub handle_poweron ($self, $event, $switches) {
   return $self->_handle_power($event, 'on');
 }
 
-sub handle_vpn ($self, $event, @args) {
+sub handle_vpn ($self, $event, $switches) {
   my $template = Text::Template->new(
     TYPE       => 'FILE',
     SOURCE     => $self->vpn_config_file,
