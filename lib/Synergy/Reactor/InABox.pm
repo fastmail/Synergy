@@ -19,7 +19,9 @@ use Safe::Isa '$_isa';
 use Text::Template;
 use Try::Tiny;
 
-sub listener_specs {
+sub listener_specs ($self) {
+  my $ns = $self->preference_namespace;
+
   return {
     name      => 'box',
     method    => 'handle_box',
@@ -29,18 +31,23 @@ sub listener_specs {
     },
     help_entries => [
       # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2019-06-03
-      { title => 'box', text => <<'END'
+      { title => 'box', text => <<"END"
 box is a tool for managing cloud-based fminabox instances
 
-subcommands:
+All subcommands can take /version and /tag can be used to target a specific box. If not provided, defaults will be used.
 
-• status: show some info about your box, including IP address, fminabox build it was built from, and its current power status
-• create: create a new box. won't let you create more than one (for now)
-• destroy: destroy your box. if its powered on, you have to shut it down first
+• status: show some info about your boxes, including IP address, fminabox build it was built from, and its current power status
+• create: create a new box
+• destroy: destroy a box. if its powered on, you have to shut it down first
 • shutdown: gracefully shut down and power off your box
 • poweroff: forcibly shut down and power off your box (like pulling the power)
 • poweron: start up your box
 • vpn: get an OpenVPN config file to connect to your box
+
+The following preferences exist:
+
+* $ns.version: which version to create by default (default: jessie)
+* $ns.datacentre: which datacentre to create boxes in (if unset, chooses one near you)
 END
       },
     ],
