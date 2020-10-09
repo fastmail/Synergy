@@ -162,12 +162,13 @@ sub _determine_version_and_tag ($self, $event, $switches) {
   # - if this is the "default" box, which sets the "$username.box" DNS name
   my $default_version = $self->get_user_preference($event->from_user, 'version');
   my ($version, $tag) = $switches->@{qw(version tag)};
+  my $is_default_box = !($version || $tag);
   $version //= $default_version;
   $tag //= $version;
 
   # XXX check version and tag valid
 
-  return ($version, $tag);
+  return ($version, $tag, $is_default_box);
 }
 
 sub handle_status ($self, $event, $switches) {
@@ -185,7 +186,7 @@ sub handle_status ($self, $event, $switches) {
 }
 
 sub handle_create ($self, $event, $switches) {
-  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
+  my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
 
   return $self->_get_droplet_for($event->from_user, $tag)
     ->then(sub ($maybe_droplet) {
@@ -266,11 +267,19 @@ sub handle_create ($self, $event, $switches) {
         );
       }
 
-      # we're assuming this succeeds. if not, well, the DNS is out of date. what
-      # else can we do?
+      # update the DNS name. we will assume this succeeds; if it fails the box
+      # is still good and there's not really much else we can do.
       my $ip_address = $self->_ip_address_for_droplet($droplet);
+      my $update_f = $self->_update_dns($self->_dns_name_for($event->from_user, $tag), $ip_address);
+      return $update_f unless $is_default_box;
 
-      $self->_update_dns($self->_dns_name_for($event->from_user, $tag), $ip_address);
+      # if this is the default box, also set the default name (ie
+      # username.box). we make a second DNS-updating future and combine them
+      # together
+      return Future->wait_all(
+        $update_f,
+        $self->_update_dns($self->_dns_name_for($event->from_user), $ip_address),
+      );
     });
 }
 
