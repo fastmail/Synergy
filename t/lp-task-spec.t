@@ -337,6 +337,24 @@ plan_ok(
   "blank lines in long description are preserved"
 );
 
+plan_ok(
+  "where are my plums? 👥",
+  {
+    name        => "where are my plums?",
+    package_id  => 7,
+  },
+  "text, discussion"
+);
+
+plan_ok(
+  "where are my plums? :phone:",
+  {
+    name        => "where are my plums?",
+    package_id  => 7,
+  },
+  "text, discussion"
+);
+
 is_deeply(
   $synergy->reactor_named('lp')->_parse_search("foo"),
   [

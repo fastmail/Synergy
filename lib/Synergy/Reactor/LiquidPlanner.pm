@@ -1465,8 +1465,14 @@ sub _extract_flags_from_task_text ($self, $text) {
                           | :heavy_heart_exclamation_mark_ornament:
         | 🔥              | :fire: }nx;
 
+  my $discuss_emoji
+    = qr{ 👥  | :busts_in_silhouette:
+        | ☎️   | :phone:
+        | 🗣  | :speaking_head_in_silhouette:
+        }nx;
+
   while ($text =~ s/\s*\(([!>]+)\)\s*\z//
-     ||  $text =~ s/\s*($start_emoji|$urgent_emoji)\s*\z//
+     ||  $text =~ s/\s*($start_emoji|$urgent_emoji|$discuss_emoji)\s*\z//
      ||  $text =~ s/\s+(##?[a-z0-9]+)\s*\z//i
   ) {
     my $hunk = $1;
@@ -1491,8 +1497,9 @@ sub _extract_flags_from_task_text ($self, $text) {
       $flag{package}{ $self->urgent_package_id } ++ if $hunk =~ /!/;
       next;
     } else {
-      $flag{start} ++                               if $hunk =~ $start_emoji;
-      $flag{package}{ $self->urgent_package_id } ++ if $urgent_emoji;
+      $flag{start} ++                                   if $hunk =~ $start_emoji;
+      $flag{package}{ $self->urgent_package_id } ++     if $hunk =~ $urgent_emoji;
+      $flag{package}{ $self->discussion_package_id } ++ if $hunk =~ $discuss_emoji;
       next;
     }
   }
@@ -1683,6 +1690,19 @@ sub _handle_subcmds ($self, $phase, $cmd_line, $plan) {
         && grep {; $_ !=  $urgent } keys $plan->{package}->%*;
 
       $plan->{package}{ $self->urgent_package_id } = 1;
+      next CMD;
+    }
+
+    if ($cmd eq 'agenda' || $cmd eq 'discuss') {
+      cmd_error("The /$cmd command takes no arguments.") if @args;
+
+      my $discussion = $self->discussion_package_id;
+
+      cmd_error("You can't assign to Awaiting Discussion and some other package.")
+        if $plan->{package}
+        && grep {; $_ !=  $discussion } keys $plan->{package}->%*;
+
+      $plan->{package}{ $self->discussion_package_id } = 1;
       next CMD;
     }
 
