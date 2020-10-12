@@ -480,6 +480,7 @@ The slash commands understood are:
 • */project*: create the task in the named project (see *projects*)
 • */start*: start your timer running on this task
 • */urgent*: mark this task as urgent
+• */discuss*: put this task into Awaiting Discussion
 EOH
   ],
 
