@@ -160,7 +160,16 @@ sub handle_status ($self, $event, @args) {
     });
 }
 
-sub handle_create ($self, $event, %args) {
+sub handle_create ($self, $event, @args) {
+  unless (@args % 2 == 0) {
+    return Future->fail(
+      "You gave me weird arguments to *box create* and I didn't understand them.",
+      'stop-processing'
+    );
+  }
+
+  my %args = @args;
+
   # do sanity checks before HTTP requests
   my $version = delete $args{'/version'}
              // $self->get_user_preference($event->from_user, 'version');
