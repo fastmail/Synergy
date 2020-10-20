@@ -15,6 +15,7 @@ has listeners => (
   isa => 'ArrayRef',
   traits  => [ 'Array' ],
   handles => { listeners => 'elements' },
+  lazy => 1,
   default => sub ($self, @) {
     my @listeners;
     for my $spec ($self->listener_specs) {
