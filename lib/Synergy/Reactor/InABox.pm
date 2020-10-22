@@ -320,7 +320,7 @@ sub handle_destroy ($self, $event, $switches) {
     })
     ->then(sub {
       $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
-      $event->reply("Box destroyed:" . $self->_box_name_for($event->from_user, $tag));
+      $event->reply("Box destroyed: " . $self->_box_name_for($event->from_user, $tag));
     });
 }
 
