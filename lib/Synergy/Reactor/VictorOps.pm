@@ -255,6 +255,7 @@ EOH
 sub state ($self) {
   return {
     oncall_list => $self->oncall_list,
+    maint_started_by_user => $self->maint_started_by_user,
   };
 }
 
@@ -501,6 +502,7 @@ sub handle_maint_start ($self, $event) {
   })
   ->then(sub ($data) {
     $self->maint_started_by_user($event->from_user->username);
+    $self->save_state;
     $self->_ack_all($event->from_user->username);
   })
   ->then(sub ($nacked) {
