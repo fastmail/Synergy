@@ -109,6 +109,12 @@ has maint_timer_interval => (
   default => 600,
 );
 
+has last_maint_warning_time => (
+  is => 'rw',
+  isa => 'Int',
+  default => 0,
+);
+
 has maint_started_by_user => (
   is => 'rw',
   isa => 'Str',
@@ -389,29 +395,18 @@ sub handle_resolve_acked ($self, $event) {
 }
 
 sub _check_long_maint ($self) {
-  my $maint;
   my $current_time = time();
+  # No warning if we've warned in last 25 minutes
+  return unless ($current_time - $self->last_maint_warning_time) > (60 * 25);
+
   $self->_vo_request(GET => '/maintenancemode')
   ->then(sub ($data) {
-    $maint = $data->{activeInstances} // [];
+    my $maint = $data->{activeInstances} // [];
     unless (@$maint) {
       $self->_clear_maint_started_by_user();
       return Future->fail('not in maint');
     }
-    return $self->_vo_request(GET => '/incidents');
-  })->then(sub ($data) {
-    my $is_new_incident;
-
-    for my $incident ($data->{incidents}->@*) {
-      next if $incident->{currentPhase} eq 'RESOLVED';
-
-      my $incident_start_time = str2time($incident->{startTime});
-      my $incident_duration = $current_time - $incident_start_time;
-
-      $is_new_incident = 1, last if $incident_duration < (60 * 25);
-    }
-    return Future->fail('an incident newer than 25 minutes') if $is_new_incident;
-
+    $self->last_maint_warning_time($current_time);
     # maint startedAt is unix time * 1000
     my $maint_start_time = int($maint->[0]->{startedAt} / 1000);
     my $maint_duration_s = $current_time - $maint_start_time;
@@ -430,7 +425,6 @@ sub _check_long_maint ($self) {
   })
   ->else(sub ($message, $extra = {}) {
     return if $message eq 'not in maint';
-    return if $message eq 'an incident newer than 25 minutes';
     return if $message eq 'maint duration less than 30m';
     $Logger->log("VO: error _check_long_maint():  $message");
   })->retain;
