@@ -418,7 +418,8 @@ sub _check_long_maint ($self) {
 
     my $group_address = $self->oncall_group_address;
     my $maint_duration_m = int($maint_duration_s / 60);
-    my $who = $maint->[0]->{startedBy} eq 'PUBLICAPI' ? $self->maint_started_by_user : $maint->[0]->{startedBy};
+    my $who = $maint->[0]->{startedBy} eq 'PUBLICAPI' ? $self->maint_started_by_user
+      : $self->_vo_to_slack_map->{$maint->[0]->{startedBy}};
 
     $self->oncall_channel->send_message(
       $self->maint_warning_address,
