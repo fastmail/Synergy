@@ -87,6 +87,12 @@ has oncall_channel_name => (
   isa => 'Str',
 );
 
+has oncall_channel => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) { $self->hub->channel_named($self->oncall_channel_name) }
+);
+
 has oncall_group_address => (
   is => 'ro',
   isa => 'Str',
@@ -134,12 +140,15 @@ sub start ($self) {
   $check_oncall_timer->start;
   $self->hub->loop->add($check_oncall_timer);
 
-  my $maint_warning_timer = IO::Async::Timer::Periodic->new(
-    interval => $self->maint_timer_interval,
-    on_tick  => sub {  $self->_check_long_maint },
-  );
-  $maint_warning_timer->start;
-  $self->hub->loop->add($maint_warning_timer);
+  # No maint warning timer unless we can warn oncall
+  if ($self->oncall_channel && $self->oncall_group_address && $self->maint_warning_address) {
+    my $maint_warning_timer = IO::Async::Timer::Periodic->new(
+      interval => $self->maint_timer_interval,
+      on_tick  => sub {  $self->_check_long_maint },
+    );
+    $maint_warning_timer->start;
+    $self->hub->loop->add($maint_warning_timer);
+  }
 }
 
 sub listener_specs {
@@ -407,19 +416,15 @@ sub _check_long_maint ($self) {
     my $maint_duration_s = $current_time - $maint_start_time;
     return Future->fail('maint duration less than 30m') unless $maint_duration_s > (60 * 30);
 
-    return Future->fail('oncall_channel_name undefined') unless $self->oncall_channel_name;
-    return Future->fail('oncall_group_address undefined') unless my $group_address = $self->oncall_group_address;
-    return Future->fail('cannot create channel') unless my $channel = $self->hub->channel_named($self->oncall_channel_name);
+    my $group_address = $self->oncall_group_address;
+    my $maint_duration_m = int($maint_duration_s / 60);
+    my $who = $maint->[0]->{startedBy} eq 'PUBLICAPI' ? $self->maint_started_by_user : $maint->[0]->{startedBy};
 
-    if ($channel && $self->maint_warning_address) {
-      my $maint_duration_m = int($maint_duration_s / 60);
-      my $who = $maint->[0]->{startedBy} eq 'PUBLICAPI' ? $self->maint_started_by_user : $maint->[0]->{startedBy};
-      $channel->send_message(
-        $self->maint_warning_address,
-        "\@oncall Hey, by the way, VictorOps is in maintenance mode. (Started $maint_duration_m minutes ago by $who.)",
-        { slack => "<!subteam^$group_address> Hey, by the way, VictorOps is in maintenance mode. (Started $maint_duration_m minutes ago by $who.)" }
-      );
-    }
+    $self->oncall_channel->send_message(
+      $self->maint_warning_address,
+      "\@oncall Hey, by the way, VictorOps is in maintenance mode. (Started $maint_duration_m minutes ago by $who.)",
+      { slack => "<!subteam^$group_address> Hey, by the way, VictorOps is in maintenance mode. (Started $maint_duration_m minutes ago by $who.)" }
+    );
   })
   ->else(sub ($message, $extra = {}) {
     return if $message eq 'not in maint';
