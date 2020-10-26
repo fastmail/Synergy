@@ -536,7 +536,7 @@ sub handle_maint_end ($self, $event) {
       # at which point there shouldn't be anything left to buzz.
       return $self->_resolve_incidents($event, {
         type => 'all',
-        since => $timestamp - 600,
+        since => $timestamp - 600000,
         whose => 'all',
         silent_if_none => 1,
       })->transform(done => sub { $instance_id });
