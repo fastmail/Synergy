@@ -5246,6 +5246,7 @@ sub _handle_contents ($self, $event, $rest) {
 
   unless ( $item->{type} eq 'Package'
         || $item->{type} eq 'Project'
+        || $item->{type} eq 'Folder'
         || $item->{type} eq 'Inbox'
   ) {
     return $event->error_reply(sprintf "You can't get the contents of a non-container.  That item is a \l$item->{type}.")
