@@ -87,9 +87,38 @@ has oncall_channel_name => (
   isa => 'Str',
 );
 
+has oncall_channel => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) { $self->hub->channel_named($self->oncall_channel_name) }
+);
+
 has oncall_group_address => (
   is => 'ro',
   isa => 'Str',
+);
+
+has maint_warning_address => (
+  is  => 'ro',
+  isa => 'Str',
+);
+
+has maint_timer_interval => (
+  is => 'ro',
+  isa => 'Int',
+  default => 600,
+);
+
+has last_maint_warning_time => (
+  is => 'rw',
+  isa => 'Int',
+  default => 0,
+);
+
+has maint_started_by_user => (
+  is => 'rw',
+  isa => 'Str',
+  clearer => '_clear_maint_started_by_user',
 );
 
 has oncall_list => (
@@ -108,14 +137,25 @@ around '_set_oncall_list' => sub ($orig, $self, @rest) {
 sub start ($self) {
   return unless $self->oncall_channel_name;
 
-  my $timer = IO::Async::Timer::Periodic->new(
+  my $check_oncall_timer = IO::Async::Timer::Periodic->new(
     first_interval => 30,   # don't start immediately
     interval       => 150,
     on_tick        => sub { $self->_check_at_oncall },
   );
 
-  $timer->start;
-  $self->hub->loop->add($timer);
+  $check_oncall_timer->start;
+  $self->hub->loop->add($check_oncall_timer);
+
+  # No maint warning timer unless we can warn oncall
+  if ($self->oncall_channel && $self->oncall_group_address && $self->maint_warning_address) {
+    my $maint_warning_timer = IO::Async::Timer::Periodic->new(
+      first_interval => 45,
+      interval => $self->maint_timer_interval,
+      on_tick  => sub {  $self->_check_long_maint },
+    );
+    $maint_warning_timer->start;
+    $self->hub->loop->add($maint_warning_timer);
+  }
 }
 
 sub listener_specs {
@@ -222,6 +262,8 @@ EOH
 sub state ($self) {
   return {
     oncall_list => $self->oncall_list,
+    maint_started_by_user => $self->maint_started_by_user,
+    last_maint_warning_time => $self->last_maint_warning_time,
   };
 }
 
@@ -298,6 +340,14 @@ after register_with_hub => sub ($self, @) {
   if (my $list = $state->{oncall_list}) {
     $self->_set_oncall_list($list);
   }
+
+  if (my $who = $state->{maint_started_by_user}) {
+    $self->maint_started_by_user($who);
+  }
+
+  if (my $when = $state->{last_maint_warning_time}) {
+    $self->last_maint_warning_time($when);
+  }
 };
 
 sub handle_maint_query ($self, $event) {
@@ -351,6 +401,51 @@ sub handle_resolve_acked ($self, $event) {
   $self->_resolve_incidents($event, {
     type => 'acked',
     whose => 'all'
+  })->retain;
+}
+
+sub _check_long_maint ($self) {
+  my $current_time = time();
+  # No warning if we've warned in last 25 minutes
+  return unless ($current_time - $self->last_maint_warning_time) > (60 * 25);
+
+  $self->_vo_request(GET => '/maintenancemode')
+  ->then(sub ($data) {
+    my $maint = $data->{activeInstances} // [];
+    unless (@$maint) {
+      $self->_clear_maint_started_by_user();
+      $self->save_state;
+      return Future->fail('not in maint');
+    }
+
+    $self->last_maint_warning_time($current_time);
+    $self->save_state;
+
+    # maint startedAt is unix time * 1000
+    my $maint_start_time = int($maint->[0]->{startedAt} / 1000);
+    my $maint_duration_s = $current_time - $maint_start_time;
+    return Future->fail('maint duration less than 30m')
+      unless $maint_duration_s > (60 * 30);
+
+    my $group_address = $self->oncall_group_address;
+    my $maint_duration_m = int($maint_duration_s / 60);
+    my $who = $maint->[0]->{startedBy} eq 'PUBLICAPI'
+            ? $self->maint_started_by_user
+            : $self->_vo_to_slack_map->{$maint->[0]->{startedBy}};
+
+    my $text = "Hey, by the way, VictorOps is in maintenance mode."
+             . " (Started $maint_duration_m minutes ago by $who.)";
+
+    $self->oncall_channel->send_message(
+      $self->maint_warning_address,
+      "\@oncall $text",
+      { slack => "<!subteam^$group_address> $text" }
+    );
+  })
+  ->else(sub ($message, $extra = {}) {
+    return if $message eq 'not in maint';
+    return if $message eq 'maint duration less than 30m';
+    $Logger->log("VO: error _check_long_maint():  $message");
   })->retain;
 }
 
@@ -419,6 +514,8 @@ sub handle_maint_start ($self, $event) {
     });
   })
   ->then(sub ($data) {
+    $self->maint_started_by_user($event->from_user->username);
+    $self->save_state;
     $self->_ack_all($event->from_user->username);
   })
   ->then(sub ($nacked) {
@@ -545,6 +642,7 @@ sub handle_maint_end ($self, $event) {
       return $self->_vo_request(PUT => "/maintenancemode/$instance_id/end");
     })
     ->then(sub {
+      $self->_clear_maint_started_by_user();
       return $event->reply("🚨 VO maint cleared. Good job everyone!");
     }
     )->else(sub ($category, $extra = {}) {
