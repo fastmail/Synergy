@@ -149,6 +149,7 @@ sub start ($self) {
   # No maint warning timer unless we can warn oncall
   if ($self->oncall_channel && $self->oncall_group_address && $self->maint_warning_address) {
     my $maint_warning_timer = IO::Async::Timer::Periodic->new(
+      first_interval => 45,
       interval => $self->maint_timer_interval,
       on_tick  => sub {  $self->_check_long_maint },
     );
@@ -262,6 +263,7 @@ sub state ($self) {
   return {
     oncall_list => $self->oncall_list,
     maint_started_by_user => $self->maint_started_by_user,
+    last_maint_warning_time => $self->last_maint_warning_time,
   };
 }
 
@@ -338,6 +340,14 @@ after register_with_hub => sub ($self, @) {
   if (my $list = $state->{oncall_list}) {
     $self->_set_oncall_list($list);
   }
+
+  if (my $who = $state->{maint_started_by_user}) {
+    $self->maint_started_by_user($who);
+  }
+
+  if (my $when = $state->{last_maint_warning_time}) {
+    $self->last_maint_warning_time($when);
+  }
 };
 
 sub handle_maint_query ($self, $event) {
@@ -404,10 +414,12 @@ sub _check_long_maint ($self) {
     my $maint = $data->{activeInstances} // [];
     unless (@$maint) {
       $self->_clear_maint_started_by_user();
+      $self->save_state;
       return Future->fail('not in maint');
     }
 
     $self->last_maint_warning_time($current_time);
+    $self->save_state;
 
     # maint startedAt is unix time * 1000
     my $maint_start_time = int($maint->[0]->{startedAt} / 1000);
