@@ -406,21 +406,28 @@ sub _check_long_maint ($self) {
       $self->_clear_maint_started_by_user();
       return Future->fail('not in maint');
     }
+
     $self->last_maint_warning_time($current_time);
+
     # maint startedAt is unix time * 1000
     my $maint_start_time = int($maint->[0]->{startedAt} / 1000);
     my $maint_duration_s = $current_time - $maint_start_time;
-    return Future->fail('maint duration less than 30m') unless $maint_duration_s > (60 * 30);
+    return Future->fail('maint duration less than 30m')
+      unless $maint_duration_s > (60 * 30);
 
     my $group_address = $self->oncall_group_address;
     my $maint_duration_m = int($maint_duration_s / 60);
-    my $who = $maint->[0]->{startedBy} eq 'PUBLICAPI' ? $self->maint_started_by_user
-      : $self->_vo_to_slack_map->{$maint->[0]->{startedBy}};
+    my $who = $maint->[0]->{startedBy} eq 'PUBLICAPI'
+            ? $self->maint_started_by_user
+            : $self->_vo_to_slack_map->{$maint->[0]->{startedBy}};
+
+    my $text = "Hey, by the way, VictorOps is in maintenance mode."
+             . " (Started $maint_duration_m minutes ago by $who.)";
 
     $self->oncall_channel->send_message(
       $self->maint_warning_address,
-      "\@oncall Hey, by the way, VictorOps is in maintenance mode. (Started $maint_duration_m minutes ago by $who.)",
-      { slack => "<!subteam^$group_address> Hey, by the way, VictorOps is in maintenance mode. (Started $maint_duration_m minutes ago by $who.)" }
+      "\@oncall $text",
+      { slack => "<!subteam^$group_address> $text" }
     );
   })
   ->else(sub ($message, $extra = {}) {
