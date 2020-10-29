@@ -72,6 +72,17 @@ has primary_channel_name => (
   required => 1, # TODO: die during registration if ∄ channel
 );
 
+has clock_out_address => (
+  is  => 'ro',
+  isa => 'Str',
+);
+
+has clock_out_channel => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) { $self->hub->channel_named($self->primary_channel_name) }
+);
+
 sub state ($self) {
   return {
     last_report_time => $self->last_report_time,
