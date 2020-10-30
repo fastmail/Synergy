@@ -9,6 +9,7 @@ use IO::Async::Test;
 use JSON::MaybeXS qw(encode_json);
 use Plack::Response;
 use Sub::Override;
+use Storable qw(dclone);
 use Test::More;
 use Test::Deep;
 
@@ -80,17 +81,20 @@ sub single_message_text {
 # minimal data for _format_droplet
 my $alice_droplet = {
   id     => 123,
-  name   => 'alice.box.fm.local',
+  name   => 'alice-jessie.box.fm.local',
   status => 'active',
   image  => {
-    name => 'fminabox-20200202'
+    name => 'fminabox-jessie-20200202'
   },
   region => {
     name => 'Bridgewater',
     slug => 'bnj1',
   },
   networks => {
-    v4 => [{ ip_address => '127.0.0.2' }],
+    v4 => [{
+      ip_address => '127.0.0.2',
+      type => 'public',
+    }],
   },
 };
 
@@ -101,14 +105,14 @@ subtest 'status' => sub {
   send_message('synergy: box status');
   like(
     single_message_text(),
-    qr{Your box: name: \Qalice.box.fm.local\E},
+    qr{Your boxes:\s+name: \Qalice-jessie.box.fm.local\E},
     'alice has a box and synergy says so'
   );
 
   send_message('synergy: box status', 'bob');
   is(
     single_message_text(),
-    "You don't seem to have a box.",
+    "You don't seem to have any boxes.",
     'bob has no box and synergy says so'
   );
 };
@@ -125,7 +129,7 @@ subtest 'poweron' => sub {
   send_message('synergy: box poweron');
   is(
     single_message_text(),
-    'Your box is already powered on!',
+    'That box is already powered on!',
     'if the box is already on, synergy says so'
   );
 
@@ -142,7 +146,7 @@ subtest 'poweron' => sub {
   is(@texts, 3, 'sent three messages (reactji on/off, and message)')
     or diag explain \@texts;
 
-  is($texts[2], 'Your box has been powered on.', 'successfully turned on');
+  is($texts[2], 'That box has been powered on.', 'successfully turned on');
 
   $channel->clear_messages;
 };
@@ -162,7 +166,7 @@ for my $method (qw(poweroff shutdown)) {
 
     like(
       $texts[2],
-      qr{Your box has been (powered off|shut down)},
+      qr{That box has been (powered off|shut down)},
       'successfully turned off',
     );
 
@@ -173,7 +177,7 @@ for my $method (qw(poweroff shutdown)) {
     send_message("synergy: box $method");
     like(
       single_message_text(),
-      qr{Your box is already (powered off|shut down)!},
+      qr{That box is already (powered off|shut down)!},
       'if the box is already off, synergy says so'
     );
   };
@@ -188,11 +192,11 @@ subtest 'destroy' => sub {
   );
 
   send_message('synergy: box destroy /force');
-  is(single_message_text(), 'Box destroyed.', 'successfully force destroyed');
+  like(single_message_text(), qr{^Box destroyed}, 'successfully force destroyed');
 
   local $alice_droplet->{status} = 'off';
   send_message('synergy: box destroy');
-  is(single_message_text(), 'Box destroyed.', 'already off: successfully destroyed');
+  like(single_message_text(), qr{^Box destroyed}, 'already off: successfully destroyed');
 };
 
 my %CREATE_RESPONSES = (
@@ -236,6 +240,8 @@ my %CREATE_RESPONSES = (
 subtest 'create' => sub {
   undef $droplet_guard;
 
+  my $box_name_re = qr{[-a-z0-9.]+}i;
+
   my $do_create = sub (%override) {
     my $resp_for = sub ($key) { $override{$key} // $CREATE_RESPONSES{$key} };
     my $msg = $override{message} // "box create";
@@ -264,7 +270,7 @@ subtest 'create' => sub {
     );
 
     is(@texts, 1, 'sent a single failure message');
-    like($texts[0], qr{already have a box}, 'message seems ok');
+    like($texts[0], qr{This box already exists}, 'message seems ok');
   };
 
   subtest 'good create' => sub {
@@ -273,8 +279,8 @@ subtest 'create' => sub {
     cmp_deeply(
       \@texts,
       [
-        re(qr{Creating \w+ box in nyc3}),
-        re(qr{Box created: name: \Qalice.box.fm.local\E}),
+        re(qr{Creating $box_name_re in nyc3}i),
+        re(qr{Box created: name: \Qalice-jessie.box.fm.local\E}),
       ],
       'normal create with defaults seems fine'
     );
@@ -306,7 +312,7 @@ subtest 'create' => sub {
     cmp_deeply(
       \@texts,
       [
-        re(qr{Creating \w+ box}),
+        re(qr{Creating $box_name_re}),
         re(qr{There was an error creating the box}),
       ],
       'sent one will create, one error'
@@ -320,7 +326,7 @@ subtest 'create' => sub {
     cmp_deeply(
       \@texts,
       [
-        re(qr{Creating \w+ box}),
+        re(qr{Creating $box_name_re}),
         re(qr{Something went wrong while creating box}),
       ],
       'sent one will create, one error'
@@ -328,6 +334,9 @@ subtest 'create' => sub {
   };
 
   subtest 'good create with non-default version' => sub {
+    my $foo_droplet = dclone($alice_droplet);
+    $foo_droplet->{name} =~ s/jessie/foo/;
+
     my @texts = $do_create->(
       message => 'box create /version foo',
       snapshot_fetch => gen_response(200, {
@@ -336,13 +345,16 @@ subtest 'create' => sub {
           name => 'fminabox-foo-20201004',
         }]
       }),
+      last_droplet_fetch => gen_response(200, {
+        droplets => [ $foo_droplet ],
+      }),
     );
 
     cmp_deeply(
       \@texts,
       [
-        re(qr{Creating \w+ box in nyc3}),
-        re(qr{Box created: name: \Qalice.box.fm.local\E}),
+        re(qr{Creating $box_name_re in nyc3}),
+        re(qr{Box created: name: \Qalice-foo.box.fm.local\E}),
       ],
       'got our two normal messages'
     );
