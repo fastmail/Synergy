@@ -189,6 +189,17 @@ sub handle_clock_out ($self, $event) {
     $comment,
   );
 
+  if ( $self->clock_out_channel
+    && $self->clock_out_address
+    && $event->conversation_address ne $self->clock_out_address
+  ) {
+    my $username = $event->from_user->username;
+    $self->clock_out_channel->send_message(
+      $self->clock_out_address,
+      "$username just clocked out: $comment"
+    );
+  }
+
   if ($event->is_public) {
     $event->reply("See you later!");
   } else {
