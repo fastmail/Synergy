@@ -262,7 +262,7 @@ subtest 'exit maint' => sub {
   };
 
   @VO_RESPONSES = (
-    gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42, startedAt => 86400 }] }),
+    gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42, startedAt => 86400000 }] }),
     gen_response(200, $incidents),
     $patch_responder,
     gen_response(200, {}),
