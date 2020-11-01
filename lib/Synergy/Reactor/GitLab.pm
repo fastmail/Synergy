@@ -632,19 +632,37 @@ sub handle_merge_request ($self, $event) {
       $num,
     );
 
-    my $http_future = $self->hub->http_get(
+    my $mr_get = $self->hub->http_get(
       $url,
       'PRIVATE-TOKEN' => $self->api_token,
     );
+
+    # approval status is a separate call (sigh)
+    my $approval_get = $self->hub->http_get(
+      "$url/approvals",
+      'PRIVATE-TOKEN' => $self->api_token,
+    );
+
+    my $http_future = Future->wait_all($mr_get, $approval_get);
     push @futures, $http_future;
 
-    $http_future->on_done(sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log([ "Error: %s", $res->as_string ]);
+    $http_future->on_done(sub ($mr_f, $approval_f) {
+      my $mr_res = $mr_f->get;
+      unless ($mr_res->is_success) {
+        $Logger->log([ "Error: %s", $mr_res->as_string ]);
         return;
       }
 
-      my $data = $JSON->decode($res->decoded_content);
+      my $approval_res = $approval_f->get;
+      unless ($approval_res->is_success) {
+        $Logger->log([ "Error: %s", $approval_res->as_string ]);
+        return;
+      }
+
+      my $data = $JSON->decode($mr_res->decoded_content);
+      my $approval_data = $JSON->decode($approval_res->decoded_content);
+
+      my $is_approved = $approval_data->{approved};
 
       my $key = $self->_key_for_gitlab_data($event, $data);
       if ($self->has_expanded_mr_recently($key)) {
@@ -694,10 +712,12 @@ sub handle_merge_request ($self, $event) {
         }
       }
 
-      if ($data->{upvotes} || $data->{downvotes}) {
+      if ($data->{upvotes} || $data->{downvotes} || $is_approved) {
+        my $approval_str = $is_approved ? "Approved" : "Not yet approved";
         push @fields, {
           title => "Review status",
-          value => sprintf('%s %s, %s %s',
+          value => sprintf('%s (%s %s, %s %s)',
+            $approval_str,
             $data->{upvotes}, PL_N('upvote', $data->{upvotes}),
             $data->{downvotes}, PL_N('downvote', $data->{downvotes})),
           short => \1
