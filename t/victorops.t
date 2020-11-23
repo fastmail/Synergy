@@ -230,38 +230,51 @@ subtest 'exit maint' => sub {
   # exit maint and /resolve
   # 89, 99, 109 should resolve
   # 69, 79 predate maint startedAt - 10 minutes
-  # 119 is already resolved, so should do nothing
+  # 119 shouldn't resolve, it is routed to a different team
+  # 129 is already resolved, so should do nothing
   my $incidents = {
     incidents => [
       {
         incidentNumber => 69,
         currentPhase => 'UNACKED',
         startTime => '1970-01-01T00:00:10Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 79,
         currentPhase => 'ACKED',
         startTime => '1970-01-01T23:45:11Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 89,
         currentPhase => 'UNACKED',
         startTime => '1970-01-01T23:50:01Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 99,
         currentPhase => 'UNACKED',
         startTime => '1970-01-02T00:54:11Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 109,
         currentPhase => 'ACKED',
         startTime => '1970-01-02T00:54:11Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 119,
+        currentPhase => 'ACKED',
+        startTime => '1970-01-02T00:54:12Z',
+        pagedTeams => [ "foobar" ],
+      },
+      {
+        incidentNumber => 129,
         currentPhase => 'RESOLVED',
         startTime => '1971-01-02T00:54:11Z',
+        pagedTeams => [ "plumbing" ],
       }
     ],
   };
@@ -346,11 +359,13 @@ subtest 'resolve' => sub {
         incidentNumber => 42,
         currentPhase => 'ACKED',
         transitions => [{ by => 'alice' }],
+        pagedTeams => ['plumbing'],
       },
       {
         incidentNumber => 37,
         currentPhase => 'ACKED',
         transitions => [{ by => 'bob' }],
+        pagedTeams => ['plumbing'],
       }
     ],
   };
