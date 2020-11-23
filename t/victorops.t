@@ -230,7 +230,8 @@ subtest 'exit maint' => sub {
   # exit maint and /resolve
   # 89, 99, 109 should resolve
   # 69, 79 predate maint startedAt - 10 minutes
-  # 119 is already resolved, so should do nothing
+  # 119 shouldn't resolve, it is routed to a different team
+  # 129 is already resolved, so should do nothing
   my $incidents = {
     incidents => [
       {
@@ -265,6 +266,12 @@ subtest 'exit maint' => sub {
       },
       {
         incidentNumber => 119,
+        currentPhase => 'ACKED',
+        startTime => '1970-01-02T00:54:12Z',
+        pagedTeams => [ "foobar" ],
+      },
+      {
+        incidentNumber => 129,
         currentPhase => 'RESOLVED',
         startTime => '1971-01-02T00:54:11Z',
         pagedTeams => [ "plumbing" ],
