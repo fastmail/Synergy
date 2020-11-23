@@ -237,31 +237,37 @@ subtest 'exit maint' => sub {
         incidentNumber => 69,
         currentPhase => 'UNACKED',
         startTime => '1970-01-01T00:00:10Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 79,
         currentPhase => 'ACKED',
         startTime => '1970-01-01T23:45:11Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 89,
         currentPhase => 'UNACKED',
         startTime => '1970-01-01T23:50:01Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 99,
         currentPhase => 'UNACKED',
         startTime => '1970-01-02T00:54:11Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 109,
         currentPhase => 'ACKED',
         startTime => '1970-01-02T00:54:11Z',
+        pagedTeams => [ "plumbing" ],
       },
       {
         incidentNumber => 119,
         currentPhase => 'RESOLVED',
         startTime => '1971-01-02T00:54:11Z',
+        pagedTeams => [ "plumbing" ],
       }
     ],
   };
