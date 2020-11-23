@@ -555,6 +555,8 @@ sub _resolve_incidents($self, $event, $args) {
 
       for my $incident ($data->{incidents}->@*) {
         next if $incident->{currentPhase} eq 'RESOLVED';
+        # only resolve incidents paged to our team
+        next if grep { $_ ne $self->team_name } $incident->{pagedTeams}->@*;
 
         if (my $since = $args->{since}) {
           next unless (str2time($incident->{startTime}) * 1000) > $since;
