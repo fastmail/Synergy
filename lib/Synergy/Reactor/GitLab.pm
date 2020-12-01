@@ -600,9 +600,14 @@ sub _handle_mr_search_string ($self, $text, $event) {
 }
 
 sub handle_merge_request ($self, $event) {
-  $event->mark_handled if $event->was_targeted;
+  my $text = $event->text;
 
-  my @mrs = $event->text =~ /\b([-_a-z]+!\d+)(?=\W|$)/gi;
+  my @mrs = $text =~ /\b([-_a-z]+!\d+)(?=\W|$)/gi;
+
+  $text =~ s/\Q$_// for @mrs;
+
+  $event->mark_handled if $event->was_targeted && $text !~ /\S/;
+
   state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
 
   state $base = $self->url_base;
