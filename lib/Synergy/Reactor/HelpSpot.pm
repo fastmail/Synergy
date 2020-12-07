@@ -10,6 +10,8 @@ use URI;
 use URI::QueryParam;
 use XML::LibXML;
 
+use Synergy::Logger '$Logger';
+
 use experimental qw(signatures);
 use namespace::clean;
 use utf8;
@@ -57,7 +59,16 @@ sub ticket_report ($self, $who, $arg = {}) {
     open my $fh, '<', \$res->decoded_content(charset => 'none')
       or die "error making handle to XML results: $!";
 
-    my $doc = XML::LibXML->load_xml(IO => $fh);
+    my $doc = eval { XML::LibXML->load_xml(IO => $fh) };
+    unless ($doc) {
+      $Logger->log("couldn't parse ticket report for $who: $@");
+      my $text = join q{ },
+        "\N{ADMISSION TICKETS}",
+        "\N{CROSS MARK}",
+        "error fetching data from HelpSpot";
+
+      return Future->done($text, { slack => $text });
+    };
 
     # HelpSpot is ludicrous.  If there are 0 requests, you get...
     # <requests>
