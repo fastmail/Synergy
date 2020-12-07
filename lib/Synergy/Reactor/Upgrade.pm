@@ -112,7 +112,7 @@ sub handle_upgrade ($self, $event) {
   }
 
   if (my $err = $self->check_next) {
-    $event->reply("Ugrade failed. Version $new_version has problems: " . block($err));
+    $event->reply("Upgrade failed. Version $new_version has problems: " . block($err));
 
     if (my $reset_err = $self->git_do("reset --hard $old_version")) {
       $event->reply("Failed to reset back to old version $old_version. Manual intervention probably required. Error: " . block($reset_err));
