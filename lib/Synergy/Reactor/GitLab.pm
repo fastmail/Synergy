@@ -729,6 +729,16 @@ sub handle_merge_request ($self, $event) {
         };
       }
 
+      if (my $pipeline = $data->{pipeline}) {
+        my $status = ucfirst $pipeline->{status};
+        $status =~ s/_/ /g;
+        push @fields, {
+          title => "Pipeline status",
+          value => $status,
+          short => \1,
+        };
+      }
+
       my $slack = {
         text        => "",
         attachments => [{
