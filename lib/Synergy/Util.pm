@@ -74,7 +74,7 @@ sub bool_from_text ($text) {
   return (undef, "you can use yes/no, y/n, 1/0, true/false, t/f, on/off, or yeahnah/nahyeah");
 }
 
-sub parse_date_for_user ($str, $user) {
+sub parse_date_for_user ($str, $user, $allow_midnight = 0) {
   my $tz = $user ? $user->time_zone : 'America/New_York';
 
   my $format = $tz =~ m{\AAmerica/} ? 'm/d' : 'd/m';
@@ -87,6 +87,8 @@ sub parse_date_for_user ($str, $user) {
   );
 
   my $dt = $parser_for{$tz}->parse_datetime($str);
+
+  return $dt if $allow_midnight;
 
   if ($dt->hour == 0 && $dt->minute == 0 && $dt->second == 0) {
     $dt->set(hour => 9);

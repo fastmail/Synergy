@@ -72,7 +72,7 @@ sub handle_clox ($self, $event) {
   my $time;
   if ($spec) {
     return $event->error_reply(qq{Sorry, I couldn't understand the time "$time".})
-      unless $time = parse_date_for_user($spec, $event->from_user);
+      unless $time = parse_date_for_user($spec, $event->from_user, 1);
   } else {
     $time = $NOW_FACTORY->();
   }
