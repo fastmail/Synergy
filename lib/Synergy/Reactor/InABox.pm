@@ -21,6 +21,7 @@ use Try::Tiny;
 
 sub listener_specs ($self) {
   my $ns = $self->preference_namespace;
+  my $default_version = $self->default_box_version;
 
   return {
     name      => 'box',
@@ -45,7 +46,7 @@ All subcommands can take /version and /tag can be used to target a specific box.
 
 The following preferences exist:
 
-* $ns.version: which version to create by default (default: bullseye)
+* $ns.version: which version to create by default (default: $default_version)
 * $ns.datacentre: which datacentre to create boxes in (if unset, chooses one near you)
 END
       },
@@ -90,6 +91,27 @@ has box_project_id => (
   is        => 'ro',
   isa       => 'Str',
   predicate => 'has_project_id',
+);
+
+has box_datacentres => (
+  is => 'ro',
+  isa => 'ArrayRef',
+  required => 1,
+);
+
+has default_box_version => (
+  is => 'ro',
+  isa => 'Str',
+  default => 'bullseye',
+);
+
+has known_box_versions => (
+  is => 'ro',
+  isa => 'ArrayRef',
+  lazy => 1,
+  default => sub ($self) {
+    return [ $self->default_box_version ];
+  },
 );
 
 my %command_handler = (
@@ -180,7 +202,9 @@ sub _determine_version_and_tag ($self, $event, $switches) {
   # - the version, by request or from prefs or implied
   # - the tag, by request or from the version
   # - if this is the "default" box, which sets the "$username.box" DNS name
-  my $default_version = $self->get_user_preference($event->from_user, 'version');
+  my $default_version = $self->get_user_preference($event->from_user, 'version')
+                     // $self->default_box_version;
+
   my ($version, $tag) = $switches->@{qw(version tag)};
   my $is_default_box = !($version || $tag);
   $version //= $default_version;
@@ -675,9 +699,10 @@ sub _add_box_to_project ($self, $droplet) {
 __PACKAGE__->add_preference(
   name      => 'version',
   validator => sub ($self, $value, @) {
-    my %known = map {; $_ => 1 } qw( buster bullseye );
-
+    # Clearing is fine; we'll pick up the default elsewhere
     return undef unless defined $value;
+
+    my %known = map {; $_ => 1 } $self->known_box_versions->@*;
 
     $value = lc $value;
 
@@ -688,17 +713,20 @@ __PACKAGE__->add_preference(
 
     return $value;
   },
-  default   => 'bullseye',
+  default   => undef,
   description => 'Default Debian version for your fminabox',
 );
 
 __PACKAGE__->add_preference(
   name      => 'datacentre',
   validator => sub ($self, $value, @) {
+    my %known = map {; $_ => 1 } $self->box_datacentres->@*;
+
     $value = lc $value;
 
-    unless ($value =~ /\A[a-z0-9]+\z/) {
-      return (undef, "Hmm, $value doesn't seem like a valid datacentre name.");
+    unless ($known{$value}) {
+      my $datacentres = join q{, }, sort keys %known;
+      return (undef, "unknown datacentre $value; known datacentres are: $datacentres");
     }
 
     return $value;
