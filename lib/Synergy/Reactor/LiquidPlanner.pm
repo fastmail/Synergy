@@ -375,7 +375,7 @@ EOH
       "*search `SEARCH`*: find items in LiquidPlanner matching term",
       "Additional search fields include:",
       "• *done:`{yes,no,both}`*, search for completed items",
-      "• *in:`{inbox,urgent,discuss,recurring,LP-ID}`*, search for scheduled items",
+      "• *in:`{inbox,urgent,discuss,recurring,staging,LP-ID}`*, search for scheduled items",
       "• *onhold:`{yes,no,both}`*, search for items on hold",
       "• *page:`N`*, get the Nth page of 10 results",
       "• *phase:`P`*, only find work in projects in phase P",
@@ -2448,6 +2448,7 @@ sub _compile_search ($self, $conds, $from_user) {
       my $to_set = $value eq 'inbox'              ? $self->inbox_package_id
                  : $value eq 'interrupts'         ? $self->interrupts_package_id
                  : $value eq 'urgent'             ? $self->urgent_package_id
+                 : $value eq 'staging'            ? $self->staging_package_id
                  : $value =~ /\Adiscuss(ion)?\z/n ? $self->discussion_package_id
                  : $value =~ /\A[0-9]+\z/         ? $value
                  : undef;
