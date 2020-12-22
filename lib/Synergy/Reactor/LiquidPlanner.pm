@@ -736,11 +736,13 @@ sub provide_lp_link ($self, $event) {
             $slack .= "*Escalation Point*: $item->{custom_field_values}{Escalation}\n";
           }
 
-          if ($item->{assignments}) {
+          my @assignments = grep {; ! $_->{is_done} }
+                            @{ $item->{assignments} // [] };
+
+          if (@assignments) {
             my @assignees = sort uniq
                             map  {; $by_lp{ $_->{person_id} } // '?' }
-                            grep {; ! $_->{is_done} }
-                            $item->{assignments}->@*;
+                            @assignments;
 
             if (@assignees && $item->{type} eq 'Project') {
               $slack .= "*Project Lead*: " . shift(@assignees) . "\n";
@@ -780,7 +782,11 @@ sub provide_lp_link ($self, $event) {
           }
 
           if (my $str = fmt_date_field('updated_at')) {
-            $slack .= "*Last updated*: $str\n";
+            my $updated = DateTime::Format::ISO8601->parse_datetime($item->{updated_at});
+
+            $slack .= "*Last updated*: %s (%s)\n",
+              $str,
+              concise(ago(time - $updated->epoch, 1));
           }
 
           if (my $str = fmt_date_field('done_on')) {
