@@ -288,10 +288,10 @@ has [ qw(
   inbox_package_id
   interrupts_package_id
   urgent_package_id
-  current_work_package_id
   project_portfolio_id
   recurring_package_id
   discussion_package_id
+  staging_package_id
 ) ] => (
   is  => 'ro',
   isa => 'Int',
