@@ -38,6 +38,7 @@ my $synergy = Synergy::Hub->synergize(
         interrupts_package_id => 6,
         discussion_package_id => 7,
         staging_package_id => 8,
+        archive_package_id => 9,
 
         primary_nag_channel_name => "test-channel",
       },

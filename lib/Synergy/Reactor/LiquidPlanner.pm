@@ -147,11 +147,26 @@ my %Showable_Attribute = (
   #   doneness
 );
 
-sub _is_urgent ($self, $item) {
-  my $urgent = $self->urgent_package_id;
-  scalar grep {; $_ == $urgent }
-    ($item->{parent_ids}->@*, $item->{package_ids}->@*)
+sub _container_role ($self, $item) {
+  my %pkg_id = map {; my $method = "$_\_package_id"; ($_ => $self->$method) } qw(
+    inbox
+    urgent
+    staging
+    archive
+    discussion
+    recurring
+  );
+
+  for my $parent (reverse ($item->{parent_ids}->@*, $item->{package_ids}->@*)) {
+    for my $pkg (keys %pkg_id) {
+      return $pkg if $parent == $pkg_id{ $pkg };
+    }
+  }
+
+  return 'none';
 }
+
+sub _is_urgent ($self, $item) { scalar( $self->_container_role($item) eq 'urgent' ) }
 
 sub _last_comment_ago ($self, $item) {
   return unless $item->{comments} && $item->{comments}->@*;
@@ -292,6 +307,7 @@ has [ qw(
   recurring_package_id
   discussion_package_id
   staging_package_id
+  archive_package_id
 ) ] => (
   is  => 'ro',
   isa => 'Int',
@@ -704,7 +720,7 @@ sub provide_lp_link ($self, $event) {
           $self->_slack_item_link_with_name($item, { emoji => 0 });
 
         if ($as_cmd) {
-          my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_->username) : () }
+          my %by_lp = map {; $_->lp_id ? ($_->lp_id, $_) : () }
                       $self->hub->user_directory->users;
 
           # The user asked for this directly, so let's give them more detail.
@@ -741,7 +757,8 @@ sub provide_lp_link ($self, $event) {
 
           if (@assignments) {
             my @assignees = sort uniq
-                            map  {; $by_lp{ $_->{person_id} } // '?' }
+                            map  {; $_ ? $_->username : '?' }
+                            map  {; $by_lp{ $_->{person_id} } }
                             @assignments;
 
             if (@assignees && $item->{type} eq 'Project') {
@@ -777,8 +794,37 @@ sub provide_lp_link ($self, $event) {
           if (my $str = fmt_date_field('created_at')) {
             my $creator_id = $item->{created_by};
             $slack .= sprintf "*Created*: by %s at %s\n",
-              $by_lp{ $creator_id } // 'somebody',
+              ($by_lp{ $creator_id } ? $by_lp{ $creator_id }->username : 'somebody'),
               $str;
+          }
+
+          {
+            my @users = grep {; $_ }
+                        map  {; $by_lp{ $_->{person_id} } }
+                        @assignments;
+
+            my (@virtuals) = sort map {; $_->username } grep {;   $_->is_virtual } @users;
+            my (@humans)   = sort map {; $_->username } grep {; ! $_->is_virtual } @users;
+
+            my $role = $self->_container_role($item);
+
+            my sub cj (@list) { join q{, }, @list }
+
+            my $current_status
+              = $item->{is_done}              ? 'Closed'
+              : $role eq 'inbox' && @humans   ? 'In inbox, waiting on humans: ' . cj(@humans)
+              : $role eq 'inbox'              ? 'In inbox, waiting on teams: ' . cj(@virtuals)
+              : $role eq 'staging'            ? 'Waiting for scheduling'
+              : $role eq 'urgent' && @humans  ? 'Urgent!'
+              : $role eq 'urgent'             ? 'UH-OH! Urgent, but no humans, only ' . cj(@virtuals)
+              : $role eq 'archive'            ? 'Archived for action someday, maybe'
+              : $role eq 'recurring'          ? '(ongoing recurring task)'
+              : $role eq 'discussion'         ? 'Pending discussion'
+              : $item->{on_hold}              ? 'On hold (for some reason?)'
+              : @humans                       ? 'Scheduled'
+              :                                 'UH-OH! Scheduled, but no humans, only ' . cj(@virtuals);
+
+            $slack .= sprintf "*Status*: %s\n", $current_status;
           }
 
           if (my $str = fmt_date_field('updated_at')) {
@@ -803,14 +849,11 @@ sub provide_lp_link ($self, $event) {
             my ($latest) = sort {; $b->{created_at} cmp $a->{created_at} }
                            $item->{comments}->@*;
 
-            my %by_lp = map  {; $_->lp_id ? ($_->lp_id, $_->username) : () }
-                        $self->hub->user_directory->users;
-
             if ($latest) {
               my $created = parse_lp_datetime($latest->{created_at});
 
               $slack .= sprintf "\n*Last comment* by %s, %s:\n>>> %s\n",
-                $by_lp{ $latest->{person_id} } // 'somebody',
+                ($by_lp{ $latest->{person_id} } ? $by_lp{ $latest->{person_id} }->username : 'somebody'),
                 concise(ago(time - $created->epoch, 1)),
                 $latest->{plain_text};
             }
