@@ -364,7 +364,10 @@ __PACKAGE__->add_preference(
     my $err = qq{"$value" doesn't look like a valid time zone name};
 
     eval { DateTime->now(time_zone => $value) };
-    return (undef, $err) if $@ =~ /invalid name/;
+    if (my $ex = @_) {
+      $Logger->log(['Parsing time zone name "%s" threw an exception: %s', $value, $ex]);
+      return (undef, $err);
+    }
 
     return $value;
   },
