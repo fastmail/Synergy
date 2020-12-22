@@ -6,15 +6,88 @@ package Synergy::Reactor::VictorOps;
 use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor::EasyListening',
-     'Synergy::Role::HasPreferences';
+     'Synergy::Role::HasPreferences',
+     'Synergy::Role::HTTPEndpoint';
 
 use experimental qw(signatures);
 use namespace::clean;
+
+use Crypt::Mac::HMAC qw( hmac_b64 );
 use JSON::MaybeXS;
 use List::Util qw(first);
 use DateTimeX::Format::Ago;
 use Synergy::Logger '$Logger';
 use Date::Parse 2.32;   # century time bugfix
+
+has webhook_auth_code => (
+  is  => 'ro',
+  isa => 'Str',
+  predicate => 'has_webhook_auth_code',
+);
+
+has webhook_url => (
+  is  => 'ro',
+  isa => 'Str',
+  predicate => 'has_webhook_url',
+);
+
+has '+http_path' => (
+  default => '/victorops',
+);
+
+sub http_app ($self, $env) {
+  my $req = Plack::Request->new($env);
+
+  unless ($self->has_webhook_auth_code && $self->has_webhook_url) {
+    # ¯\_(ツ)_/¯
+    return [
+      400,
+      [ 'Content-Type', 'application/json' ],
+      [ "{}\n" ],
+    ];
+  }
+
+  # Create a string with the URL of the webhook, exactly how it appears in
+  # VictorOps; this includes trailing slashes etc…
+  my $to_hash   = $self->webhook_url;
+  my $auth_code = $self->webhook_auth_code;
+
+  # Sort the request’s POST variables alphabetically by key.
+  #
+  # Append each POST variable’s key and value to the URL string, with no
+  # delimiter.
+  my $param = $req->body_parameters;
+  for my $key (sort keys $param->%*) {
+    $to_hash .= "$key$param->{$key}";
+  }
+
+  # Create a binary hash of the resulting string with HMAC-SHA1, using the
+  # webhook’s authentication key
+  #
+  # Base64 encode the binary signature
+  my $hash = hmac_b64('SHA1', $auth_code, $to_hash);
+
+  # Compare the output with the key X-VictorOps-Signature in the request – if
+  # it matches, the request originated from VictorOps.
+  unless ($hash eq $req->header('X-VictorOps-Signature')) {
+    return [
+      401,
+      [ 'Content-Type', 'application/json' ],
+      [ qq[{"error","authentication error"}\n] ],
+    ];
+  }
+
+  $Logger->log([
+    "successfully authenticated VictorOps incident posted: %s",
+    { map {; $_ => $param->{$_} } keys %$param },
+  ]);
+
+  return [
+    204,
+    [],
+    [],
+  ];
+}
 
 has alert_endpoint_uri => (
   is => 'ro',
