@@ -830,7 +830,7 @@ sub provide_lp_link ($self, $event) {
           if (my $str = fmt_date_field('updated_at')) {
             my $updated = DateTime::Format::ISO8601->parse_datetime($item->{updated_at});
 
-            $slack .= "*Last updated*: %s (%s)\n",
+            $slack .= sprintf "*Last updated*: %s (%s)\n",
               $str,
               concise(ago(time - $updated->epoch, 1));
           }
