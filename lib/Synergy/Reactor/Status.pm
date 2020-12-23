@@ -197,8 +197,10 @@ sub _business_hours_status ($self, $event, $user) {
       $user->their;
   }
 
-  return sprintf "%s off today.  Otherwise, it would be inside %s normal business hours.",
-    ucfirst $user->theyre, $user->their;
+  unless ($shift) {
+    return sprintf "%s off today.  Otherwise, it would be inside %s normal business hours.",
+      ucfirst $user->theyre, $user->their;
+  }
 
   return sprintf "It's currently %s normal business hours.",
     $user->their;
