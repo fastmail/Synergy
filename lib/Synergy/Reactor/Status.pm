@@ -176,16 +176,26 @@ sub _business_hours_status ($self, $event, $user) {
   my $today_hrs = $hours->{$dow};
 
   unless ($today_hrs) {
-    return sprintf "It's outside of %s normal business hours.",
-      $user->their;
+    return sprintf "%s doesn't work on %ss.",
+      $user->they, $now->day_name;
   }
 
-  my $time = $now->format_cldr('HH:mm');
+  my $shift = $user->shift_for_day($self->hub, $now);
+
+  my $time  = $now->format_cldr('HH:mm');
 
   if ($time lt $today_hrs->{start} or $time gt $today_hrs->{end}) {
+    if (!shift) {
+      return sprintf "It's outside of %s normal business hours, *and* %s off today.",
+        $user->their, $user->theyre;
+    }
+
     return sprintf "It's outside of %s normal business hours.",
       $user->their;
   }
+
+  return sprintf "%s off today.  Otherwise, it would be inside %s normal business hours.",
+    ucfirst $user->theyre, $user->their;
 
   return sprintf "It's currently %s normal business hours.",
     $user->their;
