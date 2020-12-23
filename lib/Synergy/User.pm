@@ -66,6 +66,7 @@ sub they      { $_[0]->_pronoun->[0] }
 sub them      { $_[0]->_pronoun->[1] }
 sub their     { $_[0]->_pronoun->[2] }
 sub theirs    { $_[0]->_pronoun->[3] }
+sub theyre    { my $p = $_[0]->_pronoun->[0]; $p eq 'they' ? "they're" : "$p\'s" }
 sub themself  { $_[0]->_pronoun->[4] }
 
 has wtf_replies => (
