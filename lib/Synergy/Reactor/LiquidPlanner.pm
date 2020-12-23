@@ -1322,8 +1322,10 @@ sub nag ($self, $timer, @) {
 
     next USER unless $self->get_user_preference($user, 'should-nag');
 
-    my $showtime = $sy_timer->is_showtime;
-    my $user_dnd = $self->_user_doing_dnd($user);
+    my $showtime  = $sy_timer->is_showtime;
+    my $user_dnd  = $self->_user_doing_dnd($user);
+    my $off_today = ! $user->shift_for_day($self->hub, DateTime->now);
+
     my $til = $sy_timer->chilltill;
     $Logger->log([
       "nag status for %s: %s",
@@ -1331,7 +1333,7 @@ sub nag ($self, $timer, @) {
       { showtime => $showtime, dnd => $user_dnd, chilltill => $til }
     ]);
 
-    if ($showtime && ! $user_dnd) {
+    if ($showtime && ! $user_dnd && ! $off_today) {
       if ($lp_timer) {
         $Logger->log("$username: We're good: there's a timer.");
 
