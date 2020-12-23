@@ -143,6 +143,9 @@ sub _doing_status ($self, $event, $user) {
     (sort {; $a->{until} <=> $b->{until} } grep {; $_->{until} } @doings),
   );
 
+  # If you've let it sit that long, it's probably bunk now. -- rjbs, 2020-12-23
+  @doings = grep {; time - $_->{since} < 5 * 86_400 } @doings;
+
   my $from_user = $event->from_user;
   my $reply = q{};
 
