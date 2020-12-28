@@ -705,7 +705,7 @@ sub provide_lp_link ($self, $event) {
         next;
       } elsif ($item->{type} =~ /\A Task | Package | Project | Folder \z/x) {
         my $icon = $item->{custom_field_values}{Emoji}
-                // ($item->{type} eq 'Task'    ? ($as_cmd ? "🌀" : "")
+                // ($item->{type} eq 'Task'    ? ($as_cmd ? $self->_icon_for_task($item) : "")
                   : $item->{type} eq 'Package' ? "📦"
                   : $item->{type} eq 'Project' ? "📁"
                   : $item->{type} eq 'Folder'  ? "🗂"
@@ -2253,6 +2253,17 @@ sub upcoming_tasks_for_user ($self, $user, $count) {
   return \@tasks;
 }
 
+sub _icon_for_task ($self, $task) {
+  return "🔥" if $self->_is_urgent($task);
+
+  my $type = $task->{custom_field_values}{'Task Type'} // '';
+  return "🐛" if $type eq 'Bug Report';
+  return "💭" if $type eq 'Feature Request';
+  return "☝️"  if $type eq 'Todo';
+
+  return "🌀";
+}
+
 sub _format_item_list ($self, $itemlist, $display) {
   my $reply = q{};
   my $slack = q{};
@@ -2265,8 +2276,7 @@ sub _format_item_list ($self, $itemlist, $display) {
     my $uri = $self->item_uri($item->{id});
     $reply .= "$item->{name} ($uri)\n";
 
-    my $icon = $item->{type} eq 'Task'    ? ($self->_is_urgent($item) ? "🔥"
-                                                                      : "🌀")
+    my $icon = $item->{type} eq 'Task'    ? $self->_icon_for_task($item)
              : $item->{type} eq 'Package' ? "📦"
              : $item->{type} eq 'Project' ? "📁"
              : $item->{type} eq 'Folder'  ? "🗂"
@@ -4894,7 +4904,7 @@ sub _slack_pkg_summary ($self, $summary, $lp_member_id) {
 
   for my $c (@tasks) {
     $text .= sprintf "%s %s\n",
-      "🌀",
+      $self->_icon_for_task($c),
       $self->_slack_item_link_with_name($c);
   }
 
