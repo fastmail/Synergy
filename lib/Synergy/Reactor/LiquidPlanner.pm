@@ -2500,6 +2500,7 @@ sub _compile_search ($self, $conds, $from_user) {
                  : $value eq 'interrupts'         ? $self->interrupts_package_id
                  : $value eq 'urgent'             ? $self->urgent_package_id
                  : $value eq 'staging'            ? $self->staging_package_id
+                 : $value eq 'recurring'          ? $self->recurring_package_id
                  : $value =~ /\Adiscuss(ion)?\z/n ? $self->discussion_package_id
                  : $value =~ /\A[0-9]+\z/         ? $value
                  : undef;
