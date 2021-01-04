@@ -225,7 +225,7 @@ sub send_message ($self, $channel, $text, $alts = {}) {
 
       my $f = $self->loop->new_future;
       $http_future->on_done(sub ($http_res) {
-        my $res = decode_json($http_res->decoded_content);
+        my $res = decode_json($http_res->decoded_content(charset => undef));
         $f->done({
           type => 'slack',
           transport_data => $res
@@ -267,7 +267,7 @@ sub _send_rich_text ($self, $channel, $rich) {
 
   my $f = $self->loop->new_future;
   $http_future->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content);
+    my $res = decode_json($http_res->decoded_content(charset => undef));
     $f->done({
       type => 'slack',
       transport_data => $res
@@ -295,7 +295,7 @@ sub send_file ($self, $channel, $filename, $content) {
 
   my $f = $self->loop->new_future;
   $http_future->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content);
+    my $res = decode_json($http_res->decoded_content(charset => undef));
     $f->done({
       type => 'slack',
       transport_data => $res
@@ -435,7 +435,7 @@ sub dm_channel_for_address ($self, $slack_id) {
 
   return unless $res->is_success;
 
-  my $json = decode_json($res->decoded_content);
+  my $json = decode_json($res->decoded_content(charset => undef));
 
   $channel_id = $json->{ok}                       ? $json->{channel}->{id}
               : $json->{error} eq 'cannot_dm_bot' ? undef
@@ -481,7 +481,7 @@ sub load_users ($self) {
   $self->api_call('users.list', {
     presence => 0,
   })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content);
+    my $res = decode_json($http_res->decoded_content(charset => undef));
     my %users = map { $_->{id} => $_ } $res->{members}->@*;
 
     # See comment in _register_slack_rtm: here, we coerce our username to be
@@ -503,7 +503,7 @@ sub load_channels ($self) {
     types => 'public_channel',
     form_encoded => 1,
   })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content);
+    my $res = decode_json($http_res->decoded_content(charset => undef));
     $self->_set_channels({
       map { $_->{id}, $_ } $res->{channels}->@*
     });
@@ -519,7 +519,7 @@ sub load_group_conversations ($self) {
     types => 'mpim,private_channel',
     form_encoded => 1,
   })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content);
+    my $res = decode_json($http_res->decoded_content(charset => undef));
 
     $self->_set_group_conversations({
       map { $_->{id},  $_ } $res->{channels}->@*
@@ -553,7 +553,7 @@ sub load_dm_channels ($self) {
     types => 'im',
     form_encoded => 1,
   })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content);
+    my $res = decode_json($http_res->decoded_content(charset => undef));
 
     $self->_set_dm_channels({
       map { $_->{user}, $_->{id} } $res->{ims}->@*
