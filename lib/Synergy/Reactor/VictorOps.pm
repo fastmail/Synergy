@@ -13,6 +13,7 @@ use experimental qw(signatures);
 use namespace::clean;
 
 use Crypt::Mac::HMAC qw( hmac_b64 );
+use IO::Async::Timer::Periodic;
 use JSON::MaybeXS;
 use List::Util qw(first);
 use DateTimeX::Format::Ago;

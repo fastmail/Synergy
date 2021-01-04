@@ -13,6 +13,7 @@ use DateTime::Format::ISO8601;
 use DateTimeX::Format::Ago;
 use Digest::MD5 qw(md5_hex);
 use Future 0.36;  # for ->retain
+use IO::Async::Timer::Periodic;
 use JSON::MaybeXS;
 use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(all uniq);

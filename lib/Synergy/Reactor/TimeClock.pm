@@ -13,6 +13,7 @@ use namespace::clean;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text);
 
+use IO::Async::Timer::Periodic;
 use List::Util qw(max);
 
 use utf8;

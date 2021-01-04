@@ -11,6 +11,7 @@ with 'Synergy::Role::Reactor::EasyListening';
 use experimental qw(signatures);
 use namespace::clean;
 
+use IO::Async::Timer::Periodic;
 use JMAP::Tester;
 use JSON::MaybeXS;
 use Lingua::EN::Inflect qw(NUMWORDS PL_N);
