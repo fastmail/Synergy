@@ -971,7 +971,6 @@ has primary_nag_channel_name => (
 has aggressive_nag_channel_name => (
   is => 'ro',
   isa => 'Str',
-  default => 'twilio',
 );
 
 has last_utterances => (
@@ -1228,6 +1227,14 @@ sub start ($self) {
     interval => 300,
     on_tick  => sub ($timer, @arg) { $self->nag($timer); },
   );
+
+  Carp::confess("requested aggressive nag channel does not exist")
+    if $self->aggressive_nag_channel_name
+    && ! $self->hub->channel_named($self->aggressive_nag_channel_name);
+
+  Carp::confess("requested primary nag channel does not exist")
+    if $self->primary_nag_channel_name
+    && ! $self->hub->channel_named($self->primary_nag_channel_name);
 
   $self->hub->loop->add($nag_timer);
 
