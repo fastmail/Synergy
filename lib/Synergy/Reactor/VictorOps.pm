@@ -164,7 +164,10 @@ has oncall_channel_name => (
 has oncall_channel => (
   is => 'ro',
   lazy => 1,
-  default => sub ($self) { $self->hub->channel_named($self->oncall_channel_name) }
+  default => sub ($self) {
+    return unless my $channel_name = $self->oncall_channel_name;
+    return $self->hub->channel_named($channel_name);
+  }
 );
 
 has oncall_group_address => (
@@ -209,26 +212,26 @@ around '_set_oncall_list' => sub ($orig, $self, @rest) {
 };
 
 sub start ($self) {
-  return unless $self->oncall_channel_name;
-
-  my $check_oncall_timer = IO::Async::Timer::Periodic->new(
-    first_interval => 30,   # don't start immediately
-    interval       => 150,
-    on_tick        => sub { $self->_check_at_oncall },
-  );
-
-  $check_oncall_timer->start;
-  $self->hub->loop->add($check_oncall_timer);
-
-  # No maint warning timer unless we can warn oncall
-  if ($self->oncall_channel && $self->oncall_group_address && $self->maint_warning_address) {
-    my $maint_warning_timer = IO::Async::Timer::Periodic->new(
-      first_interval => 45,
-      interval => $self->maint_timer_interval,
-      on_tick  => sub {  $self->_check_long_maint },
+  if ($self->oncall_channel) {
+    my $check_oncall_timer = IO::Async::Timer::Periodic->new(
+      first_interval => 30,   # don't start immediately
+      interval       => 150,
+      on_tick        => sub { $self->_check_at_oncall },
     );
-    $maint_warning_timer->start;
-    $self->hub->loop->add($maint_warning_timer);
+
+    $check_oncall_timer->start;
+    $self->hub->loop->add($check_oncall_timer);
+
+    # No maint warning timer unless we can warn oncall
+    if ($self->oncall_group_address && $self->maint_warning_address) {
+      my $maint_warning_timer = IO::Async::Timer::Periodic->new(
+        first_interval => 45,
+        interval => $self->maint_timer_interval,
+        on_tick  => sub {  $self->_check_long_maint },
+      );
+      $maint_warning_timer->start;
+      $self->hub->loop->add($maint_warning_timer);
+    }
   }
 }
 
@@ -774,10 +777,8 @@ sub _ack_all ($self, $username) {
 
 
 sub _check_at_oncall ($self) {
-  return unless $self->oncall_channel_name;
-
-  my $channel = $self->hub->channel_named($self->oncall_channel_name);
-  return unless $channel->isa('Synergy::Channel::Slack');
+  my $channel = $self->oncall_channel;
+  return unless $channel && $channel->isa('Synergy::Channel::Slack');
 
   $Logger->log("checking VO for oncall updates");
 
