@@ -158,7 +158,9 @@ sub _container_role ($self, $item) {
     recurring
   );
 
-  for my $parent (reverse ($item->{parent_ids}->@*, $item->{package_ids}->@*)) {
+  for my $parent (
+    reverse ( ($item->{parent_ids} // [])->@*, ($item->{package_ids} // [])->@*)
+  ) {
     for my $pkg (keys %pkg_id) {
       return $pkg if $parent == $pkg_id{ $pkg };
     }
