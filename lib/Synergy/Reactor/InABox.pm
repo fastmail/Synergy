@@ -607,7 +607,7 @@ __PACKAGE__->add_preference(
 
     return $value;
   },
-  default   => 'jessie',
+  default   => 'buster',
   description => 'Default Debian version for your fminabox',
 );
 
