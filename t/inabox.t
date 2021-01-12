@@ -81,10 +81,10 @@ sub single_message_text {
 # minimal data for _format_droplet
 my $alice_droplet = {
   id     => 123,
-  name   => 'alice-jessie.box.fm.local',
+  name   => 'alice-buster.box.fm.local',
   status => 'active',
   image  => {
-    name => 'fminabox-jessie-20200202'
+    name => 'fminabox-buster-20200202'
   },
   region => {
     name => 'Bridgewater',
@@ -105,7 +105,7 @@ subtest 'status' => sub {
   send_message('synergy: box status');
   like(
     single_message_text(),
-    qr{Your boxes:\s+name: \Qalice-jessie.box.fm.local\E},
+    qr{Your boxes:\s+name: \Qalice-buster.box.fm.local\E},
     'alice has a box and synergy says so'
   );
 
@@ -207,7 +207,7 @@ my %CREATE_RESPONSES = (
   snapshot_fetch => gen_response(200, {
     snapshots => [{
       id => 42,
-      name => 'fminabox-jessie-20200202',
+      name => 'fminabox-buster-20200202',
     }]
   }),
 
@@ -280,7 +280,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{Box created: name: \Qalice-jessie.box.fm.local\E}),
+        re(qr{Box created: name: \Qalice-buster.box.fm.local\E}),
       ],
       'normal create with defaults seems fine'
     );
@@ -335,7 +335,7 @@ subtest 'create' => sub {
 
   subtest 'good create with non-default version' => sub {
     my $foo_droplet = dclone($alice_droplet);
-    $foo_droplet->{name} =~ s/jessie/foo/;
+    $foo_droplet->{name} =~ s/buster/foo/;
 
     my @texts = $do_create->(
       message => 'box create /version foo',
