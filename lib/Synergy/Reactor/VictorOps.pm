@@ -262,7 +262,8 @@ alerts because everything is on fire."
 • *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
 
 When you leave maintenance mode, any alerts that happened during it, or even
-shortly before it, will be marked resolved.
+shortly before it, will be marked resolved.  If you don't want that, say *maint
+end /noresolve*
 EOH
       ],
     },
@@ -705,6 +706,10 @@ sub handle_maint_end ($self, $event) {
       return Future->done($timestamp, $instance_id);
     })
     ->then(sub ($timestamp, $instance_id) {
+      if (grep {; $_ =~ qr{\A/nor(?:esolve)?\z/} } @args) {
+        return Future->done($instance_id);
+      }
+
       # We resolve before demainting because there's a race: if you exit
       # maint, VO immediately sends phone alerts for everything that's active,
       # even if they're going to be resolved in a quarter-second. That's
