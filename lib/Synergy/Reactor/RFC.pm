@@ -83,7 +83,10 @@ sub handle_rfc_search ($self, $event) {
     push @results, $data;
   }
 
-  return $event->reply("No RFCs found!") unless @results;
+  unless (@results) {
+    $event->mark_handled;
+    return $event->reply("No RFCs found!");
+  }
 
   my $text = join qq{\n}, map {;
     sprintf 'RFC %s - %s, by %s',
