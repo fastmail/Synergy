@@ -48,6 +48,19 @@ sub _http_get ($self, $param) {
   );
 }
 
+sub _http_post ($self, $method, $param) {
+  my $uri = URI->new($self->api_uri);
+  $uri->query_form_hash({ method => $method });
+
+  my $res = $self->hub->http_post(
+    $uri,
+    Content => [ %$param ],
+    Content_Type => 'application/x-www-form-urlencoded',
+    Authorization => 'Basic ' . $self->auth_token,
+    'User-Agent'  => __PACKAGE__,
+  );
+}
+
 sub ticket_report ($self, $who, $arg = {}) {
   return unless my $user_id = $self->get_user_preference($who, 'user-id');
 

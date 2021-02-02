@@ -2107,6 +2107,7 @@ sub task_plan_from_spec ($self, $event, $spec) {
   }
 
   if (%ptn and $self->has_ptn_expansion_format) {
+    $plan{helpspot_tickets} = [ keys %ptn ];
     $plan{description} .= "\n\n" . sprintf $self->ptn_expansion_format, $_
       for keys %ptn;
   }
@@ -2243,6 +2244,15 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
         $task->{item_email};
 
       $event->reply($plain, { slack => $slack });
+
+      if ($plan->{helpspot_tickets} && $plan->{helpspot_tickets}->@*) {
+        if (my $helpspot = $self->hub->reactor_named('helpspot')) {
+          $helpspot->_http_post('private.request.update', {
+            tNote => "LiquidPlanner task created at $item_uri",
+            fNoteType => 0,
+          })->retain;
+        }
+      }
     });
   })->else(sub (@wtf) { $Logger->log("error with task creation: @wtf") })->retain;
 
