@@ -2247,10 +2247,22 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
 
       if ($plan->{helpspot_tickets} && $plan->{helpspot_tickets}->@*) {
         if (my $helpspot = $self->hub->reactor_named('helpspot')) {
-          $helpspot->_http_post('private.request.update', {
-            tNote => "LiquidPlanner task created at $item_uri",
-            fNoteType => 0,
-          })->retain;
+          for my $ptn ($plan->{helpspot_tickets}->@*) {
+            $helpspot->_http_post('private.request.update', {
+              xRequest => $ptn,
+              tNote => "LiquidPlanner task created at $item_uri",
+              fNoteType => 0,
+            })->then(sub ($res) {
+              unless ($res->is_success) {
+                $event->reply("I couldn't add a comment to PTN $ptn for the task, sorry.");
+              }
+              return Future->done;
+            })->else(sub {
+              $event->reply("I couldn't add a comment to PTN $ptn for the task, sorry.");
+              $Logger->log([ "something went wrong posting to HelpSpot", $_[0]->as_string ]);
+              return Future->done;
+            })->retain;
+          }
         }
       }
     });
