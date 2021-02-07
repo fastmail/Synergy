@@ -206,6 +206,7 @@ sub handle_dispatch {
   my ($self, $data, $name) = @_;
 
   if ($name eq 'READY') {
+    use Data::Dumper; warn Dumper($data);
     $self->_set_own_id($data->{user}{id});
     $self->_set_own_name($data->{user}{username});
     $self->_set_guild_id($data->{guilds}->[0]->{id}); # XXX support multiple guilds someday?
@@ -413,6 +414,7 @@ sub api_put ($self, $endpoint, $arg = {}) {
     $self->hub->http_client->PUT(
       $u,
       q{},
+      content_type => 'text/plain',
       headers => {
         'Authorization' => 'Bot '.$self->bot_token,
       },
@@ -449,6 +451,7 @@ sub load_users ($self) {
     limit => 1000,
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content);
+    use Data::Dumper; warn Dumper($http_res->decoded_content);
     $self->_set_users({
       map { $_->{user}{id} => $_ } @$res,
     });
