@@ -84,7 +84,7 @@ sub synergy_event_from_discord_event ($self, $discord_event) {
 
   my $synergy_event = Synergy::Event->new({
     type                 => 'message',
-    text                 => $text,  
+    text                 => $text,
     was_targeted         => $was_targeted,
     is_public            => $is_public,
     from_channel         => $self,

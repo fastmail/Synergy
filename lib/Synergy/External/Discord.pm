@@ -373,7 +373,7 @@ sub api_post ($self, $endpoint, $arg = {}) {
   my $url = "https://discordapp.com/api$endpoint";
   return Future->wrap(
     $self->hub->http_client->POST(
-      URI->new($url), 
+      URI->new($url),
       $arg,
       headers => {
         'Authorization' => 'Bot '.$self->bot_token,
