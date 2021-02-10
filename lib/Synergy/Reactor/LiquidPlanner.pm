@@ -2243,7 +2243,7 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
         $reply_base,
         $task->{item_email};
 
-      $event->reply($plain, { slack => $slack });
+      my $f = $event->reply($plain, { slack => $slack });
 
       if ($plan->{helpspot_tickets} && $plan->{helpspot_tickets}->@*) {
         if (my $helpspot = $self->hub->reactor_named('helpspot')) {
@@ -2265,6 +2265,8 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
           }
         }
       }
+
+      return $f;
     });
   })->else(sub (@wtf) { $Logger->log("error with task creation: @wtf") })->retain;
 
