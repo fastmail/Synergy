@@ -4,6 +4,7 @@ requires 'Acme::Zalgo';
 requires 'Archive::Zip';
 requires 'Carp';
 requires 'Cpanel::JSON::XS';
+requires 'Crypt::Mac::HMAC';
 requires 'DBD::SQLite';
 requires 'Data::Dumper::Concise';
 requires 'Date::Parse', '2.32';
