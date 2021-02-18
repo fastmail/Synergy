@@ -1539,6 +1539,13 @@ sub _extract_flags_from_task_text ($self, $text) {
   ) {
     my $hunk = $1;
     if ($hunk =~ s/^##?//) {
+      # Sometimes people say #urgent instead of (!) or the like.  Just do what
+      # they mean. -- rjbs, 2021-02-18
+      if (lc $hunk eq 'urgent') {
+        $flag{package}{ $self->urgent_package_id } ++;
+        next;
+      }
+
       my $plan = $self->_tag_to_plan($hunk);
 
       if ($plan->{project}) {

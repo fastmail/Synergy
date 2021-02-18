@@ -179,6 +179,17 @@ plan_ok(
 );
 
 plan_ok(
+  "Buy raisins ⏳ #GORP #urgent",
+  {
+    name        => "Buy raisins",
+    package_id  => 2,
+    project_id  => 1,
+    start       => 1,
+  },
+  "text, project, emoji, stuff"
+);
+
+plan_ok(
   "Buy raisins ⏳ #GORP (!!!)\n\nIf you're in Australia, buy sultanas.",
   {
     name        => "Buy raisins",
