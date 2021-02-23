@@ -37,6 +37,41 @@ has _fortunes => (
   },
 );
 
+# source-ident => [ count, most-recent-epoch ]
+has _scolding_counts => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits => ['Hash'],
+  lazy => 1,
+  default => sub { {} },
+  handles => {
+    remove_scolding    => 'delete',
+    recent_scoldings   => 'keys',
+    scolding_data_for  => 'get',
+    note_scolding_data => 'set',
+  },
+);
+
+# If it's been more than 5 minutes since the last time you asked for a fortune
+# in this channel, you can ask again.
+has scold_reaper => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) {
+    return IO::Async::Timer::Periodic->new(
+      interval => 30,
+      on_tick  => sub {
+        my $then = time - (60 * 5);
+
+        for my $key ($self->recent_scoldings) {
+          my ($count, $ts) = $self->scolding_data_for($key)->@*;
+          $self->remove_scolding($key) if $ts lt $then;
+        }
+      },
+    );
+  }
+);
+
 sub listener_specs {
   return (
     {
@@ -68,11 +103,41 @@ END
   );
 }
 
+sub start ($self) {
+  $self->hub->loop->add($self->scold_reaper->start);
+}
+
 sub handle_fortune ($self, $event) {
   $event->mark_handled;
 
   if ($self->fortune_count == 0) {
     return $event->reply("I don't have any fortunes yet!");
+  }
+
+  # no spamming public channels with fortunes, yo.
+  if ($event->is_public) {
+    my $src = $event->source_identifier;
+
+    my $data = $self->scolding_data_for($src) // [];
+    my $count = $data->[0] // 0;
+
+    $self->note_scolding_data($src, [ $count + 1, time]);
+
+    if ($count >= 3) {
+      $event->ephemeral_reply("No fishing for your favorite fortunes in public!");
+
+      $event->reply(
+        "No fishing for your favorite fortunes in public!",
+        {
+          slack_reaction => {
+            event => $event,
+            reaction => 'no_entry_sign',
+          }
+        },
+      );
+
+      return;
+    }
   }
 
   my $i = int(rand($self->fortune_count));
