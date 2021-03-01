@@ -2119,8 +2119,11 @@ sub task_plan_from_spec ($self, $event, $spec) {
       for keys %ptn;
   }
 
-  $error{name} = "That task name is just too long!  Consider putting more of it in the long description.  You can do that by separating the name and long description with `---` (and spaces around that)."
-    if length $plan{name} > 200;
+  if (length $plan{name} > 200) {
+    my $remnant = substr $plan{name}, 180, 20;
+
+    $error{name} = qq{That task name is just too long!  Consider putting more of it in the long description.  You can do that by separating the name and long description with `---` (and spaces around that).  It hit the limit at the end of "…$remnant…".};
+  }
 
   return (undef, \%error) if %error;
   return (\%plan, undef);
