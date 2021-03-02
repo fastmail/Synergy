@@ -718,17 +718,15 @@ sub handle_merge_request ($self, $event) {
         }
       }
 
-      if ($data->{upvotes} || $data->{downvotes} || $is_approved) {
-        my $approval_str = $is_approved ? "Approved" : "Not yet approved";
-        push @fields, {
-          title => "Review status",
-          value => sprintf('%s (%s %s, %s %s)',
-            $approval_str,
-            $data->{upvotes}, PL_N('upvote', $data->{upvotes}),
-            $data->{downvotes}, PL_N('downvote', $data->{downvotes})),
-          short => \1
-        };
-      }
+      my $approval_str = $is_approved ? "Approved" : "Not yet approved";
+      push @fields, {
+        title => "Review status",
+        value => sprintf('%s (%s %s, %s %s)',
+          $approval_str,
+          $data->{upvotes}, PL_N('upvote', $data->{upvotes}),
+          $data->{downvotes}, PL_N('downvote', $data->{downvotes})),
+        short => \1
+      };
 
       if (my $pipeline = $data->{pipeline}) {
         my $status = ucfirst $pipeline->{status};
