@@ -718,7 +718,10 @@ sub handle_merge_request ($self, $event) {
         }
       }
 
-      my $approval_str = $is_approved ? "Approved" : "Not yet approved";
+      my $approval_str = join q{, },
+        ($data->{work_in_progress} ? 'Work in progress' : ()),
+        ($is_approved ? "Approved" : "Not yet approved");
+
       push @fields, {
         title => "Review status",
         value => sprintf('%s (%s %s, %s %s)',
