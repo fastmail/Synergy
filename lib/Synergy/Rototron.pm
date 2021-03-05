@@ -362,6 +362,7 @@ package Synergy::Rototron::Rotor {
     'sparkles'  => "\N{SPARKLES}",
     'helmet'    => "\N{HELMET WITH WHITE CROSS}",
     'wrench'    => "\N{WRENCH}",
+    'frame_with_picture' => "\N{FRAME WITH PICTURE}",
   );
 
   has name => (is => 'ro', required => 1);
