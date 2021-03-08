@@ -17,10 +17,9 @@ sub listener_specs {
     name      => 'uptime',
     method    => 'handle_uptime',
     exclusive => 1,
-    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^(?:uptime|status)\s*$/i },
+    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^(?:uptime)\s*$/i },
     help_entries => [
-      { title => 'uptime', text => 'uptime: Say how long synergy was up for. Alias: status', },
-      { title => 'status', text => 'status: Say how long synergy was up for. Alias: uptime', },
+      { title => 'uptime', text => 'uptime: Say how long synergy was up for.', },
     ],
   };
 }
