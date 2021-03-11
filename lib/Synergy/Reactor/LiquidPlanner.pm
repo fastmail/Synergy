@@ -3713,12 +3713,22 @@ sub _handle_timer_commit ($self, $event, $comment) {
   $comment //= '';
   while ($comment =~ s/(?:\A|\s+)(DONE|STOP|SOTP|CHILL|$time_re)\s*\z//) {
     my $got = $1;
+
     if ($got =~ $time_re) {
       $timer_override = $1 / (($2 || 'h') eq 'h' ? 1 : 60);
     } else {
       $meta{$got}++;
     }
   }
+
+  if ($comment =~ /(?:\A|\s+)(DONE|STOP|SOTP|CHILL|$time_re)\s*\z/i) {
+    my $got = $1;
+    # It's mixed case, but not all caps.
+    if ($got ne lc $got && $got =~ /\p{Ll}/) {
+      return $event->error_reply("You ended with '$got', which looks like \U$got\E, but it has to be all caps to count.  You could try again with all lowercase, or just add a full stop…");
+    }
+  }
+
 
   $meta{DONE} = 1 if $comment =~ s/\Adone\z//i;
   $meta{STOP} = 1 if $meta{DONE} or $meta{CHILL} or $meta{SOTP};
