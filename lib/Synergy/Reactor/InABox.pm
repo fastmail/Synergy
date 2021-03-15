@@ -195,6 +195,10 @@ sub handle_status ($self, $event, $switches) {
 sub handle_create ($self, $event, $switches) {
   my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
 
+  # XXX call /v2/sizes API to validate
+  # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
+  my $size = $switches->{size} // 's-4vcpu-8gb';
+
   return $self->_get_droplet_for($event->from_user, $tag)
     ->then(sub ($maybe_droplet) {
       if ($maybe_droplet) {
@@ -227,7 +231,7 @@ sub handle_create ($self, $event, $switches) {
       my %droplet_create_args = (
         name     => $name,
         region   => $region,
-        size     => 's-4vcpu-8gb',
+        size     => $size,
         image    => $snapshot->{id},
         ssh_keys => [ $ssh_key->{id} ],
         tags     => [ 'fminabox' ],
