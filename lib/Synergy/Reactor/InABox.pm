@@ -46,7 +46,7 @@ All subcommands can take /version and /tag can be used to target a specific box.
 
 The following preferences exist:
 
-* $ns.version: which version to create by default (default: jessie)
+* $ns.version: which version to create by default (default: buster)
 * $ns.datacentre: which datacentre to create boxes in (if unset, chooses one near you)
 END
       },
