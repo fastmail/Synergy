@@ -159,8 +159,9 @@ sub handle_now_working ($self, $event) {
 
   my @lines;
   for my $user (sort { $a->username cmp $b->username } $self->hub->user_directory->users) {
+    next if $user->is_virtual;
     next unless $user->is_working_now;
-    push @lines, "* " . $user->username;
+    push @lines, "• " . $user->username;
   }
 
   unless (@lines) {
