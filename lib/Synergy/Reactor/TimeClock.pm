@@ -21,6 +21,15 @@ use utf8;
 sub listener_specs {
   return (
     {
+      name      => 'now_working',
+      method    => 'handle_now_working',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ /\Anow\s+working\s*\z/;
+      }
+    },
+    {
       name      => 'hours_for',
       method    => 'handle_hours_for',
       exclusive => 1,
@@ -144,6 +153,22 @@ has _timeclock_dbh => (
     return $dbh;
   },
 );
+
+sub handle_now_working ($self, $event) {
+  $event->mark_handled;
+
+  my @lines;
+  for my $user (sort { $a->username cmp $b->username } $self->hub->user_directory->users) {
+    next unless $user->is_working_now;
+    push @lines, "* " . $user->username;
+  }
+
+  unless (@lines) {
+    return $event->reply("How about that!  Nobody's working right now.");
+  }
+
+  return $event->reply("Currently on the clock:\n" . join qq{\n}, @lines);
+}
 
 sub handle_hours_for ($self, $event) {
   $event->mark_handled;
