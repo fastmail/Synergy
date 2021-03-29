@@ -1353,7 +1353,7 @@ sub nag ($self, $timer, @) {
 
       if (defined (my $goal = $self->get_user_preference($user, 'tracking-goal'))) {
         my $logged_today = $self->_time_logged_today_for($user)->get;
-        if ($logged_today > $goal) {
+        if ($logged_today >= $goal) {
           $Logger->log("$username: already met tracking goal; not nagging");
           next USER;
         }
@@ -4292,7 +4292,7 @@ sub _maybe_logged_today_text ($self, $user) {
       my $goal = $self->get_user_preference($user, 'tracking-goal');
       my $text = sprintf("So far today, you've logged %0.02f %s.%s",
         $hours, PL_N('hour', $hours),
-        (defined $goal && $hours > $goal ? " $tada" : ""),
+        (defined $goal && $hours >= $goal ? " $tada" : ""),
       );
 
       return Future->done($text);
@@ -4405,8 +4405,8 @@ sub _handle_timesheet ($self, $event, $text) {
         $plain  .= sprintf "\nTotal: %0.2fh", $total;
         $slack .= sprintf "\n*Total:* %0.2fh", $total;
 
-        $plain .= " $tada" if defined $goal && $total > $goal;
-        $slack .= " $tada" if defined $goal && $total > $goal;
+        $plain .= " $tada" if defined $goal && $total >= $goal;
+        $slack .= " $tada" if defined $goal && $total >= $goal;
 
         $event->reply($plain, { slack => $slack });
       });
@@ -4439,7 +4439,7 @@ sub _handle_timesheet ($self, $event, $text) {
         sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.%s",
           $total, PL_N('hour', $total),
           $today, PL_N('hour', $total),
-          (defined $goal && $today > $goal ? " $tada" : ""),
+          (defined $goal && $today >= $goal ? " $tada" : ""),
       );
     })->retain;
   }
@@ -4486,7 +4486,7 @@ sub timesheet_report ($self, $who, $arg = {}) {
     my $str = sprintf "So far this iteration, you've logged %0.2f %s.  So far today, you've logged %0.2f %s.%s",
       $total, PL_N('hour', $total),
       $today, PL_N('hour', $total),
-      (defined $goal && $today > $goal ? " $tada" : "");
+      (defined $goal && $today >= $goal ? " $tada" : "");
     return Future->done([ $str, { slack => $str } ]);
   });
 }
