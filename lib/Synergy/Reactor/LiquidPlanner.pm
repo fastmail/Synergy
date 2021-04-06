@@ -2466,7 +2466,15 @@ sub _parse_search ($self, $text) {
   # The valid forms are [ name => value ] and [ name => op => value ]
   # so [ name => x = y => z... ] is too many and we barf.
   # -- rjbs, 2019-06-23
-  return undef if grep {; @$_ > 3 } @$hunks;
+  if (grep {; @$_ > 3 } @$hunks) {
+    return [
+      {
+        error => join q{ },
+          "You used a `name:value` style search, but there were colons",
+          "in the value.  Maybe you should quote the whole thing?"
+      },
+    ];
+  }
 
   return [
     map {;
@@ -2802,9 +2810,13 @@ sub _handle_tsearch ($self, $event, $text) {
 }
 
 sub _handle_search ($self, $event, $text, $arg = {}) {
-  my $instructions = $self->_parse_search($text);
+  my $instructions = eval { $self->_parse_search($text); };
 
   # This is stupid. -- rjbs, 2019-03-30
+  if ($instructions->[0]{error}) {
+    return $event->error_reply("I couldn't understand that search: $instructions->[0]{error}");
+  }
+
   unless (defined $instructions) {
     return $event->error_reply("Your search blew my mind, and now I am dead.");
   }

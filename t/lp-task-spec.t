@@ -485,4 +485,12 @@ is_deeply(
   "field:op:value with qstring value and qstring op",
 );
 
+cmp_deeply(
+  $synergy->reactor_named('lp')->_parse_search(q{bar a:b:c:d foo}),
+  [
+    { error => re(qr{quote the whole thing}) },
+  ],
+  "field:op:value:wtf:is:this error",
+);
+
 done_testing;
