@@ -249,7 +249,9 @@ sub handle_heartbeat {
 sub handle_reconnect {
   my ($self, $data) = @_;
 
-  $Logger->log("discord: handle_reconnect: unimplemented");
+  $Logger->log("discord: handle_reconnect: attempting to reconnect");
+  $self->loop->remove($self->client);
+  $self->connect;
 }
 
 sub handle_invalid_session {
