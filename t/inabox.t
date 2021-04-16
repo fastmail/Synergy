@@ -295,15 +295,27 @@ subtest 'create' => sub {
       snapshot_fetch => gen_response(200 => { snapshots => [] }),
     );
 
-    is(@texts, 1, 'sent a single failure message');
-    like($texts[0], qr{find a DO (snapshot|ssh key)}, 'no snapshot, message ok');
+    cmp_deeply(
+      \@texts,
+      [
+        re(qr{Creating $box_name_re in nyc3}i),
+        re(qr{find a DO (snapshot|ssh key)}),
+      ],
+      'no snapshot, messages ok'
+    );
 
     @texts = $do_create->(
       ssh_key_fetch => gen_response(200 => { ssh_keys => [] }),
     );
 
-    is(@texts, 1, 'sent a single failure message');
-    like($texts[0], qr{find a DO (snapshot|ssh key)}, 'no ssh key, message ok');
+    cmp_deeply(
+      \@texts,
+      [
+        re(qr{Creating $box_name_re in nyc3}i),
+        re(qr{find a DO (snapshot|ssh key)}),
+      ],
+      'no ssh key, messages ok'
+    );
   };
 
   subtest 'failed create' => sub {

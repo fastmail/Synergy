@@ -208,6 +208,10 @@ sub handle_create ($self, $event, $switches) {
         );
       }
 
+      my $name = $self->_box_name_for($event->from_user, $tag);
+      my $region = $self->_region_for_user($event->from_user);
+      $event->reply("Creating $name in $region, this will take a minute or two.");
+
       return Future->done;
     })
     ->then(sub {
@@ -224,9 +228,7 @@ sub handle_create ($self, $event, $switches) {
     })
     ->then(sub ($snapshot, $ssh_key) {
       my $name = $self->_box_name_for($event->from_user, $tag);
-
       my $region = $self->_region_for_user($event->from_user);
-      $event->reply("Creating $name in $region, this will take a minute or two.");
 
       my %droplet_create_args = (
         name     => $name,
