@@ -147,9 +147,17 @@ sub _do_request ($self, $method, $endpoint, $data = undef) {
   )->then(sub ($res) {
     unless ($res->is_success) {
       my $code = $res->code;
-      $Logger->log([ "error talking to DO: %s", $res->as_string ]);
+      my $desc = "got $code trying to $method $endpoint";
+
+      $Logger->log([
+        "error talking to DO (%s): %s, %s",
+        $desc,
+        $res->as_string,
+        $data,
+      ]);
+
       return Future->fail(
-        "Error talking to DO (got $code trying to $method $endpoint)",
+        "Error talking to DO ($desc)",
         'http',
         { http_res => $res }
       );
@@ -255,6 +263,13 @@ sub handle_create ($self, $event, $switches) {
       }
 
       return $self->_do_action_status_f("/actions/$action_id");
+    })
+    ->then(sub ($status = undef) {
+      # We delay this 5 seconds because a completed droplet sometimes does not
+      # show up in GET /droplets immediately, which causes annoying problems.
+      # Waiting 5s is a silly fix, but seems to work, and it's not like box
+      # creation is lightning-fast anyway. -- michael, 2021-04-16
+      $self->hub->loop->delay_future(after => 5)->then_done($status)
     })
     ->then(sub ($status = undef) {
       # action status checks have been seen to time out or crash but the droplet
@@ -456,11 +471,19 @@ sub _do_action_status_f ($self, $actionurl) {
     $self->_do_request(GET => $actionurl)
       ->then(sub ($data) {
         my $status = $data->{action}{status};
+
+        # ugh, DO is now sometimes returning empty string in the status field
+        # -- michael, 2021-04-16
+        $status = 'completed' if ! $status && $data->{action}{completed_at};
+
         return $status eq 'in-progress'
           ? $self->hub->loop->delay_future(after => 5)->then_done($status)
           : Future->done($status);
       })
-  } until => sub ($f) { $f->get ne 'in-progress' };
+  } until => sub ($f) {
+    my $status = $f->get;
+    return $status eq 'completed' || $status eq 'errored';
+  };
 }
 
 sub _get_droplet_for ($self, $user, $tag = undef) {

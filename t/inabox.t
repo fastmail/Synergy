@@ -63,9 +63,9 @@ sub gen_response ($code, $data) {
   return Plack::Response->new($code, [], $json)->finalize;
 }
 
-sub send_message ($text, $from = $channel->default_from) {
+sub send_message ($text, $from = $channel->default_from, $wait_arg = {}) {
   $channel->queue_todo([ send => { text => $text, from => $from }  ]);
-  $channel->queue_todo([ wait => {} ]);
+  $channel->queue_todo([ wait => $wait_arg ]);
   wait_for { $channel->is_exhausted; };
 }
 
@@ -155,7 +155,7 @@ for my $method (qw(poweroff shutdown)) {
   subtest $method => sub {
     @DO_RESPONSES = (
       gen_response(200, { action => { id => 987 } }),
-      gen_response(200, { action => { status => 'completed'   } }),
+      gen_response(200, { action => { status => 'completed' } }),
     );
 
     send_message("synergy: box $method");
@@ -243,6 +243,7 @@ subtest 'create' => sub {
   my $box_name_re = qr{[-a-z0-9.]+}i;
 
   my $do_create = sub (%override) {
+    my $wait = delete $override{wait} // 0;
     my $resp_for = sub ($key) { $override{$key} // $CREATE_RESPONSES{$key} };
     my $msg = $override{message} // "box create";
 
@@ -257,7 +258,11 @@ subtest 'create' => sub {
       $resp_for->('dns_post'),
     );
 
-    send_message("synergy: $msg");
+    send_message(
+      "synergy: $msg",
+      $channel->default_from,
+      ($wait ? { seconds => $wait } : ()),
+    );
 
     my @texts = map {; $_->{text} } $channel->sent_messages;
     $channel->clear_messages;
@@ -274,7 +279,7 @@ subtest 'create' => sub {
   };
 
   subtest 'good create' => sub {
-    my @texts = $do_create->();
+    my @texts = $do_create->(wait => 5.25);
     is(@texts, 2, 'sent two messages: please hold, then completion');
     cmp_deeply(
       \@texts,
@@ -332,9 +337,12 @@ subtest 'create' => sub {
   };
 
   subtest 'failed action fetch' => sub {
-    my @texts = $do_create->(action_fetch => gen_response(200 => {
-      action => { status => 'errored' },
-    }));
+    my @texts = $do_create->(
+      action_fetch => gen_response(200 => {
+        action => { status => 'errored' },
+      }),
+      wait => 5.25,
+    );
     cmp_deeply(
       \@texts,
       [
@@ -360,6 +368,7 @@ subtest 'create' => sub {
       last_droplet_fetch => gen_response(200, {
         droplets => [ $foo_droplet ],
       }),
+      wait => 5.25,
     );
 
     cmp_deeply(
