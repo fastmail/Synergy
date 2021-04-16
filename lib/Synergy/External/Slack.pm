@@ -125,7 +125,7 @@ sub connect ($self) {
   $self->hub->http_client
             ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
             ->on_done(sub ($res) { $self->_register_slack_rtm($res) })
-            ->on_fail(sub ($err) { die "couldn't start RTM API: $err" })
+            ->on_fail(sub { die "couldn't start RTM API: @_" })
             ->get;
 };
 

@@ -184,6 +184,9 @@ sub set_loop ($self, $loop) {
   confess "tried to set loop, but look already set" if $self->_get_loop;
   $self->_set_loop($loop);
 
+  # Force this here, because reactor/channel startup might use it and creating
+  # it can be racy (I think).
+  $self->http_client;
   $self->server->start;
 
   $_->start for $self->reactors;
@@ -259,6 +262,7 @@ has http_client => (
   default => sub ($self) {
     my $http = Net::Async::HTTP->new(
       max_connections_per_host => 5, # seems good?
+      max_in_flight => 10,           # default is 4; bump a bit
     );
 
     $self->loop->add($http);
