@@ -13,6 +13,7 @@ use Net::Async::HTTP;
 use Net::Async::WebSocket::Client;
 use List::AllUtils qw(part);
 use Data::Dumper::Concise;
+use Time::HiRes ();
 
 use Synergy::Logger '$Logger';
 
@@ -35,7 +36,7 @@ has _heartbeat_timer => (
 
 has _waiting_for_heartbeat_ack_since => (
   is      => 'rw',
-  isa     => 'Int',
+  isa     => 'Num',
   clearer => '_clear_waiting_for_heartbeat_ack_since',
 );
 
@@ -297,7 +298,8 @@ sub handle_heartbeat_ack {
 
   my $since = $self->_waiting_for_heartbeat_ack_since;
 
-  $Logger->log([ "heartbeat (sent at %s) has been acked", $since ]);
+  my $ago = Time::HiRes::time() - $since;
+  $Logger->log_debug([ "heartbeat (sent %0.4fs ago) has been acked", $ago ]);
 
   $self->_clear_waiting_for_heartbeat_ack_since;
 
@@ -340,7 +342,7 @@ sub send_heartbeat {
   #$Logger->log("discord: heartbeat frame: $frame");
 
   $self->client->send_text_frame($frame);
-  $self->_waiting_for_heartbeat_ack_since(time);
+  $self->_waiting_for_heartbeat_ack_since(Time::HiRes::time());
 
   return
 }
