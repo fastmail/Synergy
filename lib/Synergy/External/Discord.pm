@@ -33,10 +33,10 @@ has _heartbeat_timer => (
   predicate => '_has_heartbeat_timer',
 );
 
-has _last_heartbeat_ack => (
+has _waiting_for_heartbeat_ack_since => (
   is      => 'rw',
   isa     => 'Int',
-  default => sub { time },
+  clearer => '_clear_waiting_for_heartbeat_ack_since',
 );
 
 has _sequence => (
@@ -251,6 +251,11 @@ sub handle_reconnect {
 
   $Logger->log("discord: handle_reconnect: attempting to reconnect");
   $self->loop->remove($self->client);
+
+  if ($self->_has_heartbeat_timer) {
+    $self->loop->remove($self->_heartbeat_timer);
+  }
+
   $self->connect;
 }
 
@@ -272,17 +277,13 @@ sub handle_hello {
 
   my $timer = IO::Async::Timer::Periodic->new(
     interval => $interval,
-    on_tick => sub {
-      if ($self->_last_heartbeat_ack + $interval < time) {
-        $Logger->log("discord: previous heartbeat was never acknowledged");
-        # XXX reconnect
-      }
-      $self->send_heartbeat;
-    },
+    on_tick => sub { $self->send_heartbeat; },
   );
 
   $timer->start;
   $self->loop->add($timer);
+
+  $Logger->log([ 'discord heartbeat begun with interval %s', $interval ]);
 
   $self->_heartbeat_timer($timer);
 
@@ -293,7 +294,14 @@ sub handle_hello {
 
 sub handle_heartbeat_ack {
   my ($self, $data) = @_;
-  $self->_last_heartbeat_ack(time);
+
+  my $since = $self->_waiting_for_heartbeat_ack_since;
+
+  $Logger->log([ "heartbeat (sent at %s) has been acked", $since ]);
+
+  $self->_clear_waiting_for_heartbeat_ack_since;
+
+  return;
 }
 
 sub send_identify {
@@ -317,13 +325,24 @@ sub send_identify {
 
 sub send_heartbeat {
   my ($self) = @_;
+
+  if (my $since = $self->_waiting_for_heartbeat_ack_since) {
+    $Logger->log([ "discord: heartbeat sent at %s was never acked", $since ]);
+  }
+
   #$Logger->log("discord: sending heartbeat");
+
   my $frame = encode_json({
     op => 1,
     d  => $self->_sequence
   });
+
   #$Logger->log("discord: heartbeat frame: $frame");
+
   $self->client->send_text_frame($frame);
+  $self->_waiting_for_heartbeat_ack_since(time);
+
+  return
 }
 
 sub send_message ($self, $channel_id, $text, $alts = {}) {
