@@ -47,6 +47,11 @@ has _waiting_for_heartbeat_ack_since => (
   clearer => '_clear_waiting_for_heartbeat_ack_since',
 );
 
+has _last_heartbeat_acked_at => (
+  is  => 'rw',
+  isa => 'Num',
+);
+
 has _sequence => (
   is => 'rw',
   isa => 'Int',
@@ -309,11 +314,13 @@ sub handle_hello {
 sub handle_heartbeat_ack {
   my ($self, $data) = @_;
 
+  my $now   = Time::HiRes::time();
   my $since = $self->_waiting_for_heartbeat_ack_since;
+  $self->_last_heartbeat_acked_at($now);
 
-  my $ago = Time::HiRes::time() - $since;
+  my $ago = $now - $since;
   $Logger->log_debug([
-    "Discord: heartbeat (sent %0.4fs ago) has been acked",
+    "heartbeat (sent %0.4fs ago) has been acked",
     $ago,
   ]);
 
@@ -345,7 +352,16 @@ sub send_heartbeat {
   my ($self) = @_;
 
   if (my $since = $self->_waiting_for_heartbeat_ack_since) {
-    $Logger->log([ "Discord: heartbeat sent at %s was never acked", $since ]);
+    my $msg  = sprintf "heartbeat sent at %s was never acked", $since;
+
+    if (my $last = $self->_last_heartbeat_acked_at) {
+      my $now  = Time::HiRes::time();
+      my $ago  = $now - $last;
+
+      $Logger->log([ "$msg; last heartbeat ack %0.4fs ago", $ago ]);
+    } else {
+      $Logger->log("$msg; no heartbeat has ever been acked");
+    }
   }
 
   my $frame = encode_json({
