@@ -32,7 +32,14 @@ has connected => (
 has _heartbeat_timer => (
   is => 'rw',
   predicate => '_has_heartbeat_timer',
+  clearer   => '_clear_heartbeat_timer',
 );
+
+before _clear_heartbeat_timer => sub ($self, @) {
+  if ($self->_has_heartbeat_timer) {
+    $self->loop->remove($self->_heartbeat_timer);
+  }
+};
 
 has _waiting_for_heartbeat_ack_since => (
   is      => 'rw',
@@ -253,9 +260,7 @@ sub handle_reconnect {
   $Logger->log("discord: handle_reconnect: attempting to reconnect");
   $self->loop->remove($self->client);
 
-  if ($self->_has_heartbeat_timer) {
-    $self->loop->remove($self->_heartbeat_timer);
-  }
+  $self->_clear_heartbeat_timer;
 
   $self->connect;
 }
@@ -271,14 +276,11 @@ sub handle_hello {
 
   my $interval = int($data->{heartbeat_interval}/1000);
 
-  if ($self->_has_heartbeat_timer) {
-    # remove any previous timer
-    $self->loop->remove($self->_heartbeat_timer);
-  }
+  $self->_clear_heartbeat_timer;
 
   my $timer = IO::Async::Timer::Periodic->new(
-    interval => $interval,
-    on_tick => sub { $self->send_heartbeat; },
+    interval  => $interval,
+    on_tick   => sub { $self->send_heartbeat; },
   );
 
   $timer->start;
