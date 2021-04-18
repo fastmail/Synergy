@@ -76,9 +76,12 @@ has channels => (
   },
 );
 sub set_channel ($self, $channel) {
-  die "E: set_channel takes a type 0 channel object" unless $channel->{type} == 0;
+  $Logger->log_fatal("ERROR: set_channel takes a type 0 channel object")
+    unless $channel->{type} == 0;
+
   return if $self->is_channel($channel->{id});
-  $Logger->log("discord: adding channel: $channel->{name} ($channel->{id})");
+
+  $Logger->log("Discord: adding channel: $channel->{name} ($channel->{id})");
   $self->_set_channel($channel->{id} => $channel);
 }
 
@@ -93,10 +96,14 @@ has dm_channels => (
     _set_dm_channel => 'set',
   },
 );
+
 sub set_dm_channel ($self, $channel) {
-  die "E: set_dm_channel takes a type 1 channel object" unless $channel->{type} == 1;
+  $Logger->log_fatal("ERROR: set_dm_channel takes a type 1 channel object")
+    unless $channel->{type} == 1;
+
   return if $self->is_dm_channel($channel->{id});
-  $Logger->log("discord: adding DM channel ($channel->{id})");
+
+  $Logger->log("Discord: adding DM channel ($channel->{id})");
   $self->_set_dm_channel($channel->{id} => $channel);
 }
 
@@ -111,10 +118,14 @@ has group_conversations => (
     _set_group_conversation => 'set',
   },
 );
+
 sub set_group_conversation ($self, $channel) {
-  die "E: set_group_conversation takes a type 3 channel object" unless $channel->{type} == 3;
+  $Logger->log_fatal("ERROR: set_group_conversation takes a type 3 channel object")
+    unless $channel->{type} == 3;
+
   return if $self->set_group_conversation($channel->{id});
-  $Logger->log("discord: adding group conversation $channel->{name} ($channel->{id})");
+
+  $Logger->log("Discord: adding group conversation $channel->{name} ($channel->{id})");
   $self->_set_group_conversation($channel->{id} => $channel);
 }
 
@@ -129,7 +140,7 @@ has client => (
 
         my $event;
         unless (eval { $event = $JSON->decode($frame) }) {
-          $Logger->log("discord: error decoding frame content: <$frame> <$@>");
+          $Logger->log("Discord: error decoding frame content: <$frame> <$@>");
           return;
         }
 
@@ -172,21 +183,19 @@ sub _register_discord_rtg ($self, $res) {
 
   my $wss_url = $json->{url};
 
-  $Logger->log("discord: connecting to RTG: $wss_url");
+  $Logger->log("Discord: connecting to RTG: $wss_url");
 
   $self->loop->add($self->client);
   $self->client->connect(
     url => $wss_url,
     service => 'https',
     on_connected => sub {
-      $Logger->log("discord: connected to RTG");
+      $Logger->log("Discord: connected to RTG");
     },
   );
 }
 
 sub handle_event ($self, $event) {
-  #warn Dumper($event);
-
   my ($opcode, $data, $sequence, $name) = @$event{qw(op d s t)};
 
   $self->_sequence($sequence) if defined $sequence;
@@ -203,7 +212,10 @@ sub handle_event ($self, $event) {
 
   my $handler = $opcode_handlers->{$opcode};
   unless ($handler) {
-    $Logger->log("discord: no handler for opcode $opcode, data: ".encode_json($data));
+    $Logger->log([
+      "Discord: no handler for opcode $opcode, data: %s",
+      $data,
+    ]);
     return;
   }
 
@@ -214,12 +226,13 @@ sub handle_dispatch {
   my ($self, $data, $name) = @_;
 
   if ($name eq 'READY') {
-    use Data::Dumper; warn Dumper($data);
+    $Logger->log_debug([ "Discord ready: %s", $data ]);
+
     $self->_set_own_id($data->{user}{id});
     $self->_set_own_name($data->{user}{username});
     $self->_set_guild_id($data->{guilds}->[0]->{id}); # XXX support multiple guilds someday?
 
-    $Logger->log("discord: ready for service, I am $data->{user}{username} ($data->{user}{id})");
+    $Logger->log("Discord: ready for service, I am $data->{user}{username} ($data->{user}{id})");
 
     $self->load_users;
     $self->load_channels;
@@ -239,7 +252,7 @@ sub handle_dispatch {
       $self->set_group_conversation($data);
     }
     else {
-      $Logger->log("discord: no support for type $data->{type} channel");
+      $Logger->log("Discord: no support for type $data->{type} channel");
     }
     return;
   }
@@ -251,13 +264,13 @@ sub handle_dispatch {
 sub handle_heartbeat {
   my ($self, $data) = @_;
 
-  $Logger->log("discord: handle_heartbeat: unimplemented");
+  $Logger->log("Discord: handle_heartbeat: unimplemented");
 }
 
 sub handle_reconnect {
   my ($self, $data) = @_;
 
-  $Logger->log("discord: handle_reconnect: attempting to reconnect");
+  $Logger->log("Discord: handle_reconnect: attempting to reconnect");
   $self->loop->remove($self->client);
 
   $self->_clear_heartbeat_timer;
@@ -268,7 +281,7 @@ sub handle_reconnect {
 sub handle_invalid_session {
   my ($self, $data) = @_;
 
-  $Logger->log("discord: handle_invalid_session: unimplemented");
+  $Logger->log("Discord: handle_invalid_session: unimplemented");
 }
 
 sub handle_hello {
@@ -286,11 +299,9 @@ sub handle_hello {
   $timer->start;
   $self->loop->add($timer);
 
-  $Logger->log([ 'discord heartbeat begun with interval %s', $interval ]);
-
   $self->_heartbeat_timer($timer);
 
-  $Logger->log("discord: hello! heartbeat interval set to $interval ms");
+  $Logger->log([ 'Discord: hello! heartbeat interval set to %s', $interval ]);
 
   $self->send_identify;
 }
@@ -301,7 +312,10 @@ sub handle_heartbeat_ack {
   my $since = $self->_waiting_for_heartbeat_ack_since;
 
   my $ago = Time::HiRes::time() - $since;
-  $Logger->log_debug([ "heartbeat (sent %0.4fs ago) has been acked", $ago ]);
+  $Logger->log_debug([
+    "Discord: heartbeat (sent %0.4fs ago) has been acked",
+    $ago,
+  ]);
 
   $self->_clear_waiting_for_heartbeat_ack_since;
 
@@ -311,7 +325,7 @@ sub handle_heartbeat_ack {
 sub send_identify {
   my ($self) = @_;
 
-  $Logger->log("discord: sending identify");
+  $Logger->log("Discord: sending identify");
   my $frame = encode_json({
     op => 2,
     d  => {
@@ -323,7 +337,7 @@ sub send_identify {
       },
     },
   });
-  #$Logger->log("discord: identify frame: $frame");
+  $Logger->log_debug([ "Discord: identify frame: %s", $frame ]);
   $self->client->send_text_frame($frame);
 }
 
@@ -331,22 +345,18 @@ sub send_heartbeat {
   my ($self) = @_;
 
   if (my $since = $self->_waiting_for_heartbeat_ack_since) {
-    $Logger->log([ "discord: heartbeat sent at %s was never acked", $since ]);
+    $Logger->log([ "Discord: heartbeat sent at %s was never acked", $since ]);
   }
-
-  #$Logger->log("discord: sending heartbeat");
 
   my $frame = encode_json({
     op => 1,
     d  => $self->_sequence
   });
 
-  #$Logger->log("discord: heartbeat frame: $frame");
-
   $self->client->send_text_frame($frame);
   $self->_waiting_for_heartbeat_ack_since(Time::HiRes::time());
 
-  return
+  return;
 }
 
 sub send_message ($self, $channel_id, $text, $alts = {}) {
@@ -475,12 +485,15 @@ sub load_users ($self) {
   $self->api_get("/guilds/$guild_id/members", {
     limit => 1000,
   })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content);
-    use Data::Dumper; warn Dumper($http_res->decoded_content);
+    my $json = $http_res->decoded_content(charset => undef);
+    my $res  = decode_json($json);
+
+    $Logger->log("Discord: users loaded");
+    $Logger->log_debug([ 'Discord: user list: %s', $res ]);
+
     $self->_set_users({
       map { $_->{user}{id} => $_ } @$res,
     });
-    $Logger->log("discord: users loaded");
 
     $self->loaded_users(1);
   });
@@ -488,14 +501,16 @@ sub load_users ($self) {
 
 sub load_channels ($self) {
   my $guild_id = $self->guild_id;
-  $self->api_get("/guilds/$guild_id/channels")
-  ->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content);
+  $self->api_get("/guilds/$guild_id/channels")->on_done(sub ($http_res) {
+    my $json = $http_res->decoded_content(charset => undef);
+    my $res  = decode_json($json);
+
     my ($channels, $dms, $voice_channels, $group_dms) = part { $_->{type} } @$res;
     $self->set_channel($_) for @$channels;
     $self->set_dm_channel($_) for @$dms;
     $self->set_group_conversation($_) for @$group_dms;
-    $Logger->log("discord: channels loaded");
+
+    $Logger->log("Discord: channels loaded");
 
     $self->loaded_channels(1);
   });
