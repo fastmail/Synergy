@@ -19,8 +19,23 @@ sub describe_conversation {}
 sub send_message_to_user { ...}
 
 sub send_message ($self, $address, $text, $alts = {}) {
-  $self->client->do_PRIVMSG(target => $address, text => $text);
-  return Future->done; # ???
+  my @lines = split /\n/, $text;
+
+  my $now = Future->done; # The Future is Now!
+
+  for my $line (@lines) {
+    next unless length $line; # I'm not sure this is what I want to do.
+    $line = Encode::encode('utf-8', $line);
+    my $now = $now->retain->then(sub {
+      $self->client->do_PRIVMSG(target => $address, text => $line);
+    });
+  }
+
+  return $now->else(sub {
+    my (@error) = @_;
+    $Logger->log([ "IRC: error sending response: %s", \@error ]);
+    return Future->done;
+  });
 }
 
 with 'Synergy::Role::Channel';
