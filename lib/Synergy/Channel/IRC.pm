@@ -54,7 +54,7 @@ sub start ($channel) {
       return if $hints->{is_notice};
 
       my $text = $hints->{text};
-      my $had_prefix = $text =~ s/\A\@?\Q$nick\E:?\s*//;
+      my $had_prefix = $text =~ s/\A\@?\Q$nick\E:?\s*//i;
 
       my $event = Synergy::Event->new({
         type => 'message',
