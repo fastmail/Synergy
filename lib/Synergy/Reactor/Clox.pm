@@ -95,7 +95,9 @@ sub handle_clox ($self, $event) {
   @tzs = ('America/New_York') unless @tzs;
 
   my $tz_nick = $self->hub->env->time_zone_names;
-  my $user_tz = mel_to_syd($event->from_user->time_zone);
+
+  my $user_tz = $event->from_user ? mel_to_syd($event->user->time_zone)
+                                  : 'America/New_York'; # Eh.
 
   my %tz_objs = map {; $_ => DateTime::TimeZone->new(name => $_) } @tzs;
 
