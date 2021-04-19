@@ -60,11 +60,11 @@ sub start ($channel) {
         type => 'message',
         text => $text,
         was_targeted  => $hints->{target_is_me} || $had_prefix,
-        is_public     => 0, # XXX junk
+        is_public     => !! ($hints->{target_type} eq 'channel'),
         from_channel  => $channel,
         from_address  => $hints->{prefix_nick},
         transport_data => $hints, # XXX ???
-        conversation_address => $hints->{prefix_nick},
+        conversation_address => $hints->{target_name},
       });
 
       $Logger->log("Event <<$text>> from <<$hints->{prefix_nick}>>");
