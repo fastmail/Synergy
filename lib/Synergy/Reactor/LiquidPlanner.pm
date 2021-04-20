@@ -280,7 +280,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
                     $item->{assignments}->@*;
 
     $text .= sprintf " \N{EN DASH} %s: %s",
-      PL_N('assignees', 0+@assignees),
+      PL_N('assignee', 0+@assignees),
       (join q{, }, @assignees);
   }
 
