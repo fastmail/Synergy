@@ -203,8 +203,9 @@ my sub event_mismatches ($lhs, $rhs) {
           && $lhs->{$key} ne $rhs->{$key});
   }
 
-  $mismatch{participants} = 1
-    if keys $lhs->{participants}->%* != keys $rhs->{participants}->%*;
+  my $lhs_p = exists $lhs->{participants} ? keys $lhs->{participants}->%* : 0;
+  my $rhs_p = exists $rhs->{participants} ? keys $rhs->{participants}->%* : 0;
+  $mismatch{participants} = 1 if $lhs_p != $rhs_p;
 
   return sort keys %mismatch;
 }
