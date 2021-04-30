@@ -202,9 +202,15 @@ my sub event_mismatches ($lhs, $rhs) {
           && $lhs->{$key} ne $rhs->{$key});
   }
 
-  my $lhs_p = exists $lhs->{participants} ? keys $lhs->{participants}->%* : 0;
-  my $rhs_p = exists $rhs->{participants} ? keys $rhs->{participants}->%* : 0;
-  $mismatch{participants} = 1 if $lhs_p != $rhs_p;
+  if (0) {
+    # This isn't great.  I want this to be here, but I also need to be able to
+    # remove all participants from events with them.  Looks like I can't set
+    # participants to undef or {} and I'm not sure how to proceed.  So we can
+    # ignore this for now. -- rjbs, 2021-04-30
+    my $lhs_p = exists $lhs->{participants} ? keys $lhs->{participants}->%* : 0;
+    my $rhs_p = exists $rhs->{participants} ? keys $rhs->{participants}->%* : 0;
+    $mismatch{participants} = 1 if $lhs_p != $rhs_p;
+  }
 
   return sort keys %mismatch;
 }
