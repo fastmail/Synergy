@@ -206,25 +206,6 @@ my sub event_mismatches ($lhs, $rhs) {
   $mismatch{participants} = 1
     if keys $lhs->{participants}->%* != keys $rhs->{participants}->%*;
 
-  $mismatch{participants} = 1
-    if grep { ! exists $rhs->{participants}{$_} } keys $lhs->{participants}->%*;
-
-  for my $pid (keys $lhs->{participants}->%*) {
-    my $lhsp = $lhs->{participants}->{$pid};
-    my $rhsp = $rhs->{participants}->{$pid};
-
-    for my $key (qw( name email kind roles participationStatus )) {
-      $mismatch{"participants.$pid.$key"} = 1
-        if (defined $lhsp->{$key} xor defined $rhsp->{$key})
-        || (_HASH0 $lhsp->{$key} xor _HASH0 $rhsp->{$key})
-        || (_HASH0 $lhsp->{$key} && join(qq{\0}, sort keys $lhsp->{$key}->%*)
-                                ne join(qq{\0}, sort keys $rhsp->{$key}->%*))
-        || (! _HASH0 $lhsp->{$key}
-            && defined $lhsp->{$key}
-            && $lhsp->{$key} ne $rhsp->{$key});
-    }
-  }
-
   return sort keys %mismatch;
 }
 
@@ -250,30 +231,13 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
                       $user->{name} // $user->{username}),
         start     => $start,
         duration  => "P1D",
-        keywords  => { $rotor->keyword => JSON::MaybeXS->true },
-        replyTo   => { imip => "MAILTO:$user->{username}\@fastmailteam.com" },
+        keywords  => {
+          $rotor->keyword => JSON::MaybeXS->true,
+          "username:" . $user->{username} => JSON::MaybeXS->true,
+        },
         calendarId      => $rotor->calendar_id,
         freeBusyStatus  => "free",
         showWithoutTime => JSON::MaybeXS->true,
-        participants    => {
-          $user->{username} => {
-            participationStatus => 'accepted',
-            name  => $user->{name} // $user->{username},
-            email => "$user->{username}\@fastmailteam.com",
-            kind  => "individual",
-            roles => {
-              # XXX: I don't think "owner" is correct, here, but if I don't put
-              # it in the event definition, it gets added anyway, and then when
-              # we run a second time, we detect a difference between plan and
-              # found, and update the event, fruitlessly hoping that the
-              # participant roles will be right this time.  Bah.
-              # -- rjbs, 2019-01-30
-              owner    => JSON::MaybeXS->true,
-
-              attendee => JSON::MaybeXS->true,
-            },
-          },
-        }
       }
     };
   }
