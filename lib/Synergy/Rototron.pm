@@ -190,8 +190,7 @@ my sub event_mismatches ($lhs, $rhs) {
   my %mismatch;
 
   for my $key (qw(
-    @type title start duration showWithoutTime freeBusyStatus
-    replyTo keywords
+    @type title start duration showWithoutTime freeBusyStatus keywords
   )) {
     $mismatch{$key} = 1
       if (defined $lhs->{$key} xor defined $rhs->{$key})
