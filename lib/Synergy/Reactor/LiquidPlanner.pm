@@ -4473,7 +4473,12 @@ sub timesheet_report ($self, $who, $arg = {}) {
       "@err"
     ]);
 
-    return Future->done;
+    # It's not really that there are no timesheet entries, but we couldn't get
+    # them and we don't want to crash the bot, especially since it'll be in the
+    # process of updating everyone.  It'll start up again, having not made it
+    # to a checkpoint, and notify everyone again.  Ugh!  Just act like we got
+    # zero entries. -- rjbs, 2021-05-03
+    return Future->done([]);
   });
 
   my $today = DateTime->now(time_zone => $who->time_zone)->ymd;
