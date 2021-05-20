@@ -298,11 +298,18 @@ sub current_officers_for_duty ($self, $duty_name) {
 }
 
 sub _user_from_duty ($self, $duty) {
-  # We assume only one participant, obviously. -- rjbs, 2019-03-01
-  my ($participant) = values $duty->{participants}->%*;
-  my ($username)    = $participant->{email} =~ /\A(.+)\@/ ? $1 : undef;
+  my (@user_keywords) = grep {; /^username:/ } keys $duty->{keywords}->%*;
 
-  return unless $username;
+  if (@user_keywords != 1) {
+    $Logger->log([
+      "didn't find exactly one username keyword on duty event: %s",
+      $duty,
+    ]);
+
+    return;
+  }
+
+  my $username = $user_keywords[0] =~ s/^username://r;
 
   return $self->hub->user_directory->user_named($username);
 }
