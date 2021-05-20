@@ -148,6 +148,9 @@ sub duties_on ($self, $dt) {
 sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
   my %want_calendar_id = map {; $_->{calendar_id} => 1 } $self->rotors;
 
+  my $from = $from_ymd =~ /Z\z/ ? $from_ymd : "${from_ymd}T00:00:00Z";
+  my $to   = $to_ymd   =~ /Z\z/ ? $to_ymd   : "${to_ymd}T00:00:00Z";
+
   my $res = eval {
     my $res = $self->jmap_client->request({
       using       => [ 'urn:ietf:params:jmap:mail', 'https://cyrusimap.org/ns/jmap/calendars', ],
@@ -156,8 +159,8 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
           'CalendarEvent/query' => {
             filter => {
               inCalendars => [ keys %want_calendar_id ],
-              after       => $from_ymd . "T00:00:00Z",
-              before      => $to_ymd . "T00:00:00Z",
+              after       => $from,
+              before      => $to,
             },
           },
           'a',

@@ -279,20 +279,15 @@ sub current_triage_officers ($self) {
 sub current_officers_for_duty ($self, $duty_name) {
   my $rototron = $self->rototron;
 
-  my @tzs = sort {; $a cmp $b }
-            uniq
-            grep {; defined }
-            map  {; $_->time_zone }
-            $self->hub->user_directory->users;
+  my $now  = DateTime->now(time_zone => 'UTC');
+  my $znow = $now->iso8601 . 'Z';
 
-  my @users;
+  my $items = $self->rototron->_get_duty_items_between($znow, $znow);
 
-  for my $tz (@tzs) {
-    push @users, grep {; defined && $_->is_working_now }
-                 map  {; $self->_user_from_duty($_) }
-                 grep {; $_->{keywords}{"rotor:$duty_name"} }
-                 $rototron->duties_on( DateTime->now(time_zone => $tz) )->@*;
-  }
+  my @users = grep {; defined && $_->is_working_now }
+              map  {; $self->_user_from_duty($_) }
+              grep {; $_->{keywords}{"rotor:$duty_name"} }
+              @$items;
 
   return uniq sort @users;
 }
