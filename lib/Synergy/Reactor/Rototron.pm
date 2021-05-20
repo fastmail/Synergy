@@ -343,7 +343,8 @@ sub handle_duty ($self, $event) {
       unless $when_dt;
   } else {
     $is_now = 1;
-    $when_dt = DateTime->now(time_zone => $event->from_user->time_zone);
+    my $tz = $event->from_user ? $event->from_user->time_zone : 'UTC';
+    $when_dt = DateTime->now(time_zone => $tz);
   }
 
   my @lines;
