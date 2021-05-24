@@ -6,6 +6,8 @@ use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor::EasyListening';
 
+use utf8;
+
 use experimental qw(signatures);
 use namespace::clean;
 use List::Util qw(first);
@@ -28,6 +30,15 @@ sub listener_specs {
     method    => 'handle_page',
     exclusive => 1,
     predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^page/i },
+    help_entries => [
+      { title => 'page', text => <<'END'
+*page* tries to page somebody via their phone or pager.  This is generally
+reserved for emergencies or at least "nobody is replying in chat!"
+
+• *page `WHO`: `MESSAGE`*: send this message to that person's phone or pager
+END
+      },
+    ],
   };
 }
 
