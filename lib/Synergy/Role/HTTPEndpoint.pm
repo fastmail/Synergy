@@ -12,9 +12,10 @@ use Plack::Request;
 requires 'http_app';
 
 has http_path => (
-  is  => 'ro',
-  isa => 'Str',
-  required => 1,
+  is    => 'ro',
+  isa   => 'Str',
+  lazy  => 1,
+  default => sub { confess "http path did not have an effective default" }
 );
 
 has http_username => (
