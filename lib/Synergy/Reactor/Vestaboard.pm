@@ -18,8 +18,16 @@ use URI;
 use URI::QueryParam;
 
 my $MAX_SECRET_AGE  = 1800;
-my $MAX_TOKEN_COUNT = 1;
-my $TOKEN_REGEN_FREQ  = 6 * 3600;
+
+has max_token_count => (
+  is => 'ro',
+  default => 1,
+);
+
+has token_regen_period => (
+  is => 'ro',
+  default => 6 * 3600,
+);
 
 sub listener_specs {
   return (
@@ -355,7 +363,7 @@ sub _pay_to_post_payload ($self, $event, $user, $payload) {
   my $tokens = $self->_updated_tokens_for($user);
 
   unless ($tokens > 0) {
-    $event->error_reply("Sorry, you don't have any token!");
+    $event->error_reply("Sorry, you don't have any tokens!");
     return;
   }
 
@@ -393,9 +401,9 @@ sub _updated_tokens_for ($self, $user) {
   $token_state->{count} //= 0;
   $token_state->{next}  //= time - 1;
 
-  if ($token_state->{count} < $MAX_TOKEN_COUNT && time > $token_state->{next}) {
+  if ($token_state->{count} < $self->max_token_count && time > $token_state->{next}) {
     $token_state->{count}++;
-    $token_state->{next} = time + $TOKEN_REGEN_FREQ;
+    $token_state->{next} = time + $self->token_regen_period;
   }
 
   return $token_state->{count};
