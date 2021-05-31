@@ -108,7 +108,7 @@ has '+http_path' => (
 sub http_app ($self, $env) {
   my $req = Plack::Request->new($env);
 
-  if ($req->path eq 'POST') {
+  if ($req->method eq 'POST') {
     my $username = $req->parameters->{username}; # yeah yeah, multivalue…
     my $secret   = $req->parameters->{secret};
     my $save_as  = $req->parameters->{name};
