@@ -109,10 +109,21 @@ sub http_app ($self, $env) {
   my $req = Plack::Request->new($env);
 
   if ($req->method eq 'POST') {
-    my $username = $req->parameters->{u}; # yeah yeah, multivalue…
-    my $secret   = $req->parameters->{secret};
-    my $save_as  = $req->parameters->{name};
-    my $design   = eval { JSON::MaybeXS->new->decode($req->content); };
+    my $payload  = eval { JSON::MaybeXS->new->decode($req->content); };
+
+    unless ($payload) {
+      return [
+        400,
+        [ "Content-Type" => "application/json" ],
+        [ qq({ "error": "garbled payload" }\n) ],
+      ];
+    }
+
+    state $i = 1;
+    my $username = $payload->{username};
+    my $secret   = $payload->{secret};
+    my $design   = $payload->{board};
+    my $save_as  = join q{.}, $i++, $^T; # Idiotic -- rjbs, 2021-05-31
 
     my $user     = $username && $self->hub->user_directory->user_named($username);
     my $is_valid = $user && $self->_validate_secret_for($user, $secret);
