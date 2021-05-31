@@ -12,6 +12,7 @@ use experimental qw(signatures);
 use namespace::clean;
 
 use Data::GUID qw(guid_string);
+use Lingua::EN::Inflect qw(NUMWORDS PL_N);
 use Plack::Request;
 use Unicode::Normalize qw(NFD);
 use URI;
@@ -49,7 +50,7 @@ sub listener_specs {
       name      => 'vesta_post_text',
       method    => 'handle_vesta_post_text',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta post text .+\z/i },
+      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta post text:? .+\z/i },
       help_entries => [
         {
           title => 'vesta',
@@ -66,6 +67,18 @@ sub listener_specs {
         {
           title => 'vesta',
           text  => "**vesta post `DESIGN`**: post your design to the board",
+        }
+      ],
+    },
+    {
+      name      => 'vesta_status',
+      method    => 'handle_vesta_status',
+      exclusive => 1,
+      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta status\z/i },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "**vesta status**: check the board status and your token count",
         }
       ],
     },
@@ -230,9 +243,40 @@ after register_with_hub => sub ($self, @) {
   }
 };
 
-sub handle_vesta_edit ($self, $event) {
-  my $text = $event->text;
+sub handle_vesta_status ($self, $event) {
+  $event->mark_handled;
 
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my $status;
+
+  if (my $locked_by = $self->locked_by) {
+    my $time_left = $locked_by->{expires_at} - time;
+
+    $status = sprintf 'The board is locked by %s until %s.',
+      $locked_by->{locked_by},
+      ($time_left > 86_400*7
+        ? 'some far-off time'
+        : $user->format_timestamp($locked_by->{expires_at}));
+  } else {
+    $status = "The board is unlocked.";
+  }
+
+  my $tokens = $self->_updated_tokens_for($user);
+
+  $status .= sprintf "  You have %s board %s.",
+    scalar($tokens == 0 ? 'no' : NUMWORDS($tokens)),
+    PL_N('token', $tokens);
+
+  $event->reply($status);
+}
+
+sub handle_vesta_edit ($self, $event) {
   $event->mark_handled;
 
   my $user = $event->from_user;
@@ -332,7 +376,7 @@ sub handle_vesta_post_text ($self, $event) {
     return;
   }
 
-  my ($text) = $event->text =~ /\Avesta post text (.+)\z/i;
+  my ($text) = $event->text =~ /\Avesta post text:? (.+)\z/i;
 
   $text = uc $text;
 
