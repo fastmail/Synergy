@@ -365,6 +365,7 @@ sub handle_vesta_lock ($self, $event) {
 
   if ($event->text =~ /vesta unlock/i) {
     $self->_set_lock_state({});
+    $self->save_state;
     $event->reply("The board is now unlocked!");
     return
   }
@@ -373,6 +374,8 @@ sub handle_vesta_lock ($self, $event) {
     locked_by   => $user->username,
     expires_at  => time + 2*86_400, # two days is probably a good default?
   });
+
+  $self->save_state;
 
   $event->reply("The board is locked!  Don't forget to unlock it later.");
   return
