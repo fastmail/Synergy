@@ -5,7 +5,7 @@ html {
 
 body {
     margin: 0;
-    background-image: linear-gradient(315deg, #81dddd 0%, #d0f0ff 74%);
+    background: #003153;
 }
 
 #logo {
@@ -23,7 +23,7 @@ body {
     text-align: center;
     width: max-content;
     margin: 0 auto;
-    background-image: linear-gradient(230deg, #6d7073 0%, #747f84 74%);
+    background-image: linear-gradient(230deg, #4a4c4f 0%, #484b4d 74%);
     padding: 1.2em;
     margin-top: 1.2em;
     border: 0.2rem solid rgb(37, 40, 42);
