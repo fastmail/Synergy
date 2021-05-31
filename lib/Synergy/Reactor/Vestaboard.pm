@@ -11,23 +11,48 @@ use namespace::clean;
 
 use Data::GUID qw(guid_string);
 use Plack::Request;
+use Unicode::Normalize qw(NFD);
 use URI;
 use URI::QueryParam;
 
+my $MAX_SECRET_AGE  = 1800;
+my $MAX_TOKEN_COUNT = 1;
+my $TOKEN_REGEN_FREQ  = 6 * 3600;
+
 sub listener_specs {
-  return {
-    name      => 'vesta_edit',
-    method    => 'handle_vesta_edit',
-    exclusive => 1,
-    predicate => sub ($, $e) { $e->was_targeted && lc $e->text eq 'vesta edit' },
-    help_entries => [
-      {
-        title => 'vesta',
-        text  => "**vesta edit**: edit what is on the vestaboard",
-      }
-    ],
-  };
+  return (
+    {
+      name      => 'vesta_edit',
+      method    => 'handle_vesta_edit',
+      exclusive => 1,
+      predicate => sub ($, $e) { $e->was_targeted && lc $e->text eq 'vesta edit' },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "**vesta edit**: edit what is on the vestaboard",
+        }
+      ],
+    },
+    {
+      name      => 'vesta_post',
+      method    => 'handle_vesta_post',
+      exclusive => 1,
+      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta post \S+/i },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "**vesta post `DESIGN`**: post your design to the board",
+        }
+      ],
+    },
+  );
 }
+
+has [ qw( subscription_id api_key api_secret ) ] => (
+  is  => 'ro',
+  isa => 'Str',
+  required => 1,
+);
 
 has '+http_path' => (
   default => sub {
@@ -70,8 +95,14 @@ sub http_app ($self, $env) {
       $name =~ s/[^\pL\pN\pM]/-/g;
       $name =~ s/-{2,}/-/g;
 
+      my $name_key = NFD(fc $name);
+
       my $this_user_state = $self->_user_state->{ $username } //= {};
-      $this_user_state->{designs}{$name} = $design;
+      $this_user_state->{designs}{$name_key} = {
+        name       => $name,
+        characters => $design,
+      };
+
       $self->save_state;
 
       if ($self->default_channel_name) {
@@ -113,9 +144,8 @@ sub _validate_design ($self, $design) {
 #   lock: undef | { by: USERNAME, expires_at: null | EPOCH-SEC }
 #   user:
 #     ${username}:
-#       tokens: COUNT
-#       next_token: EPOCH-SEC
-#       designs: { NAME: DESIGN }
+#       tokens: { count: COUNT, next: EPOCH-SEC }
+#       designs: { NAMEKEY: { characters: GRID, name: NAME }
 #       secret: { expires_at: EPOCH-SEC, value: STRING }
 
 sub state ($self) {
@@ -147,14 +177,14 @@ has _lock_state => (
   default => sub {  {}  },
 );
 
-sub is_locked ($self) {
+sub locked_by ($self) {
   my $lock = $self->_lock_state;
 
   # No lock.
   return if keys %$lock == 0;
 
   # Unexpired lock.
-  return 1 if ($self->_lock_state->{expires_at} // 0) > time;
+  return $lock->{locked_by} if ($self->_lock_state->{expires_at} // 0) > time;
 
   # Expired lock.  Empty the lock, save state, and return false.
   $self->_set_lock_state({});
@@ -210,8 +240,6 @@ sub handle_vesta_edit ($self, $event) {
   return;
 }
 
-my $MAX_SECRET_AGE = 1800;
-
 sub _validate_secret_for ($self, $user, $secret) {
   my $hashref = $self->_user_state->{ $user->username };
 
@@ -236,6 +264,85 @@ sub _secret_for ($self, $user) {
   $self->save_state;
 
   return $hashref->{value};
+}
+
+sub handle_vesta_post ($self, $event) {
+  my $text = $event->text;
+  $event->mark_handled;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my ($name) = $event->text =~ /\Avesta post (\S+)\z/i;
+  my $name_key = NFD(fc $name);
+
+  my $this_user_state = $self->_user_state->{ $user->username } //= {};
+  my $design = $this_user_state->{designs}{$name_key};
+
+  unless ($design) {
+    $event->error_reply("Sorry, I couldn't find a design with that name.");
+    return;
+  }
+
+  my $locked_by = $self->locked_by;
+  if ($locked_by && $locked_by ne $user->username) {
+    $event->error_reply("Sorry, the board can't be changed right now!");
+    return;
+  }
+
+  my $tokens = $self->_updated_tokens_for($user);
+
+  unless ($tokens > 0) {
+    $event->error_reply("Sorry, you don't have any token!");
+    return;
+  }
+
+  my $uri = sprintf 'https://platform.vestaboard.com/subscriptions/%s/message',
+    $self->subscription_id;
+
+  my $res_f = $self->hub->http_post(
+    $uri,
+    Content => {
+      characters => $design->{characters},
+    },
+    'Content-Type' => 'application/json',
+    'X-Vestaboard-Api-Key'    => $self->api_key,
+    'X-Vestaboard-Api-Secret' => $self->api_secret,
+    'User-Agent'  => __PACKAGE__,
+  );
+
+  return $res_f
+    ->then(sub ($res) {
+      $event->reply("Board update posted!");
+
+      my $state = $self->_user_state->{ $user->username } //= {};
+      $state->{tokens}{count} = $tokens - 1;
+
+      $self->save_state;
+      return Future->done;
+    })
+    ->else(sub {
+      $event->reply_error("Sorry, something went wrong trying to post!");
+    });
+}
+
+sub _updated_tokens_for ($self, $user) {
+  my $state = $self->_user_state->{ $user->username } //= {};
+  my $token_state = $state->{tokens} //= {};
+
+  $token_state->{count} //= 0;
+  $token_state->{next}  //= time - 1;
+
+  if ($token_state->{count} < $MAX_TOKEN_COUNT && time > $token_state->{next}) {
+    $token_state->{count}++;
+    $token_state->{next} = time + $TOKEN_REGEN_FREQ;
+  }
+
+  return $token_state->{count};
 }
 
 1;
