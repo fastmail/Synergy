@@ -57,6 +57,20 @@ sub listener_specs {
       ],
     },
     {
+      name      => 'vesta_delete_design',
+      method    => 'handle_vesta_delete_design',
+      exclusive => 1,
+      predicate => sub ($, $e) {
+        $e->was_targeted && lc $e->text =~ /\Avesta delete design /;
+      },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "**vesta delete design `DESIGN`**: delete one of your designs",
+        }
+      ],
+    },
+    {
       name      => 'vesta_designs',
       method    => 'handle_vesta_designs',
       exclusive => 1,
@@ -333,6 +347,38 @@ sub handle_vesta_designs ($self, $event) {
   $text .= "• $_->{name}\n" for values $state->{designs}->%*;
 
   $event->reply($text);
+  return;
+}
+
+sub handle_vesta_delete_design ($self, $event) {
+  $event->mark_handled;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I can't help you out!");
+    return;
+  }
+
+  my ($name) = $event->text =~ /\Avesta delete design (.+)/;
+
+  $name =~ s/[^\pL\pN\pM]/-/g;
+  $name =~ s/-{2,}/-/g;
+
+  my $name_key = NFD(fc $name);
+
+  my $state = $self->_user_state->{ $user->username } //= {};
+
+  unless (exists $state->{designs}{ $name_key }) {
+    $event->reply("You don't have a design with that name.");
+    return;
+  }
+
+  delete $state->{designs}{$name_key};
+
+  $self->save_state;
+
+  $event->reply("Okay, I've deleted that design.");
   return;
 }
 
