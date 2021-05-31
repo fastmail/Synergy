@@ -478,7 +478,7 @@ sub handle_vesta_edit ($self, $event) {
 sub _validate_secret_for ($self, $user, $secret) {
   my $hashref = $self->_user_state->{ $user->username };
 
-  $Logger->log([
+  $Logger->log_debug([
     'u=<%s> secret=<%s> state=<%s>',
     $user->username,
     $secret,
