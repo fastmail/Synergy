@@ -17,6 +17,7 @@ use Lingua::EN::Inflect qw(NUMWORDS PL_N);
 use Path::Tiny;
 use Plack::App::File;
 use Plack::Request;
+use Time::Duration;
 use Unicode::Normalize qw(NFD);
 use URI;
 use URI::QueryParam;
@@ -411,6 +412,13 @@ sub handle_vesta_status ($self, $event) {
   $status .= sprintf "  You have %s board %s.",
     scalar($tokens == 0 ? 'no' : NUMWORDS($tokens)),
     PL_N('token', $tokens);
+
+  if ($tokens < $self->max_token_count) {
+    my $state = $self->_user_state->{ $user->username };
+    my $next = $state->{tokens}{next};
+    $status .= sprintf "  You'll get another token in %s.",
+      duration($next - time);
+  }
 
   $event->reply($status);
 }
