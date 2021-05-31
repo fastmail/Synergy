@@ -161,6 +161,8 @@ sub http_app ($self, $env) {
       [ qq({ "ok": true }\n) ],
     ];
   } else {
+    $Logger->log("Serving raw editor");
+
     open my $fh, '<', join(q{/}, $self->asset_directory, 'index.html');
     return [
       200,
