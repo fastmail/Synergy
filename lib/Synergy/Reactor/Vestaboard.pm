@@ -112,7 +112,7 @@ sub http_app ($self, $env) {
     my $username = $req->parameters->{username}; # yeah yeah, multivalue…
     my $secret   = $req->parameters->{secret};
     my $save_as  = $req->parameters->{name};
-    my $design   = $req->parameters->{characters};
+    my $design   = eval { JSON::MaybeXS->new->decode($req->content); };
 
     my $user     = $self->hub->user_directory->user_named($username);
     my $is_valid = $user && $self->_validate_secret_for($user, $secret);
