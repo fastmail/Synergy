@@ -17,6 +17,8 @@ use Unicode::Normalize qw(NFD);
 use URI;
 use URI::QueryParam;
 
+use Synergy::Logger '$Logger';
+
 my $MAX_SECRET_AGE  = 1800;
 
 has max_token_count => (
@@ -248,6 +250,8 @@ sub handle_vesta_edit ($self, $event) {
   my $uri    = URI->new($self->editor_uri);
   $uri->query_param(u => $user->username);
   $uri->query_param(secret => $secret);
+
+  $Logger->log("sending user $uri");
 
   $event->private_reply(
     "Okay, time to get editing! Click here: $uri",
