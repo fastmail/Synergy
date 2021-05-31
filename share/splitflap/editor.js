@@ -78,9 +78,7 @@ const designText = url.searchParams.get("design");
 let startBoard;
 try {
   if (startBoardText) {
-    startBoard = JSON.parse(
-      decodeURI(RawDeflate.inflate(atob(startBoardText)))
-    );
+    startBoard = JSON.parse(RawDeflate.inflate(atob(startBoardText)));
   }
 } catch (_) {}
 if (designText) {
@@ -93,10 +91,7 @@ const updateJsonBlock = () => {
     board.map((row) => [...row.map((column) => column.value)])
   );
   jsonBlock.innerText = representation;
-  url.searchParams.set(
-    "state",
-    btoa(RawDeflate.deflate(encodeURI(representation)))
-  );
+  url.searchParams.set("state", btoa(RawDeflate.deflate(representation)));
   window.history.pushState({}, "", url);
 };
 
