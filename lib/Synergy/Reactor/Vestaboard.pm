@@ -539,7 +539,7 @@ sub _pay_to_post_payload ($self, $event, $user, $payload) {
       my $state = $self->_user_state->{ $user->username } //= {};
       $state->{tokens}{count} = $tokens - 1;
 
-      $self->_lock_state({
+      $self->_set_lock_state({
         locked_by   => $user->username,
         expires_at  => int(time + ($self->token_regen_period / 2)),
       });
