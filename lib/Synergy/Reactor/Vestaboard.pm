@@ -360,7 +360,7 @@ sub handle_vesta_delete_design ($self, $event) {
     return;
   }
 
-  my ($name) = $event->text =~ /\Avesta delete design (.+)/;
+  my ($name) = $event->text =~ /\Avesta delete design\s+(.+)/;
 
   $name =~ s/[^\pL\pN\pM]/-/g;
   $name =~ s/-{2,}/-/g;
@@ -527,7 +527,7 @@ sub handle_vesta_post ($self, $event) {
     return;
   }
 
-  my ($name) = $event->text =~ /\Avesta post (\S+)\z/i;
+  my ($name) = $event->text =~ /\Avesta post\s+(\S+)\z/i;
   my $design = $self->_get_user_design_named($name);
 
   unless ($design) {
