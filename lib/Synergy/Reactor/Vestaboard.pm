@@ -525,7 +525,8 @@ sub _pay_to_post_payload ($self, $event, $user, $payload) {
   my $res_f = $self->hub->http_post(
     $uri,
     Content => JSON::MaybeXS->new->encode($payload),
-    'Content-Type' => 'application/json',
+    Content_Type => 'application/json',
+
     'X-Vestaboard-Api-Key'    => $self->api_key,
     'X-Vestaboard-Api-Secret' => $self->api_secret,
     'User-Agent'  => __PACKAGE__,
