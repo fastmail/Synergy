@@ -141,7 +141,7 @@ option[value="69"] {
     display: none;
 }
 #infobox.success {
-    background: #cdc;
+    background: #e7f4ec;
     border: 1px solid green;
 }
 #infobox.error {
