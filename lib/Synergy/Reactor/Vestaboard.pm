@@ -45,7 +45,9 @@ sub listener_specs {
       name      => 'vesta_edit',
       method    => 'handle_vesta_edit',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && lc $e->text eq 'vesta edit' },
+      predicate => sub ($, $e) {
+        $e->was_targeted && lc $e->text =~ /\Avesta edit /i;
+      },
       help_entries => [
         {
           title => 'vesta',
@@ -123,7 +125,11 @@ sub http_app ($self, $env) {
     my $username = $payload->{username};
     my $secret   = $payload->{secret};
     my $design   = $payload->{board};
-    my $save_as  = join q{.}, $i++, $^T; # Idiotic -- rjbs, 2021-05-31
+
+    # This idiotic fallback is just in case I have done something else idiotic
+    # somewhere that causes us to almost drop a design on the floor.
+    # -- rjbs, 2021-05-31
+    my $save_as  = $payload->{design} // join q{.}, $i++, $^T;
 
     my $user     = $username && $self->hub->user_directory->user_named($username);
     my $is_valid = $user && $self->_validate_secret_for($user, $secret);
@@ -327,6 +333,10 @@ sub handle_vesta_status ($self, $event) {
 sub handle_vesta_edit ($self, $event) {
   $event->mark_handled;
 
+  my $text = $event->text;
+  my $name = $text =~ s/\Avesta edit\s+//r;
+  $name =~ s/[^\pL\pN\pM]/-/g;
+
   my $user = $event->from_user;
 
   unless ($user) {
@@ -340,6 +350,7 @@ sub handle_vesta_edit ($self, $event) {
 
   my $secret = $self->_secret_for($user);
   my $uri    = URI->new($self->editor_uri);
+  $uri->query_param(design   => $name);
   $uri->query_param(username => $user->username);
   $uri->query_param(secret => $secret);
 
