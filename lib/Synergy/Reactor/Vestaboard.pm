@@ -109,12 +109,12 @@ sub http_app ($self, $env) {
   my $req = Plack::Request->new($env);
 
   if ($req->method eq 'POST') {
-    my $username = $req->parameters->{username}; # yeah yeah, multivalue…
+    my $username = $req->parameters->{u}; # yeah yeah, multivalue…
     my $secret   = $req->parameters->{secret};
     my $save_as  = $req->parameters->{name};
     my $design   = eval { JSON::MaybeXS->new->decode($req->content); };
 
-    my $user     = $self->hub->user_directory->user_named($username);
+    my $user     = $username && $self->hub->user_directory->user_named($username);
     my $is_valid = $user && $self->_validate_secret_for($user, $secret);
 
     unless ($is_valid) {
