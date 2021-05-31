@@ -41,6 +41,15 @@ has asset_directory => (
   required => 1,
 );
 
+has board_admins => (
+  isa => 'ArrayRef',
+  default => sub {  []  },
+  traits  => [ 'Array' ],
+  handles => {
+    board_admins => 'elements',
+  },
+);
+
 sub listener_specs {
   return (
     {
@@ -118,6 +127,18 @@ sub listener_specs {
         {
           title => 'vesta',
           text  => "**vesta status**: check the board status and your token count",
+        }
+      ],
+    },
+    {
+      name      => 'vesta_lock',
+      method    => 'handle_vesta_lock',
+      exclusive => 1,
+      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta (un)?lock\z/i },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "**vesta lock/unlock**: (admins only) lock or unlock the board",
         }
       ],
     },
@@ -325,6 +346,36 @@ sub _setup_asset_servers ($self) {
   }
 
   return;
+}
+
+sub handle_vesta_lock ($self, $event) {
+  $event->mark_handled;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I can't help you out!");
+    return;
+  }
+
+  unless (grep {; $_ eq $user->username } $self->board_admins) {
+    $event->error_reply("Sorry, only board admins can lock or unlock the board");
+    return;
+  }
+
+  if ($event->text =~ /vesta unlock/i) {
+    $self->_set_lock_state({});
+    $event->reply("The board is now unlocked!");
+    return
+  }
+
+  $self->_set_lock_state({
+    locked_by   => $user->username,
+    expires_at  => time + 2*86_400, # two days is probably a good default?
+  });
+
+  $event->reply("The board is locked!  Don't forget to unlock it later.");
+  return
 }
 
 sub handle_vesta_designs ($self, $event) {
