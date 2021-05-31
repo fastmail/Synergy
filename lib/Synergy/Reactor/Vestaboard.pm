@@ -2,6 +2,8 @@ use v5.24.0;
 use warnings;
 package Synergy::Reactor::Vestaboard;
 
+use utf8;
+
 use Moose;
 with 'Synergy::Role::Reactor::EasyListening';
 with 'Synergy::Role::HTTPEndpoint';
@@ -34,10 +36,22 @@ sub listener_specs {
       ],
     },
     {
+      name      => 'vesta_post_text',
+      method    => 'handle_vesta_post_text',
+      exclusive => 1,
+      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta post text .+\z/i },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "**vesta post text `TEXT`**: post a text message to the board",
+        }
+      ],
+    },
+    {
       name      => 'vesta_post',
       method    => 'handle_vesta_post',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta post \S+/i },
+      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta post \S+\z/i },
       help_entries => [
         {
           title => 'vesta',
@@ -267,7 +281,6 @@ sub _secret_for ($self, $user) {
 }
 
 sub handle_vesta_post ($self, $event) {
-  my $text = $event->text;
   $event->mark_handled;
 
   my $user = $event->from_user;
@@ -288,6 +301,51 @@ sub handle_vesta_post ($self, $event) {
     return;
   }
 
+  $self->_pay_to_post_payload(
+    $event,
+    $user,
+    {
+      characters => $design->{characters},
+    }
+  );
+}
+
+sub handle_vesta_post_text ($self, $event) {
+  $event->mark_handled;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my ($text) = $event->text =~ /\Avesta post text (.+)\z/i;
+
+  $text = uc $text;
+
+  unless ($self->_text_is_valid($text)) {
+    $event->error_reply("Sorry, I can't post that to the board.");
+    return;
+  }
+
+  $self->_pay_to_post_payload(
+    $event,
+    $user,
+    {
+      text => $text,
+    }
+  );
+}
+
+sub _text_is_valid ($self, $text) {
+  # This feels pretty thing. -- rjbs, 2021-05-31
+  return if $text =~ m{[^ 0-9A-Z!@#\$\(\)-\+&=;:'"%,./?°]};
+  return if length $text > 6 * 22;
+  return 1;
+}
+
+sub _pay_to_post_payload ($self, $event, $user, $payload) {
   my $locked_by = $self->locked_by;
   if ($locked_by && $locked_by ne $user->username) {
     $event->error_reply("Sorry, the board can't be changed right now!");
@@ -306,9 +364,7 @@ sub handle_vesta_post ($self, $event) {
 
   my $res_f = $self->hub->http_post(
     $uri,
-    Content => {
-      characters => $design->{characters},
-    },
+    Content => JSON::MaybeXS->new->encode($payload),
     'Content-Type' => 'application/json',
     'X-Vestaboard-Api-Key'    => $self->api_key,
     'X-Vestaboard-Api-Secret' => $self->api_secret,
@@ -327,7 +383,7 @@ sub handle_vesta_post ($self, $event) {
     })
     ->else(sub {
       $event->reply_error("Sorry, something went wrong trying to post!");
-    });
+    })->retain;
 }
 
 sub _updated_tokens_for ($self, $user) {
