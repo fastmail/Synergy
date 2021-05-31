@@ -148,6 +148,8 @@ sub http_app ($self, $env) {
 
     $self->save_state;
 
+    $Logger->log("Saved new design <$name> for $username");
+
     if ($self->default_channel_name) {
       my $channel = $self->hub->channel_named($self->default_channel_name);
       $channel->send_message_to_user($user, "I've saved a new board design called `$name`.");
