@@ -13,6 +13,8 @@ use namespace::clean;
 
 use Data::GUID qw(guid_string);
 use Lingua::EN::Inflect qw(NUMWORDS PL_N);
+use Path::Tiny;
+use Plack::App::File;
 use Plack::Request;
 use Unicode::Normalize qw(NFD);
 use URI;
@@ -30,6 +32,11 @@ has max_token_count => (
 has token_regen_period => (
   is => 'ro',
   default => 6 * 3600,
+);
+
+has asset_directory => (
+  is => 'ro',
+  required => 1,
 );
 
 sub listener_specs {
@@ -94,79 +101,71 @@ has [ qw( subscription_id api_key api_secret ) ] => (
 has '+http_path' => (
   default => sub {
     my ($self) = @_;
-    return '/vesta/' . $self->name;
+    return '/vesta/' . $self->name . '/';
   },
 );
 
 sub http_app ($self, $env) {
   my $req = Plack::Request->new($env);
 
-  if ($req->path eq '/editor') {
-    if ($req->path eq 'POST') {
-      my $username = $req->parameters->{username}; # yeah yeah, multivalue…
-      my $secret   = $req->parameters->{secret};
-      my $save_as  = $req->parameters->{name};
-      my $design   = $req->parameters->{characters};
+  if ($req->path eq 'POST') {
+    my $username = $req->parameters->{username}; # yeah yeah, multivalue…
+    my $secret   = $req->parameters->{secret};
+    my $save_as  = $req->parameters->{name};
+    my $design   = $req->parameters->{characters};
 
-      my $user     = $self->hub->user_directory->user_named($username);
-      my $is_valid = $user && $self->_validate_secret_for($user, $secret);
+    my $user     = $self->hub->user_directory->user_named($username);
+    my $is_valid = $user && $self->_validate_secret_for($user, $secret);
 
-      unless ($is_valid) {
-        return [
-          403,
-          [ "Content-Type" => "application/json" ],
-          [ qq({ "error": "authentication failed" }\n) ],
-        ];
-      }
-
-      unless ($self->_validate_design($design)) {
-        return [
-          400,
-          [ "Content-Type" => "application/json" ],
-          [ qq({ "error": "invalid design" }\n) ],
-        ];
-      }
-
-      # This is stupid, but should get the job done. -- rjbs, 2021-05-30
-      my $name = length $save_as ? $save_as : ("design " . time);
-      $name =~ s/[^\pL\pN\pM]/-/g;
-      $name =~ s/-{2,}/-/g;
-
-      my $name_key = NFD(fc $name);
-
-      my $this_user_state = $self->_user_state->{ $username } //= {};
-      $this_user_state->{designs}{$name_key} = {
-        name       => $name,
-        characters => $design,
-      };
-
-      $self->save_state;
-
-      if ($self->default_channel_name) {
-        my $channel = $self->hub->channel_named($self->default_channel_name);
-        $channel->send_message_to_user($user, "I've saved a new board design called `$name`.");
-      }
-
+    unless ($is_valid) {
       return [
-        200,
+        403,
         [ "Content-Type" => "application/json" ],
-        [ qq({ "ok": true }\n) ],
-      ];
-    } else {
-      # Serve the editor.
-      return [
-        200,
-        [ "Content-Type" => "text/plain" ],
-        [ "This does not yet work.\n" ],
+        [ qq({ "error": "authentication failed" }\n) ],
       ];
     }
-  }
 
-  return [
-    404,
-    [ 'Content-Type' => 'text/plain' ],
-    [ "Sorry, nothing here." ],
-  ];
+    unless ($self->_validate_design($design)) {
+      return [
+        400,
+        [ "Content-Type" => "application/json" ],
+        [ qq({ "error": "invalid design" }\n) ],
+      ];
+    }
+
+    # This is stupid, but should get the job done. -- rjbs, 2021-05-30
+    my $name = length $save_as ? $save_as : ("design " . time);
+    $name =~ s/[^\pL\pN\pM]/-/g;
+    $name =~ s/-{2,}/-/g;
+
+    my $name_key = NFD(fc $name);
+
+    my $this_user_state = $self->_user_state->{ $username } //= {};
+    $this_user_state->{designs}{$name_key} = {
+      name       => $name,
+      characters => $design,
+    };
+
+    $self->save_state;
+
+    if ($self->default_channel_name) {
+      my $channel = $self->hub->channel_named($self->default_channel_name);
+      $channel->send_message_to_user($user, "I've saved a new board design called `$name`.");
+    }
+
+    return [
+      200,
+      [ "Content-Type" => "application/json" ],
+      [ qq({ "ok": true }\n) ],
+    ];
+  } else {
+    open my $fh, '<', join(q{/}, $self->asset_directory, 'index.html');
+    return [
+      200,
+      [ "Content-Type" => "text/html; charset=utf-8" ],
+      $fh,
+    ];
+  }
 }
 
 sub _validate_design ($self, $design) {
@@ -241,7 +240,41 @@ after register_with_hub => sub ($self, @) {
     $self->_set_user_state($state->{user});
     $self->_set_lock_state($state->{lock});
   }
+
+  $self->_setup_asset_servers;
+
+  return;
 };
+
+sub _setup_asset_servers ($self) {
+  # I know, this is incredibly stupid, but it gets the job done.  We can talk
+  # about better ways to do this at some future date. -- rjbs, 2021-05-31
+
+  my $root = $self->asset_directory;
+  my @files = `find $root -type f`;
+  chomp @files;
+
+  my $server = $self->hub->server;
+  my $base   = $self->http_path;
+
+  for my $path (@files) {
+    my $mount_as = $path =~ s{\A$root/}{}r;
+
+    $server->register_path("$base$mount_as", sub ($env) {
+      open my $fh, '<', $path or die "can't read asset file $path: $!";
+
+      return [
+        200,
+        [
+          'Content-Type', Plack::MIME->mime_type($path),
+        ],
+        $fh,
+      ];
+    });
+  }
+
+  return;
+}
 
 sub handle_vesta_status ($self, $event) {
   $event->mark_handled;
