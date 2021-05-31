@@ -74,6 +74,7 @@ let firstElement;
 
 const url = new URL(window.location);
 const startBoardText = url.searchParams.get("state");
+const designText = url.searchParams.get("design");
 let startBoard;
 try {
   if (startBoardText) {
@@ -82,6 +83,9 @@ try {
     );
   }
 } catch (_) {}
+if (designText) {
+  document.getElementById("design-input").value = designText;
+}
 
 const jsonBlock = document.getElementById("json");
 const updateJsonBlock = () => {
@@ -224,6 +228,9 @@ updateJsonBlock();
 window.onkeydown = (event) => {
   const active = document.activeElement;
   if (!active || !active._data) {
+    if (active && active.id === "design-input") {
+      return;
+    }
     firstElement.focus();
     if (event.key === "Tab") {
       event.preventDefault();
@@ -271,6 +278,12 @@ window.onkeydown = (event) => {
   updateJsonBlock();
 };
 
+const designInput = document.getElementById("design-input");
+designInput.onkeyup = () => {
+  url.searchParams.set("design", designInput.value);
+  window.history.pushState({}, "", url);
+};
+
 const submitButton = document.getElementById("submit-button");
 
 const setInfoBox = function (type, text) {
@@ -290,10 +303,19 @@ if (!checkParams.get("username") || !checkParams.get("secret")) {
 submitButton.onclick = async function () {
   submitButton.disabled = true;
   const urlParams = new URLSearchParams(window.location.search);
+  const design = urlParams.get("design");
+
+  if (!design) {
+    setInfoBox("error", "Please name your design!");
+    submitButton.disabled = false;
+    return;
+  }
+
   const payload = {
     username: urlParams.get("username"),
     secret: urlParams.get("secret"),
     board: JSON.parse(representation),
+    design,
   };
   console.log(payload);
   try {

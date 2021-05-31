@@ -108,6 +108,16 @@ option[value="69"] {
     display: none;
 }
 
+#design {
+    text-align: center;
+    margin: 2rem auto 1rem;
+}
+
+#design input {
+    font-size: 1.6em;
+    max-width: 94vw;
+}
+
 #submit {
     text-align: center;
     margin: 5ch auto;
