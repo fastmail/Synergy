@@ -285,14 +285,14 @@ has _lock_state => (
   default => sub {  {}  },
 );
 
-sub locked_by ($self) {
+sub current_lock ($self) {
   my $lock = $self->_lock_state;
 
   # No lock.
   return if keys %$lock == 0;
 
   # Unexpired lock.
-  return $lock->{locked_by} if ($self->_lock_state->{expires_at} // 0) > time;
+  return $lock if ($self->_lock_state->{expires_at} // 0) > time;
 
   # Expired lock.  Empty the lock, save state, and return false.
   $self->_set_lock_state({});
@@ -446,14 +446,14 @@ sub handle_vesta_status ($self, $event) {
 
   my $status;
 
-  if (my $locked_by = $self->locked_by) {
-    my $time_left = $locked_by->{expires_at} - time;
+  if (my $lock = $self->current_lock) {
+    my $time_left = $lock->{expires_at} - time;
 
     $status = sprintf 'The board is locked by %s until %s.',
-      $locked_by->{locked_by},
+      $lock->{locked_by},
       ($time_left > 86_400*7
         ? 'some far-off time'
-        : $user->format_timestamp($locked_by->{expires_at}));
+        : $user->format_timestamp($lock->{expires_at}));
   } else {
     $status = "The board is unlocked.";
   }
@@ -639,8 +639,8 @@ sub _text_is_valid ($self, $text) {
 }
 
 sub _pay_to_post_payload ($self, $event, $user, $payload) {
-  my $locked_by = $self->locked_by;
-  if ($locked_by && $locked_by ne $user->username) {
+  my $lock = $self->current_lock;
+  if ($lock && $lock->{locked_by} ne $user->username) {
     $event->error_reply("Sorry, the board can't be changed right now!");
     return;
   }
