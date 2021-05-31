@@ -11,6 +11,7 @@ with 'Synergy::Role::HTTPEndpoint';
 use experimental qw(signatures);
 use namespace::clean;
 
+use Compress::Raw::Zlib ();
 use Data::GUID qw(guid_string);
 use Lingua::EN::Inflect qw(NUMWORDS PL_N);
 use Path::Tiny;
@@ -392,6 +393,27 @@ sub handle_vesta_edit ($self, $event) {
   $uri->query_param(username => $user->username);
   $uri->query_param(secret => $secret);
 
+  if (my $design = $self->_get_user_design_named($user, $name)) {
+    # A design exists, so let's try to encode it.
+    my $state = eval {
+      my $json = JSON::MaybeXS->new->encode($design->{characters});
+      my ($deflater) = Compress::Raw::Zlib::Deflate->new(
+        -WindowBits => - Compress::Raw::Zlib::MAX_WBITS()
+      );
+
+      $deflater->deflate(\$json, \my $deflated);
+      $deflater->flush(\$deflated);
+
+      MIME::Base64::encode_base64($deflated);
+    };
+
+    if ($state) {
+      $uri->query_param(state => $state);
+    } else {
+      $Logger->log("error producing state string: $@");
+    }
+  }
+
   $Logger->log("sending user $uri");
 
   $event->private_reply(
@@ -440,6 +462,15 @@ sub _secret_for ($self, $user) {
   return $hashref->{value};
 }
 
+sub _get_user_design_named ($self, $user, $name) {
+  my $name_key = NFD(fc $name);
+
+  my $this_user_state = $self->_user_state->{ $user->username } //= {};
+  my $design = $this_user_state->{designs}{$name_key};
+
+  return $design;
+}
+
 sub handle_vesta_post ($self, $event) {
   $event->mark_handled;
 
@@ -451,10 +482,7 @@ sub handle_vesta_post ($self, $event) {
   }
 
   my ($name) = $event->text =~ /\Avesta post (\S+)\z/i;
-  my $name_key = NFD(fc $name);
-
-  my $this_user_state = $self->_user_state->{ $user->username } //= {};
-  my $design = $this_user_state->{designs}{$name_key};
+  my $design = $self->_get_user_design_named($name);
 
   unless ($design) {
     $event->error_reply("Sorry, I couldn't find a design with that name.");
