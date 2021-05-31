@@ -350,6 +350,13 @@ sub handle_vesta_edit ($self, $event) {
 sub _validate_secret_for ($self, $user, $secret) {
   my $hashref = $self->_user_state->{ $user->username };
 
+  $Logger->log([
+    'u=<%s> secret=<%s> state=<%s>',
+    $user->username,
+    $secret,
+    $hashref,
+  ]);
+
   return unless $hashref;
 
   return unless $hashref->{expires_at} > time;
