@@ -56,6 +56,20 @@ sub listener_specs {
       ],
     },
     {
+      name      => 'vesta_designs',
+      method    => 'handle_vesta_designs',
+      exclusive => 1,
+      predicate => sub ($, $e) {
+        $e->was_targeted && lc $e->text eq 'vesta designs';
+      },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "**vesta designs**: list all your designs",
+        }
+      ],
+    },
+    {
       name      => 'vesta_post_text',
       method    => 'handle_vesta_post_text',
       exclusive => 1,
@@ -294,6 +308,30 @@ sub _setup_asset_servers ($self) {
     });
   }
 
+  return;
+}
+
+sub handle_vesta_designs ($self, $event) {
+  $event->mark_handled;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I can't help you out!");
+    return;
+  }
+
+  my $state = $self->_user_state->{ $user->username } //= {};
+
+  unless ($state->{designs} && keys $state->{designs}->%*) {
+    $event->reply("You don't have any Vestaboard designs on file.");
+    return;
+  }
+
+  my $text = "Here are your designs on file:\n";
+  $text .= "• $_->{name}\n" for values $state->{designs}->%*;
+
+  $event->reply($text);
   return;
 }
 
