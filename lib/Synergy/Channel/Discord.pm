@@ -128,9 +128,11 @@ sub describe_conversation ($self, $event) {
   if ($self->discord->is_channel($channel_id)) {
     return '#' . $self->discord->get_channel($channel_id)->{name};
   }
+
   if ($self->discord->is_dm_channel($channel_id)) {
     return '@' . $who;
   }
+
   return $self->discord->get_group_conversation($channel_id)->{name};
 }
 
@@ -142,13 +144,16 @@ sub describe_event ($self, $event) {
   my $via   = qq{via Discord instance "$discord"};
 
   my $channel_id = $event->transport_data->{channel_id};
+
   if ($self->discord->is_channel($channel_id)) {
     my $channel_name = $self->discord->get_channel($channel_id)->{name};
     return qq{a message on #$channel_name from $who $via};
   }
+
   if ($self->discord->is_dm_channel($channel_id)) {
     return "a private message from $who $via";
   }
+
   return "an unknown discord communication from $who $via";
 }
 
