@@ -528,7 +528,7 @@ sub handle_vesta_post ($self, $event) {
   }
 
   my ($name) = $event->text =~ /\Avesta post\s+(\S+)\z/i;
-  my $design = $self->_get_user_design_named($name);
+  my $design = $self->_get_user_design_named($user, $name);
 
   unless ($design) {
     $event->error_reply("Sorry, I couldn't find a design with that name.");
