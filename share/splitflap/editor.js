@@ -279,6 +279,14 @@ const setInfoBox = function (type, text) {
   infoBox.innerText = text;
 };
 
+const checkParams = new URLSearchParams(window.location.search);
+if (!checkParams.get("username") || !checkParams.get("secret")) {
+  setInfoBox(
+    "error",
+    "There seems to be a problem with your submission token.  Your attempts to save your design will probably fail!"
+  );
+}
+
 submitButton.onclick = async function () {
   submitButton.disabled = true;
   const urlParams = new URLSearchParams(window.location.search);
