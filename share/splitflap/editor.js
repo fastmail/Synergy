@@ -158,6 +158,7 @@ const createSelectForCell = (boardCell) => {
       newTargetJ--;
     }
     const targetSelect = board[newTargetI][newTargetJ].layer;
+    board[newTargetI][newTargetJ].value = 0;
     targetSelect.focus();
     targetSelect.value = " ";
   };
