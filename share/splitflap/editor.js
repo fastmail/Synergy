@@ -289,13 +289,18 @@ submitButton.onclick = async function () {
   };
   console.log(payload);
   try {
-    await fetch(window.location.href.split("?")[0], {
+    const response = await fetch(window.location.href.split("?")[0], {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
     });
+    if (response.status !== 200) {
+      throw new Error("Bad response: " + response.statusText);
+    }
+    setInfoBox("success", "Your message has been submitted!");
+    submitButton.disabled = false;
   } catch (err) {
     setInfoBox(
       "error",
@@ -305,6 +310,4 @@ submitButton.onclick = async function () {
     submitButton.disabled = false;
     return;
   }
-  setInfoBox("success", "Your message has been submitted!");
-  submitButton.disabled = false;
 };
