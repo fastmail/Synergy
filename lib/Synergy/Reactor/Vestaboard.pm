@@ -340,7 +340,7 @@ sub handle_vesta_edit ($self, $event) {
 
   my $secret = $self->_secret_for($user);
   my $uri    = URI->new($self->editor_uri);
-  $uri->query_param(u => $user->username);
+  $uri->query_param(username => $user->username);
   $uri->query_param(secret => $secret);
 
   $Logger->log("sending user $uri");
