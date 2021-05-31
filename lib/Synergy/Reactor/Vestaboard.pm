@@ -174,7 +174,7 @@ sub _validate_design ($self, $design) {
 
 sub state ($self) {
   return {
-    user  => { $self->_user_state },
+    user  => $self->_user_state,
     lock  => $self->_lock_state,
   };
 }
