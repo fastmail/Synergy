@@ -337,3 +337,7 @@ submitButton.onclick = async function () {
     return;
   }
 };
+
+document.getElementById("showstate-button").onclick = () => {
+  jsonBlock.classList.toggle("show");
+};
