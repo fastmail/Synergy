@@ -341,3 +341,15 @@ submitButton.onclick = async function () {
 document.getElementById("showstate-button").onclick = () => {
   jsonBlock.classList.toggle("show");
 };
+
+document.getElementById("clearboard-button").onclick = () => {
+  if (confirm("Are you sure?")) {
+    for (let i = 0; i < 6; i++) {
+      for (let j = 0; j < 22; j++) {
+        board[i][j].value = 0;
+        board[i][j].layer.value = " ";
+      }
+    }
+    updateJsonBlock();
+  }
+};
