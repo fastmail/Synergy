@@ -130,7 +130,6 @@ const createSelectForCell = (boardCell) => {
   newSelect.writeRaw = (num) => {
     newSelect.value = num;
     boardCell.value = num;
-    newSelect.goNextCell();
   };
   newSelect.goNextCell = () => {
     let newTargetI = boardCell.i;
@@ -155,18 +154,22 @@ const createSelectForCell = (boardCell) => {
     targetSelect.focus();
   };
   newSelect.backspace = () => {
-    let newTargetI = boardCell.i;
-    let newTargetJ = boardCell.j;
-    if (newTargetJ === 0 && newTargetI > 0) {
-      newTargetI--;
-      newTargetJ = 21;
-    } else if (newTargetI !== 0 || newTargetJ !== 0) {
-      newTargetJ--;
+    if (!Number(newSelect.value)) {
+      let newTargetI = boardCell.i;
+      let newTargetJ = boardCell.j;
+      if (newTargetJ === 0 && newTargetI > 0) {
+        newTargetI--;
+        newTargetJ = 21;
+      } else if (newTargetI !== 0 || newTargetJ !== 0) {
+        newTargetJ--;
+      }
+      const targetSelect = board[newTargetI][newTargetJ].layer;
+      board[newTargetI][newTargetJ].value = 0;
+      targetSelect.focus();
+      targetSelect.value = " ";
+    } else {
+      newSelect.writeRaw(0);
     }
-    const targetSelect = board[newTargetI][newTargetJ].layer;
-    board[newTargetI][newTargetJ].value = 0;
-    targetSelect.focus();
-    targetSelect.value = " ";
   };
   newSelect.goLeft = () => {
     let newTargetI = boardCell.i;
@@ -267,6 +270,7 @@ window.onkeydown = (event) => {
     if (shouldPaint) {
       // fun hack:  63 is PoppyRed, so let's just count up from there!
       target.writeRaw(62 + thisNumber);
+      target.goNextCell();
       event.preventDefault();
       event.stopPropagation();
     }
