@@ -98,6 +98,14 @@ option[value="69"] {
     background: white;
 } */
 
+#legend {
+    font-family: Arial, Helvetica, sans-serif;
+    text-align: center;
+    background: #888;
+    padding: 0.5em;
+    margin-top: 1em;
+}
+
 #json {
     font-family: 'Courier New', Courier, monospace;
     font-size: 0.8rem;
@@ -146,7 +154,8 @@ option[value="69"] {
     margin: 2rem auto;
 }
 
-#infobox.hidden {
+#infobox.hidden,
+#legend.hidden {
     display: none;
 }
 #infobox.success {
