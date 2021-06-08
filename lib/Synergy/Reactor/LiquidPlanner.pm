@@ -98,6 +98,14 @@ has workspace_id => (
 has activity_id => (
   is  => 'ro',
   isa => 'Int',
+  lazy => 1,
+  default  => sub ($self, @) {
+    my $id = $self->_lp_toml_data->{Workspace}{default_activity_id};
+    confess("did not configure default activity id")
+      unless $id;
+
+    return $id;
+  },
 );
 
 for my $package (qw(
@@ -113,6 +121,7 @@ for my $package (qw(
   has "$package\_package_id" => (
     is  => 'ro',
     isa => 'Int',
+    lazy => 1,
     default  => sub ($self, @) {
       my $id = $self->_lp_toml_data->{Package}{$package};
       confess("did not configure id for mandatory package: $package")
