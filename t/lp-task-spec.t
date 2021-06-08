@@ -33,7 +33,7 @@ my $synergy = Synergy::Hub->synergize(
         inbox_package_id => 3,
         recurring_package_id => 4,
 
-        project_portfolio_id => 5,
+        project_portfolio_package_id => 5,
 
         interrupts_package_id => 6,
         discussion_package_id => 7,

@@ -197,7 +197,7 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
 
   if ( $arg{project}
     && $item->{project_id}
-    && (grep {; $_ == $self->project_portfolio_id } $item->{parent_ids}->@*)
+    && (grep {; $_ == $self->project_portfolio_package_id } $item->{parent_ids}->@*)
   ) {
     my $project = $item->{parent_crumbs}[-1] =~ s/^P: //r;
     $title = "*[$project]* $title";
@@ -304,13 +304,13 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
 
 has [ qw(
   inbox_package_id
-  interrupts_package_id
   urgent_package_id
-  project_portfolio_id
-  recurring_package_id
+  interrupts_package_id
   discussion_package_id
+  recurring_package_id
   staging_package_id
   archive_package_id
+  project_portfolio_package_id
 ) ] => (
   is  => 'ro',
   isa => 'Int',
@@ -4534,7 +4534,7 @@ sub _handle_projects ($self, $event, $text) {
     sort {; $a->[1] <=> $b->[1] || $PROJECT_SORTER{$sort}->() }
     map  {; [
       $_,
-      ($_->{parent_id} == $self->project_portfolio_id ? 1 : 0),
+      ($_->{parent_id} == $self->project_portfolio_package_id ? 1 : 0),
       $_->{custom_field_values}{'Project Phase'},
       ($by_lp{ $_->{assignments}[0]{person_id} } // "(unknown user)"),
     ] }
@@ -4845,7 +4845,7 @@ sub project_report ($self, $who, $arg = {}) {
       [ item_type => '='  => 'Project'  ],
       [ owner_id  => '='  => $lp_id     ],
       [ is_done   => is   => 'false'    ],
-      [ parent_id => '='  => $self->project_portfolio_id ],
+      [ parent_id => '='  => $self->project_portfolio_package_id ],
       [ "custom_field:'Project Phase'" => 'is_set' ],
     ],
   });
