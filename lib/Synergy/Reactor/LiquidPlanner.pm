@@ -68,6 +68,27 @@ my sub parse_lp_datetime ($str) {
   DateTime::Format::ISO8601->parse_datetime($str);
 }
 
+has team_toml_filename => (
+  is => 'ro',
+);
+
+has _lp_toml_data => (
+  is    => 'ro',
+  lazy  => 1,
+  default => sub ($self, @) {
+    my $filename = $self->team_toml_filename;
+    return {} unless length $filename;
+
+    open(my $fh, '<', $filename)
+      or die "Can't read team TOML file ($filename): $!";
+
+    my $toml = do { local $/; <$fh> };
+
+    require TOML;
+    return TOML::from_toml($toml);
+  },
+);
+
 has workspace_id => (
   is  => 'ro',
   isa => 'Int',
@@ -78,6 +99,29 @@ has activity_id => (
   is  => 'ro',
   isa => 'Int',
 );
+
+for my $package (qw(
+  inbox
+  urgent
+  interrupts
+  discussion
+  recurring
+  staging
+  archive
+  project_portfolio
+)) {
+  has "$package\_package_id" => (
+    is  => 'ro',
+    isa => 'Int',
+    default  => sub ($self, @) {
+      my $id = $self->_lp_toml_data->{Package}{$package};
+      confess("did not configure id for mandatory package: $package")
+        unless $id;
+
+      return $id;
+    },
+  );
+}
 
 has triage_channel_name => (
   is  => 'ro',
@@ -301,21 +345,6 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
 
   return $text;
 }
-
-has [ qw(
-  inbox_package_id
-  urgent_package_id
-  interrupts_package_id
-  discussion_package_id
-  recurring_package_id
-  staging_package_id
-  archive_package_id
-  project_portfolio_package_id
-) ] => (
-  is  => 'ro',
-  isa => 'Int',
-  required => 1,
-);
 
 my %KNOWN = (
   # SHORTCUTS
