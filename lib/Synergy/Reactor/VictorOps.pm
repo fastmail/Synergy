@@ -18,6 +18,7 @@ use JSON::MaybeXS;
 use List::Util qw(first);
 use DateTimeX::Format::Ago;
 use Synergy::Logger '$Logger';
+use Synergy::Util qw( bool_from_text );
 use Date::Parse 2.32;   # century time bugfix
 
 has webhook_auth_code => (
@@ -706,7 +707,18 @@ sub handle_maint_end ($self, $event) {
       return Future->done($timestamp, $instance_id);
     })
     ->then(sub ($timestamp, $instance_id) {
-      if (grep {; $_ =~ qr{\A/nor(?:esolve)?\z/} } @args) {
+      # Normally we will resolve incidents when leaving maint.  This is not a
+      # universally beloved behavior, though, so there are way ways out of it:
+      # you can say "demaint /noresolve" if you want to change behavior just
+      # the one time, or you can set your victorops.resolve-on-maint preference
+      # to false, to change the default behavior.  Note:  There is no way to
+      # resolve-on-maint if you set your preference to no.  You'll just need to
+      # issue two commands. -- rjbs, 2021-06-09
+      if (
+        (not $self->get_user_preference($event->from_user, 'resolve-on-maint') )
+        ||
+        (grep {; $_ =~ qr{\A/nor(?:esolve)?\z/} } @args)
+      ) {
         return Future->done($instance_id);
       }
 
@@ -838,6 +850,12 @@ __PACKAGE__->add_preference(
 
     return lc $value;
   },
+);
+
+__PACKAGE__->add_preference(
+  name      => 'resolve-on-maint',
+  default   => 1,
+  validator => sub ($self, $value, @) { return bool_from_text($value) },
 );
 
 1;
