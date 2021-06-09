@@ -32,6 +32,13 @@ has ticket_regex => (
   },
 );
 
+# id => name-or-slackmoji
+has brand_mapping => (
+  is => 'ro',
+  isa => 'HashRef',
+  predicate => 'has_brand_mapping',
+);
+
 has zendesk_client => (
   is => 'ro',
   lazy => 1,
@@ -113,6 +120,12 @@ sub _output_ticket ($self, $event, $id) {
       my $assignee = $ticket->assignee;
       my @assignee = $assignee ?  [ "Assigned to" => $assignee->name ] : ();
 
+      my @brand;
+      if ( $self->has_brand_mapping && $ticket->brand_id) {
+        my $brand_text = $self->brand_mapping->{$ticket->brand_id};
+        @brand = [ Product => $brand_text ] if $brand_text;
+      }
+
       # slack block syntax is silly.
       my @fields = map {;
         +{
@@ -120,6 +133,7 @@ sub _output_ticket ($self, $event, $id) {
            text => "*$_->[0]:* $_->[1]",
          }
       } (
+        @brand,
         [ "Status"  => ucfirst($status) ],
         [ "Opened"  => ago(time - $created) ],
         [ "Updated" => ago(time - $updated) ],
