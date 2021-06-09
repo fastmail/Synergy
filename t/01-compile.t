@@ -6,6 +6,7 @@ chomp @files;
 
 my %to_skip = map {; $_ => 1 } qw(
   Synergy::Reactor::RememberTheMilk
+  Synergy::Reactor::Zendesk
 );
 
 for my $file (sort @files) {
