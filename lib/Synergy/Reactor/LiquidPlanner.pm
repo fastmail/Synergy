@@ -4034,7 +4034,7 @@ sub _handle_timer_start ($self, $event, $text) {
     return $self->_handle_timer_start_existing($event, $task);
   }
 
-  if ($text =~ /\A(?:LP)?([0-9]+)\z/) {
+  if ($text =~ /\A(?:LP\s*)?([0-9]+)\z/) {
     my $task_id = $1;
     my $task_res = $lpc->get_item($task_id);
 
