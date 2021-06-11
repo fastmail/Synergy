@@ -2294,24 +2294,7 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
       my $f = $event->reply($plain, { slack => $slack });
 
       if ($plan->{helpspot_tickets} && $plan->{helpspot_tickets}->@*) {
-        if (my $helpspot = $self->hub->reactor_named('helpspot')) {
-          for my $ptn ($plan->{helpspot_tickets}->@*) {
-            $helpspot->_http_post('private.request.update', {
-              xRequest => $ptn,
-              tNote => "LiquidPlanner task created at $item_uri",
-              fNoteType => 0,
-            })->then(sub ($res) {
-              unless ($res->is_success) {
-                $event->reply("I couldn't add a comment to PTN $ptn for the task, sorry.");
-              }
-              return Future->done;
-            })->else(sub {
-              $event->reply("I couldn't add a comment to PTN $ptn for the task, sorry.");
-              $Logger->log([ "something went wrong posting to HelpSpot", $_[0]->as_string ]);
-              return Future->done;
-            })->retain;
-          }
-        }
+        $self->_add_task_links($event, $plan->{helpspot_tickets}, $item_uri);
       }
 
       return $f;
@@ -2319,6 +2302,45 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
   })->else(sub (@wtf) { $Logger->log("error with task creation: @wtf") })->retain;
 
   return;
+}
+
+# This is, obviously, _extremely_ specific to our work synergy install.
+sub _add_task_links ($self, $event, $ptns, $task_link) {
+  my $helpspot = $self->hub->reactor_named('helpspot');
+  my $zendesk = $self->hub->reactor_named('zendesk');
+  return unless $helpspot || $zendesk;
+
+  PTN: for my $ptn (@$ptns) {
+    if ($ptn < 1_000_000) {
+      next PTN unless $helpspot;
+
+      $helpspot->_http_post('private.request.update', {
+        xRequest => $ptn,
+        tNote => "LiquidPlanner task created at $task_link",
+        fNoteType => 0,
+      })->then(sub ($res) {
+        unless ($res->is_success) {
+          $event->reply("I couldn't add a comment to PTN $ptn for the task, sorry.");
+        }
+        return Future->done;
+      })->else(sub {
+        $event->reply("I couldn't add a comment to PTN $ptn for the task, sorry.");
+        $Logger->log([ "something went wrong posting to HelpSpot: %s", $_[0]->as_string ]);
+        return Future->done;
+      })->retain;
+    } else {
+      next PTN unless $zendesk;
+
+      $zendesk->zendesk_client->ticket_api->add_comment_to_ticket_f($ptn, {
+        body => "LiquidPlanner task created at $task_link",
+        public => \0,
+      })->else(sub ($err, @) {
+        $event->reply("I couldn't add a comment to PTN $ptn for the task, sorry.");
+        $Logger->log([ "something went wrong posting to Zendesk: %s", $err ]);
+        return Future->done;
+      })->retain;
+    }
+  }
 }
 
 sub upcoming_tasks_for_user ($self, $user, $count) {
