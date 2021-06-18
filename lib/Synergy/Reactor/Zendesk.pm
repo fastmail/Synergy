@@ -54,6 +54,42 @@ has zendesk_client => (
   },
 );
 
+# This is stolen from the GitLab reactor; I might make this abstract later but
+# it'll require a parameterized role. -- michael, 2021-06-18
+has _recent_ticket_expansions => (
+  is => 'ro',
+  isa => 'HashRef',
+  traits => ['Hash'],
+  lazy => 1,
+  default => sub { {} },
+  handles => {
+    has_expanded_ticket_recently => 'exists',
+    note_ticket_expansion        => 'set',
+    remove_ticket_expansion      => 'delete',
+    recent_ticket_expansions     => 'keys',
+    ticket_expansion_for         => 'get',
+  },
+);
+
+# We'll only keep records of expansions for 5m or so.
+has expansion_record_reaper => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) {
+    return IO::Async::Timer::Periodic->new(
+      interval => 30,
+      on_tick  => sub {
+        my $then = time - (60 * 5);
+
+        for my $key ($self->recent_ticket_expansions) {
+          my $ts = $self->ticket_expansion_for($key);
+          $self->remove_ticket_expansion($key) if $ts lt $then;
+        }
+      },
+    );
+  }
+);
+
 sub listener_specs ($self) {
   my $ticket_re = $self->ticket_regex;
 
@@ -77,11 +113,17 @@ sub handle_ptn_mention ($self, $event) {
   my %ids = map {; $_ => 1 } @ids;
   @ids = sort keys %ids;
 
-  my $replied = 0;
+  my $declined_to_reply = 0;
 
   my @futures;
 
   for my $id (@ids) {
+      my $key = $self->_expansion_key_for_ticket($event, $id);
+      if ($self->has_expanded_ticket_recently($key)) {
+        $declined_to_reply++;
+        next;
+      }
+
     my $f = $self->_output_ticket($event, $id);
     push @futures, $f;
   }
@@ -90,6 +132,9 @@ sub handle_ptn_mention ($self, $event) {
   $f->retain;
 
   $f->on_ready(sub ($waiter) {
+    $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
+      if $declined_to_reply;
+
     return unless $event->was_targeted;
 
     my @failed = $waiter->failed_futures;
@@ -99,6 +144,16 @@ sub handle_ptn_mention ($self, $event) {
     my $which = WORDLIST(@ids, { conj => "or" });
     $event->reply("Sorry, I couldn't find any tickets for $which.");
   });
+}
+
+sub _expansion_key_for_ticket ($self, $event, $id) {
+  # Not using $event->source_identifier here because we don't care _who_
+  # triggered the expansion. -- michael, 2019-02-05
+  return join(';',
+    $id,
+    $event->from_channel->name,
+    $event->conversation_address
+  );
 }
 
 sub _output_ticket ($self, $event, $id) {
@@ -160,6 +215,9 @@ sub _output_ticket ($self, $event, $id) {
           text => $text,
         },
       });
+
+      my $key = $self->_expansion_key_for_ticket($event, $ticket->id);
+      $self->note_ticket_expansion($key, time);
 
       return Future->done(1);
     })
