@@ -254,6 +254,10 @@ sub decode_slack_formatting ($self, $text) {
   $text =~ s/&gt;/>/g;
   $text =~ s/&amp;/&/g;
 
+  # Weirdly, desktop Slack kills leading/trailing spaces, but on mobile it
+  # will happily send them.
+  $text =~ s/^\s*|\s$//g;
+
   return $text;
 }
 
