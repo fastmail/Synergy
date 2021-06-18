@@ -5,7 +5,10 @@ package Synergy::Reactor::GitLab;
 
 use Moose;
 with 'Synergy::Role::Reactor::EasyListening',
-     'Synergy::Role::HasPreferences';
+     'Synergy::Role::HasPreferences',
+     'Synergy::Role::DeduplicatesExpandos' => {
+       expandos => [qw( mr commit )],
+     };
 
 use experimental qw(lexical_subs signatures);
 use namespace::clean;
@@ -69,42 +72,6 @@ has relevant_owners => (
   lazy => 1,
   default => sub { [] },
 );
-
-# key => time
-has _expansion_cache_guts => (
-  is  => 'ro',
-  isa => 'HashRef',
-  traits  => [ 'Hash' ],
-  default => sub {  {}  },
-);
-
-sub _expansion_cache ($self) {
-  my $guts = $self->_expansion_cache_guts;
-
-  for my $key (keys %$guts) {
-    delete $guts->{$key} if time - 300 > $guts->{$key};
-  }
-
-  return $guts;
-}
-
-sub has_expanded_mr_recently ($self, $key) {
-  return exists $self->_expansion_cache->{"MR_$key"};
-}
-
-sub note_mr_expansion ($self, $key) {
-  $self->_expansion_cache_guts->{"MR_$key"} = time;
-  return;
-}
-
-sub has_expanded_commit_recently ($self, $key) {
-  return exists $self->_expansion_cache->{"COMMIT_$key"};
-}
-
-sub note_commit_expansion ($self, $key) {
-  $self->_expansion_cache_guts->{"COMMIT_$key"} = time;
-  return;
-}
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
@@ -268,16 +235,6 @@ sub _load_auto_shortcuts ($self) {
     $self->add_shortcuts(%names);
     $self->save_state;
   })->retain;
-}
-
-sub _key_for_gitlab_data ($self, $event, $data) {
-  # Not using $event->source_identifier here because we don't care _who_
-  # triggered the expansion. -- michael, 2019-02-05
-  return join(';',
-    $data->{id},
-    $event->from_channel->name,
-    $event->conversation_address
-  );
 }
 
 sub _parse_search ($self, $text) {
@@ -803,13 +760,12 @@ sub handle_merge_request ($self, $event) {
 
       my $is_approved = $approval_data->{approved};
 
-      my $key = $self->_key_for_gitlab_data($event, $data);
-      if ($self->has_expanded_mr_recently($key)) {
+      if ($self->has_expanded_mr_recently($event, $data->{id})) {
         $declined_to_reply++;
         return;
       }
 
-      $self->note_mr_expansion($key);
+      $self->note_mr_expansion($event, $data->{id});
 
       my $state = $data->{state};
 
@@ -949,13 +905,12 @@ sub handle_commit ($self, $event) {
 
       my $data = $JSON->decode($res->decoded_content);
 
-      my $key = $self->_key_for_gitlab_data($event, $data);
-      if ($self->has_expanded_commit_recently($key)) {
+      if ($self->has_expanded_commit_recently($event, $data->{id})) {
         $declined_to_reply++;
         return;
       }
 
-      $self->note_commit_expansion($key);
+      $self->note_commit_expansion($event, $data->{id});
 
       my $commit_url = sprintf("%s/%s/commit/%s",
         $self->url_base,
