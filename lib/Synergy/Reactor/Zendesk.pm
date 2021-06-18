@@ -90,6 +90,10 @@ has expansion_record_reaper => (
   }
 );
 
+sub start ($self) {
+  $self->hub->loop->add($self->expansion_record_reaper->start);
+}
+
 sub listener_specs ($self) {
   my $ticket_re = $self->ticket_regex;
 
