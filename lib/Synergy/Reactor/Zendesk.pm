@@ -23,12 +23,21 @@ has [qw( domain username api_token )] => (
 );
 
 # XXX config'able
-has ticket_regex => (
+has shorthand_ticket_regex => (
   is => 'ro',
   lazy => 1,
   default => sub {
     my $prefix = 'PTN';
     return qr/(?:^|\W)(?:#|(?i)$prefix)\s*[_*]{0,2}([0-9]{7,})\b/i;
+  },
+);
+
+has url_ticket_regex => (
+  is => 'ro',
+  lazy => 1,
+  default => sub ($self) {
+    my $domain = $self->domain;
+    return qr{\bhttps://$domain/agent/tickets/([0-9]{7,})\b}i;
   },
 );
 
@@ -95,7 +104,8 @@ sub start ($self) {
 }
 
 sub listener_specs ($self) {
-  my $ticket_re = $self->ticket_regex;
+  my $ticket_re = $self->shorthand_ticket_regex;
+  my $url_re = $self->url_ticket_regex;
 
   return (
     {
@@ -103,6 +113,7 @@ sub listener_specs ($self) {
       method    => 'handle_ptn_mention',
       predicate => sub ($self, $e) {
         return 1 if $e->text =~ /$ticket_re/;
+        return 1 if $e->text =~ /$url_re/;
         return;
       },
     },
@@ -112,8 +123,12 @@ sub listener_specs ($self) {
 sub handle_ptn_mention ($self, $event) {
   $event->mark_handled if $event->was_targeted;
 
-  my $ticket_re = $self->ticket_regex;
+  my $ticket_re = $self->shorthand_ticket_regex;
   my @ids = $event->text =~ m/$ticket_re/g;
+
+  my $url_re = $self->url_ticket_regex;
+  push @ids, $event->text =~ m/$url_re/g;
+
   my %ids = map {; $_ => 1 } @ids;
   @ids = sort keys %ids;
 
