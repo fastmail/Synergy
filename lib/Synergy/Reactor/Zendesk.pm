@@ -183,7 +183,7 @@ sub _output_ticket ($self, $event, $id) {
       my $created = str2time($ticket->created_at);
       my $updated = str2time($ticket->updated_at);
 
-      my $text = "#%$id: $subject (status: $status)";
+      my $text = "#$id: $subject (status: $status)";
 
       my $link = sprintf("<https://%s/agent/tickets/%s|#%s>",
         $self->domain,
