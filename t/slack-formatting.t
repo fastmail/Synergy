@@ -36,7 +36,7 @@ subtest "Url formatting" => sub {
     ],
     [
       "<> < >",
-      "  ",
+      "",
     ],
   ) {
     my ($pre, $expect) = @$pair;
