@@ -345,6 +345,8 @@ sub maybe_respond_to_edit ($self, $slack_event) {
     return;
   }
 
+  $Logger->log([ 'will attempt to handle edit event: %s', $slack_event ]);
+
   # Massage the slack event a bit, then reinject it.
   my $message = $slack_event->{message};
   $message->{channel} = $slack_event->{channel};
@@ -352,6 +354,8 @@ sub maybe_respond_to_edit ($self, $slack_event) {
 
   unless ($reply->{was_error}) {
     return unless $reply->{was_targeted};
+
+    $Logger->log([ 'unable to respond to edit of non-error-causing event' ]);
 
     my $event = $self->synergy_event_from_slack_event($message, 'edit');
     $event->ephemeral_reply(
