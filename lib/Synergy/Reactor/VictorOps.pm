@@ -814,13 +814,18 @@ sub _check_at_oncall ($self) {
         privileged => 1,
       );
 
-      $self->_set_oncall_list(\@new);
-
       $f->on_done(sub ($http_res) {
         my $data = decode_json($http_res->decoded_content);
         unless ($data->{ok}) {
           $Logger->log(["error updating oncall slack group: %s", $data]);
+          return;
         }
+
+        # Don't set our local cache until we're sure we've actually updated
+        # the slack group; this way, if something goes wrong setting the group
+        # the first time, we'll actually try again the next time around,
+        # rather than just saying "oh, nothing changed, great!"
+        $self->_set_oncall_list(\@new);
       });
 
       return $f;
