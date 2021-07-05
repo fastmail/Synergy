@@ -105,7 +105,7 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 🦐 shrimp
 🦑 squid
 🦓 zebra
-🦒 giraffe
+🦒 giraffe        giraffe_face
 🦔 hedgehog
 🦕 sauropod
 🦖 trex           t-rex
