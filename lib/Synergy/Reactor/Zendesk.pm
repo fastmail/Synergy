@@ -293,43 +293,42 @@ sub ticket_report ($self, $who, $arg = {}) {
        });
 }
 
-sub unassigned_report ($self, $who, $arg = {}) {
+sub _filter_count_report ($self, $who, $arg = {}) {
+  my $emoji = $arg->{emoji};
+  my $desc = $arg->{description} // "Zendesk Tickets";
+
+  my @req;
+
   if ($arg->{view}) {
-    $self->zendesk_client
-         ->make_request_f(
-           GET => "/api/v2/views/$arg->{view}/tickets.json",
-         )->then(sub ($res) {
-           my $count = $res->{count};
-           return Future->done unless $count;
-
-           my $desc = $arg->{description} // "Zendesk Tickets";
-           my $text = "\N{BUG} Unassigned $desc: $count";
-
-           return Future->done([ $text, { slack => $text } ]);
-         })->else(sub (@err) {
-           $Logger->log([ "error fetching self from Zendesk: %s", \@err ]);
-           return Future->fail("unassigned_report", 'http');
-         });
+    @req = (GET => "/api/v2/views/$arg->{view}/tickets.json");
   } elsif ($arg->{query}) {
-    $self->zendesk_client
-         ->make_request_f(
-           GET => "/api/v2/search.json?query=" . $arg->{query},
-         )->then(sub ($res) {
-           my $count = $res->{count};
-           return Future->done unless $count;
-
-           my $desc = $arg->{description} // "Zendesk Tickets";
-           my $text = "\N{BUG} Unassigned $desc: $count";
-
-           return Future->done([ $text, { slack => $text } ]);
-         })->else(sub (@err) {
-           $Logger->log([ "error fetching self from Zendesk: %s", \@err ]);
-           return Future->fail("unassigned_report", 'http');
-         });
+    @req = (GET => "/api/v2/search.json?query=" . $arg->{query});
   } else {
     my $text = "Sorry, only view based url reports are supported right now";
     return Future->done([ $text, { slack => $text } ]);
   }
+
+  $self->zendesk_client
+       ->make_request_f(
+         @req,
+       )->then(sub ($res) {
+         my $count = $res->{count};
+         return Future->done unless $count;
+
+         my $text = "$emoji $desc: $count";
+
+         return Future->done([ $text, { slack => $text } ]);
+       })->else(sub (@err) {
+         $Logger->log([ "error making request @req to Zendesk: %s", \@err ]);
+         return Future->fail("$emoji $desc", 'http');
+       });
+}
+
+sub unassigned_bug_report ($self, $who, $arg = {}) {
+  $arg->{description} //= "Unassigned bug reports";
+  $arg->{emoji}       //= "\N{BUG}";
+
+  $self->_filter_count_report($who, $arg);
 }
 
 1;
