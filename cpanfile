@@ -45,6 +45,7 @@ requires 'Plack::Middleware::AccessLog';
 requires 'Plack::Middleware::Auth::Basic';
 requires 'Plack::Request';
 requires 'Prometheus::Tiny', '0.002';
+requires 'Safe::Isa';
 requires 'Sub::Exporter';
 requires 'Sub::Override';
 requires 'TOML';
