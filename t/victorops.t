@@ -286,14 +286,30 @@ subtest 'exit maint' => sub {
     gen_response(200, {}),
   );
 
-  send_message('synergy: demaint /resolve', 'alice');
+  send_message('synergy: demaint', 'alice');
   cmp_deeply(
     clear_sent_message_queue(),
     [
       'Successfully resolved 3 incidents. The board is clear!',
       '🚨 VO maint cleared. Good job everyone!'
     ],
-    'demaint /resolve'
+    'demaint'
+  );
+
+  @VO_RESPONSES = (
+    gen_response(200, { activeInstances => [{ isGlobal => 1, instanceId => 42, startedAt => 86400000 }] }),
+    gen_response(200, $incidents),
+    $patch_responder,
+    gen_response(200, {}),
+  );
+
+  send_message('synergy: demaint /noresolve', 'alice');
+  cmp_deeply(
+    clear_sent_message_queue(),
+    [
+      '🚨 VO maint cleared. Good job everyone!'
+    ],
+    'demaint /noresolve'
   );
 };
 
