@@ -17,10 +17,20 @@ use experimental qw(postderef signatures);
 use namespace::clean;
 use utf8;
 
+__PACKAGE__->add_preference(
+  name      => 'staff-email-address',
+  validator => sub ($self, $value, @) { return $value =~ /@/ ? $value : undef },
+  description => 'Your staff email address in Zendesk',
+);
+
 has [qw( domain username api_token )] => (
   is => 'ro',
   required => 1,
 );
+
+after register_with_hub => sub ($self, @) {
+  $self->fetch_state;   # load prefs
+};
 
 # XXX config'able
 has shorthand_ticket_regex => (
@@ -244,6 +254,43 @@ sub _output_ticket ($self, $event, $id) {
       $Logger->log([ "error fetching ticket %s from Zendesk", $id ]);
       return Future->fail("PTN $id", 'http');
     });
+}
+
+sub ticket_report ($self, $who, $arg = {}) {
+  my $email = $self->get_user_preference(
+    $who, 'staff-email-address'
+  );
+
+  unless ($email) {
+    my $text = "ticket_report: (warning) No staff-email-address user pref configured for " . $who->username;
+    return Future->done([ $text, { slack => $text } ]);
+  }
+
+  $self->zendesk_client
+       ->user_api
+       ->get_by_email_no_fetch($email)
+       ->scoped_client
+       ->make_request_f(
+         GET => "/api/v2/users/me.json?include=open_ticket_count"
+       )->then(sub ($res) {
+         unless ($res->{open_ticket_count}) {
+           $Logger->log([ "Did not get an open_ticket_count in res: %s", $res ]);
+           return Future->fail("ticket_report", 'http');
+         }
+
+         # It's a single key/value pair where the key is the id of our user.
+         # We just want the value, which is the count
+         my ($count) = values $res->{open_ticket_count}->%*;
+         return Future->done unless $count;
+
+         my $desc = $arg->{description} // "Zendesk Tickets";
+         my $text = sprintf "\N{ADMISSION TICKETS} %s: %s", $desc, $count;
+
+         return Future->done([ $text, { slack => $text } ]);
+       })->else(sub (@err) {
+         $Logger->log([ "error fetching our user from Zendesk: %s", \@err ]);
+         return Future->fail("ticket_report", 'http');
+       });
 }
 
 1;
