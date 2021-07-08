@@ -310,6 +310,22 @@ sub unassigned_report ($self, $who, $arg = {}) {
            $Logger->log([ "error fetching self from Zendesk: %s", \@err ]);
            return Future->fail("unassigned_report", 'http');
          });
+  } elsif ($arg->{query}) {
+    $self->zendesk_client
+         ->make_request_f(
+           GET => "/api/v2/search.json?query=" . $arg->{query},
+         )->then(sub ($res) {
+           my $count = $res->{count};
+           return Future->done unless $count;
+
+           my $desc = $arg->{description} // "Zendesk Tickets";
+           my $text = "\N{BUG} Unassigned $desc: $count";
+
+           return Future->done([ $text, { slack => $text } ]);
+         })->else(sub (@err) {
+           $Logger->log([ "error fetching self from Zendesk: %s", \@err ]);
+           return Future->fail("unassigned_report", 'http');
+         });
   } else {
     my $text = "Sorry, only view based url reports are supported right now";
     return Future->done([ $text, { slack => $text } ]);
