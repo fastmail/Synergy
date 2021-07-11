@@ -62,7 +62,7 @@ sub listener_specs {
       help_entries => [
         {
           title => 'vesta',
-          text  => "**vesta edit**: edit what is on the vestaboard",
+          text  => "*vesta edit*: edit what is on the vestaboard",
         }
       ],
     },
@@ -76,7 +76,7 @@ sub listener_specs {
       help_entries => [
         {
           title => 'vesta',
-          text  => "**vesta delete design `DESIGN`**: delete one of your designs",
+          text  => "*vesta delete design `DESIGN`*: delete one of your designs",
         }
       ],
     },
@@ -90,7 +90,7 @@ sub listener_specs {
       help_entries => [
         {
           title => 'vesta',
-          text  => "**vesta designs**: list all your designs",
+          text  => "*vesta designs*: list all your designs",
         }
       ],
     },
@@ -102,7 +102,7 @@ sub listener_specs {
       help_entries => [
         {
           title => 'vesta',
-          text  => "**vesta post text `TEXT`**: post a text message to the board",
+          text  => "*vesta post text `TEXT`*: post a text message to the board",
         }
       ],
     },
@@ -114,7 +114,7 @@ sub listener_specs {
       help_entries => [
         {
           title => 'vesta',
-          text  => "**vesta post `DESIGN`**: post your design to the board",
+          text  => "*vesta post `DESIGN`*: post your design to the board",
         }
       ],
     },
@@ -126,7 +126,7 @@ sub listener_specs {
       help_entries => [
         {
           title => 'vesta',
-          text  => "**vesta status**: check the board status and your token count",
+          text  => "*vesta status*: check the board status and your token count",
         }
       ],
     },
@@ -138,7 +138,7 @@ sub listener_specs {
       help_entries => [
         {
           title => 'vesta',
-          text  => "**vesta lock/unlock**: (admins only) lock or unlock the board",
+          text  => "*vesta lock/unlock*: (admins only) lock or unlock the board",
         }
       ],
     },
