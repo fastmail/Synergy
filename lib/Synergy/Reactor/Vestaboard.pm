@@ -62,7 +62,7 @@ sub listener_specs {
       help_entries => [
         {
           title => 'vesta',
-          text  => "*vesta edit*: edit what is on the vestaboard",
+          text  => "*vesta edit `DESIGN`*: edit what is on the vestaboard",
         }
       ],
     },
