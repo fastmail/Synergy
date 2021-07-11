@@ -71,6 +71,7 @@ const splitflapValues = {
 let representation = [];
 let workingRow;
 let firstElement;
+let numbersAreColors = false;
 
 const url = new URL(window.location);
 const startBoardText = url.searchParams.get("state");
@@ -126,6 +127,10 @@ const createSelectForCell = (boardCell) => {
   if (boardCell.i === 0 && boardCell.j === 0) {
     firstElement = newSelect;
   }
+  newSelect.writeRaw = (num) => {
+    newSelect.value = num;
+    boardCell.value = num;
+  };
   newSelect.goNextCell = () => {
     let newTargetI = boardCell.i;
     let newTargetJ = boardCell.j;
@@ -149,18 +154,22 @@ const createSelectForCell = (boardCell) => {
     targetSelect.focus();
   };
   newSelect.backspace = () => {
-    let newTargetI = boardCell.i;
-    let newTargetJ = boardCell.j;
-    if (newTargetJ === 0 && newTargetI > 0) {
-      newTargetI--;
-      newTargetJ = 21;
-    } else if (newTargetI !== 0 || newTargetJ !== 0) {
-      newTargetJ--;
+    if (!Number(newSelect.value)) {
+      let newTargetI = boardCell.i;
+      let newTargetJ = boardCell.j;
+      if (newTargetJ === 0 && newTargetI > 0) {
+        newTargetI--;
+        newTargetJ = 21;
+      } else if (newTargetI !== 0 || newTargetJ !== 0) {
+        newTargetJ--;
+      }
+      const targetSelect = board[newTargetI][newTargetJ].layer;
+      board[newTargetI][newTargetJ].value = 0;
+      targetSelect.focus();
+      targetSelect.value = " ";
+    } else {
+      newSelect.writeRaw(0);
     }
-    const targetSelect = board[newTargetI][newTargetJ].layer;
-    board[newTargetI][newTargetJ].value = 0;
-    targetSelect.focus();
-    targetSelect.value = " ";
   };
   newSelect.goLeft = () => {
     let newTargetI = boardCell.i;
@@ -223,6 +232,11 @@ updateJsonBlock();
 
 window.onkeydown = (event) => {
   const active = document.activeElement;
+  const thisNumber = Number(event.key);
+  const shouldPaint =
+    !Number.isNaN(thisNumber) && thisNumber >= 1 && thisNumber <= 7;
+  let target = event.target;
+
   if (!active || !active._data) {
     if (active && active.id === "design-input") {
       return;
@@ -232,7 +246,11 @@ window.onkeydown = (event) => {
       event.preventDefault();
       event.stopPropagation();
     }
-    return;
+    if (!shouldPaint) {
+      return;
+    } else {
+      target = firstElement;
+    }
   }
   if (
     [
@@ -247,29 +265,38 @@ window.onkeydown = (event) => {
   ) {
     event.preventDefault();
     event.stopPropagation();
+  } else if (numbersAreColors) {
+    const thisNumber = Number(event.key);
+    if (shouldPaint) {
+      // fun hack:  63 is PoppyRed, so let's just count up from there!
+      target.writeRaw(62 + thisNumber);
+      target.goNextCell();
+      event.preventDefault();
+      event.stopPropagation();
+    }
   } else {
     return;
   }
   if (event.key === " ") {
-    event.target.goNextCell();
+    target.goNextCell();
   }
   if (event.key === "Enter") {
-    event.target.goNextRow();
+    target.goNextRow();
   }
   if (event.key === "Backspace") {
-    event.target.backspace();
+    target.backspace();
   }
   if (event.key === "ArrowRight") {
-    event.target.goRight();
+    target.goRight();
   }
   if (event.key === "ArrowLeft") {
-    event.target.goLeft();
+    target.goLeft();
   }
   if (event.key === "ArrowUp") {
-    event.target.goUp();
+    target.goUp();
   }
   if (event.key === "ArrowDown") {
-    event.target.goDown();
+    target.goDown();
   }
   updateJsonBlock();
 };
@@ -336,4 +363,25 @@ submitButton.onclick = async function () {
     submitButton.disabled = false;
     return;
   }
+};
+
+document.getElementById("showstate-button").onclick = () => {
+  jsonBlock.classList.toggle("show");
+};
+
+document.getElementById("clearboard-button").onclick = () => {
+  if (confirm("Are you sure?")) {
+    for (let i = 0; i < 6; i++) {
+      for (let j = 0; j < 22; j++) {
+        board[i][j].value = 0;
+        board[i][j].layer.value = " ";
+      }
+    }
+    updateJsonBlock();
+  }
+};
+
+document.getElementById("colors-button").onclick = () => {
+  document.getElementById("legend").classList.toggle("hidden");
+  numbersAreColors = !numbersAreColors;
 };

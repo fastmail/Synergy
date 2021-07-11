@@ -98,14 +98,26 @@ option[value="69"] {
     background: white;
 } */
 
+#legend {
+    font-family: Arial, Helvetica, sans-serif;
+    text-align: center;
+    background: #888;
+    padding: 0.5em;
+    margin-top: 1em;
+}
+
 #json {
     font-family: 'Courier New', Courier, monospace;
     font-size: 0.8rem;
     background: lightgray;
     margin: 1em auto 0;
-    max-width: 500px;
+    max-width: 800px;
     padding: 1em;
     display: none;
+}
+
+#json.show {
+    display: block;
 }
 
 #design {
@@ -128,6 +140,11 @@ option[value="69"] {
     padding: 0.3em 1em;
 }
 
+#extra {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
 #infobox {
     font-family: Arial, Helvetica, sans-serif;
     max-width: 600px;
@@ -137,7 +154,8 @@ option[value="69"] {
     margin: 2rem auto;
 }
 
-#infobox.hidden {
+#infobox.hidden,
+#legend.hidden {
     display: none;
 }
 #infobox.success {

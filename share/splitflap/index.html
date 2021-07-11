@@ -11,13 +11,19 @@
     <div id="logo">
         <img src="./assets/fm.png" />
     </div>
+    <div id="legend" class="hidden"><p>1 🟥 | 2 🟧 | 3 🟨 | 4 🟩 | 5 🟦 | 6 🟪 | 7 ⬜ </p></div>
     <div id="board"></div>
     <div id="json"></div>
     <div id="design"><input id="design-input" placeholder="Name your design!"></div>
+    <div id="infobox" class="hidden"></div>
     <div id="submit">
         <button id="submit-button">Submit!</button>
     </div>
-    <div id="infobox" class="hidden"></div>
+    <div id="extra">
+        <button id="showstate-button">Show board state</button>
+        <button id="clearboard-button">Clear board</button>
+        <button id="colors-button">Use numbers 1–7 as colors</button>
+    </div>
     <script src="./vendor/rawinflate.js"></script>
     <script src="./vendor/rawdeflate.js"></script>
     <script src="editor.js"></script>
