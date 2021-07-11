@@ -220,7 +220,7 @@ sub http_app ($self, $env) {
 
     if ($self->default_channel_name) {
       my $channel = $self->hub->channel_named($self->default_channel_name);
-      $channel->send_message_to_user($user, "I've saved a new board design called `$name`.");
+      $channel->send_message_to_user($user, "I've updated a board design called `$name`.");
     }
 
     return [
