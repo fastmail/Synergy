@@ -706,7 +706,7 @@ sub handle_maint_end ($self, $event) {
       return Future->done($timestamp, $instance_id);
     })
     ->then(sub ($timestamp, $instance_id) {
-      if (grep {; $_ =~ qr{\A/nor(?:esolve)?\z/} } @args) {
+      if (grep {; $_ =~ qr{\A/nor(?:esolve)?\z} } @args) {
         return Future->done($instance_id);
       }
 
