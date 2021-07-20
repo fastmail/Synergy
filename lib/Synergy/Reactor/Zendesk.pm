@@ -38,7 +38,7 @@ has shorthand_ticket_regex => (
   lazy => 1,
   default => sub {
     my $prefix = 'PTN';
-    return qr/(?:^|\W)(?:#|(?i)$prefix)\s*[_*]{0,2}([0-9]{7,})\b/i;
+    return qr/(?:^|\W)(?:#|(?i)$prefix)\s*[_*]{0,2}([0-9]{5,})\b/i;
   },
 );
 
@@ -70,6 +70,42 @@ has zendesk_client => (
       domain   => $self->domain,
       token    => $self->api_token,
     });
+  },
+);
+
+has ticket_mapping_dbfile => (
+  is => 'ro',
+  isa => 'Str',
+  default => "ticket-mapping.sqlite",
+);
+
+has _ticket_mapping_dbh => (
+  is  => 'ro',
+  lazy     => 1,
+  init_arg => undef,
+  default  => sub ($self, @) {
+    my $dbf = $self->ticket_mapping_dbfile;
+
+    my $dbh = DBI->connect(
+      "dbi:SQLite:dbname=$dbf",
+      undef,
+      undef,
+      { RaiseError => 1 },
+    );
+
+    {
+      no warnings 'once';
+      die $DBI::errstr unless $dbh;
+    }
+
+    $dbh->do(q{
+      CREATE TABLE IF NOT EXISTS ticket_mapping (
+        helpspot_id INTEGER PRIMARY KEY,
+        zendesk_id INTEGER NOT NULL
+      );
+    });
+
+    return $dbh;
   },
 );
 
@@ -139,7 +175,10 @@ sub handle_ptn_mention ($self, $event) {
   my $url_re = $self->url_ticket_regex;
   push @ids, $event->text =~ m/$url_re/g;
 
-  my %ids = map {; $_ => 1 } @ids;
+  my %ids = map {; $_ => 1 }
+            map {; $self->_translate_ticket_id($_) }
+            @ids;
+
   @ids = sort keys %ids;
 
   my $declined_to_reply = 0;
@@ -329,6 +368,19 @@ sub unassigned_bug_report ($self, $who, $arg = {}) {
   $arg->{emoji}       //= "\N{BUG}";
 
   $self->_filter_count_report($who, $arg);
+}
+
+sub _translate_ticket_id ($self, $id) {
+  return $id if $id >= 1_000_000;
+
+  my ($zd_id) = $self->_ticket_mapping_dbh->selectrow_array(
+    "SELECT zendesk_id from ticket_mapping WHERE helpspot_id = ?",
+    undef,
+    "$id",
+  );
+
+  return $zd_id if $zd_id;
+  return $id;
 }
 
 1;
