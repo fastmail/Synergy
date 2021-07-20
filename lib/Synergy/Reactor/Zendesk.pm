@@ -249,6 +249,11 @@ sub _output_ticket ($self, $event, $id) {
         @brand = [ Product => $brand_text ] if $brand_text;
       }
 
+      my @old_ptn;
+      if ($ticket->external_id) {
+        @brand = [ "Old PTN" => $ticket->external_id ];
+      }
+
       # slack block syntax is silly.
       my @fields = map {;
         +{
@@ -257,6 +262,7 @@ sub _output_ticket ($self, $event, $id) {
          }
       } (
         @brand,
+        @old_ptn,
         [ "Status"  => ucfirst($status) ],
         [ "Opened"  => ago(time - $created) ],
         [ "Updated" => ago(time - $updated) ],
