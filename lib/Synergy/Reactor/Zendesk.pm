@@ -251,7 +251,7 @@ sub _output_ticket ($self, $event, $id) {
 
       my @old_ptn;
       if ($ticket->external_id) {
-        @brand = [ "Old PTN" => $ticket->external_id ];
+        @old_ptn = [ "Old PTN" => $ticket->external_id ];
       }
 
       # slack block syntax is silly.
