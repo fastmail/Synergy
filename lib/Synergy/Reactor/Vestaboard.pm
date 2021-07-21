@@ -670,6 +670,10 @@ sub _pay_to_post_payload ($self, $event, $user, $payload) {
 
   return $res_f
     ->then(sub ($res) {
+      $Logger->log([
+        "posted update to Vestaboard API, status: %s",
+        $res->status_line,
+      ]);
       $event->reply("Board update posted!");
 
       my $state = $self->_user_state->{ $user->username } //= {};
