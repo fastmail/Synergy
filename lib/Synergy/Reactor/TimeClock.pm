@@ -315,7 +315,7 @@ sub check_for_shift_changes ($self) {
   #
   # We want to find people who have come on duty in the last 15m, unless we've
   # already sent a report in the last 15m.  Also, anyone who will end their
-  # shift in the next 30m, unless we already covered that time.
+  # shift in the next 15m, unless we already covered that time.
   #
   # If we've been offline for a good long time (oh no!) let's not give people
   # reports that are more than two hours overdue.  First off, it's just polite.
@@ -325,8 +325,8 @@ sub check_for_shift_changes ($self) {
   my $last = max($self->last_report_time, $now - 7200);
 
   my %if = (
-    morning => sub ($s, $e) { $s > $last        && $s <= $now },
-    evening => sub ($s, $e) { $e > $last + 1800 && $e <= $now + 1800 },
+    morning => sub ($s, $e) { $s > $last       && $s <= $now },
+    evening => sub ($s, $e) { $e > $last + 900 && $e <= $now + 900 },
   );
 
   my %report = map {; $_ => $report_reactor->report_named($_) } keys %if;
