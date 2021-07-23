@@ -44,12 +44,6 @@ has url_base => (
   default => sub { $_[0]->api_uri =~ s|/api$||r; },
 );
 
-has project_id => (
-  is  => 'ro',
-  isa => 'Int',
-  required => 1,
-);
-
 has project_shortcuts => (
   is => 'ro',
   isa => 'HashRef',
@@ -61,6 +55,12 @@ has project_shortcuts => (
     all_shortcuts    => 'keys',
     add_shortcuts    => 'set',
   }
+);
+
+has custom_project_shortcuts => (
+  is => 'ro',
+  isa => 'HashRef',
+  default => sub { {} },
 );
 
 has relevant_owners => (
@@ -132,23 +132,17 @@ after register_with_hub => sub ($self, @) {
 };
 
 sub start ($self) {
+  $self->add_shortcuts($self->custom_project_shortcuts->%*);
+
   my $timer = IO::Async::Timer::Countdown->new(
     delay => 60,
     on_expire => sub {
-      $Logger->log("fetching repo config from GitLab");
-
-      my $f2 = $self->_reload_repos;
-      $f2->on_fail(sub ($err) {
-        $Logger->log([
-          "error doing initial repo load from GitLab: %s",
-          $err
-        ]);
-      });
+      $Logger->log("loading shortcuts from GitLab");
+      $self->_load_auto_shortcuts;
     }
   );
 
-  $timer->start;
-  $self->hub->loop->add($timer);
+  $self->hub->loop->add($timer->start);
   $self->hub->loop->add($self->expansion_record_reaper->start);
 }
 
@@ -160,15 +154,6 @@ sub state ($self) {
 
 sub listener_specs {
   return (
-    {
-      name      => 'reload',
-      method    => 'handle_reload',
-      exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted &&
-        $e->text =~ /^reload\s+(?!shortcuts)/in;
-      },
-    },
     {
       name      => 'r?',
       method    => 'handle_r_hook',
@@ -236,68 +221,6 @@ EOH
   );
 }
 
-sub handle_reload ($self, $event) {
-  $event->mark_handled;
-
-  return $event->error_reply("Sorry, I don't know who you are.")
-    unless $event->from_user;
-
-  my $text = $event->text;
-  my ($what) = $text =~ /^\s*reload\s+(.*)/i;
-  $what &&= lc $what;
-
-  $what =~ s/^\s*|\s*$//g;
-
-  return $self->handle_repos($event) if $what eq 'repos';
-
-  return $event->error_reply("I don't know how to reload <$what>");
-}
-
-sub handle_repos ($self, $event) {
-  my $f = $self->_reload_repos;
-  $f->on_done(sub { return $event->reply("repo config reloaded") });
-  $f->on_fail(sub ($err) {
-    return $event->reply("encounter errors reloading repos: $err");
-  });
-}
-
-sub _reload_repos ($self) {
-  my $url = sprintf("%s/v4/projects/%s/repository/files/repos.yaml?ref=master",
-    $self->api_uri,
-    $self->project_id,
-  );
-
-  my $ret_future = $self->loop->new_future;
-  my $http_future = $self->hub->http_get(
-    $url,
-    'PRIVATE-TOKEN' => $self->api_token,
-  );
-
-  $http_future->on_done(sub ($http_res) {
-    unless ($http_res->is_success) {
-      $Logger->log([ "Error: %s", $http_res->as_string ]);
-      return $ret_future->fail('error retrieving repo config');
-    }
-
-    my $content = eval {
-      decode_base64( $JSON->decode( $http_res->decoded_content )->{content} );
-    };
-
-    return $ret_future->fail('error with GitLab response') unless $content;
-
-    my $repos = eval { YAML::XS::Load($content) };
-    return $ret_future->fail('error with YAML in config') unless $repos;
-
-    $self->add_shortcuts(%$repos);
-    $self->_load_auto_shortcuts;
-    $self->save_state;
-
-    $ret_future->done;
-  });
-
-  return $ret_future;
-}
-
 # For every namespace we care about (i.e., $self->relevant_owners), we'll add
 # a shortcut that's just the project name, unless it conflicts.
 sub _load_auto_shortcuts ($self) {
@@ -355,6 +278,7 @@ sub _load_auto_shortcuts ($self) {
     delete $names{$_} for @conflicts;
     return unless keys %names;
     $self->add_shortcuts(%names);
+    $self->save_state;
   })->retain;
 }
 
