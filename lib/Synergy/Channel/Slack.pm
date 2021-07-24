@@ -51,10 +51,14 @@ has slack => (
 
 # {
 #   user_message_ts => {
-#     reply_ts  => $our_ts,
 #     channel   => $channel,
-#     was_error => $bool,
 #     was_targeted => $bool,
+#     replies => [
+#       {
+#         was_error => bool,
+#         reply_ts  => $our_ts,
+#       }
+#     ]
 #   }
 # }
 has our_replies => (
@@ -64,13 +68,31 @@ has our_replies => (
   lazy    => 1,
   default => sub { {} },
   handles => {
-    reply_for           => 'get',
-    has_reply_for       => 'exists',
-    add_reply           => 'set',
+    replies_for         => 'get',
+    set_reply           => 'set',
     reply_timestamps    => 'keys',
     delete_reply_record => 'delete',
   },
 );
+
+sub add_reply ($self, $event, $reply_data) {
+  my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
+  return unless $ts;
+
+  my $existing = $self->replies_for($ts);
+
+  if (! $existing) {
+    $existing = {
+      channel      => $channel,
+      was_targeted => $event->was_targeted,
+      replies      => [],
+    };
+
+    $self->set_reply($ts, $existing);
+  }
+
+  push $existing->{replies}->@*, $reply_data;
+}
 
 # Clean out our state so we don't respond to edits older than 2m
 has reply_reaper => (
@@ -300,7 +322,7 @@ sub send_ephemeral_message ($self, $channel, $user, $text) {
 }
 
 sub note_reply ($self, $event, $future, $args = {}) {
-  my ($channel, $ts) = $event->transport_data->@{qw( channel ts )};
+  my $ts = $event->transport_data->{ts};
   return unless $ts;
 
   $future->on_done(sub ($data) {
@@ -316,25 +338,25 @@ sub note_reply ($self, $event, $future, $args = {}) {
     # -- michael, 2019-02-05
     return unless $data->{transport_data}{ts};
 
-    $self->add_reply($ts => {
+    $self->add_reply($event, {
       reply_ts  => $data->{transport_data}{ts},
-      channel   => $channel,
       was_error => $args->{was_error} ? 1 : 0,
-      was_targeted => $event->was_targeted,
     });
   });
 }
 
 sub maybe_respond_to_edit ($self, $slack_event) {
   my $orig_ts = $slack_event->{message}{ts};
-  my $reply = $self->reply_for($orig_ts);
+  my $reply_data = $self->replies_for($orig_ts);
 
-  unless ($reply) {
+  unless ($reply_data) {
     $Logger->log("ignoring edit of a message we didn't respond to");
     return;
   }
 
-  unless ($slack_event->{channel} eq $reply->{channel}) {
+  $Logger->log([ "found original messages for edit: %s", $reply_data ]);
+
+  unless ($slack_event->{channel} eq $reply_data->{channel}) {
     $Logger->log("ignoring edit whose channel doesn't match reply channel");
     return;
   }
@@ -352,8 +374,14 @@ sub maybe_respond_to_edit ($self, $slack_event) {
   $message->{channel} = $slack_event->{channel};
   $message->{event_ts} = $slack_event->{event_ts};
 
-  unless ($reply->{was_error}) {
-    return unless $reply->{was_targeted};
+  # Find the error-causing part(s). If there weren't any, we can't do
+  # anything.
+  my @error_ts = map  {; $_->{reply_ts} }
+                 grep {; $_->{was_error} }
+                 $reply_data->{replies}->@*;
+
+  unless (@error_ts) {
+    return unless $reply_data->{was_targeted};
 
     $Logger->log([ 'unable to respond to edit of non-error-causing event' ]);
 
@@ -364,43 +392,57 @@ sub maybe_respond_to_edit ($self, $slack_event) {
     return;
   }
 
-  $self->delete_reply($orig_ts);
+  $self->delete_reply($orig_ts, $_) for @error_ts;
 
   my $event = $self->synergy_event_from_slack_event($message, 'message');
   $self->hub->handle_event($event);
 }
 
-sub delete_reply ($self, $orig_ts) {
-  my $reply = $self->delete_reply_record($orig_ts);
-  return unless $reply;
+sub delete_reply ($self, $orig_ts, $reply_ts) {
+  my $reply_data = $self->replies_for($orig_ts);
+  return unless $reply_data;
 
   $self->slack->api_call('chat.delete', {
-    channel => $reply->{channel},
-    ts => $reply->{reply_ts},
+    channel => $reply_data->{channel},
+    ts      => $reply_ts,
   });
+
+  # Do the new bookkeeping
+  my @new = grep {; $_->{reply_ts} ne $reply_ts }
+            $reply_data->{replies}->@*;
+
+  if (@new) {
+    $reply_data->{replies} = \@new;
+  } else {
+    $self->delete_reply_record($orig_ts);
+  }
 }
 
 sub maybe_delete_reply ($self, $slack_event) {
   my $orig_ts = $slack_event->{previous_message}{ts};
   return unless $orig_ts;
-  my $reply = $self->reply_for($orig_ts);
+  my $reply_data = $self->replies_for($orig_ts);
 
-  unless ($reply) {
+  unless ($reply_data) {
     $Logger->log("ignoring deletion of a message we didn't respond to");
     return;
   }
 
-  unless ($slack_event->{channel} eq $reply->{channel}) {
+  unless ($slack_event->{channel} eq $reply_data->{channel}) {
     $Logger->log("ignoring deletion whose channel doesn't match reply channel");
     return;
   }
 
-  unless ($reply->{was_error}) {
+  my @error_ts = map  {; $_->{reply_ts} }
+                 grep {; $_->{was_error} }
+                 $reply_data->{replies}->@*;
+
+  unless (@error_ts) {
     $Logger->log("ignoring deletion of a message that didn't result in error");
     return;
   }
 
-  $self->delete_reply($orig_ts);
+  $self->delete_reply($orig_ts, $_) for @error_ts;
 }
 
 sub send_file_to_user ($self, $user, $filename, $content) {
