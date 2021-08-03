@@ -59,7 +59,7 @@ sub handle_my_projects ($self, $event) {
     Content => "{}", # TODO: filter here for real
   )->get; # TODO: use sequencing
 
-  my $data  = JSON::MaybeXS->new->decode( $res->decoded_content(charset => undef) );
+  my $data  = JSON::MaybeXS->new->utf8->decode( $res->decoded_content(charset => undef) );
   my @pages = $data->{results}->@*;
 
   my $reply = q{};
