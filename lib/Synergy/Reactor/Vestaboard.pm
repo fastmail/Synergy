@@ -620,6 +620,9 @@ sub handle_vesta_post_text ($self, $event) {
 
   $text = uc $text;
 
+  $text =~ s/[‘’]/'/g; # Slack likes to smarten up quotes,
+  $text =~ s/[“”]/"/g; # which is stupid. -- rjbs, 2021-08-12
+
   unless ($self->_text_is_valid($text)) {
     $event->error_reply("Sorry, I can't post that to the board.");
     return;
