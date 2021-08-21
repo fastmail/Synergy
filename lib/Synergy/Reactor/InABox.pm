@@ -205,7 +205,7 @@ sub handle_create ($self, $event, $switches) {
 
   # XXX call /v2/sizes API to validate
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
-  my $size = $switches->{size} // 's-4vcpu-8gb';
+  my $size = $switches->{size} // 's-8vcpu-16gb';
 
   return $self->_get_droplet_for($event->from_user, $tag)
     ->then(sub ($maybe_droplet) {
