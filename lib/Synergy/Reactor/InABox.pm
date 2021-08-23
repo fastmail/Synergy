@@ -625,7 +625,7 @@ sub _update_dns ($self, $name, $ip) {
 __PACKAGE__->add_preference(
   name      => 'version',
   validator => sub ($self, $value, @) {
-    my %known = map {; $_ => 1 } qw( jessie buster );
+    my %known = map {; $_ => 1 } qw( buster bullseye );
 
     $value = lc $value;
 
