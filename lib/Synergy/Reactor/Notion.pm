@@ -54,7 +54,7 @@ sub handle_my_projects ($self, $event) {
 
     'User-Agent'      => 'Synergy/2021.05',
     Authorization     => "Bearer $token",
-    'Notion-Version'  => '2021-05-13',
+    'Notion-Version'  => '2021-08-16',
     'Content-Type'    => 'application/json',
     Content => "{}", # TODO: filter here for real
   )->get; # TODO: use sequencing
@@ -81,6 +81,8 @@ sub handle_my_projects ($self, $event) {
     next unless grep {; $_->{person}{email} eq $email } @people;
     my $title = join q{ - }, map {; $_->{plain_text} } $page->{properties}{Name}{title}->@*;
 
+    my $emoji = $page->{properties}{icon}{emoji} // "\N{FILE FOLDER}";
+
     my $safe_title = $title;
     $safe_title =~ s{[^A-Za-z0-9]}{-}g;
 
@@ -88,8 +90,8 @@ sub handle_my_projects ($self, $event) {
 
     my $href = "https://www.notion.so/$safe_title-$id";
 
-    $reply .= "$title ($stage)\n";
-    $slack .= sprintf "<%s|%s> (%s)\n", $href, $title, $stage;
+    $reply .= "$emoji $title ($stage)\n";
+    $slack .= sprintf "<%s|%s %s> (%s)\n", $href, $emoji, $title, $stage;
   }
 
   unless (length $reply) {
