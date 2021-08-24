@@ -81,7 +81,7 @@ sub handle_my_projects ($self, $event) {
     next unless grep {; $_->{person}{email} eq $email } @people;
     my $title = join q{ - }, map {; $_->{plain_text} } $page->{properties}{Name}{title}->@*;
 
-    my $emoji = $page->{properties}{icon}{emoji} // "\N{FILE FOLDER}";
+    my $emoji = $page->{icon}{emoji} // "\N{FILE FOLDER}";
 
     my $safe_title = $title;
     $safe_title =~ s{[^A-Za-z0-9]}{-}g;
