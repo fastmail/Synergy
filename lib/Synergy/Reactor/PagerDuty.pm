@@ -94,6 +94,23 @@ has oncall_group_address => (
   isa => 'Str',
 );
 
+has maint_warning_address => (
+  is  => 'ro',
+  isa => 'Str',
+);
+
+has maint_timer_interval => (
+  is => 'ro',
+  isa => 'Int',
+  default => 600,
+);
+
+has last_maint_warning_time => (
+  is => 'rw',
+  isa => 'Int',
+  default => 0,
+);
+
 has oncall_list => (
   is => 'ro',
   isa => 'ArrayRef',
@@ -117,6 +134,17 @@ sub start ($self) {
 
     $check_oncall_timer->start;
     $self->hub->loop->add($check_oncall_timer);
+
+    # No maint warning timer unless we can warn oncall
+    if ($self->oncall_group_address && $self->maint_warning_address) {
+      my $maint_warning_timer = IO::Async::Timer::Periodic->new(
+        first_interval => 45,
+        interval => $self->maint_timer_interval,
+        on_tick  => sub {  $self->_check_long_maint },
+      );
+      $maint_warning_timer->start;
+      $self->hub->loop->add($maint_warning_timer);
+    }
   }
 }
 
@@ -157,6 +185,7 @@ EOH
 sub state ($self) {
   return {
     oncall_list => $self->oncall_list,
+    last_maint_warning_time => $self->last_maint_warning_time,
   };
 }
 
@@ -197,12 +226,14 @@ after register_with_hub => sub ($self, @) {
   if (my $list = $state->{oncall_list}) {
     $self->_set_oncall_list($list);
   }
+
+  if (my $when = $state->{last_maint_warning_time}) {
+    $self->last_maint_warning_time($when);
+  }
 };
 
-sub handle_maint_query ($self, $event) {
-  $event->mark_handled;
-
-  my $f = $self->_pd_request('GET' => '/maintenance_windows')
+sub _relevant_maint_windows ($self) {
+  return $self->_pd_request('GET' => '/maintenance_windows?filter=ongoing')
     ->then(sub ($data) {
       my $maint = $data->{maintenance_windows} // [];
 
@@ -213,25 +244,34 @@ sub handle_maint_query ($self, $event) {
         push @relevant, $window;
       }
 
-      unless (@relevant) {
+      return Future->done(@relevant);
+    });
+}
+
+sub _format_maint_window ($self, $window) {
+  state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
+
+  my $services = join q{, }, map {; $_->{summary} } $window->{services}->@*;
+  my $start = DateTime::Format::ISO8601->parse_datetime($window->{start_time});
+  my $ago = $ago_formatter->format_datetime($start);
+  my $who = $window->{created_by}->{summary};   # XXX map to our usernames
+
+  return "$services ($ago, started by $who)";
+}
+
+sub handle_maint_query ($self, $event) {
+  $event->mark_handled;
+
+  my $f = $self->_relevant_maint_windows
+    ->then(sub (@maints) {
+      unless (@maints) {
         return $event->reply("PD not in maint right now. Everything is fine maybe!");
       }
 
-      state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
+      my $maint_text = join q{; },
+                       map {; $self->_format_maint_window($_) }
+                       @maints;
 
-      # the way we use VO there's probably not more than one, but at least this
-      # way if there are we won't just drop the rest on the floor -- robn, 2019-08-16
-      my @texts;
-      for my $window (@relevant) {
-        my $services = join q{, }, map {; $_->{summary} } $window->{services}->@*;
-        my $start = DateTime::Format::ISO8601->parse_datetime($window->{start_time});
-        my $ago = $ago_formatter->format_datetime($start);
-        my $who = $window->{created_by}->{summary};   # XXX map to our usernames
-
-        push @texts, "$services ($ago, started by $who)";
-      }
-
-      my $maint_text = join q{; }, @texts;
       return $event->reply("🚨 PD in maint: $maint_text");
     })
     ->else(sub (@fails) {
@@ -240,6 +280,54 @@ sub handle_maint_query ($self, $event) {
     });
 
   $f->retain;
+}
+
+sub _check_long_maint ($self) {
+  my $current_time = time();
+
+  # No warning if we've warned in last 25 minutes
+  return unless ($current_time - $self->last_maint_warning_time) > (60 * 25);
+
+  $self->_relevant_maint_windows
+    ->then(sub (@maint) {
+      unless (@maint) {
+        return Future->fail('not in maint');
+      }
+
+      $self->last_maint_warning_time($current_time);
+      $self->save_state;
+
+      my $oldest;
+      for my $window (@maint) {
+        my $start = DateTime::Format::ISO8601->parse_datetime($window->{start_time});
+        my $epoch = $start->epoch;
+        $oldest = $epoch if ! $oldest || $epoch < $oldest;
+      }
+
+      my $maint_duration_s = $current_time - $oldest;
+      return Future->fail('maint duration less than 30m')
+        unless $maint_duration_s > (60 * 30);
+
+      my $group_address = $self->oncall_group_address;
+      my $maint_duration_m = int($maint_duration_s / 60);
+
+      my $maint_text = join q{; },
+                       map {; $self->_format_maint_window($_) }
+                       @maint;
+
+      my $text =  "Hey, by the way, PagerDuty is in maintenance mode: $maint_text";
+
+      $self->oncall_channel->send_message(
+        $self->maint_warning_address,
+        "\@oncall $text",
+        { slack => "<!subteam^$group_address> $text" }
+      );
+    })
+    ->else(sub ($message, $extra = {}) {
+      return if $message eq 'not in maint';
+      return if $message eq 'maint duration less than 30m';
+      $Logger->log("PD error _check_long_maint():  $message");
+    })->retain;
 }
 
 sub _current_oncall_ids ($self) {
