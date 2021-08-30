@@ -188,7 +188,7 @@ sub _business_hours_status ($self, $event, $user) {
   my $time  = $now->format_cldr('HH:mm');
 
   if ($time lt $today_hrs->{start} or $time gt $today_hrs->{end}) {
-    if (!shift) {
+    if (! $shift) {
       return sprintf "It's outside of %s normal business hours, *and* %s off today.",
         $user->their, $user->theyre;
     }
