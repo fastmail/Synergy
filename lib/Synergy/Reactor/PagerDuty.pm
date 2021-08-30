@@ -12,6 +12,8 @@ use experimental qw(signatures);
 use namespace::clean;
 
 use Data::Dumper::Concise;
+use DateTime::Format::ISO8601;
+use DateTimeX::Format::Ago;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use List::Util qw(first);
@@ -34,7 +36,7 @@ has api_key => (
 has service_id => (
   is => 'ro',
   isa => 'Str',
-  # required => 1,
+  required => 1,
 );
 
 has _pd_to_slack_map => (
@@ -121,6 +123,27 @@ sub start ($self) {
 sub listener_specs {
   return (
     {
+      name      => 'maint-query',
+      method    => 'handle_maint_query',
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint(\s+status)?\s*$/in },
+      help_entries => [
+        # start /force is not documented here because it will mention itself to
+        # the user when needed -- rjbs, 2020-06-15
+        { title => 'maint', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
+Conveniences for managing PagerDuty's "maintenance mode", aka "silence all the
+alerts because everything is on fire."
+
+• *maint status*: show current maintenance state
+• *maint start*: enter maintenance mode. All alerts are now silenced! Also acks
+• *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
+
+When you leave maintenance mode, any alerts that happened during it, or even
+shortly before it, will be marked resolved.  If you don't want that, say *maint
+end /noresolve*
+EOH
+      ],
+    },
+    {
       name      => 'oncall',
       method    => 'handle_oncall',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
@@ -175,6 +198,49 @@ after register_with_hub => sub ($self, @) {
     $self->_set_oncall_list($list);
   }
 };
+
+sub handle_maint_query ($self, $event) {
+  $event->mark_handled;
+
+  my $f = $self->_pd_request('GET' => '/maintenance_windows')
+    ->then(sub ($data) {
+      my $maint = $data->{maintenance_windows} // [];
+
+      # We only care if maint window covers a service we care about.
+      my @relevant;
+      for my $window (@$maint) {
+        next unless grep {; $_->{id} eq $self->service_id } $window->{services}->@*;
+        push @relevant, $window;
+      }
+
+      unless (@relevant) {
+        return $event->reply("PD not in maint right now. Everything is fine maybe!");
+      }
+
+      state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
+
+      # the way we use VO there's probably not more than one, but at least this
+      # way if there are we won't just drop the rest on the floor -- robn, 2019-08-16
+      my @texts;
+      for my $window (@relevant) {
+        my $services = join q{, }, map {; $_->{summary} } $window->{services}->@*;
+        my $start = DateTime::Format::ISO8601->parse_datetime($window->{start_time});
+        my $ago = $ago_formatter->format_datetime($start);
+        my $who = $window->{created_by}->{summary};   # XXX map to our usernames
+
+        push @texts, "$services ($ago, started by $who)";
+      }
+
+      my $maint_text = join q{; }, @texts;
+      return $event->reply("🚨 PD in maint: $maint_text");
+    })
+    ->else(sub (@fails) {
+      $Logger->log("PD handle_maint_query failed: @fails");
+      return $event->reply("Something went wrong while getting maint state from PD. Sorry!");
+    });
+
+  $f->retain;
+}
 
 sub _current_oncall_ids ($self) {
   $self->_pd_request(GET => '/oncalls')
