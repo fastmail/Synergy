@@ -179,6 +179,14 @@ EOH
         { title => 'oncall', text => '*oncall*: show a list of who is on call in PagerDuty right now' },
       ],
     },
+    {
+      name      => 'ack-all',
+      method    => 'handle_ack_all',
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^ack all\s*$/i },
+      help_entries => [
+        { title => 'ack', text => '*ack all*: acknowledge all triggered alerts in PagerDuty' },
+      ],
+    },
   );
 }
 
@@ -363,6 +371,48 @@ sub handle_oncall ($self, $event) {
     })
     ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
     ->retain;
+}
+
+sub handle_ack_all ($self, $event) {
+  $event->mark_handled;
+
+  $self->_ack_all($event->from_user->username)
+    ->then(sub ($n_acked) {
+      my $noun = $n_acked == 1 ? 'incident' : 'incidents';
+      $event->reply("Successfully acked $n_acked $noun. Good luck!");
+    })
+    ->else(sub {
+      $event->reply("Something went wrong acking incidents. Sorry!");
+    })
+    ->retain;
+}
+
+sub _ack_all ($self, $username) {
+  my $sid = $self->service_id;
+  # XXX is this limit sufficient?
+  return $self->_pd_request(GET => "/incidents?service_ids[]=$sid&statuses[]=triggered&limit=100")
+    ->then(sub ($data) {
+      my @unacked = map  {; $_->{id} } $data->{incidents}->@*;
+
+      return Future->done({ incidents => [] }) unless @unacked;
+
+      $Logger->log("PD: acking incidents: @unacked");
+
+      my @put = map {;
+        +{
+          id => $_,
+          type => 'incident_reference',
+          status => 'acknowledged',
+        },
+      } @unacked;
+
+      return $self->_pd_request(PUT => '/incidents', {
+        incidents => \@put,
+      });
+    })->then(sub ($data) {
+      my $nacked = $data->{incidents}->@*;
+      return Future->done($nacked);
+    });
 }
 
 sub _check_at_oncall ($self) {
