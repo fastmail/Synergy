@@ -255,6 +255,26 @@ sub _url_for ($self, $endpoint) {
   return $self->api_endpoint_uri . $endpoint;
 }
 
+sub is_known_user ($self, $event) {
+  my $user = $event->from_user;
+
+  return 1 if $user && $self->get_user_preference($user, 'api-token');
+
+  if (! $user) {
+    $event->reply("Sorry, I don't even know who you are!");
+    return 0;
+  }
+
+  my $name = $user->username;
+  my $ns = $self->preference_namespace;
+  $event->reply(
+    "You look like my old friend $name, but you haven't set your "
+    . "$ns.api-token yet, so I can't help you here, sorry."
+  );
+
+  return 0;
+}
+
 # this is way too many positional args, but...meh.
 sub _pd_request_for_user ($self, $user, $method, $endpoint, $data = undef) {
   my $token = $self->get_user_preference($user, 'api-token');
@@ -433,6 +453,7 @@ sub handle_oncall ($self, $event) {
 
 sub handle_maint_start ($self, $event) {
   $event->mark_handled;
+  return unless $self->is_known_user($event);
 
   my $force = $event->text =~ m{/force\s*$};
   my $f;
@@ -507,6 +528,7 @@ sub handle_maint_start ($self, $event) {
 
 sub handle_maint_end ($self, $event) {
   $event->mark_handled;
+  return unless $self->is_known_user($event);
 
   my (@args) = split /\s+/, $event->text;
 
@@ -553,6 +575,7 @@ sub handle_maint_end ($self, $event) {
 
 sub handle_ack_all ($self, $event) {
   $event->mark_handled;
+  return unless $self->is_known_user($event);
 
   $self->_ack_all($event)
     ->then(sub ($n_acked) {
@@ -597,6 +620,8 @@ sub _ack_all ($self, $event) {
 
 sub handle_resolve_mine ($self, $event) {
   $event->mark_handled;
+  return unless $self->is_known_user($event);
+
   $self->_resolve_incidents($event, {
     whose => 'own',
   })->retain;
@@ -604,14 +629,17 @@ sub handle_resolve_mine ($self, $event) {
 
 sub handle_resolve_all ($self, $event) {
   $event->mark_handled;
+  return unless $self->is_known_user($event);
+
   $self->_resolve_incidents($event, {
     whose => 'all',
   })->retain;
 }
 
 sub handle_resolve_acked ($self, $event) {
-  warn "resolve acked";
   $event->mark_handled;
+  return unless $self->is_known_user($event);
+
   $self->_resolve_incidents($event, {
     whose => 'all',
     only_acked => 1,
