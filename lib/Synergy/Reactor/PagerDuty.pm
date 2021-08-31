@@ -255,7 +255,13 @@ sub _url_for ($self, $endpoint) {
   return $self->api_endpoint_uri . $endpoint;
 }
 
-sub _pd_request ($self, $method, $endpoint, $data = undef) {
+# this is way too many positional args, but...meh.
+sub _pd_request_for_user ($self, $user, $method, $endpoint, $data = undef) {
+  my $token = $self->get_user_preference($user, 'api-token');
+  return $self->_pd_request($method => $endpoint, $data, $token);
+}
+
+sub _pd_request ($self, $method, $endpoint, $data = undef, $token = undef) {
   my %content;
 
   if ($data) {
@@ -268,7 +274,7 @@ sub _pd_request ($self, $method, $endpoint, $data = undef) {
   return $self->hub->http_request(
     $method,
     $self->_url_for($endpoint),
-    Authorization => 'Token token=' . $self->api_key,
+    Authorization => 'Token token=' . ($token // $self->api_key),
     Accept        => 'application/vnd.pagerduty+json;version=2',
     %content,
   )->then(sub ($res) {
@@ -461,20 +467,24 @@ sub handle_maint_start ($self, $event) {
   })
   ->then(sub {
     # XXX add reason here?
-    return $self->_pd_request(POST => '/maintenance_windows', {
-      maintenance_window => {
-        type => 'maintenance_window',
-        start_time => $ISO8601->format_datetime(DateTime->now),
-        end_time   =>  $ISO8601->format_datetime(DateTime->now->add(hours => 1)),
-        services => [{
-          id => $self->service_id,
-          type => 'service_reference',
-        }],
-      },
-    });
+    return $self->_pd_request_for_user(
+      $event->from_user,
+      POST => '/maintenance_windows',
+      {
+        maintenance_window => {
+          type => 'maintenance_window',
+          start_time => $ISO8601->format_datetime(DateTime->now),
+          end_time   =>  $ISO8601->format_datetime(DateTime->now->add(hours => 1)),
+          services => [{
+            id => $self->service_id,
+            type => 'service_reference',
+          }],
+        },
+      }
+    );
   })
   ->then(sub ($data) {
-    $self->_ack_all($event->from_user->username);
+    $self->_ack_all($event);
   })
   ->then(sub ($nacked) {
     my $ack_text = ' ';
@@ -511,12 +521,16 @@ sub handle_maint_end ($self, $event) {
       my @futures;
       for my $window (@maints) {
         my $id = $window->{id};
-        push @futures, $self->_pd_request(PUT => "/maintenance_windows/$id", {
-          maintenance_window => {
-            type       => $window->{type},
-            end_time   => $now,
-          },
-        });
+        push @futures, $self->_pd_request_for_user(
+          $event->from_user,
+          PUT => "/maintenance_windows/$id",
+          {
+            maintenance_window => {
+              type       => $window->{type},
+              end_time   => $now,
+            },
+          }
+        );
       }
 
       return Future->wait_all(@futures);
@@ -540,7 +554,7 @@ sub handle_maint_end ($self, $event) {
 sub handle_ack_all ($self, $event) {
   $event->mark_handled;
 
-  $self->_ack_all($event->from_user->username)
+  $self->_ack_all($event)
     ->then(sub ($n_acked) {
       my $noun = $n_acked == 1 ? 'incident' : 'incidents';
       $event->reply("Successfully acked $n_acked $noun. Good luck!");
@@ -551,7 +565,7 @@ sub handle_ack_all ($self, $event) {
     ->retain;
 }
 
-sub _ack_all ($self, $username) {
+sub _ack_all ($self, $event) {
   my $sid = $self->service_id;
   # XXX is this limit sufficient?
   return $self->_pd_request(GET => "/incidents?service_ids[]=$sid&statuses[]=triggered&limit=100")
@@ -570,9 +584,11 @@ sub _ack_all ($self, $username) {
         },
       } @unacked;
 
-      return $self->_pd_request(PUT => '/incidents', {
-        incidents => \@put,
-      });
+      return $self->_pd_request_for_user(
+        $event->from_user,
+        PUT => '/incidents',
+        { incidents => \@put },
+      );
     })->then(sub ($data) {
       my $nacked = $data->{incidents}->@*;
       return Future->done($nacked);
@@ -643,9 +659,11 @@ sub _resolve_incidents($self, $event, $arg) {
         },
       } @unresolved;
 
-      return $self->_pd_request(PUT => '/incidents', {
-        incidents => \@put,
-      });
+      return $self->_pd_request_for_user(
+        $event->from_user,
+        PUT => '/incidents',
+        { incidents => \@put },
+      );
     })->then(sub ($data) {
       return Future->done if $data->{no_incidents};
 
@@ -713,6 +731,24 @@ sub _check_at_oncall ($self) {
     })->retain;
 }
 
+sub _get_pd_account ($self, $token) {
+  return $self->hub->http_get(
+    $self->_url_for('/users/me'),
+    Authorization => "Token token=$token",
+    Accept        => 'application/vnd.pagerduty+json;version=2',
+  )->then(sub ($res) {
+    my $rc = $res->code;
+
+    return Future->fail('That token seems invalid.')
+      if $rc == 401;
+
+    return Future->fail("Encountered error talking to LP: got HTTP $rc")
+      unless $res->is_success;
+
+    return Future->done(decode_json($res->decoded_content));
+  })->retain;
+}
+
 __PACKAGE__->add_preference(
   name      => 'user-id',
   after_set => sub ($self, $username, $val) {
@@ -721,8 +757,39 @@ __PACKAGE__->add_preference(
   },
   validator => sub ($self, $value, @) {
     return (undef, 'user id cannot contain spaces') if $value =~ /\s/;
-
     return $value;
+  },
+);
+
+__PACKAGE__->add_preference(
+  name      => 'api-token',
+  describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
+  default   => undef,
+  validator => sub ($self, $token, $event) {
+    $token =~ s/^\s*|\s*$//g;
+
+    my ($actual_val, $ret_err);
+
+    $self->_get_pd_account($token)
+      ->then(sub ($account) {
+        $actual_val = $token;
+
+        my $id = $account->{user}{id};
+        my $email = $account->{user}{email};
+        $event->reply(
+          "Great! I found the PagerDuty user for $email, and will also set your PD user id to $id."
+        );
+        $self->set_user_preference($event->from_user, 'user-id', $id);
+
+        return Future->done;
+      })
+      ->else(sub ($err) {
+        $ret_err = $err;
+        return Future->fail('bad auth');
+      })
+      ->block_until_ready;
+
+    return ($actual_val, $ret_err);
   },
 );
 
