@@ -4,7 +4,6 @@ use utf8;
 package Synergy::Reactor::PagerDuty;
 
 use Moose;
-use DateTime;
 with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::HasPreferences';
 
@@ -12,12 +11,16 @@ use experimental qw(signatures);
 use namespace::clean;
 
 use Data::Dumper::Concise;
+use DateTime;
 use DateTime::Format::ISO8601;
 use DateTimeX::Format::Ago;
+use Future;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use List::Util qw(first);
 use Synergy::Logger '$Logger';
+
+my $ISO8601 = DateTime::Format::ISO8601->new;
 
 has api_endpoint_uri => (
   is => 'ro',
@@ -172,6 +175,23 @@ EOH
       ],
     },
     {
+      name      => 'maint-start',
+      method    => 'handle_maint_start',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ m{^maint\s+start\s*(/force)?\s*$}i },
+    },
+    {
+      name      => 'maint-end',
+      method    => 'handle_maint_end',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return 1 if $e->text =~ /^maint\s+(end|stop)\b/i;
+        return 1 if $e->text =~ /^unmaint\b/i;
+        return 1 if $e->text =~ /^demaint\b/i;
+      },
+    },
+    {
       name      => 'oncall',
       method    => 'handle_oncall',
       predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
@@ -256,11 +276,15 @@ sub _relevant_maint_windows ($self) {
     });
 }
 
+sub _format_maints ($self, @maints) {
+  return join q{; }, map {; $self->_format_maint_window($_) } @maints;
+}
+
 sub _format_maint_window ($self, $window) {
   state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
 
   my $services = join q{, }, map {; $_->{summary} } $window->{services}->@*;
-  my $start = DateTime::Format::ISO8601->parse_datetime($window->{start_time});
+  my $start = $ISO8601->parse_datetime($window->{start_time});
   my $ago = $ago_formatter->format_datetime($start);
   my $who = $window->{created_by}->{summary};   # XXX map to our usernames
 
@@ -276,10 +300,7 @@ sub handle_maint_query ($self, $event) {
         return $event->reply("PD not in maint right now. Everything is fine maybe!");
       }
 
-      my $maint_text = join q{; },
-                       map {; $self->_format_maint_window($_) }
-                       @maints;
-
+      my $maint_text = $self->_format_maints(@maints);
       return $event->reply("🚨 PD in maint: $maint_text");
     })
     ->else(sub (@fails) {
@@ -307,7 +328,7 @@ sub _check_long_maint ($self) {
 
       my $oldest;
       for my $window (@maint) {
-        my $start = DateTime::Format::ISO8601->parse_datetime($window->{start_time});
+        my $start = $ISO8601->parse_datetime($window->{start_time});
         my $epoch = $start->epoch;
         $oldest = $epoch if ! $oldest || $epoch < $oldest;
       }
@@ -319,10 +340,7 @@ sub _check_long_maint ($self) {
       my $group_address = $self->oncall_group_address;
       my $maint_duration_m = int($maint_duration_s / 60);
 
-      my $maint_text = join q{; },
-                       map {; $self->_format_maint_window($_) }
-                       @maint;
-
+      my $maint_text = $self->_format_maints(@maint);
       my $text =  "Hey, by the way, PagerDuty is in maintenance mode: $maint_text";
 
       $self->oncall_channel->send_message(
@@ -370,6 +388,118 @@ sub handle_oncall ($self, $event) {
         return $event->reply('current oncall: ' . join(', ', sort @users));
     })
     ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
+    ->retain;
+}
+
+sub handle_maint_start ($self, $event) {
+  $event->mark_handled;
+
+  my $force = $event->text =~ m{/force\s*$};
+  my $f;
+
+  if ($force) {
+    # don't bother checking
+    $f = Future->done;
+  } else {
+    $f = $self->_user_is_oncall($event->from_user)->then(sub ($is_oncall) {
+      return Future->done if $is_oncall;
+
+      $event->error_reply(join(q{ },
+        "You don't seem to be on call right now.",
+        "Usually, the person oncall is getting the alerts, so they should be",
+        "the one to decide whether or not to shut them up.",
+        "If you really want to do this, try again with /force."
+      ));
+      return Future->fail('not-oncall');
+    });
+  }
+
+  $f->then(sub {
+    $self->_relevant_maint_windows
+  })
+  ->then(sub (@maints) {
+    return Future->done unless @maints;
+
+    my $desc = $self->_format_maints(@maints);
+    $event->reply("PD already in maint: $desc");
+
+    return Future->fail('already-maint');
+  })
+  ->then(sub {
+    # XXX add reason here?
+    return $self->_pd_request(POST => '/maintenance_windows', {
+      maintenance_window => {
+        type => 'maintenance_window',
+        start_time => $ISO8601->format_datetime(DateTime->now),
+        end_time   =>  $ISO8601->format_datetime(DateTime->now->add(hours => 1)),
+        services => [{
+          id => $self->service_id,
+          type => 'service_reference',
+        }],
+      },
+    });
+  })
+  ->then(sub ($data) {
+    $self->_ack_all($event->from_user->username);
+  })
+  ->then(sub ($nacked) {
+    my $ack_text = ' ';
+    $ack_text = " 🚑 $nacked alert".($nacked > 1 ? 's' : '')." acked!"
+      if $nacked;
+
+    return $event->reply("🚨 PD now in maint for an hour!$ack_text Good luck!");
+  })
+  ->else(sub ($category, $extra = {}) {
+    return if $category eq 'not-oncall';
+    return if $category eq 'already-maint';
+
+    $Logger->log("PD handle_maint_start failed: $category");
+    return $event->reply("Something went wrong while fiddling with PD maint state. Sorry!");
+  })
+  ->retain;
+
+  return;
+}
+
+sub handle_maint_end ($self, $event) {
+  $event->mark_handled;
+
+  my (@args) = split /\s+/, $event->text;
+
+  $self->_relevant_maint_windows
+    ->then(sub (@maints) {
+      unless (@maints) {
+        $event->reply("PD not in maint right now. Everything is fine maybe!");
+        return Future->fail('no-maint');
+      }
+
+      my $now = $ISO8601->format_datetime(DateTime->now);
+      my @futures;
+      for my $window (@maints) {
+        my $id = $window->{id};
+        push @futures, $self->_pd_request(PUT => "/maintenance_windows/$id", {
+          maintenance_window => {
+            type       => $window->{type},
+            end_time   => $now,
+          },
+        });
+      }
+
+      return Future->wait_all(@futures);
+    })
+    ->then(sub (@futures) {
+      my @failed = grep {; $_->is_failed } @futures;
+
+      if (@failed) {
+        $Logger->log([ "PD demaint failed: %s", [ map {; $_->failure } @failed ] ]);
+        $event->reply(
+          "Something went wrong fiddling PD maint state; "
+          . "you'll probably want to sort it out on the web. Sorry about that!"
+        );
+      } else {
+        $event->reply("🚨 PD maint cleared. Good job everyone!");
+      }
+    })
     ->retain;
 }
 
