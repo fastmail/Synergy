@@ -10,6 +10,7 @@ with 'Synergy::Role::Reactor::EasyListening',
 use experimental qw(signatures);
 use namespace::clean;
 
+use Carp ();
 use Data::Dumper::Concise;
 use DateTime;
 use DateTime::Format::ISO8601;
@@ -70,7 +71,7 @@ has _slack_to_pd_map => (
   lazy => 1,
   clearer => '_clear_slack_to_pd_map',
   handles => {
-    pd_from_username => 'get',
+    pd_id_from_username => 'get',
   },
   default => sub ($self) {
     my %map = reverse $self->_pd_to_slack_map->%*;
@@ -206,6 +207,39 @@ EOH
       help_entries => [
         { title => 'ack', text => '*ack all*: acknowledge all triggered alerts in PagerDuty' },
       ],
+    },
+    {
+      name      => 'resolve-all',
+      method    => 'handle_resolve_all',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ m{^resolve\s+all\s*$}i
+      },
+      help_entries => [
+        { title => 'resolve', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
+*resolve*: manage resolving alerts in PagerDuty
+
+You can run this in one of several ways:
+
+• *resolve all*: resolve all triggered and acknowledged alerts in PagerDuty
+• *resolve acked*: resolve the acknowledged alerts in PagerDuty
+• *resolve mine*: resolve the acknowledged alerts assigned to you in PagerDuty
+EOH
+      ],
+    },
+    {
+      name      => 'resolve-acked',
+      method    => 'handle_resolve_acked',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ m{^resolve\s+acked\s*$}i },
+    },
+    {
+      name      => 'resolve-mine',
+      method    => 'handle_resolve_mine',
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return $e->text =~ m{^resolve\s+mine\s*$}i },
     },
   );
 }
@@ -542,6 +576,89 @@ sub _ack_all ($self, $username) {
     })->then(sub ($data) {
       my $nacked = $data->{incidents}->@*;
       return Future->done($nacked);
+    });
+}
+
+sub handle_resolve_mine ($self, $event) {
+  $event->mark_handled;
+  $self->_resolve_incidents($event, {
+    whose => 'own',
+  })->retain;
+}
+
+sub handle_resolve_all ($self, $event) {
+  $event->mark_handled;
+  $self->_resolve_incidents($event, {
+    whose => 'all',
+  })->retain;
+}
+
+sub handle_resolve_acked ($self, $event) {
+  warn "resolve acked";
+  $event->mark_handled;
+  $self->_resolve_incidents($event, {
+    whose => 'all',
+    only_acked => 1,
+  })->retain;
+}
+
+sub _resolve_incidents($self, $event, $arg) {
+  my $sid = $self->service_id;
+
+  my $whose = $arg->{whose};
+  Carp::confess("_resolve_incidents called with bogus args")
+    unless $whose && ($whose eq 'all' || $whose eq 'own');
+
+  my $only_acked = $arg->{only_acked} // ($whose eq 'own' ? 1 : 0);
+
+  # XXX pagination?
+  return $self->_pd_request(GET => "/incidents?service_ids[]=$sid&statuses[]=triggered&statuses[]=acknowledged&limit=100")
+    ->then(sub ($data) {
+      my $pd_id = $self->pd_id_from_username($event->from_user->username);
+      my @unresolved;
+
+      for my $incident ($data->{incidents}->@*) {
+        # skip unacked incidents unless we've asked for all
+        next if $only_acked && $incident->{status} eq 'triggered';
+
+        # 'resolve own' is 'resolve all the alerts I have acked'
+        if ($whose eq 'own') {
+          next unless grep {; $_->{acknowledger}{id} eq $pd_id }
+                      $incident->{acknowledgements}->@*;
+        }
+
+        push @unresolved, $incident->{id};
+      }
+
+      unless (@unresolved) {
+        $event->reply("Looks like there's no incidents to resolve. Lucky!");
+        return Future->done({ no_incidents => 1 });  # hack
+      }
+
+      my @put = map {;
+        +{
+          id => $_,
+          type => 'incident_reference',
+          status => 'resolved',
+        },
+      } @unresolved;
+
+      return $self->_pd_request(PUT => '/incidents', {
+        incidents => \@put,
+      });
+    })->then(sub ($data) {
+      return Future->done if $data->{no_incidents};
+
+      my $n = $data->{incidents}->@*;
+      my $noun = $n == 1 ? 'incident' : 'incidents';
+
+      my $exclamation = $whose eq 'all' ? "The board is clear!" : "Phew!";
+
+      $event->reply("Successfully resolved $n $noun. $exclamation");
+      return Future->done;
+    })->else(sub (@failure) {
+      $Logger->log(["PD error resolving incidents: %s", \@failure ]);
+      $event->reply("Something went wrong resolving incidents. Sorry!");
     });
 }
 
