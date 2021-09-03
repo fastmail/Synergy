@@ -133,6 +133,7 @@ sub _build_stream {
 }
 
 package Synergy::Channel::Console::DiagnosticHandler {
+
   use Moose;
   extends 'Synergy::DiagnosticHandler';
 

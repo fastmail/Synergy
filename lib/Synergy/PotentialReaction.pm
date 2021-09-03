@@ -1,4 +1,5 @@
 package Synergy::PotentialReaction;
+
 use Moose;
 
 has reactor => (is => 'ro', required => 1);

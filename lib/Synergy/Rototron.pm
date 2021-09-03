@@ -325,6 +325,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
 }
 
 package Synergy::Rototron::Rotor {
+
   use Moose;
   use experimental qw(lexical_subs signatures);
 
@@ -465,6 +466,7 @@ package Synergy::Rototron::Rotor {
 }
 
 package Synergy::Rototron::AvailabilityChecker {
+
   use Moose;
   use experimental qw(lexical_subs signatures);
 
@@ -703,6 +705,7 @@ package Synergy::Rototron::AvailabilityChecker {
 }
 
 package Synergy::Rototron::JMAPClient {
+
   use Moose;
   use experimental qw(lexical_subs signatures);
 

@@ -19,6 +19,7 @@ has host => (is => 'ro', default => '127.0.0.1');
 has color_scheme => (is => 'ro');
 
 package Synergy::DiagnosticUplink::Connection {
+
   use parent 'IO::Async::Stream';
 
   use experimental qw(lexical_subs signatures);

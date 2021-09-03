@@ -1,6 +1,7 @@
 use v5.28.0;
 use warnings;
 package Synergy::Hub;
+# ABSTRACT: synergy's brain
 
 use Moose;
 use MooseX::StrictConstructor;
@@ -344,6 +345,7 @@ sub synergize_file {
 }
 
 package Synergy::HTTPClient {
+
   use parent 'Net::Async::HTTP';
 }
 

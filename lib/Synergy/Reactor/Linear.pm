@@ -20,6 +20,7 @@ use Synergy::Util qw(reformat_help);
 use utf8;
 
 package Synergy::Reactor::Linear::LinearHelper {
+
   use Synergy::Logger '$Logger';
 
   sub new_for_reactor ($class, $reactor) {

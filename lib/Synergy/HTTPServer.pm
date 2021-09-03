@@ -49,6 +49,7 @@ has tls_key_file => (
 );
 
 package Synergy::HTTPServer::PSGI {
+
   use parent 'Net::Async::HTTP::Server::PSGI';
 }
 
