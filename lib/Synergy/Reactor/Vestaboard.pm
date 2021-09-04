@@ -50,6 +50,10 @@ has board_admins => (
   },
 );
 
+has secret_url_component => (
+  is => 'ro',
+);
+
 sub listener_specs {
   return (
     {
@@ -260,6 +264,7 @@ sub state ($self) {
   return {
     user  => $self->_user_state,
     lock  => $self->_lock_state,
+    current_characters => $self->_current_characters,
   };
 }
 
@@ -283,6 +288,12 @@ has _lock_state => (
   is      => 'ro',
   writer  => '_set_lock_state',
   default => sub {  {}  },
+);
+
+has _current_characters => (
+  is      => 'ro',
+  writer  => '_set_current_characters',
+  default => sub {  [ [], [], [], [], [], [] ] },
 );
 
 sub current_lock ($self) {
@@ -311,9 +322,13 @@ after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
     $self->_set_user_state($state->{user});
     $self->_set_lock_state($state->{lock});
+    $self->_set_current_characters($state->{current_characters})
+      if $self->_current_characters;
   }
 
   $self->_setup_asset_servers;
+
+  $self->_setup_content_server if $self->secret_url_component;
 
   return;
 };
@@ -344,6 +359,26 @@ sub _setup_asset_servers ($self) {
       ];
     });
   }
+
+  return;
+}
+
+sub _setup_content_server ($self) {
+  my $secret = $self->secret_url_component;
+
+  my $base = $self->http_path;
+  $base =~ s{/\z}{};
+  my $path = "${base}/$secret";
+
+  $self->hub->server->register_path($path, sub ($env) {
+    return [
+      200,
+      [
+        'Content-Type', 'application/json',
+      ],
+      [ JSON::MaybeXS->new->encode($self->_current_characters) ],
+    ];
+  });
 
   return;
 }
@@ -686,6 +721,13 @@ sub _pay_to_post_payload ($self, $event, $user, $payload) {
         locked_by   => $user->username,
         expires_at  => int(time + ($self->token_regen_period / 2)),
       });
+
+      if ($payload->{characters}) {
+        # We might have "text" which we'll ignore for now.  Later, we can make
+        # the text-posting command build characters locally instead of using
+        # the text-posting Vestaboard API. -- rjbs, 2021-09-04
+        $self->_set_current_characters($payload->{characters});
+      }
 
       $self->save_state;
       return Future->done;
