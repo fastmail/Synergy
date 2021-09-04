@@ -135,6 +135,18 @@ sub listener_specs {
       ],
     },
     {
+      name      => 'vesta_show',
+      method    => 'handle_vesta_show',
+      exclusive => 1,
+      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta show\z/i },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "*vesta show*: see what's on the board",
+        }
+      ],
+    },
+    {
       name      => 'vesta_lock',
       method    => 'handle_vesta_lock',
       exclusive => 1,
@@ -381,6 +393,64 @@ sub _setup_content_server ($self) {
   });
 
   return;
+}
+
+my %CHAR_FOR = (
+  0 => "\N{IDEOGRAPHIC SPACE}",
+  (map { $_ => chr(0xFF20 + $_) }      ( 1 .. 26)), # A .. Z
+  (map { $_ => chr(0xFF10 + $_ - 26) } (27 .. 35)), # 1 .. 9
+  36 => "\x{FF10}", # Zero
+
+  40 => "\N{FULLWIDTH DOLLAR SIGN}",
+  41 => "\N{FULLWIDTH LEFT PARENTHESIS}", # '(',
+  42 => "\N{FULLWIDTH RIGHT PARENTHESIS}", # ')',
+
+  44 => "\N{FULLWIDTH HYPHEN-MINUS}", # '-',
+
+  46 => "\N{FULLWIDTH PLUS SIGN}", # '+',
+  47 => "\N{FULLWIDTH AMPERSAND}", # '&',
+  48 => "\N{FULLWIDTH EQUALS SIGN}", # '=',
+  49 => "\N{FULLWIDTH SEMICOLON}", # ';',
+  37 => "\N{FULLWIDTH EXCLAMATION MARK}", # '!',
+  38 => "\N{FULLWIDTH COMMERCIAL AT}", # '@',
+  39 => "\N{FULLWIDTH NUMBER SIGN}", # '#',
+  50 => "\N{FULLWIDTH COLON}", # ':',
+
+  52 => "\N{FULLWIDTH APOSTROPHE}", # "'",
+  53 => "\N{FULLWIDTH QUOTATION MARK}",
+  54 => "\N{FULLWIDTH PERCENT SIGN}",
+  55 => "\N{FULLWIDTH COMMA}",
+  56 => "\N{FULLWIDTH FULL STOP}",
+
+  59 => "\N{FULLWIDTH SOLIDUS}",
+  60 => "\N{FULLWIDTH QUOTATION MARK}",
+  62 => "° ", # no full-width variant available
+  63 => '🟥', # here and below: the colors
+  64 => '🟧',
+  65 => '🟨',
+  66 => '🟩',
+  67 => '🟦',
+  68 => '🟪',
+  69 => '⬜️',
+);
+
+sub handle_vesta_show ($self, $event) {
+  $event->mark_handled;
+
+  my $curr = $self->_current_characters;
+
+  unless ($curr) {
+    $event->reply("Sorry, I don't know what's on the board!");
+    return;
+  }
+
+  my @lines;
+  for my $line (@$curr) {
+    push @lines,
+      join q{}, map {; $CHAR_FOR{$_} // "\N{IDEOGRAPHIC SPACE}" } @$line;
+  }
+
+  $event->reply("Currently on the board:\n" . join qq{\n}, @lines);
 }
 
 sub handle_vesta_lock ($self, $event) {
