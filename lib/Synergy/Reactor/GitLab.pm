@@ -538,9 +538,7 @@ sub handle_merge_request ($self, $event) {
   my $base = $self->url_base;
   my @found = $event->text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/merge_requests/([0-9]+)}g;
 
-  my %seen;
   while (my ($key, $num) = splice @found, 0, 2) {
-    next if $seen{"$key!$num"}++;
     push @mrs, "$key!$num";
   }
 
