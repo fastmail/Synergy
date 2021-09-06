@@ -333,9 +333,13 @@ sub handle_destroy ($self, $event, $switches) {
       }
 
       $droplet = $maybe_droplet;
-      return Future->done($maybe_droplet)
+      return Future->done;
     })
-    ->then(sub ($droplet) {
+    ->then(sub {
+      $Logger->log([ "Destroying dns entries of: %s", $droplet->{name} ]);
+      $self->remove_dns_entries($self->_ip_address_for_droplet($droplet));
+    })
+    ->then(sub {
       $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
       $self->_do_request(DELETE => "/droplets/$droplet->{id}");
     })
@@ -589,6 +593,23 @@ sub _region_for_user ($self, $user) {
     $area eq 'Australia' ? 'sfo2' :
     $area eq 'Europe'    ? 'ams3' :
                            'nyc3';
+}
+
+sub remove_dns_entries ($self, $ip) {
+  my $base = '/domains/' . $self->box_domain . '/records';
+
+  return $self->_do_request(GET => "$base?per_page=200")
+  ->then(sub ($data) {
+    my @records = grep {$_->{data} eq $ip } $data->{domain_records}->@*;
+    Future->done(@records);
+  })
+  ->then(sub (@records) {
+    return Future->wait_all(
+      map {
+        $self->_do_request(DELETE => "$base/$_->{id}", {})
+      } @records
+    );
+  });
 }
 
 sub _update_dns ($self, $name, $ip) {
