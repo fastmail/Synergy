@@ -536,7 +536,7 @@ sub handle_merge_request ($self, $event) {
   state $dt_formatter = DateTimeX::Format::Ago->new(language => 'en');
 
   state $base = $self->url_base;
-  my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/merge_requests/([0-9]+)};
+  my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/merge_requests/([0-9]+)}gi;
 
   for my $key (keys %found) {
     my $num = $found{$key};
