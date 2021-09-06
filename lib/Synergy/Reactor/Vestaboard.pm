@@ -434,6 +434,49 @@ my %CHAR_FOR = (
   69 => '⬜️',
 );
 
+my %CODE_FOR = (
+  ' ' => 0,
+  (map {; $_ => ord($_) - 0x40 } ('A' .. 'Z')),
+  '0' => 36,
+  (map {; $_ => ord($_) - 0x29 } ( 1 ..   9 )),
+
+  # If put into the qw[...], we'll get a warning, and this is simpler than
+  # faffing about with "no warnings". -- rjbs, 2021-09-05
+  '#' => 39,
+  ',' => 55,
+
+  qw[
+      !   37
+      @   38
+      $   40
+      (   41
+      )   42
+      -   44
+      +   46
+      &   47
+      =   48
+      ;   49
+      :   50
+      '   52
+      "   53
+      %   54
+      .   56
+      /   59
+      ?   60
+      °   62
+  ],
+);
+
+sub _characters_to_display_text ($self, $characters) {
+  my @lines;
+  for my $line (@$characters) {
+    push @lines,
+      join q{}, map {; $CHAR_FOR{$_} // "\N{IDEOGRAPHIC SPACE}" } @$line;
+  }
+
+  return join qq{\n}, @lines;
+}
+
 sub handle_vesta_show ($self, $event) {
   $event->mark_handled;
 
@@ -444,13 +487,8 @@ sub handle_vesta_show ($self, $event) {
     return;
   }
 
-  my @lines;
-  for my $line (@$curr) {
-    push @lines,
-      join q{}, map {; $CHAR_FOR{$_} // "\N{IDEOGRAPHIC SPACE}" } @$line;
-  }
-
-  $event->reply("Currently on the board:\n" . join qq{\n}, @lines);
+  my $display = $self->_characters_to_display_text($curr);
+  $event->reply("Currently on the board:\n$display");
 }
 
 sub handle_vesta_lock ($self, $event) {
@@ -711,6 +749,60 @@ sub handle_vesta_post ($self, $event) {
   );
 }
 
+sub _text_to_characters ($self, $text) {
+  # This will return either [...characters...] or a string that indicates what
+  # went wrong.  This is stupid, but it's ... fine? -- rjbs, 2021-09-05
+  $text = uc $text;
+
+  $text =~ s/[‘’]/'/g; # Slack likes to smarten up quotes,
+  $text =~ s/[“”]/"/g; # which is stupid. -- rjbs, 2021-08-12
+
+  my @words = grep {; length } split /\s+/, $text;
+
+  unless (@words) {
+    return "There wasn't anything to post!";
+  }
+
+  my %unknown;
+  for (@words) {
+    $_ = [ map {; $CODE_FOR{$_} // ($unknown{$_} = -1) } split //, $_ ];
+  }
+
+  if (%unknown) {
+    my @chars = sort keys %unknown;
+    return "I didn't know what to do with these: @chars";
+  }
+
+  my @lines = ([]);
+  while (defined(my $word = shift @words)) {
+    if ($lines[-1]->@* + @$word + 1 < 22) {
+      push $lines[-1]->@*, ($lines[-1]->@* ? 0 : ()), @$word;
+    } elsif (@lines == 6) {
+      return "I can't make the text fit.";
+    } else {
+      push @lines, [ @$word ];
+    }
+  }
+
+  # 1. for given lines, left and right pad
+  my ($minpad) = 22 - (sort { $b <=> $a } map {; 0 + @$_ } @lines)[0];
+  my $leftpad  = int($minpad / 2) + ($minpad % 2);
+  unshift @$_, (0) x $leftpad for @lines;
+  push @$_, (0) x (22 - @$_) for @lines;
+
+  # 2. add blank lines at top and bottom
+  my $addlines = 6 - @lines;
+  my $front    = int($addlines / 2) + ($addlines % 2);
+
+  @lines = (
+    (map {; [ (0) x 22 ] } (1 .. $front)),
+    @lines,
+    (map {; [ (0) x 22 ] } (1 .. $addlines - $front))
+  );
+
+  return \@lines;
+}
+
 sub handle_vesta_post_text ($self, $event) {
   $event->mark_handled;
 
@@ -733,11 +825,18 @@ sub handle_vesta_post_text ($self, $event) {
     return;
   }
 
+  my $post = $self->_text_to_characters($text);
+
+  unless (ref $post) {
+    $event->error_reply("Sorry, I can't post that to the board.  $post");
+    return;
+  }
+
   $self->_pay_to_post_payload(
     $event,
     $user,
     {
-      text => $text,
+      characters => $post,
     }
   );
 }
