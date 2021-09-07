@@ -624,33 +624,52 @@ sub _get_incidents ($self, @statuses) {
   return Future->done(@results);
 }
 
+sub _update_status_for_incidents ($self, $who, $status, $incident_ids) {
+  # This just prevents some special-casing elsewhere
+  return Future->done unless @$incident_ids;
+
+  my @todo = @$incident_ids;
+  my @incidents;
+
+  # *Surely* we won't have more than 500 at a time, right? Right?! Anyway,
+  # 500 is the PagerDuty max for this endpoint.
+  while (my @ids = splice @todo, 0, 500) {
+    my @put = map {;
+      +{
+        id => $_,
+        type => 'incident_reference',
+        status => $status,
+      },
+    } @ids;
+
+    $self->_pd_request_for_user(
+      $who,
+      PUT => '/incidents',
+      { incidents => \@put }
+    )->then(sub ($data) {
+      push @incidents, $data->{incidents}->@*;
+    })
+    ->await;
+  }
+
+  return Future->done(@incidents);
+}
+
 sub _ack_all ($self, $event) {
   my $sid = $self->service_id;
 
   return $self->_get_incidents(qw(triggered))
     ->then(sub (@incidents) {
       my @unacked = map  {; $_->{id} } @incidents;
-
-      return Future->done({ incidents => [] }) unless @unacked;
-
       $Logger->log([ "PD: acking incidents: %s", \@unacked ]);
 
-      my @put = map {;
-        +{
-          id => $_,
-          type => 'incident_reference',
-          status => 'acknowledged',
-        },
-      } @unacked;
-
-      return $self->_pd_request_for_user(
+      return $self->_update_status_for_incidents(
         $event->from_user,
-        PUT => '/incidents',
-        { incidents => \@put },
+        'acknowledged',
+        \@unacked,
       );
-    })->then(sub ($data) {
-      my $nacked = $data->{incidents}->@*;
-      return Future->done($nacked);
+    })->then(sub (@incidents) {
+      return Future->done(scalar @incidents);
     });
 }
 
@@ -712,26 +731,20 @@ sub _resolve_incidents($self, $event, $arg) {
 
       unless (@unresolved) {
         $event->reply("Looks like there's no incidents to resolve. Lucky!");
-        return Future->done({ no_incidents => 1 });  # hack
+        return Future->done;
       }
 
-      my @put = map {;
-        +{
-          id => $_,
-          type => 'incident_reference',
-          status => 'resolved',
-        },
-      } @unresolved;
+      $Logger->log([ "PD: acking incidents: %s", \@unresolved ]);
 
-      return $self->_pd_request_for_user(
+      return $self->_update_status_for_incidents(
         $event->from_user,
-        PUT => '/incidents',
-        { incidents => \@put },
+        'resolved',
+        \@unresolved,
       );
-    })->then(sub ($data) {
-      return Future->done if $data->{no_incidents};
+    })->then(sub (@incidents) {
+      return Future->done if ! @incidents;
 
-      my $n = $data->{incidents}->@*;
+      my $n = @incidents;
       my $noun = $n == 1 ? 'incident' : 'incidents';
 
       my $exclamation = $whose eq 'all' ? "The board is clear!" : "Phew!";
