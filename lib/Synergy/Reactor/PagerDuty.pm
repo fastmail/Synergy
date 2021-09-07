@@ -588,16 +588,52 @@ sub handle_ack_all ($self, $event) {
     ->retain;
 }
 
+# returns a future that yields a list of incidents
+sub _get_incidents ($self, @statuses) {
+  Carp::confess("no statuses found to get!") unless @statuses;
+
+  # url params
+  my $offset   = 0;
+  my $limit    = 100;
+  my $sid      = $self->service_id;
+  my $statuses = join q{&}, map {; "statuses[]=$_" } @statuses;
+
+  # iteration variables
+  my $is_done = 0;
+  my $i = 0;
+  my @results;
+
+  while (! $is_done) {
+    my $url = "/incidents?service_ids[]=$sid&$statuses&limit=$limit&offset=$offset";
+
+    $self->_pd_request(GET => $url)
+      ->then(sub ($data) {
+        push @results, $data->{incidents}->@*;
+
+        $is_done = ! $data->{more};
+        $offset += $limit;
+
+        if (++$i > 20) {
+          $Logger->log("did more than 20 requests getting incidents from PD; aborting to avoid infinite loop!");
+          $is_done = 1;
+        }
+      })
+      ->await;
+  }
+
+  return Future->done(@results);
+}
+
 sub _ack_all ($self, $event) {
   my $sid = $self->service_id;
-  # XXX is this limit sufficient?
-  return $self->_pd_request(GET => "/incidents?service_ids[]=$sid&statuses[]=triggered&limit=100")
-    ->then(sub ($data) {
-      my @unacked = map  {; $_->{id} } $data->{incidents}->@*;
+
+  return $self->_get_incidents(qw(triggered))
+    ->then(sub (@incidents) {
+      my @unacked = map  {; $_->{id} } @incidents;
 
       return Future->done({ incidents => [] }) unless @unacked;
 
-      $Logger->log("PD: acking incidents: @unacked");
+      $Logger->log([ "PD: acking incidents: %s", \@unacked ]);
 
       my @put = map {;
         +{
@@ -656,12 +692,12 @@ sub _resolve_incidents($self, $event, $arg) {
   my $only_acked = $arg->{only_acked} // ($whose eq 'own' ? 1 : 0);
 
   # XXX pagination?
-  return $self->_pd_request(GET => "/incidents?service_ids[]=$sid&statuses[]=triggered&statuses[]=acknowledged&limit=100")
-    ->then(sub ($data) {
+  return $self->_get_incidents(qw(triggered acknowledged))
+    ->then(sub (@incidents) {
       my $pd_id = $self->pd_id_from_username($event->from_user->username);
       my @unresolved;
 
-      for my $incident ($data->{incidents}->@*) {
+      for my $incident (@incidents) {
         # skip unacked incidents unless we've asked for all
         next if $only_acked && $incident->{status} eq 'triggered';
 
