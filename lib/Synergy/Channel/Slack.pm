@@ -220,7 +220,7 @@ sub synergy_event_from_slack_event ($self, $slack_event, $type = 'message') {
 
   my $was_targeted;
 
-  if ($text =~ s/\A \@?($me)(?=\W):?\s*//ix) {
+  if ($text =~ s/\A \s* \@? ($me) (?=\W) :? \s* //ix) {
     $was_targeted = !! $1;
   }
 
