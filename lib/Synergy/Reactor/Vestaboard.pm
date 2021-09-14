@@ -488,7 +488,16 @@ sub handle_vesta_show ($self, $event) {
   }
 
   my $display = $self->_characters_to_display_text($curr);
-  $event->reply("Currently on the board:\n$display");
+  my $reply   = "Currently on the board:\n$display";
+
+  my $whitespace = $CHAR_FOR{0};
+
+  $event->reply(
+    $reply,
+    {
+      slack => ($reply =~ s/$whitespace/:spacer:/gr)
+    }
+  );
 }
 
 sub handle_vesta_lock ($self, $event) {
