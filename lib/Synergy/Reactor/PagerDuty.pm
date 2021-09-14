@@ -539,7 +539,9 @@ sub handle_maint_end ($self, $event) {
         return Future->fail('no-maint');
       }
 
-      my $now = $ISO8601->format_datetime(DateTime->now);
+      # add 5s to allow for clock skew, otherwise PD gives you "end cannot be
+      # before now"
+      my $now = $ISO8601->format_datetime(DateTime->now->add(seconds => 5));
       my @futures;
       for my $window (@maints) {
         my $id = $window->{id};
