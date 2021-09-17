@@ -37,6 +37,7 @@ use Sub::Exporter -setup => [ qw(
   transliterate
 
   validate_business_hours describe_business_hours
+  day_name_from_abbr
 ) ];
 
 sub read_config_file ($filename) {
@@ -545,6 +546,20 @@ sub describe_business_hours ($value) {
 
   return join q{, }, map {; $desc{$_} ? "\u$_: $desc{$_}" : () }
     (qw(weekdays sun), @wdays, qw(sat weekends));
+}
+
+sub day_name_from_abbr ($dow) {
+  state $days = {
+    mon => 'Monday',
+    tue => 'Tuesday',
+    wed => 'Wednesday',
+    thu => 'Thursday',
+    fri => 'Friday',
+    sat => 'Saturday',
+    sun => 'Sunday',
+  };
+
+  return $days->{$dow};
 }
 
 1;

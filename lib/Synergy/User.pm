@@ -172,6 +172,11 @@ sub hours_for_dow ($self, $dow) {
   return $hours;
 }
 
+sub is_wfh_on ($self, $dow) {
+  my $wfh_days = $self->preference('wfh-days');
+  return !! grep {; $_ eq $dow } @$wfh_days;
+}
+
 # We must now inject $hub, because the directory is not necessarily attached
 # to one.
 sub shift_for_day ($self, $hub, $moment) {

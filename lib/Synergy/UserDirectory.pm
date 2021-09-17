@@ -14,8 +14,9 @@ use experimental qw(signatures lexical_subs);
 use namespace::autoclean;
 use Path::Tiny;
 use Synergy::User;
-use Synergy::Util qw(known_alphabets read_config_file);
+use Synergy::Util qw(known_alphabets read_config_file day_name_from_abbr);
 use Synergy::Logger '$Logger';
+use Lingua::EN::Inflect qw(WORDLIST);
 use List::Util qw(first shuffle all);
 use DateTime;
 use Defined::KV;
@@ -379,6 +380,32 @@ __PACKAGE__->add_preference(
   describer => \&Synergy::Util::describe_business_hours,
   validator => sub ($self, $value, @) {
     return Synergy::Util::validate_business_hours($value);
+  },
+);
+
+__PACKAGE__->add_preference(
+  name => 'wfh-days',
+  help      => q{days you work regularly from home; use "Wed, Fri" (etc.)"},
+  default   => sub { [] },
+  describer => sub ($value) {
+    my @all = map {; day_name_from_abbr($_) } @$value;
+    return @all ? WORDLIST(@all) : '<none>';
+  },
+  validator => sub ($self, $value, @) {
+    my @known = qw(mon tue wed thu fri sat sun);
+    my %is_valid = map {; $_ => 1 } @known;
+
+    my @got = split /[,;]\s+/, lc $value;
+
+    return [] if @got == 1 and $got[0] eq 'none';
+
+    my @bad = grep {; ! $is_valid{$_} } @got;
+    if (@bad) {
+      my $err = q{use 3-letter day abbreviations, separated with commas, like "Wed, Fri" (or "none")};
+      return (undef, $err);
+    }
+
+    return \@got;
   },
 );
 

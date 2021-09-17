@@ -11,7 +11,7 @@ use utf8;
 use experimental qw(signatures);
 use namespace::clean;
 use List::Util qw(first);
-use Synergy::Util qw(parse_time_hunk);
+use Synergy::Util qw(parse_time_hunk day_name_from_abbr);
 use Time::Duration::Parse;
 use Time::Duration;
 
@@ -202,8 +202,16 @@ sub _business_hours_status ($self, $event, $user) {
       ucfirst $user->theyre, $user->their;
   }
 
-  return sprintf "It's currently %s normal business hours.",
-    $user->their;
+  my $trailer = '';
+  if ($user->is_wfh_on($dow)) {
+    $trailer = sprintf q{, and usually %s works from home on %ss},
+      $user->they,
+      day_name_from_abbr($dow);
+  }
+
+  return sprintf "It's currently %s normal business hours%s.",
+    $user->their,
+    $trailer,
 }
 
 sub _chatter_status ($self, $event, $user) {
