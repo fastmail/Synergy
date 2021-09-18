@@ -204,8 +204,9 @@ sub _business_hours_status ($self, $event, $user) {
 
   my $trailer = '';
   if ($user->is_wfh_on($dow)) {
-    $trailer = sprintf q{, and usually %s works from home on %ss},
+    $trailer = sprintf q{, and usually %s work%s from home on %ss},
       $user->they,
+      $user->they eq 'they' ? '' : 's',   # sigh, english
       day_name_from_abbr($dow);
   }
 
