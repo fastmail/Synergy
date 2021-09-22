@@ -41,7 +41,7 @@ sub handle_dc($self, $event) {
   }
 
   my ($cmd) = $event->text =~ /^dc\s+(?:-e\s+)?'?(.*?)'?\s*$/i;
-  unless ($cmd) {
+  unless (length ($cmd // '')) {
     return $event->reply("Sory, I didn't understand that. Try: dc -e '1 2 +p', for example");
   }
 
@@ -86,7 +86,7 @@ sub handle_dc($self, $event) {
         $event->reply("Sorry, dc terminated on signal $exitcode");
 
         return;
-      } elsif (! $resp) {
+      } elsif (! length($resp // '' )) {
         $event->reply("<no output>");
 
         return;
