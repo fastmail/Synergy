@@ -110,6 +110,11 @@ has maint_warning_address => (
   isa => 'Str',
 );
 
+has oncall_change_announce_address => (
+  is  => 'ro',
+  isa => 'Str',
+);
+
 has maint_timer_interval => (
   is => 'ro',
   isa => 'Int',
@@ -815,8 +820,53 @@ sub _check_at_oncall ($self) {
         $self->_set_oncall_list(\@new);
       });
 
+      $self->_announce_oncall_change({were => \@have, now => \@new});
+        if $self->oncall_change_announce_address;
+
       return $f;
     })->retain;
+}
+
+sub _announce_oncall_change($self, $args) {
+  my %were = map {
+    $self->username_from_pd($_) ? $self->username_from_pd($_) : $_ => 1
+  } $args->{were}->@*;
+  
+  my %are = map {
+    $self->username_from_pd($_) ? $self->username_from_pd($_) : $_ => 1
+  } $args->{now}->@*;
+
+  my @leaving = grep {
+    ! $are{$_};
+    } keys %were;
+
+  my @joining = grep {
+  ! $were{$_};
+  } keys %are;
+
+  my @lines;
+
+  if (@leaving) {
+    my $verb = @leaving > 1
+             ? 'have'
+             : 'has';
+    my $removed = join ', ', sort @leaving;
+    push @lines, "$removed $verb been removed from the oncall group";
+  }
+
+  if (@joining) {
+    my $verb = @joining > 1
+             ? 'have'
+             : 'has';
+    my $added = join ', ', sort @joining;
+    push @lines, "$added $verb been added to the oncall group";
+  }
+
+  my $message = join "\n", @lines;
+  $self->oncall_channel->send_message(
+    $self->oncall_change_announce_address,
+    $message,
+  );
 }
 
 sub _get_pd_account ($self, $token) {
