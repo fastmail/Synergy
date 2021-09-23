@@ -43,6 +43,13 @@ has service_id => (
   required => 1,
 );
 
+# used for getting oncall names
+has escalation_policy_id => (
+  is => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
 has _pd_to_slack_map => (
   is => 'ro',
   isa => 'HashRef',
@@ -419,7 +426,9 @@ sub _check_long_maint ($self) {
 sub _current_oncall_ids ($self) {
   $self->_pd_request(GET => '/oncalls')
     ->then(sub ($data) {
-      my @oncall = map {; $_->{user} }
+      my $policy_id = $self->escalation_policy_id;
+      my @oncall = map  {; $_->{user} }
+                   grep {; $_->{escalation_policy}{id} eq $policy_id }
                    grep {; $_->{escalation_level} == 1}
                    $data->{oncalls}->@*;
 
