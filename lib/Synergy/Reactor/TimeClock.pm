@@ -11,7 +11,7 @@ use experimental qw(signatures lexical_subs);
 use namespace::clean;
 
 use Synergy::Logger '$Logger';
-use Synergy::Util qw(bool_from_text);
+use Synergy::Util qw(bool_from_text describe_business_hours);
 
 use IO::Async::Timer::Periodic;
 use List::Util qw(max);
@@ -35,7 +35,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return $e->text =~ /\Ahours(\s+for)?\s+/;
+        return $e->text =~ /\Ahours(\s+for)?\s+/i;
       }
     },
     {
@@ -185,11 +185,12 @@ sub handle_hours_for ($self, $event) {
   my $tz = $target->time_zone;
   my $tz_nick = $self->hub->env->time_zone_names->{ $tz } // $tz;
 
+
   return $event->reply(
-    sprintf "%s's usual hours: %s, %s",
+    sprintf "%s's usual hours (%s): %s",
       $target->username,
-      $self->hub->user_directory->describe_user_preference($target, 'business-hours'),
       $tz_nick,
+      describe_business_hours($target->business_hours, $target),
   );
 }
 

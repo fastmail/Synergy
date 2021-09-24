@@ -518,13 +518,19 @@ sub validate_business_hours ($value) {
   return \%week_struct;
 }
 
-sub describe_business_hours ($value) {
+sub describe_business_hours ($value, $user = undef) {
   my @wdays = qw(mon tue wed thu fri);
   my @wends = qw(sat sun);
 
   my %desc = map {; keys($value->{$_}->%*)
                     ? ($_ => "$value->{$_}{start}-$value->{$_}{end}")
                     : ($_ => '') } (@wdays, @wends);
+
+  if ($user) {
+    for my $dow (keys %desc) {
+      $desc{$dow} .= $user->is_wfh_on($dow) ? " \N{HOUSE WITH GARDEN}" : '';
+    }
+  }
 
   return "None" unless any { length $_ } values %desc;
 
