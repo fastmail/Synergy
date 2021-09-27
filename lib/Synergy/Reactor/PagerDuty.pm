@@ -820,47 +820,36 @@ sub _check_at_oncall ($self) {
         $self->_set_oncall_list(\@new);
       });
 
-      $self->_announce_oncall_change({were => \@have, now => \@new});
+      $self->_announce_oncall_change(\@have, \@new)
         if $self->oncall_change_announce_address;
 
       return $f;
     })->retain;
 }
 
-sub _announce_oncall_change($self, $args) {
-  my %were = map {
-    $self->username_from_pd($_) ? $self->username_from_pd($_) : $_ => 1
-  } $args->{were}->@*;
-  
-  my %are = map {
-    $self->username_from_pd($_) ? $self->username_from_pd($_) : $_ => 1
-  } $args->{now}->@*;
+sub _announce_oncall_change ($self, $old, $new) {
+  my %before = map {; ($self->username_from_pd($_) // $_) => 1 } $old->@*;
+  my %after = map {; ($self->username_from_pd($_) // $_) => 1 } $new->@*;
 
-  my @leaving = grep {
-    ! $are{$_};
-    } keys %were;
-
-  my @joining = grep {
-  ! $were{$_};
-  } keys %are;
+  my @leaving = grep { ! $after{$_} } keys %before;
+  my @joining = grep { ! $before{$_} } keys %after;
 
   my @lines;
 
   if (@leaving) {
-    my $verb = @leaving > 1
-             ? 'have'
-             : 'has';
+    my $verb = @leaving > 1 ? 'have' : 'has';
     my $removed = join ', ', sort @leaving;
     push @lines, "$removed $verb been removed from the oncall group";
   }
 
   if (@joining) {
-    my $verb = @joining > 1
-             ? 'have'
-             : 'has';
+    my $verb = @joining > 1 ? 'have' : 'has';
     my $added = join ', ', sort @joining;
     push @lines, "$added $verb been added to the oncall group";
   }
+
+  my $oncall = join ', ', sort keys %after;
+  push @lines, "Now oncall: $oncall";
 
   my $message = join "\n", @lines;
   $self->oncall_channel->send_message(
