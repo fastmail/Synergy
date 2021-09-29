@@ -797,6 +797,11 @@ sub _check_at_oncall ($self) {
                     map  {; $self->username_from_pd($_) }
                     @new;
 
+      unless (@userids) {
+        $Logger->log("could not convert PD oncall list into slack userids; ignoring");
+        return Future->done;
+      }
+
       my $f = $channel->slack->api_call(
         'usergroups.users.update',
         {
@@ -818,18 +823,18 @@ sub _check_at_oncall ($self) {
         # the first time, we'll actually try again the next time around,
         # rather than just saying "oh, nothing changed, great!"
         $self->_set_oncall_list(\@new);
+        $self->_announce_oncall_change(\@have, \@new)
       });
-
-      $self->_announce_oncall_change(\@have, \@new)
-        if $self->oncall_change_announce_address;
 
       return $f;
     })->retain;
 }
 
-sub _announce_oncall_change ($self, $old, $new) {
-  my %before = map {; ($self->username_from_pd($_) // $_) => 1 } $old->@*;
-  my %after = map {; ($self->username_from_pd($_) // $_) => 1 } $new->@*;
+sub _announce_oncall_change ($self, $before, $after) {
+  return unless $self->oncall_change_announce_address;
+
+  my %before = map {; ($self->username_from_pd($_) // $_) => 1 } $before->@*;
+  my %after  = map {; ($self->username_from_pd($_) // $_) => 1 } $after->@*;
 
   my @leaving = grep { ! $after{$_} } keys %before;
   my @joining = grep { ! $before{$_} } keys %after;
