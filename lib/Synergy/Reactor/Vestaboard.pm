@@ -496,7 +496,12 @@ sub handle_vesta_show ($self, $event) {
               ($self->vesta_image_base =~ s{/\z}{}r),
               $self->_encode_board($curr);
 
-    $event->reply("The current board status is: $url");
+    $event->reply(
+      "The current board status is: $url",
+      {
+        slack => sprintf("Enjoy <%s|the current board status!>", $url),
+      },
+    );
     return;
   }
 
