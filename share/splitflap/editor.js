@@ -73,13 +73,78 @@ let workingRow;
 let firstElement;
 let numbersAreColors = false;
 
+const encodeBoard = (board) => {
+  let string = "";
+  let queue = board.flat().map((e) => e.value); // Eh.
+
+  while (queue.length) {
+    const code = queue.shift();
+
+    if (queue.length >= 2 && queue[0] === code && queue[1] === code) {
+      let n = 3;
+
+      queue.splice(0, 2);
+
+      while (queue.length && queue[0] === code) {
+        n++;
+        queue.shift();
+      }
+
+      string += String.fromCharCode(code | 128);
+      string += String.fromCharCode(n);
+
+      continue;
+    }
+
+    string += String.fromCharCode(code);
+  }
+
+  return btoa(string).replaceAll('+', '-')
+                     .replaceAll('/', '_')
+                     .replaceAll(/=+$/g, '');
+};
+
+const decodeBoard = (string) => {
+  string.replaceAll('-', '+').replaceAll('_', '/');
+  string = atob(string);
+
+  let codes = []
+
+  const iterator = string[Symbol.iterator]();
+  let queue = Array.from(iterator);
+
+  while (queue.length) {
+    const char = queue.shift().codePointAt(0);
+
+    if (char & 128) {
+      if (queue.length === 0) throw("underrun!");
+
+      const code = char ^ 128;
+      const run  = queue.shift().codePointAt(0);
+
+      codes.push( ...(Array(run).fill(code)) );
+      continue;
+    }
+
+    codes.push(char);
+  }
+
+  if (codes.length !== 6*22) {
+    console.log(`wrong length for encoded board: ${codes.length}`);
+    return Array(6).fill(Array(22).fill(0));
+  }
+
+  const a = Array(6).fill(1).map(i => codes.splice(0,22));
+  return a;
+};
+
 const url = new URL(window.location);
 const startBoardText = url.searchParams.get("state");
 const designText = url.searchParams.get("design");
 let startBoard;
 try {
   if (startBoardText) {
-    startBoard = JSON.parse(RawDeflate.inflate(atob(startBoardText)));
+    startBoard = decodeBoard(startBoardText);
   }
 } catch (_) {}
 if (designText) {
@@ -92,7 +157,7 @@ const updateJsonBlock = () => {
     board.map((row) => [...row.map((column) => column.value)])
   );
   jsonBlock.innerText = representation;
-  url.searchParams.set("state", btoa(RawDeflate.deflate(representation)));
+  url.searchParams.set("state", encodeBoard(board));
   window.history.pushState({}, "", url);
 };
 

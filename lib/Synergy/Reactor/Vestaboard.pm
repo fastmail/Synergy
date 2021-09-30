@@ -11,9 +11,9 @@ with 'Synergy::Role::HTTPEndpoint';
 use experimental qw(signatures);
 use namespace::clean;
 
-use Compress::Raw::Zlib ();
 use Data::GUID qw(guid_string);
 use Lingua::EN::Inflect qw(NUMWORDS PL_N);
+use MIME::Base64 ();
 use Path::Tiny;
 use Plack::App::File;
 use Plack::Request;
@@ -629,6 +629,32 @@ sub handle_vesta_status ($self, $event) {
   $event->reply($status);
 }
 
+sub _encode_board {
+  my ($self, $board) = @_;
+  my $str = q{};
+  my @queue = map {; @$_ } @$board;
+
+  QUAD: while (defined(my $code = shift @queue)) {
+    if (@queue >= 2 && $queue[0] == $code && $queue[1] == $code) {
+      my $n = 3;
+      splice @queue, 0, 2;
+
+      while (@queue && $queue[0] == $code) {
+        $n++;
+        shift @queue;
+      }
+
+      $str .= chr($code | 128) . chr($n);
+
+      next QUAD;
+    }
+
+    $str .= chr($code);
+  }
+
+  return MIME::Base64::encode_base64url($str);
+}
+
 sub handle_vesta_edit ($self, $event) {
   $event->mark_handled;
 
@@ -655,17 +681,7 @@ sub handle_vesta_edit ($self, $event) {
 
   if (my $design = $self->_get_user_design_named($user, $name)) {
     # A design exists, so let's try to encode it.
-    my $state = eval {
-      my $json = JSON::MaybeXS->new->encode($design->{characters});
-      my ($deflater) = Compress::Raw::Zlib::Deflate->new(
-        -WindowBits => - Compress::Raw::Zlib::MAX_WBITS()
-      );
-
-      $deflater->deflate(\$json, \my $deflated);
-      $deflater->flush(\$deflated);
-
-      MIME::Base64::encode_base64($deflated);
-    };
+    my $state = eval { $self->_encode_board($design->{characters}); };
 
     if ($state) {
       $uri->query_param(state => $state);
