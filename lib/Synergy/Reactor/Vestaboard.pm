@@ -50,6 +50,10 @@ has board_admins => (
   },
 );
 
+has vesta_image_base => (
+  is => 'ro',
+);
+
 has secret_url_component => (
   is => 'ro',
 );
@@ -484,6 +488,15 @@ sub handle_vesta_show ($self, $event) {
 
   unless ($curr) {
     $event->reply("Sorry, I don't know what's on the board!");
+    return;
+  }
+
+  if ($self->vesta_image_base) {
+    my $url = join q{/},
+              ($self->vesta_image_base =~ s{/\z}{}r),
+              $self->_encode_board($curr);
+
+    $event->reply("The current board status is: $url");
     return;
   }
 
