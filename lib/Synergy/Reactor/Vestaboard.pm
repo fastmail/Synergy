@@ -383,19 +383,51 @@ sub _setup_asset_servers ($self) {
 sub _setup_content_server ($self) {
   my $secret = $self->secret_url_component;
 
-  my $base = $self->http_path;
-  $base =~ s{/\z}{};
-  my $path = "${base}/$secret";
+  {
+    my $base = $self->http_path;
+    $base =~ s{/\z}{};
+    my $path = "${base}/$secret";
 
-  $self->hub->server->register_path($path, sub ($env) {
-    return [
-      200,
-      [
-        'Content-Type', 'application/json',
-      ],
-      [ JSON::MaybeXS->new->encode($self->_current_characters) ],
-    ];
-  });
+    $self->hub->server->register_path($path, sub ($env) {
+      return [
+        200,
+        [
+          'Content-Type', 'application/json',
+        ],
+        [ JSON::MaybeXS->new->encode($self->_current_characters) ],
+      ];
+    });
+  }
+
+  {
+    my $base = $self->http_path;
+    $base =~ s{/\z}{};
+    my $path = "${base}/$secret/current";
+
+    my $curr = $self->_current_characters;
+
+    unless ($curr) {
+      return [
+        404,
+        [ 'Content-Type', 'text/plain', ],
+        'Unknown.'
+      ];
+    }
+
+    my $url = join q{/},
+              ($self->vesta_image_base =~ s{/\z}{}r),
+              Synergy::VestaUtil->encode_board($curr);
+
+    $self->hub->server->register_path($path, sub ($env) {
+      return [
+        302,
+        [
+          'Location', $url
+        ],
+        [ ],
+      ];
+    });
+  }
 
   return;
 }
