@@ -140,6 +140,18 @@ sub listener_specs {
       ],
     },
     {
+      name      => 'vesta_show_design',
+      method    => 'handle_vesta_show_design',
+      exclusive => 1,
+      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta show design /i },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "*vesta show design `DESIGN`*: show a preview of one of your designs",
+        }
+      ],
+    },
+    {
       name      => 'vesta_show',
       method    => 'handle_vesta_show',
       exclusive => 1,
@@ -458,6 +470,56 @@ sub handle_vesta_show ($self, $event) {
 
   my $display = Synergy::VestaUtil->board_to_text($curr);
   my $reply   = "Currently on the board:\n$display";
+
+  my $whitespace = "\N{WHITE LARGE SQUARE}";
+
+  $event->reply(
+    $reply,
+    {
+      slack => ($reply =~ s/$whitespace/:spacer:/gr)
+    }
+  );
+}
+
+sub handle_vesta_show_design ($self, $event) {
+  $event->mark_handled;
+
+  my $text = $event->text;
+  my $name = $text =~ s/\Avesta show design\s+//r;
+  $name =~ s/[^\pL\pN\pM]/-/g;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my $design = $self->_get_user_design_named($user, $name);
+
+  unless ($design) {
+    $event->error_reply("Sorry, I can't find that design!");
+    return;
+  }
+
+  my $board = $design->{characters};
+
+  if ($self->vesta_image_base) {
+    my $url = join q{/},
+              ($self->vesta_image_base =~ s{/\z}{}r),
+              Synergy::VestaUtil->encode_board($board);
+
+    $event->reply(
+      "You can see that design at: $url",
+      {
+        slack => sprintf("Behold, your design <%s|%s>", $url, $design->{name}),
+      },
+    );
+    return;
+  }
+
+  my $display = Synergy::VestaUtil->board_to_text($board);
+  my $reply   = "Your design $design->{name}:\n$display";
 
   my $whitespace = "\N{WHITE LARGE SQUARE}";
 
