@@ -507,7 +507,8 @@ sub handle_vesta_show_design ($self, $event) {
   if ($self->vesta_image_base) {
     my $url = join q{/},
               ($self->vesta_image_base =~ s{/\z}{}r),
-              Synergy::VestaUtil->encode_board($board);
+              Synergy::VestaUtil->encode_board($board),
+              'cropped';
 
     $event->reply(
       "You can see that design at: $url",
