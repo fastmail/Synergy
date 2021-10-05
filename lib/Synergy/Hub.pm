@@ -58,6 +58,12 @@ has server => (
   },
 );
 
+has prom => (
+  is => 'ro',
+  lazy => 1,
+  default => sub { Prometheus::Tiny->new },
+);
+
 for my $pair (
   [ qw( channel channels ) ],
   [ qw( reactor reactors ) ],
@@ -208,6 +214,10 @@ sub set_loop ($self, $loop) {
 
   $_->start for $self->reactors;
   $_->start for $self->channels;
+
+  if (my $metrics_path = $self->env->metrics_path) {
+    $self->server->register_path($metrics_path, $self->prom->psgi, 'the hub');
+  }
 
   return $loop;
 }

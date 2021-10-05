@@ -25,7 +25,7 @@ has hub => (
   predicate => '_has_hub',
   init_arg  => undef,
   weak_ref  => 1,
-  handles   => [ qw( loop ) ],
+  handles   => [ qw( loop prom ) ],
 );
 
 sub hub ($self) {
