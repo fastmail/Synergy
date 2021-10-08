@@ -221,6 +221,11 @@ EOH
       ],
     },
     {
+      name      => 'incident summary',
+      method    => '_handle_incidents',
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^incidents\s*$/i },
+    },
+    {
       name      => 'resolve-all',
       method    => 'handle_resolve_all',
       predicate => sub ($self, $e) {
@@ -861,6 +866,36 @@ sub _announce_oncall_change ($self, $before, $after) {
     $self->oncall_change_announce_address,
     $message,
   );
+}
+
+sub _handle_incidents($self, $event) {
+  $event->mark_handled;
+  my $summary = $self->_active_incidents_summary;
+  my $msg = $summary ? $summary : "The board is clear!";
+  $event->reply($msg);
+}
+
+sub _active_incidents_summary($self) {
+  state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
+
+  my @summary;
+
+  my $sid = $self->service_id;
+  $self->_get_incidents(qw(triggered acknowledged))
+    ->then(sub (@incidents) {
+      return unless @incidents;
+      push @summary, "🚨 There are " . @incidents . " incidents on the board: 🚨";
+      push @summary, map {
+        my $ago = $ago_formatter->format_datetime(
+          $ISO8601->parse_datetime($_->{created_at})
+        );
+        " - "
+         . $_->{description}
+         . " fired "
+         . $ago;
+      } @incidents;
+  })->retain;
+  return join "\n", @summary;
 }
 
 sub _get_pd_account ($self, $token) {
