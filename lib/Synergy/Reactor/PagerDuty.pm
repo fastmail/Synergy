@@ -828,7 +828,7 @@ sub _check_at_oncall ($self) {
         # the first time, we'll actually try again the next time around,
         # rather than just saying "oh, nothing changed, great!"
         $self->_set_oncall_list(\@new);
-        $self->_announce_oncall_change(\@have, \@new)
+        $self->_announce_oncall_change(\@have, \@new);
       });
 
       return $f;
@@ -860,6 +860,8 @@ sub _announce_oncall_change ($self, $before, $after) {
 
   my $oncall = join ', ', sort keys %after;
   push @lines, "Now oncall: $oncall";
+
+  push @lines, $self->_active_incidents_summary;
 
   my $message = join "\n", @lines;
   $self->oncall_channel->send_message(
