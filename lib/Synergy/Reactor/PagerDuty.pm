@@ -860,15 +860,14 @@ sub _announce_oncall_change ($self, $before, $after) {
   my $oncall = join ', ', sort keys %after;
   push @lines, "Now oncall: $oncall";
 
-  $self->_active_incidents_summary->then(sub ($summary) {
-    push @lines, $summary;
-  })->await;
-
-  my $message = join "\n", @lines;
-  $self->oncall_channel->send_message(
-    $self->oncall_change_announce_address,
-    $message,
-  );
+  $self->_active_incidents_summary->then(sub ($summary = undef) {
+    push @lines, $summary if $summary;
+    my $message = join "\n", @lines;
+    $self->oncall_channel->send_message(
+      $self->oncall_change_announce_address,
+      $message,
+    );
+  })->retain;
 }
 
 sub _handle_incidents($self, $event) {
@@ -882,6 +881,8 @@ sub _handle_incidents($self, $event) {
 sub _active_incidents_summary($self) {
   return $self->_get_incidents(qw(triggered acknowledged))
     ->then(sub (@incidents) {
+      return Future->done() unless @incidents;
+
       my @summary;
       push @summary, "🚨 There are " . @incidents . " incidents on the board: 🚨";
       push @summary, map {
@@ -894,7 +895,7 @@ sub _active_incidents_summary($self) {
          . $ago;
       } @incidents;
       return Future->done(join "\n", @summary);
-  })->retain;
+  });
 }
 
 sub _get_pd_account ($self, $token) {
