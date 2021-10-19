@@ -22,6 +22,7 @@ use List::Util qw(first);
 use Synergy::Logger '$Logger';
 
 my $ISO8601 = DateTime::Format::ISO8601->new;
+my $AGO_FORMATTER = DateTimeX::Format::Ago->new(language => 'en');
 
 has api_endpoint_uri => (
   is => 'ro',
@@ -221,6 +222,11 @@ EOH
       ],
     },
     {
+      name      => 'incident-summary',
+      method    => '_handle_incidents',
+      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^incidents\s*$/i },
+    },
+    {
       name      => 'resolve-all',
       method    => 'handle_resolve_all',
       predicate => sub ($self, $e) {
@@ -353,11 +359,9 @@ sub _format_maints ($self, @maints) {
 }
 
 sub _format_maint_window ($self, $window) {
-  state $ago_formatter = DateTimeX::Format::Ago->new(language => 'en');
-
   my $services = join q{, }, map {; $_->{summary} } $window->{services}->@*;
   my $start = $ISO8601->parse_datetime($window->{start_time});
-  my $ago = $ago_formatter->format_datetime($start);
+  my $ago = $AGO_FORMATTER->format_datetime($start);
   my $who = $window->{created_by}->{summary};   # XXX map to our usernames
 
   return "$services ($ago, started by $who)";
@@ -823,7 +827,7 @@ sub _check_at_oncall ($self) {
         # the first time, we'll actually try again the next time around,
         # rather than just saying "oh, nothing changed, great!"
         $self->_set_oncall_list(\@new);
-        $self->_announce_oncall_change(\@have, \@new)
+        $self->_announce_oncall_change(\@have, \@new);
       });
 
       return $f;
@@ -856,11 +860,42 @@ sub _announce_oncall_change ($self, $before, $after) {
   my $oncall = join ', ', sort keys %after;
   push @lines, "Now oncall: $oncall";
 
-  my $message = join "\n", @lines;
-  $self->oncall_channel->send_message(
-    $self->oncall_change_announce_address,
-    $message,
-  );
+  $self->_active_incidents_summary->then(sub ($summary = undef) {
+    push @lines, $summary if $summary;
+    my $message = join "\n", @lines;
+    $self->oncall_channel->send_message(
+      $self->oncall_change_announce_address,
+      $message,
+    );
+  })->retain;
+}
+
+sub _handle_incidents($self, $event) {
+  $event->mark_handled;
+  $self->_active_incidents_summary->then(sub ($summary = undef) {
+    $summary //= "The board is clear!";
+    $event->reply($summary);
+  })->retain;
+}
+
+sub _active_incidents_summary($self) {
+  return $self->_get_incidents(qw(triggered acknowledged))
+    ->then(sub (@incidents) {
+      return Future->done() unless @incidents;
+
+      my @summary;
+      push @summary, "🚨 There are " . @incidents . " incidents on the board: 🚨";
+      push @summary, map {
+        my $ago = $AGO_FORMATTER->format_datetime(
+          $ISO8601->parse_datetime($_->{created_at})
+        );
+        " - "
+         . $_->{description}
+         . " fired "
+         . $ago;
+      } @incidents;
+      return Future->done(join "\n", @summary);
+  });
 }
 
 sub _get_pd_account ($self, $token) {
