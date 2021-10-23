@@ -536,6 +536,7 @@ package Synergy::Rototron::AvailabilityChecker {
           ]
         });
 
+        $res->assert_successful;
         $res;
       };
 
