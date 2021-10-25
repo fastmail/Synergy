@@ -860,12 +860,37 @@ sub _announce_oncall_change ($self, $before, $after) {
   my $oncall = join ', ', sort keys %after;
   push @lines, "Now oncall: $oncall";
 
-  $self->_active_incidents_summary->then(sub ($summary = undef) {
-    push @lines, $summary if $summary;
-    my $message = join "\n", @lines;
+  my $text = join qq{\n}, @lines;
+
+  my $blocks = [
+    {
+      type => "section",
+      text => {
+        type => "mrkdwn",
+        text => "$text",
+      }
+    },
+  ];
+
+  $self->_active_incidents_summary->then(sub ($summary = {}) {
+    if (my $summary_text = delete $summary->{text}) {
+      $text .= "\n$summary_text";
+    }
+
+    if (my $slack = delete $summary->{slack}) {
+      push @$blocks, { type => 'divider' };
+      push @$blocks, $slack->{blocks}->@*;
+    }
+
     $self->oncall_channel->send_message(
       $self->oncall_change_announce_address,
-      $message,
+      $text,
+      {
+        slack => {
+          blocks => $blocks,
+          text => $text,
+        }
+      }
     );
   })->retain;
 }
@@ -873,8 +898,8 @@ sub _announce_oncall_change ($self, $before, $after) {
 sub _handle_incidents($self, $event) {
   $event->mark_handled;
   $self->_active_incidents_summary->then(sub ($summary = undef) {
-    $summary //= "The board is clear!";
-    $event->reply($summary);
+    my $text = delete $summary->{text} // "The board is clear!";
+    $event->reply($text, $summary);
   })->retain;
 }
 
@@ -883,18 +908,49 @@ sub _active_incidents_summary($self) {
     ->then(sub (@incidents) {
       return Future->done() unless @incidents;
 
-      my @summary;
-      push @summary, "🚨 There are " . @incidents . " incidents on the board: 🚨";
-      push @summary, map {
+      my $title = "🚨 There are " . @incidents . " incidents on the board: 🚨";
+
+      my (@text, @slack);
+
+      for my $incident (@incidents) {
         my $ago = $AGO_FORMATTER->format_datetime(
-          $ISO8601->parse_datetime($_->{created_at})
+          $ISO8601->parse_datetime($incident->{created_at})
         );
-        " - "
-         . $_->{description}
-         . " fired "
-         . $ago;
-      } @incidents;
-      return Future->done(join "\n", @summary);
+
+        push @text, "  - $incident->{description} (fired $ago)";
+        push @slack, sprintf("• <%s|#%s> (fired %s): %s",
+          $incident->{html_url},
+          $incident->{incident_number},
+          $ago,
+          $incident->{description},
+        );
+      }
+
+      my $text = join qq{\n}, $title, @text;
+
+      my $blocks = [
+        {
+          type => "section",
+          text => {
+            type => "mrkdwn",
+            text => "*$title*",
+          }
+        },
+        {
+          type => "section",
+          text => {
+            type => "mrkdwn",
+            text => join qq{\n}, @slack,
+          }
+        },
+      ];
+
+      my $slack = {
+        blocks => $blocks,
+        text => $text,
+      };
+
+      return Future->done({ text => $text, slack => $slack });
   });
 }
 
