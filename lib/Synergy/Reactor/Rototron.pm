@@ -19,6 +19,7 @@ use List::Util qw(uniq);
 use Synergy::Logger '$Logger';
 use Synergy::Rototron;
 use Synergy::Util qw(expand_date_range parse_date_for_user);
+use Try::Tiny;
 
 sub listener_specs {
   return (
@@ -377,7 +378,14 @@ sub handle_duty ($self, $event) {
 sub start ($self) {
   my $timer = IO::Async::Timer::Periodic->new(
     interval => 15 * 60,
-    on_tick  => sub { $self->_plan_the_future; },
+    on_tick  => sub {
+      try {
+        $self->_plan_the_future;
+      } catch {
+        my $err = $_;
+        $Logger->log([ "rototron: failed to _plan_the_future: %s", $err ]);
+      };
+    },
   );
 
   $self->hub->loop->add($timer);
