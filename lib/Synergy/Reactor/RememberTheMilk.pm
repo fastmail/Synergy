@@ -160,7 +160,6 @@ sub handle_todo ($self, $event) {
         return $event->reply("Something went wrong creating that task, sorry.");
       }
 
-      # {{{"list": {"id": "7087408", "taskseries": [{"created": "2019-08-06T20:56:13Z", "id": "389696269", "location_id": "", "modified": "2019-08-06T20:56:13Z", "name": "run Jerrica under daemontools", "notes": [], "participants": [], "source": "api:fd58375d2e592a7f1e90ff575eae6e7c", "tags": [], "task": [{"added": "2019-08-06T20:56:13Z", "completed": "", "deleted": "", "due": "2019-08-09T04:00:00Z", "estimate": "", "has_due_time": "0", "id": "679750283", "postponed": "0", "priority": "N"}], "url": ""}]}, "stat": "ok", "transaction": {"id": "3515949782", "undoable": "0"}}}}
       $Logger->log([ "made task: %s", $rsp->_response ]);
       return $event->reply("Task created!");
     });
