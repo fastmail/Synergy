@@ -509,8 +509,8 @@ EOH
                   "*agenda `[WHO]`*: list items marked for discussion by/with someone",
                 ],
 
-  projects  =>  [ \&_handle_projects,
-                  "*projects*: list all known project shortcuts; can pass *sort:`{due,owner,phase}`*",
+  lpprojects=>  [ \&_handle_projects,
+                  "*lpprojects*: list all known project shortcuts; can pass *sort:`{due,owner,phase}`*",
                 ],
 
   tags      =>  [ \&_handle_tags,
