@@ -461,7 +461,7 @@ sub _handle_mr_search_string ($self, $text, $event) {
     'PRIVATE-TOKEN' => $self->api_token,
   );
 
-  $http_future->on_done(sub ($res) {
+  $http_future->then(sub ($res) {
     unless ($res->is_success) {
       $Logger->log([ "Error: %s", $res->as_string ]);
       return;
@@ -520,7 +520,7 @@ sub _handle_mr_search_string ($self, $text, $event) {
     }
 
     $event->reply($text, { slack => $slack });
-    return;
+    return Future->done;
   })->retain;
 }
 
