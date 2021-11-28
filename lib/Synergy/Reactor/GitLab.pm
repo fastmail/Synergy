@@ -494,33 +494,76 @@ sub _handle_mr_search_string ($self, $text, $event) {
       $zero + @page;
 
     my $slack = "*$text*";
+
+    my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @page;
+
+    my @approval_gets;
     for my $mr (@page) {
-      my $icons = q{};
-      if ($mr->{work_in_progress}) {
-        $icons .= "🚧";
-        $mr->{title} =~ s/^wip:?\s+//i;
-      }
+      my $url = sprintf("%s/v4/projects/%s/merge_requests/%d/approvals",
+        $self->api_uri,
+        $mr->{project_id},
+        $mr->{iid},
+      );
 
-      $icons .= "👍" if $mr->{upvotes};
-      $icons .= "👎" if $mr->{downvotes};
-
-      $icons .= " " if length $icons;
-
-      $text  .= "\n* $mr->{title}";
-      $slack .= sprintf "\n*<%s|%s>* %s%s — _(%s)_",
-        $mr->{web_url},
-        $self->_short_name_for_mr($mr),
-        $icons,
-        $mr->{title},
-        $mr->{author}{username}
-          . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
-
-      $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
-        if $mr->{labels} && $mr->{labels}->@*;
+      push @approval_gets, $self->hub->http_get(
+        $url,
+        'PRIVATE-TOKEN' => $self->api_token,
+      );
     }
 
-    $event->reply($text, { slack => $slack });
-    return Future->done;
+    Future->wait_all(@approval_gets)->then(sub (@res_f) {
+      for my $res_f (@res_f) {
+        my $res = $res_f->get;
+        my $approval_data = $JSON->decode($res->decoded_content);
+
+        # This is absurd.  The docs on getting approvals show that the id,
+        # project id, and iid are included in the response.
+        # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
+        # ...but they are not.  So, rather than screw around with decorating the
+        # future in @approval_gets, we'll parse project and MR id out of the
+        # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
+        my ($project_id, $iid) = $res->request->uri =~ m{
+          /projects/([0-9]+)
+          /merge_requests/([0-9]+)/
+        }x;
+
+        next unless $project_id;
+        my $mr = $mr_by_piid{ "$project_id/$iid" };
+        my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
+        $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
+      }
+
+      Future->done;
+    })->then(sub {
+      for my $mr (@page) {
+        my $icons = q{};
+        if ($mr->{work_in_progress}) {
+          $icons .= "🚧";
+          $mr->{title} =~ s/^wip:?\s+//i;
+        }
+
+        $icons .= "✅" if $mr->{_is_approved};
+        $icons .= "👍" if $mr->{upvotes};
+        $icons .= "👎" if $mr->{downvotes};
+
+        $icons .= " " if length $icons;
+
+        $text  .= "\n* $mr->{title}";
+        $slack .= sprintf "\n*<%s|%s>* %s%s — _(%s)_",
+          $mr->{web_url},
+          $self->_short_name_for_mr($mr),
+          $icons,
+          $mr->{title},
+          $mr->{author}{username}
+            . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
+
+        $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
+          if $mr->{labels} && $mr->{labels}->@*;
+      }
+
+      $event->reply($text, { slack => $slack });
+      return Future->done;
+    });
   })->retain;
 }
 
