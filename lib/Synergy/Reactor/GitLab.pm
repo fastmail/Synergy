@@ -7,7 +7,7 @@ use Moose;
 with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::HasPreferences';
 
-use experimental qw(signatures);
+use experimental qw(lexical_subs signatures);
 use namespace::clean;
 use DateTime::Format::ISO8601;
 use DateTimeX::Format::Ago;
@@ -346,6 +346,97 @@ sub handle_mr_search ($self, $event) {
   $self->_handle_mr_search_string($rest, $event);
 }
 
+sub _queue_produce_page_list ($self, $arg) {
+  my $page = $arg->{page} // 1;
+  my $uri  = $arg->{query_uri}->clone;
+  $uri->query_param(page => $page);
+
+  my @postfilters = ($arg->{postfilters} // [])->@*;
+
+  $Logger->log("GitLab GET: $uri");
+
+  my $event   = $arg->{event};
+  my $on_done = $arg->{on_done};
+
+  my $http_future = $self->hub->http_get(
+    $uri,
+    'PRIVATE-TOKEN' => $self->api_token,
+  );
+
+  $http_future->then(sub ($res) {
+    unless ($res->is_success) {
+      $Logger->log([ "Error: %s", $res->as_string ]);
+      return;
+    }
+
+    my $data = $JSON->decode($res->decoded_content);
+
+    return $event->error_reply("No results!")
+      if ! @$data;
+
+    my $zero = ($page-1) * 10;
+
+    return $event->error_reply("You've gone past the last page!")
+      if $zero > $#$data;
+
+    if (@postfilters) {
+      # Stupid, inefficient, good enough. -- rjbs, 2019-07-29
+      @$data = grep {;
+        my $datum = $_;
+        all { $_->($datum) } @postfilters;
+      } @$data;
+    }
+
+    my @mrs = grep {; $_ } $data->@[ $zero .. $zero+9 ];
+
+    my $header = sprintf "Results, page %s (items %s .. %s):",
+      $page,
+      $zero + 1,
+      $zero + @mrs;
+
+    my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @mrs;
+
+    my @approval_gets;
+    for my $mr (@mrs) {
+      my $url = sprintf("%s/v4/projects/%s/merge_requests/%d/approvals",
+        $self->api_uri,
+        $mr->{project_id},
+        $mr->{iid},
+      );
+
+      push @approval_gets, $self->hub->http_get(
+        $url,
+        'PRIVATE-TOKEN' => $self->api_token,
+      );
+    }
+
+    Future->wait_all(@approval_gets)->then(sub (@res_f) {
+      for my $res_f (@res_f) {
+        my $res = $res_f->get;
+        my $approval_data = $JSON->decode($res->decoded_content);
+
+        # This is absurd.  The docs on getting approvals show that the id,
+        # project id, and iid are included in the response.
+        # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
+        # ...but they are not.  So, rather than screw around with decorating the
+        # future in @approval_gets, we'll parse project and MR id out of the
+        # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
+        my ($project_id, $iid) = $res->request->uri =~ m{
+          /projects/([0-9]+)
+          /merge_requests/([0-9]+)/
+        }x;
+
+        next unless $project_id;
+        my $mr = $mr_by_piid{ "$project_id/$iid" };
+        my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
+        $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
+      }
+
+      Future->done($header, \@mrs);
+    })->then($on_done);
+  });
+}
+
 sub _handle_mr_search_string ($self, $text, $event) {
   my $conds = $self->_parse_search($text);
 
@@ -353,7 +444,13 @@ sub _handle_mr_search_string ($self, $text, $event) {
     return $event->error_reply("I didn't understand your search.");
   }
 
-  my $uri = URI->new(sprintf("%s/v4/merge_requests/?sort=asc&scope=all&state=opened", $self->api_uri));
+  my $per_page = 50; # I don't really ever intend to change this.
+
+  my $uri = URI->new(
+    sprintf "%s/v4/merge_requests/?sort=asc&scope=all&state=opened&per_page=%i",
+      $self->api_uri,
+      $per_page,
+  );
 
   my $page;
 
@@ -440,7 +537,6 @@ sub _handle_mr_search_string ($self, $text, $event) {
       next COND;
     }
 
-
     return $event->error_reply("Unknown query token: $name");
   }
 
@@ -454,116 +550,51 @@ sub _handle_mr_search_string ($self, $text, $event) {
 
   $page //= 1;
 
-  $Logger->log("GitLab GET: $uri");
+  my $reply_with_list = sub ($header, $mrs) {
+    my $text  = $header;
+    my $slack = "*$header*";
 
-  my $http_future = $self->hub->http_get(
-    $uri,
-    'PRIVATE-TOKEN' => $self->api_token,
-  );
-
-  $http_future->then(sub ($res) {
-    unless ($res->is_success) {
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      return;
-    }
-
-    my $data = $JSON->decode($res->decoded_content);
-
-    return $event->error_reply("No results!")
-      if ! @$data;
-
-    my $zero = ($page-1) * 10;
-
-    return $event->error_reply("You've gone past the last page!")
-      if $zero > $#$data;
-
-    if (@postfilters) {
-      # Stupid, inefficient, good enough. -- rjbs, 2019-07-29
-      @$data = grep {;
-        my $datum = $_;
-        all { $_->($datum) } @postfilters;
-      } @$data;
-    }
-
-    my $pages = ceil(@$data / 10);
-    my @page  = grep {; $_ } $data->@[ $zero .. $zero+9 ];
-
-    my $text  = sprintf "Results, page %s (items %s .. %s):",
-      $page,
-      $zero + 1,
-      $zero + @page;
-
-    my $slack = "*$text*";
-
-    my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @page;
-
-    my @approval_gets;
-    for my $mr (@page) {
-      my $url = sprintf("%s/v4/projects/%s/merge_requests/%d/approvals",
-        $self->api_uri,
-        $mr->{project_id},
-        $mr->{iid},
-      );
-
-      push @approval_gets, $self->hub->http_get(
-        $url,
-        'PRIVATE-TOKEN' => $self->api_token,
-      );
-    }
-
-    Future->wait_all(@approval_gets)->then(sub (@res_f) {
-      for my $res_f (@res_f) {
-        my $res = $res_f->get;
-        my $approval_data = $JSON->decode($res->decoded_content);
-
-        # This is absurd.  The docs on getting approvals show that the id,
-        # project id, and iid are included in the response.
-        # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
-        # ...but they are not.  So, rather than screw around with decorating the
-        # future in @approval_gets, we'll parse project and MR id out of the
-        # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
-        my ($project_id, $iid) = $res->request->uri =~ m{
-          /projects/([0-9]+)
-          /merge_requests/([0-9]+)/
-        }x;
-
-        next unless $project_id;
-        my $mr = $mr_by_piid{ "$project_id/$iid" };
-        my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
-        $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
+    for my $mr (@$mrs) {
+      my $icons = q{};
+      if ($mr->{work_in_progress}) {
+        $icons .= "🚧";
+        $mr->{title} =~ s/^wip:?\s+//i;
       }
 
-      Future->done;
-    })->then(sub {
-      for my $mr (@page) {
-        my $icons = q{};
-        if ($mr->{work_in_progress}) {
-          $icons .= "🚧";
-          $mr->{title} =~ s/^wip:?\s+//i;
-        }
+      $icons .= "✅" if $mr->{_is_approved};
+      $icons .= "👍" if $mr->{upvotes};
+      $icons .= "👎" if $mr->{downvotes};
 
-        $icons .= "✅" if $mr->{_is_approved};
-        $icons .= "👍" if $mr->{upvotes};
-        $icons .= "👎" if $mr->{downvotes};
+      $icons .= " " if length $icons;
 
-        $icons .= " " if length $icons;
+      $text  .= "\n* $mr->{title}";
+      $slack .= sprintf "\n*<%s|%s>* %s%s — _(%s)_",
+        $mr->{web_url},
+        $self->_short_name_for_mr($mr),
+        $icons,
+        $mr->{title},
+        $mr->{author}{username}
+          . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
 
-        $text  .= "\n* $mr->{title}";
-        $slack .= sprintf "\n*<%s|%s>* %s%s — _(%s)_",
-          $mr->{web_url},
-          $self->_short_name_for_mr($mr),
-          $icons,
-          $mr->{title},
-          $mr->{author}{username}
-            . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
+      $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
+        if $mr->{labels} && $mr->{labels}->@*;
+    }
 
-        $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
-          if $mr->{labels} && $mr->{labels}->@*;
-      }
+    $event->reply($text, { slack => $slack });
+    return Future->done;
+  };
 
-      $event->reply($text, { slack => $slack });
-      return Future->done;
-    });
+  # We want N items, where N is the per-display-page value, always 10.
+  # We want the Pth page.  This means items from index (P-1)*10 to P*10-1.
+  #
+  # If all items will be client-side approved, we need to fetch at least P*10
+  # items, filter those, and see whether we need more.
+
+  $self->_queue_produce_page_list({
+    event     => $event,
+    query_uri => $uri,
+    page      => $page,
+    on_done   => $reply_with_list,
   })->retain;
 }
 
