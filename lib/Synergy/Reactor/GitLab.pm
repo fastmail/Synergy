@@ -647,7 +647,7 @@ sub _handle_mr_search_string ($self, $text, $event) {
 
       $icons .= " " if length $icons;
 
-      $text  .= "\n* $mr->{title}";
+      $text  .= "\n* $icons $mr->{title}";
       $slack .= sprintf "\n*<%s|%s>* %s%s — _(%s)_",
         $mr->{web_url},
         $self->_short_name_for_mr($mr),
