@@ -581,8 +581,8 @@ sub _queue_produce_page_list ($self, $queue_arg) {
     return $event->error_reply("You've gone past the last page!")
       if $zero > $#$data;
 
-    my $is_last_page = ($res->header('x-page')      // -1)
-                    == ($res->header('x-last-page') // -2);
+    my $is_last_page = ($res->header('x-page')        // -1)
+                    == ($res->header('x-total-pages') // -2);
 
     my %arg = (
       is_last_page  => $is_last_page,
