@@ -495,11 +495,13 @@ sub _compile_search ($self, $conds, $event) {
 }
 
 sub _mk_approval_populator ($self) {
-  return sub ($mrs) {
+  return sub ($arg, $mrs) {
     my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @$mrs;
 
     my @approval_gets;
     for my $mr (@$mrs) {
+      next if defined $mr->{_is_approved};
+
       my $url = sprintf("%s/v4/projects/%s/merge_requests/%d/approvals",
         $self->api_uri,
         $mr->{project_id},
@@ -511,6 +513,9 @@ sub _mk_approval_populator ($self) {
         'PRIVATE-TOKEN' => $self->api_token,
       );
     }
+
+    # Maybe they're all already populated!
+    return Future->done($arg, $mrs) unless @approval_gets;
 
     Future->wait_all(@approval_gets)->then(sub (@res_f) {
       for my $res_f (@res_f) {
@@ -534,27 +539,28 @@ sub _mk_approval_populator ($self) {
         $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
       }
 
-      Future->done($mrs);
+      Future->done($arg, $mrs);
     });
   }
 }
 
-sub _queue_produce_page_list ($self, $arg) {
+sub _queue_produce_page_list ($self, $queue_arg) {
   # Don't confuse API page with display page!  The API page is the page of 20
   # that we get from the API.  The display page is the page of 10 that we will
   # display to the user. -- rjbs, 2021-11-28
-  my $display_page = $arg->{display_page} // 1;
-  my $api_page     = $arg->{api_page}     // 1;
-  my $uri  = $arg->{query_uri}->clone;
+  my $display_page = $queue_arg->{display_page} // 1;
+  my $api_page     = $queue_arg->{api_page}     // 1;
+  my $uri  = $queue_arg->{query_uri}->clone;
   $uri->query_param(page => $api_page);
 
-  my @local_filters    = ($arg->{local_filters}    // [])->@*;
-  my @approval_filters = ($arg->{approval_filters} // [])->@*;
+  my @local_filters    = ($queue_arg->{local_filters}    // [])->@*;
+  my @approval_filters = ($queue_arg->{approval_filters} // [])->@*;
+  my @starting_list    = ($queue_arg->{starting_list}    // [])->@*;
 
   $Logger->log("GitLab GET: $uri");
 
-  my $event   = $arg->{event};
-  my $on_done = $arg->{on_done};
+  my $event   = $queue_arg->{event};
+  my $on_done = $queue_arg->{on_done};
 
   my $http_future = $self->hub->http_get(
     $uri,
@@ -579,20 +585,28 @@ sub _queue_produce_page_list ($self, $arg) {
     return $event->error_reply("You've gone past the last page!")
       if $zero > $#$data;
 
-    Future->done($data);
-  })->then(sub ($mrs) {
-    # If we need to have approvals before postfilters, we will get them now.
-    return Future->done($_[0]) unless @approval_filters;
+    my $is_last_page = ($res->header('x-page')      // -1)
+                    == ($res->header('x-last-page') // -1);
 
-    $populator->($mrs)->then(sub ($mrs) {
+    my %arg = (
+      is_last_page  => $is_last_page,
+      starting_list => \@starting_list,
+    );
+
+    Future->done(\%arg, $data);
+  })->then(sub ($arg, $mrs) {
+    # If we need to have approvals before postfilters, we will get them now.
+    return Future->done($arg, $mrs) unless @approval_filters;
+
+    $populator->($arg, $mrs)->then(sub ($arg, $mrs) {
       @$mrs = grep {;
         my $datum = $_;
         all { $_->($datum) } @approval_filters;
       } @$mrs;
 
-      Future->done($mrs);
+      Future->done($arg, $mrs);
     });
-  })->then(sub ($mrs) {
+  })->then(sub ($arg, $mrs) {
     if (@$mrs) {
       # Stupid, inefficient, good enough. -- rjbs, 2019-07-29
       @$mrs = grep {;
@@ -601,22 +615,36 @@ sub _queue_produce_page_list ($self, $arg) {
       } @$mrs;
     }
 
-    # XXX This $zero is creeping in as an enclosed variable from far above.
-    # This is gross and should go. -- rjbs, 2021-11-28
-    my $zero = ($display_page-1) * 10;
-    my @page = grep {; $_ } $mrs->@[ $zero .. $zero+9 ];
+    # TODO call self instead of on-done if shortfall and more pages exist
+    my @list = (
+      $arg->{starting_list}->@*,
+      @$mrs,
+    );
 
-    my $header = sprintf "Results, page %s (items %s .. %s):",
-      $display_page,
-      $zero + 1,
-      $zero + @$mrs;
+    return @approval_filters  ? Future->done($arg, \@list)
+                              : $populator->($arg, \@list);
+  })->then(sub ($arg, $mrs) {
+    if (@$mrs >= $display_page*10 || $arg->{is_last_page}) {
+      my $zero = ($display_page-1) * 10;
+      my @page = grep {; $_ } $mrs->@[ $zero .. $zero+9 ];
 
-    return Future->done($header, \@page) unless @approval_filters;
+      my $header = sprintf "Results, page %s (items %s .. %s):",
+        $display_page,
+        $zero + 1,
+        $zero + @$mrs;
 
-    return $populator->(\@page)->then(sub ($mrs) {
-      Future->done($header, $mrs);
+      return $on_done->($header, \@page);
+    }
+
+    return $self->_queue_produce_page_list({
+      %$queue_arg,
+      starting_list => $mrs,
+      api_page      => $api_page + 1,
     });
-  })->then($on_done);
+  })->else(sub {
+    $Logger->log("ERROR: @_");
+    Future->fail;
+  });
 }
 
 sub _handle_mr_search_string ($self, $text, $event) {
