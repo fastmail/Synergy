@@ -562,7 +562,6 @@ sub _queue_produce_page_list ($self, $arg) {
   );
 
   my $populator = $self->_mk_approval_populator;
-  my $zero;
 
   $http_future->then(sub ($res) {
     unless ($res->is_success) {
@@ -575,7 +574,7 @@ sub _queue_produce_page_list ($self, $arg) {
     return $event->error_reply("No results!")
       if ! @$data;
 
-    $zero = ($display_page-1) * 10;
+    my $zero = ($display_page-1) * 10;
 
     return $event->error_reply("You've gone past the last page!")
       if $zero > $#$data;
@@ -604,6 +603,7 @@ sub _queue_produce_page_list ($self, $arg) {
 
     # XXX This $zero is creeping in as an enclosed variable from far above.
     # This is gross and should go. -- rjbs, 2021-11-28
+    my $zero = ($display_page-1) * 10;
     my @page = grep {; $_ } $mrs->@[ $zero .. $zero+9 ];
 
     my $header = sprintf "Results, page %s (items %s .. %s):",
