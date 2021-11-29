@@ -494,54 +494,52 @@ sub _compile_search ($self, $conds, $event) {
   };
 }
 
-sub _mk_approval_populator ($self) {
-  return sub ($arg, $mrs) {
-    my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @$mrs;
+sub _populate_mr_approvals ($self, $arg, $mrs) {
+  my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @$mrs;
 
-    my @approval_gets;
-    for my $mr (@$mrs) {
-      next if defined $mr->{_is_approved};
+  my @approval_gets;
+  for my $mr (@$mrs) {
+    next if defined $mr->{_is_approved};
 
-      my $url = sprintf("%s/v4/projects/%s/merge_requests/%d/approvals",
-        $self->api_uri,
-        $mr->{project_id},
-        $mr->{iid},
-      );
+    my $url = sprintf("%s/v4/projects/%s/merge_requests/%d/approvals",
+      $self->api_uri,
+      $mr->{project_id},
+      $mr->{iid},
+    );
 
-      push @approval_gets, $self->hub->http_get(
-        $url,
-        'PRIVATE-TOKEN' => $self->api_token,
-      );
+    push @approval_gets, $self->hub->http_get(
+      $url,
+      'PRIVATE-TOKEN' => $self->api_token,
+    );
+  }
+
+  # Maybe they're all already populated!
+  return Future->done($arg, $mrs) unless @approval_gets;
+
+  Future->wait_all(@approval_gets)->then(sub (@res_f) {
+    for my $res_f (@res_f) {
+      my $res = $res_f->get;
+      my $approval_data = $JSON->decode($res->decoded_content);
+
+      # This is absurd.  The docs on getting approvals show that the id,
+      # project id, and iid are included in the response.
+      # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
+      # ...but they are not.  So, rather than screw around with decorating the
+      # future in @approval_gets, we'll parse project and MR id out of the
+      # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
+      my ($project_id, $iid) = $res->request->uri =~ m{
+        /projects/([0-9]+)
+        /merge_requests/([0-9]+)/
+      }x;
+
+      next unless $project_id;
+      my $mr = $mr_by_piid{ "$project_id/$iid" };
+      my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
+      $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
     }
 
-    # Maybe they're all already populated!
-    return Future->done($arg, $mrs) unless @approval_gets;
-
-    Future->wait_all(@approval_gets)->then(sub (@res_f) {
-      for my $res_f (@res_f) {
-        my $res = $res_f->get;
-        my $approval_data = $JSON->decode($res->decoded_content);
-
-        # This is absurd.  The docs on getting approvals show that the id,
-        # project id, and iid are included in the response.
-        # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
-        # ...but they are not.  So, rather than screw around with decorating the
-        # future in @approval_gets, we'll parse project and MR id out of the
-        # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
-        my ($project_id, $iid) = $res->request->uri =~ m{
-          /projects/([0-9]+)
-          /merge_requests/([0-9]+)/
-        }x;
-
-        next unless $project_id;
-        my $mr = $mr_by_piid{ "$project_id/$iid" };
-        my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
-        $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
-      }
-
-      Future->done($arg, $mrs);
-    });
-  }
+    Future->done($arg, $mrs);
+  });
 }
 
 sub _queue_produce_page_list ($self, $queue_arg) {
@@ -567,8 +565,6 @@ sub _queue_produce_page_list ($self, $queue_arg) {
     'PRIVATE-TOKEN' => $self->api_token,
   );
 
-  my $populator = $self->_mk_approval_populator;
-
   $http_future->then(sub ($res) {
     unless ($res->is_success) {
       $Logger->log([ "Error: %s", $res->as_string ]);
@@ -586,7 +582,7 @@ sub _queue_produce_page_list ($self, $queue_arg) {
       if $zero > $#$data;
 
     my $is_last_page = ($res->header('x-page')      // -1)
-                    == ($res->header('x-last-page') // -1);
+                    == ($res->header('x-last-page') // -2);
 
     my %arg = (
       is_last_page  => $is_last_page,
@@ -598,7 +594,7 @@ sub _queue_produce_page_list ($self, $queue_arg) {
     # If we need to have approvals before postfilters, we will get them now.
     return Future->done($arg, $mrs) unless @approval_filters;
 
-    $populator->($arg, $mrs)->then(sub ($arg, $mrs) {
+    $self->_populate_mr_approvals($arg, $mrs)->then(sub ($arg, $mrs) {
       @$mrs = grep {;
         my $datum = $_;
         all { $_->($datum) } @approval_filters;
@@ -615,14 +611,14 @@ sub _queue_produce_page_list ($self, $queue_arg) {
       } @$mrs;
     }
 
-    # TODO call self instead of on-done if shortfall and more pages exist
     my @list = (
       $arg->{starting_list}->@*,
       @$mrs,
     );
 
-    return @approval_filters  ? Future->done($arg, \@list)
-                              : $populator->($arg, \@list);
+    return @approval_filters
+      ? Future->done($arg, \@list)
+      : $self->_populate_mr_approvals($arg, \@list);
   })->then(sub ($arg, $mrs) {
     if (@$mrs >= $display_page*10 || $arg->{is_last_page}) {
       my $zero = ($display_page-1) * 10;
