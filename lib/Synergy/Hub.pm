@@ -138,7 +138,30 @@ sub handle_event ($self, $event) {
     my $method  = $hit->[1]->method;
 
     try {
-      $reactor->$method($event);
+      # We should always return a future -- specifically, a single future that
+      # represents all pending (or complete) action as the result of this
+      # method.  Sometimes, though, we don't, largely for historical reasons.
+      # Rather than force ourselves to fix them all up front, let's just ignore
+      # false-returning reactions.  Things that return true, non-future values,
+      # though, will be problems… and we'll fix them! -- rjbs, 2021-11-29
+      #
+      # (Michael notes that if this is a pain to fix, we can use Future->wrap
+      # here.  Legit.)
+      my $result = $reactor->$method($event);
+      return unless $result;
+
+      # The retain here should be harmless, but I have low-key anxiety that
+      # we're going to end up with a skrillion futures that never go away.  We
+      # can add accounting for this another day. -- rjbs, 2021-11-29
+      $result->else(sub {
+        my (@args) = @_;
+        $Logger->log([
+          "reactor %s, method %s resulted in failure: %s",
+          $reactor->name,
+          $method,
+          "@args", # stupid, but avoids json serialization guff
+        ]);
+      })->retain;
     } catch {
       my $error = $_;
 
