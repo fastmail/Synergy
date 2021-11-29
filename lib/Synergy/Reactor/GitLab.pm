@@ -163,8 +163,7 @@ sub listener_specs {
       },
       help_entries => [
         { title => 'r?',
-          text  => 'This is short for `mrsearch for:me backlogged:no` --
-          in other words, "what can I act on right now?".'
+          text  => 'This is short for `mrsearch for:me backlogged:no` -- in other words, "what can I act on right now?".'
         },
       ],
     },
@@ -347,7 +346,7 @@ sub handle_mr_search ($self, $event) {
 }
 
 sub _compile_search ($self, $conds, $event) {
-  my $per_page = 50; # I don't really ever intend to change this.
+  my $per_page = 20; # I don't really ever intend to change this.
 
   my $uri = URI->new(
     sprintf "%s/v4/merge_requests/?sort=asc&scope=all&state=opened&per_page=%i",
@@ -357,7 +356,8 @@ sub _compile_search ($self, $conds, $event) {
 
   my $page;
   my $labels;
-  my @postfilters;
+  my @local_filters;
+  my @approval_filters;
 
   COND: for my $hunk (@$conds) {
     my ($name, $value) = @$hunk;
@@ -449,9 +449,23 @@ sub _compile_search ($self, $conds, $event) {
         return;
       }
 
-      push @postfilters, sub {
+      push @local_filters, sub {
         ! grep { fc $_ eq 'backlogged' } $_[0]->{labels}->@*
       };
+
+      next COND;
+    }
+
+    if ($name eq 'approved') {
+      next COND if $value eq 'both';
+      unless ($value eq 'yes' or $value eq 'no') {
+        $event->error_reply("The value for `approved:` must be yes, no, or both.");
+        return;
+      }
+
+      push @approval_filters, $value eq 'yes'
+        ? sub {   $_[0]->{_is_approved} }
+        : sub { ! $_[0]->{_is_approved} };
 
       next COND;
     }
@@ -471,66 +485,17 @@ sub _compile_search ($self, $conds, $event) {
   return {
     uri   => $uri,
     page  => $page // 1,
-    postfilters => \@postfilters,
+    local_filters     => \@local_filters,
+    approval_filters  => \@approval_filters,
   };
 }
 
-sub _queue_produce_page_list ($self, $arg) {
-  # Don't confuse API page with display page!  The API page is the page of 50
-  # that we get from the API.  The display page is the page of 10 that we will
-  # display to the user. -- rjbs, 2021-11-28
-  my $display_page = $arg->{display_page} // 1;
-  my $api_page     = $arg->{api_page}     // 1;
-  my $uri  = $arg->{query_uri}->clone;
-  $uri->query_param(page => $api_page);
-
-  my @postfilters = ($arg->{postfilters} // [])->@*;
-
-  $Logger->log("GitLab GET: $uri");
-
-  my $event   = $arg->{event};
-  my $on_done = $arg->{on_done};
-
-  my $http_future = $self->hub->http_get(
-    $uri,
-    'PRIVATE-TOKEN' => $self->api_token,
-  );
-
-  $http_future->then(sub ($res) {
-    unless ($res->is_success) {
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      return;
-    }
-
-    my $data = $JSON->decode($res->decoded_content);
-
-    return $event->error_reply("No results!")
-      if ! @$data;
-
-    my $zero = ($display_page-1) * 10;
-
-    return $event->error_reply("You've gone past the last page!")
-      if $zero > $#$data;
-
-    if (@postfilters) {
-      # Stupid, inefficient, good enough. -- rjbs, 2019-07-29
-      @$data = grep {;
-        my $datum = $_;
-        all { $_->($datum) } @postfilters;
-      } @$data;
-    }
-
-    my @mrs = grep {; $_ } $data->@[ $zero .. $zero+9 ];
-
-    my $header = sprintf "Results, page %s (items %s .. %s):",
-      $display_page,
-      $zero + 1,
-      $zero + @mrs;
-
-    my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @mrs;
+sub _mk_approval_populator ($self) {
+  return sub ($mrs) {
+    my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @$mrs;
 
     my @approval_gets;
-    for my $mr (@mrs) {
+    for my $mr (@$mrs) {
       my $url = sprintf("%s/v4/projects/%s/merge_requests/%d/approvals",
         $self->api_uri,
         $mr->{project_id},
@@ -565,9 +530,89 @@ sub _queue_produce_page_list ($self, $arg) {
         $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
       }
 
-      Future->done($header, \@mrs);
-    })->then($on_done);
-  });
+      Future->done($mrs);
+    });
+  }
+}
+
+sub _queue_produce_page_list ($self, $arg) {
+  # Don't confuse API page with display page!  The API page is the page of 20
+  # that we get from the API.  The display page is the page of 10 that we will
+  # display to the user. -- rjbs, 2021-11-28
+  my $display_page = $arg->{display_page} // 1;
+  my $api_page     = $arg->{api_page}     // 1;
+  my $uri  = $arg->{query_uri}->clone;
+  $uri->query_param(page => $api_page);
+
+  my @local_filters    = ($arg->{local_filters}    // [])->@*;
+  my @approval_filters = ($arg->{approval_filters} // [])->@*;
+
+  $Logger->log("GitLab GET: $uri");
+
+  my $event   = $arg->{event};
+  my $on_done = $arg->{on_done};
+
+  my $http_future = $self->hub->http_get(
+    $uri,
+    'PRIVATE-TOKEN' => $self->api_token,
+  );
+
+  my $populator = $self->_mk_approval_populator;
+  my $zero;
+
+  $http_future->then(sub ($res) {
+    unless ($res->is_success) {
+      $Logger->log([ "Error: %s", $res->as_string ]);
+      return;
+    }
+
+    my $data = $JSON->decode($res->decoded_content);
+
+    return $event->error_reply("No results!")
+      if ! @$data;
+
+    $zero = ($display_page-1) * 10;
+
+    return $event->error_reply("You've gone past the last page!")
+      if $zero > $#$data;
+
+    Future->done($data);
+  })->then(sub ($mrs) {
+    # If we need to have approvals before postfilters, we will get them now.
+    return Future->done($_[0]) unless @approval_filters;
+
+    $populator->($mrs)->then(sub ($mrs) {
+      @$mrs = grep {;
+        my $datum = $_;
+        all { $_->($datum) } @approval_filters;
+      } @$mrs;
+
+      Future->done($mrs);
+    });
+  })->then(sub ($mrs) {
+    if (@$mrs) {
+      # Stupid, inefficient, good enough. -- rjbs, 2019-07-29
+      @$mrs = grep {;
+        my $datum = $_;
+        all { $_->($datum) } @local_filters;
+      } @$mrs;
+    }
+
+    # XXX This $zero is creeping in as an enclosed variable from far above.
+    # This is gross and should go. -- rjbs, 2021-11-28
+    my @page = grep {; $_ } $mrs->@[ $zero .. $zero+9 ];
+
+    my $header = sprintf "Results, page %s (items %s .. %s):",
+      $display_page,
+      $zero + 1,
+      $zero + @$mrs;
+
+    return Future->done($header, \@page) unless @approval_filters;
+
+    return $populator->(\@page)->then(sub ($mrs) {
+      Future->done($header, $mrs);
+    });
+  })->then($on_done);
 }
 
 sub _handle_mr_search_string ($self, $text, $event) {
@@ -630,7 +675,8 @@ sub _handle_mr_search_string ($self, $text, $event) {
     on_done   => $reply_with_list,
     query_uri => $query->{uri},
     display_page  => $query->{page},
-    postfilters   => $query->{postfilters},
+    local_filters     => $query->{local_filters},
+    approval_filters  => $query->{approval_filters},
   })->retain;
 }
 
