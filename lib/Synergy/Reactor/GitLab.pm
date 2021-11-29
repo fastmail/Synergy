@@ -476,9 +476,13 @@ sub _compile_search ($self, $conds, $event) {
 }
 
 sub _queue_produce_page_list ($self, $arg) {
-  my $page = $arg->{page} // 1;
+  # Don't confuse API page with display page!  The API page is the page of 50
+  # that we get from the API.  The display page is the page of 10 that we will
+  # display to the user. -- rjbs, 2021-11-28
+  my $display_page = $arg->{display_page} // 1;
+  my $api_page     = $arg->{api_page}     // 1;
   my $uri  = $arg->{query_uri}->clone;
-  $uri->query_param(page => $page);
+  $uri->query_param(page => $api_page);
 
   my @postfilters = ($arg->{postfilters} // [])->@*;
 
@@ -503,7 +507,7 @@ sub _queue_produce_page_list ($self, $arg) {
     return $event->error_reply("No results!")
       if ! @$data;
 
-    my $zero = ($page-1) * 10;
+    my $zero = ($display_page-1) * 10;
 
     return $event->error_reply("You've gone past the last page!")
       if $zero > $#$data;
@@ -519,7 +523,7 @@ sub _queue_produce_page_list ($self, $arg) {
     my @mrs = grep {; $_ } $data->@[ $zero .. $zero+9 ];
 
     my $header = sprintf "Results, page %s (items %s .. %s):",
-      $page,
+      $display_page,
       $zero + 1,
       $zero + @mrs;
 
@@ -625,8 +629,8 @@ sub _handle_mr_search_string ($self, $text, $event) {
     event     => $event,
     on_done   => $reply_with_list,
     query_uri => $query->{uri},
-    page      => $query->{page},
-    postfilters => $query->{postfilters},
+    display_page  => $query->{page},
+    postfilters   => $query->{postfilters},
   })->retain;
 }
 
