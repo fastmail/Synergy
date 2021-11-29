@@ -152,6 +152,21 @@ sub state ($self) {
   };
 }
 
+my $MRS_HELP = <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg;
+The *mrsearch* command searches merge requests in GitLab.  You can pass in a
+list of colon-separated pairs like *for:me* to limit the results, or just words
+to search for.  Here are the arguments you can pass:
+
+• *for:`USER`*: MRs assigned to the named user; `*` for "assigned to anybody"
+or `~` for "assigned to nobody"
+• *by:`USER`*: MRs authored by the named user
+• *label:`LABEL`*: MRs with the given label; `*` for "has a label at all" or
+`~` for "has no labels"
+• *approved:`{yes,no,both}`*: only MRs that are (or are not) approved to merge
+• *wip:`{yes,no,both}`*: whether or not to include works in progress
+• *backlogged:`{yes,no,both}`*: whether or not to include MRs with the "backlogged" label
+EOH
+
 sub listener_specs {
   return (
     {
@@ -176,24 +191,13 @@ sub listener_specs {
         $e->text =~ /^mrs(?:earch)?(?:\z|\s+)/i;
       },
       help_entries => [
-        { title => 'mrs',
-          text  => 'See *help mrsearch*.', # Sorry, no xrefs.
+        {
+          title => 'mrs',
+          text  => $MRS_HELP,
         },
         {
           title => 'mrsearch',
-          text  =>  <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
-The *mrsearch* command searches merge requests in GitLab.  You can pass in a
-list of colon-separated pairs like *for:me* to limit the results, or just words
-to search for.  Here are the arguments you can pass:
-
-• *for:`USER`*: MRs assigned to the named user; `*` for "assigned to anybody"
-or `~` for "assigned to nobody"
-• *by:`USER`*: MRs authored by the named user
-• *label:`LABEL`*: MRs with the given label; `*` for "has a label at all" or
-`~` for "has no labels"
-• *wip:`{yes,no,both}`*: whether or not to include works in progress
-• *backlogged:`{yes,no,both}`*: whether or not to include MRs with the "backlogged" label
-EOH
+          text  => $MRS_HELP,
         },
       ],
     },
