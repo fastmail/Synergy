@@ -346,6 +346,135 @@ sub handle_mr_search ($self, $event) {
   $self->_handle_mr_search_string($rest, $event);
 }
 
+sub _compile_search ($self, $conds, $event) {
+  my $per_page = 50; # I don't really ever intend to change this.
+
+  my $uri = URI->new(
+    sprintf "%s/v4/merge_requests/?sort=asc&scope=all&state=opened&per_page=%i",
+      $self->api_uri,
+      $per_page,
+  );
+
+  my $page;
+  my $labels;
+  my @postfilters;
+
+  COND: for my $hunk (@$conds) {
+    my ($name, $value) = @$hunk;
+
+    if ($name eq 'page') {
+      if (defined $page) {
+        $event->error_reply("You gave more than one `page:` condition.");
+        return;
+      }
+
+      unless ($value =~ /\A[0-9]+\z/ && $value > 0) {
+        $event->error_reply("The `page:` condition has to be a positive integer.");
+        return;
+      }
+
+      $page = $value;
+
+      next COND;
+    }
+
+    if ($name eq 'author' or $name eq 'assignee') {
+      $name = "$name\_id";
+
+      if ($value eq '*' or $value eq '~') {
+        $value = $value eq '*' ? 'Any' : 'None';
+      } else {
+        my $who = $self->resolve_name($value, $event->from_user);
+        unless ($who) {
+          $event->error_reply("I don't know who $value is.");
+          return;
+        }
+
+        my $user_id = $self->get_user_preference($who, 'user-id');
+        unless ($user_id) {
+          $event->error_reply("I don't know the GitLab user id for " .  $who->username . ".");
+          return;
+        }
+
+        $value = $user_id;
+      }
+
+      $uri->query_param_append($name, $value);
+      next COND;
+    }
+
+    if ($name eq 'label') {
+      # Having "foo" and "None" is nonsensical, but I'm not going to sweat it
+      # just now. -- rjbs, 2019-07-23
+      if ($value eq '*' or $value eq '~') {
+        if (defined $labels) {
+          $event->error_reply("You're supplying conflicting `label:` instructions!");
+          return;
+        }
+
+        $labels = $value eq '*' ? 'Any' : 'None';
+      } else {
+        if (defined $labels  && ! ref $labels) {
+          $event->error_reply("You're supplying conflicting `label:` instructions!");
+          return;
+        }
+
+        $labels->{$value} = 1;
+      }
+
+      $uri->query_param_append($name, $value);
+      next COND;
+    }
+
+    if ($name eq 'search') {
+      $uri->query_param_append($name, $value);
+      next COND;
+    }
+
+    if ($name eq 'wip') {
+      next COND if $value eq 'both';
+      unless ($value eq 'yes' or $value eq 'no') {
+        $event->error_reply("The value for `wip:` must be yes, no, or both.");
+        return;
+      }
+
+      $uri->query_param_append($name, $value);
+      next COND;
+    }
+
+    if ($name eq 'backlogged') {
+      next COND if $value eq 'both';
+      unless ($value eq 'yes' or $value eq 'no') {
+        $event->error_reply("The value for `backlogged:` must be yes, no, or both.");
+        return;
+      }
+
+      push @postfilters, sub {
+        ! grep { fc $_ eq 'backlogged' } $_[0]->{labels}->@*
+      };
+
+      next COND;
+    }
+
+    $event->error_reply("Unknown query token: $name");
+    return;
+  }
+
+  if ($labels) {
+    $uri->query_param_append(
+      labels => ref $labels
+              ? (join q{,}, keys %$labels)
+              : $labels
+    );
+  }
+
+  return {
+    uri   => $uri,
+    page  => $page // 1,
+    postfilters => \@postfilters,
+  };
+}
+
 sub _queue_produce_page_list ($self, $arg) {
   my $page = $arg->{page} // 1;
   my $uri  = $arg->{query_uri}->clone;
@@ -444,111 +573,13 @@ sub _handle_mr_search_string ($self, $text, $event) {
     return $event->error_reply("I didn't understand your search.");
   }
 
-  my $per_page = 50; # I don't really ever intend to change this.
+  my $query = $self->_compile_search($conds, $event);
 
-  my $uri = URI->new(
-    sprintf "%s/v4/merge_requests/?sort=asc&scope=all&state=opened&per_page=%i",
-      $self->api_uri,
-      $per_page,
-  );
-
-  my $page;
-
-  my $labels;
-
-  my @postfilters;
-
-  COND: for my $hunk (@$conds) {
-    my ($name, $value) = @$hunk;
-
-    if ($name eq 'page') {
-      return $event->error_reply("You gave more than one `page:` condition.")
-        if defined $page;
-
-      return $event->error_reply("The `page:` condition has to be a positive integer.")
-        unless $value =~ /\A[0-9]+\z/ && $value > 0;
-
-      $page = $value;
-
-      next COND;
-    }
-
-    if ($name eq 'author' or $name eq 'assignee') {
-      $name = "$name\_id";
-
-      if ($value eq '*' or $value eq '~') {
-        $value = $value eq '*' ? 'Any' : 'None';
-      } else {
-        return $event->error_reply("I don't know who $value is.")
-          unless my $who = $self->resolve_name($value, $event->from_user);
-
-        return $event->error_reply("I don't know the GitLab user id for " .  $who->username . ".")
-          unless my $user_id = $self->get_user_preference($who, 'user-id');
-
-        $value = $user_id;
-      }
-
-      $uri->query_param_append($name, $value);
-      next COND;
-    }
-
-    if ($name eq 'label') {
-      # Having "foo" and "None" is nonsensical, but I'm not going to sweat it
-      # just now. -- rjbs, 2019-07-23
-      if ($value eq '*' or $value eq '~') {
-        return "You're supplying conflicting `label:` instructions!"
-          if defined $labels;
-
-        $labels = $value eq '*' ? 'Any' : 'None';
-      } else {
-        return "You're supplying conflicting `label:` instructions!"
-          if defined $labels  && ! ref $labels;
-
-        $labels->{$value} = 1;
-      }
-
-      $uri->query_param_append($name, $value);
-      next COND;
-    }
-
-    if ($name eq 'search') {
-      $uri->query_param_append($name, $value);
-      next COND;
-    }
-
-    if ($name eq 'wip') {
-      next COND if $value eq 'both';
-      return $event->error_reply("The value for `wip:` must be yes, no, or both.")
-        unless $value eq 'yes' or $value eq 'no';
-
-      $uri->query_param_append($name, $value);
-      next COND;
-    }
-
-    if ($name eq 'backlogged') {
-      next COND if $value eq 'both';
-      return $event->error_reply("The value for `backlogged:` must be yes, no, or both.")
-        unless $value eq 'yes' or $value eq 'no';
-
-      push @postfilters, sub {
-        ! grep { fc $_ eq 'backlogged' } $_[0]->{labels}->@*
-      };
-
-      next COND;
-    }
-
-    return $event->error_reply("Unknown query token: $name");
+  unless ($query) {
+    # if _compile_search returned undef, we should have already done an error
+    # reply, so we can just return here
+    return;
   }
-
-  if ($labels) {
-    $uri->query_param_append(
-      labels => ref $labels
-              ? (join q{,}, keys %$labels)
-              : $labels
-    );
-  }
-
-  $page //= 1;
 
   my $reply_with_list = sub ($header, $mrs) {
     my $text  = $header;
@@ -592,9 +623,10 @@ sub _handle_mr_search_string ($self, $text, $event) {
 
   $self->_queue_produce_page_list({
     event     => $event,
-    query_uri => $uri,
-    page      => $page,
     on_done   => $reply_with_list,
+    query_uri => $query->{uri},
+    page      => $query->{page},
+    postfilters => $query->{postfilters},
   })->retain;
 }
 
