@@ -350,7 +350,7 @@ sub handle_mr_search ($self, $event) {
 }
 
 sub _compile_search ($self, $conds, $event) {
-  my $per_page = 20; # I don't really ever intend to change this.
+  my $per_page = 50; # I don't really ever intend to change this.
 
   my $uri = URI->new(
     sprintf "%s/v4/merge_requests/?sort=asc&scope=all&state=opened&per_page=%i",
