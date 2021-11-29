@@ -135,6 +135,7 @@ sub handle_event ($self, $event) {
 
   for my $hit (@hits) {
     my $reactor = $hit->[0];
+    my $rname   = $reactor->name;
     my $method  = $hit->[1]->method;
 
     try {
@@ -157,17 +158,17 @@ sub handle_event ($self, $event) {
         my (@args) = @_;
         $Logger->log([
           "reactor %s, method %s resulted in failure: %s",
-          $reactor->name,
+          $rname,
           $method,
           "@args", # stupid, but avoids json serialization guff
         ]);
+
+        $event->error_reply("My $rname reactor crashed (in the background) while handling your message.  Sorry!");
       })->retain;
     } catch {
       my $error = $_;
 
       $error =~ s/\n.*//ms;
-
-      my $rname = $reactor->name;
 
       $event->reply("My $rname reactor crashed while handling your message.  Sorry!");
       $Logger->log([
