@@ -160,11 +160,16 @@ to search for.  Here are the arguments you can pass:
 • *for:`USER`*: MRs assigned to the named user; `*` for "assigned to anybody"
 or `~` for "assigned to nobody"
 • *by:`USER`*: MRs authored by the named user
+• *approved:`{yes,no,both}`*: only MRs that are (or are not) approved to merge
 • *label:`LABEL`*: MRs with the given label; `*` for "has a label at all" or
 `~` for "has no labels"
-• *approved:`{yes,no,both}`*: only MRs that are (or are not) approved to merge
-• *wip:`{yes,no,both}`*: whether or not to include works in progress
 • *backlogged:`{yes,no,both}`*: whether or not to include MRs with the "backlogged" label
+• *wip:`{yes,no,both}`*: whether or not to include works in progress
+
+Alternatively, you can just pass a single argument as a shortcut:
+• *todo*: MRs that are waiting for your review
+• *waiting*: MRs you sent out for review
+• *ready*: MRs that you wrote, are assigned to you, and are approved
 EOH
 
 sub listener_specs {
@@ -342,9 +347,26 @@ sub handle_r_hook ($self, $event) {
   $self->_handle_mr_search_string("for:me backlogged:no", $event);
 }
 
+my %MR_SHORTCUT = (
+  todo    => 'by:!me for:me backlogged:no',
+  ready   => 'by:me for:me approved:yes',
+  waiting => 'by:me for:!me backlogged:no',
+);
+
 sub handle_mr_search ($self, $event) {
   $event->mark_handled;
   my $rest = $event->text =~ s/\Amrs(?:earch)?\s*//ir;
+
+  unless (length $rest) {
+    return $event->reply($MRS_HELP);
+  }
+
+  # Fun fact: we document only "mrs todo" but "mrs todo x:y" works, 99% so that
+  # you can say "mrs todo page:2" -- rjbs, 2021-11-29
+  if ($rest =~ s/\A([a-z]\S+)(\s|$)//i) {
+    $rest = ($MR_SHORTCUT{$1} // $1) . " $rest";
+    $rest =~ s/\s+$//;
+  }
 
   $self->_handle_mr_search_string($rest, $event);
 }
