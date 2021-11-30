@@ -364,6 +364,18 @@ sub _compile_search ($self, $conds, $event) {
   my @approval_filters;
 
   COND: for my $hunk (@$conds) {
+    if (@$hunk == 0) {
+      # Surely this can't happen!
+      $event->error_reply("Your search was too cunning for me to comprehend.");
+      return;
+    }
+
+    if (@$hunk > 2) {
+      # Surely this can't happen!
+      $event->error_reply("You had more than one colon after $hunk->[0], which isn't valid.");
+      return;
+    }
+
     my ($name, $value) = @$hunk;
 
     if ($name eq 'page') {
@@ -385,9 +397,12 @@ sub _compile_search ($self, $conds, $event) {
     if ($name eq 'author' or $name eq 'assignee') {
       $name = "$name\_id";
 
+      my $not;
+
       if ($value eq '*' or $value eq '~') {
         $value = $value eq '*' ? 'Any' : 'None';
       } else {
+        $not = $value =~ s/\A!//;
         my $who = $self->resolve_name($value, $event->from_user);
         unless ($who) {
           $event->error_reply("I don't know who $value is.");
@@ -403,7 +418,12 @@ sub _compile_search ($self, $conds, $event) {
         $value = $user_id;
       }
 
-      $uri->query_param_append($name, $value);
+      if ($not) {
+        $uri->query_param_append("not[$name]", $value);
+      } else {
+        $uri->query_param_append($name, $value);
+      }
+
       next COND;
     }
 
