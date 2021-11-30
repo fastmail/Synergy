@@ -350,7 +350,7 @@ sub handle_r_hook ($self, $event) {
 my %MR_SHORTCUT = (
   todo    => 'by:!me for:me backlogged:no',
   ready   => 'by:me for:me approved:yes',
-  waiting => 'by:me for:!me backlogged:no',
+  waiting => 'by:me for:!me for:* backlogged:no',
 );
 
 sub handle_mr_search ($self, $event) {
