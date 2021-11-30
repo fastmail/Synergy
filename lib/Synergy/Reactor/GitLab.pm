@@ -647,7 +647,7 @@ sub _queue_produce_page_list ($self, $queue_arg) {
       my $header = sprintf "Results, page %s (items %s .. %s):",
         $display_page,
         $zero + 1,
-        $zero + @$mrs;
+        $zero + @page;
 
       return $on_done->($header, \@page);
     }
