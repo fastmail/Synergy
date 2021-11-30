@@ -517,10 +517,6 @@ EOH
                   "*tags [[STR] ... [STR]]*: list all known tags, or optionally tags that contain all STRs"
                 ],
 
-  # TODO LISTS -- Can we remove this? -- rjbs, 2019-07-02
-  todo      =>  [ \&_handle_todo,        ],
-  todos     =>  [ \&_handle_todos,       ],
-
   # TASK CREATION AND MANAGEMENT
   spent     =>  [ \&_handle_spent,
                   "spent TIME on THING: log time against a task (either TASK-SPEC or TASK-ID)",
@@ -4690,44 +4686,6 @@ sub _handle_tags ($self, $event, $text) {
   $resp .= "```";
 
   $event->private_reply($resp);
-}
-
-sub _handle_todo ($self, $event, $text) {
-  my $user = $event->from_user;
-  my $desc = $text;
-
-  # If it's for somebody else, it should be a task instead
-  if ($desc =~ /^for\s+\S+?:/) {
-    return $event->error_reply("Sorry, I can only make todo items for you");
-  }
-
-  my $lpc = $self->lp_client_for_user($user);
-
-  my $todo_res = $lpc->create_todo_item({ title => $desc });
-
-  my $reply = $todo_res->is_success
-            ? qq{I added "$desc" to your todo list.}
-            : "Sorry, I couldn't add that todo… for… some reason.";
-
-  return $event->reply($reply);
-}
-
-sub _handle_todos ($self, $event, $text) {
-  my $user = $event->from_user;
-  my $lpc  = $self->lp_client_for_user($user);
-  my $todo_res = $lpc->todo_items;
-  return unless $todo_res->is_success;
-
-  my @todos = grep {; ! $_->{is_done} } $todo_res->payload_list;
-
-  return $event->reply("You don't have any open to-do items.") unless @todos;
-
-  $event->reply("Responses to <todos> are sent privately.") if $event->is_public;
-  $event->private_reply('Open to-do items:');
-
-  for my $todo (@todos) {
-    $event->private_reply("- $todo->{title}");
-  }
 }
 
 sub _lp_assignment_is_unestimated {
