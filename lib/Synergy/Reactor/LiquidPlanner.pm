@@ -2135,6 +2135,7 @@ sub task_plan_from_spec ($self, $event, $spec) {
 
   if ($leader =~ /\Afeature request:? /i) {
     $plan{custom_field_values}{'Task Type'} = 'Feature Request';
+    $plan{done} = 1;
   }
 
   if ($plan{fields}) {
