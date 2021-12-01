@@ -2216,7 +2216,18 @@ sub _execute_task_creation_plan ($self, $event, $plan, $error) {
   my $user = $event->from_user;
   my $arg  = {};
 
-  if ( ! $plan->{package} && ($plan->{done} || $plan->{start})) {
+  if ( ! $plan->{package}
+    && (
+      # RFEs are created already done, but we put them in the inbox.
+      (
+        $plan->{done}
+        &&
+        ($plan->{custom_field_values}{'Task Type'} // '') ne 'Feature Request'
+      )
+      # If we're spending time, it's an interrupt no matter what.
+      || $plan->{start}
+    )
+  ) {
     $plan->{package_id} = $self->interrupts_package_id;
   }
 
