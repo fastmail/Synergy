@@ -26,8 +26,8 @@ sub listener_specs {
 
 sub handle_uptime ($self, $event) {
   my $uptime = duration(time - $^T);
-  $event->reply("Online for $uptime.");
   $event->mark_handled;
+  $event->reply("Online for $uptime.");
 }
 
 1;
