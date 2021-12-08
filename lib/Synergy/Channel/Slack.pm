@@ -493,6 +493,8 @@ sub describe_conversation ($self, $event) {
 
   my $channel_id = $event->transport_data->{channel};
 
+  return 'an unknown channel' unless $self->slack->is_ready;
+
   if ($channel_id =~ /^C/) {
     my $channel = $self->slack->channels->{$channel_id}{name};
     return "#$channel";
