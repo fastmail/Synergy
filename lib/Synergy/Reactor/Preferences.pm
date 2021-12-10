@@ -172,8 +172,8 @@ sub handle_dump ($self, $event) {
   my $prefs = join "\n", @pref_strings;
   my $name = $for_user->username;
 
-  $event->reply("Preferences for $name: ```$prefs```");
   $event->mark_handled;
+  $event->reply("Preferences for $name: ```$prefs```");
 }
 
 sub _error_no_prefs ($self, $event, $component) {

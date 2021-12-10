@@ -120,8 +120,8 @@ role {
                    ? 'Your'
                    : $user->username . q{'s};
 
-    $event->reply("$possessive $full_name setting is now $desc.");
     $event->mark_handled;
+    $event->reply("$possessive $full_name setting is now $desc.");
   };
 
   method user_has_preference => sub ($self, $user, $pref_name) {

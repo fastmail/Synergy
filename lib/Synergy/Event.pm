@@ -8,6 +8,7 @@ use utf8;
 
 use namespace::autoclean;
 
+use Future;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(transliterate);
 
@@ -70,6 +71,11 @@ has was_handled => (
     mark_unhandled => 'unset',
   },
 );
+
+around mark_handled => sub ($orig, $self, @rest) {
+  $self->$orig(@rest);
+  return Future->done;
+};
 
 sub event_uri ($self) {
   return undef unless $self->from_channel->can('_uri_from_event');
