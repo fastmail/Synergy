@@ -113,6 +113,17 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
   return undef;
 }
 
+# NOTE: This is a hack. It's here because I want to make sure for reactors
+# with preferences, you never have to remember to call ->fetch_state on
+# startup to load the prefs (...because I never remember to do so). That means
+# I need somewhere to hook that around() call. register_with_hub is convenient
+# for channels and reactors, because they all get it, but the UserDirectory is
+# weird and manages state but _isn't_ a HubComponent. Rather than work out
+# exactly what to do here, we'll just install a stub register_with_hub, which
+# is only called in the modifier in HasPreferences.
+# -- michael, 2021-12-10
+sub register_with_hub {}
+
 sub load_users_from_database ($self) {
   my $dbh = $self->env->state_dbh;
   my %users;

@@ -22,6 +22,7 @@ role {
   requires 'state';
   requires 'save_state';
   requires 'fetch_state';
+  requires 'register_with_hub';
 
   has preference_namespace => (
     is => 'ro',
@@ -178,6 +179,13 @@ role {
     my $state = $self->$orig(@rest);
     $state->{preferences} = $self->user_preferences;
     return $state;
+  };
+
+  around register_with_hub => sub ($orig, $self, @rest) {
+    $self->$orig(@rest);
+
+    # make sure we've fetched state (and thus, loaded preferences)
+    $self->fetch_state;
   };
 
   around fetch_state => sub ($orig, $self, @rest) {

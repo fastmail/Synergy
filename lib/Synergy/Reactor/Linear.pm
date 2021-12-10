@@ -34,10 +34,6 @@ has default_team_id => (
   default => 'c4196244-4381-498b-ae0b-9288fc459cdd', # move to config!!
 );
 
-after register_with_hub => sub ($self, @) {
-  $self->fetch_state;   # load prefs
-};
-
 sub handle_new_issue ($self, $event) {
   $event->mark_handled;
 
