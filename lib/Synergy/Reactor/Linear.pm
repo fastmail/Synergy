@@ -4,7 +4,8 @@ package Synergy::Reactor::Linear;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::EasyListening',
+     'Synergy::Role::HasPreferences';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
@@ -27,26 +28,31 @@ sub listener_specs {
   );
 }
 
-# XXX This is bananas and should be user OAuth or, *at least*, a user-provided
-# bearer token.
-has auth_token => (
-  is  => 'ro',
-  isa => 'Str',
-  default => sub { $ENV{LINEAR_AUTH} },
-);
-
 has default_team_id => (
   is => 'ro',
   isa => 'Str',
   default => 'c4196244-4381-498b-ae0b-9288fc459cdd', # move to config!!
 );
 
+after register_with_hub => sub ($self, @) {
+  $self->fetch_state;   # load prefs
+};
+
 sub handle_new_issue ($self, $event) {
   $event->mark_handled;
 
+  my $user = $event->from_user;
+  my $token = $self->get_user_preference($user, 'api-token');
+
+  unless ($user && $token) {
+    my $rname = $self->name;
+    my $err = "Hmm, you don't have a Linear API token set. Make one, then set your $rname.api-token preference";
+    return $event->error_reply($err);
+  }
+
   # Probably we should have one of these cached per user…
   my $linear = Linear::Client->new({
-    auth_token       => $self->auth_token,
+    auth_token       => $token,
     default_team_id  => $self->default_team_id,
   });
 
@@ -71,5 +77,20 @@ sub handle_new_issue ($self, $event) {
           )
          });
 }
+
+__PACKAGE__->add_preference(
+  name      => 'api-token',
+  describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
+  default   => undef,
+  validator => sub ($self, $value, $event) {
+    $value =~ s/^\s*|\s*$//g;
+
+    unless ($value =~ /^lin_api/) {
+      return (undef, "that doesn't look like a normal API token; check it and try again?");
+    }
+
+    return ($value, undef);
+  },
+);
 
 1;
