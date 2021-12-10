@@ -21,7 +21,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\A ( \+\+ | >> ) \s+/x;
+        return unless $e->text =~ /\A L ( \+\+ | >> ) \s+/x;
       },
     },
   );
@@ -50,7 +50,9 @@ sub handle_new_issue ($self, $event) {
     default_team_id  => $self->default_team_id,
   });
 
-  my $plan_f = $linear->plan_from_input($event->text);
+  my $text = $event->text =~ s/\AL//r;
+
+  my $plan_f = $linear->plan_from_input($text);
 
   # XXX: I do not like our current error-returning scheme. -- rjbs, 2021-12-10
   $plan_f->else(sub ($error) { $event->error_reply("Couldn't make task: $error") })
