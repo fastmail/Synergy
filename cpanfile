@@ -22,6 +22,7 @@ requires 'IO::Async::SSL';
 requires 'IO::Async::Test';
 requires 'IO::Async::Timer::Absolute';
 requires 'IO::Async::Timer::Periodic';
+requires 'JMAP::Tester';
 requires 'JSON', '2';
 requires 'JSON::MaybeXS';
 requires 'Lingua::EN::Inflect';
