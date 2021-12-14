@@ -174,7 +174,7 @@ sub handle_now_working ($self, $event) {
 sub handle_hours_for ($self, $event) {
   $event->mark_handled;
 
-  my ($who) = $event->text =~ /\Ahours(?:\s+for)?\s+(\S+)\s*\z/;
+  my ($who) = $event->text =~ /\Ahours(?:\s+for)?\s+(\S+)\s*\z/i;
 
   my $target = $self->resolve_name($who, $event->from_user);
 
