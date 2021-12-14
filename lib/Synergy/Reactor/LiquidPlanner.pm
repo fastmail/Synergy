@@ -2135,6 +2135,7 @@ sub task_plan_from_spec ($self, $event, $spec) {
 
   if ($leader =~ /\Afeature request:? /i) {
     $plan{custom_field_values}{'Task Type'} = 'Feature Request';
+    $error{'Task Type'} = "Don't make new tasks for feature requests!  Just update the ticket in Zendesk.";
     $plan{done} = 1;
   }
 
