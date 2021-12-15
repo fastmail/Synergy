@@ -77,12 +77,15 @@ sub handle_list_teams ($self, $event) {
   $event->mark_handled;
   $self->_with_linear_client($event, sub ($linear) {
     $linear->teams->then(sub ($teams) {
-      my $text = q{};
+      my $text  = qq{Teams in Linear\n};
+      my $slack = qq{*Teams in Linear*\n};
       for my $team_key (sort keys %$teams) {
-        $text .= sprintf "%s — %s\n", uc $team_key, $teams->{$team_key}{name};
+        my $this = sprintf "%s — %s\n", uc $team_key, $teams->{$team_key}{name};
+        $text  .= $this;
+        $slack .= $this;
       }
 
-      return $event->reply($text);
+      return $event->reply($text, { slack => $slack });
     });
   });
 }
