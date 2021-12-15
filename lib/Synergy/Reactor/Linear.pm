@@ -39,6 +39,11 @@ sub listener_specs {
   );
 }
 
+has _linear_shared_cache => (
+  is => 'ro',
+  default => sub {  {}  },
+);
+
 has default_team_id => (
   is => 'ro',
   isa => 'Str',
@@ -49,7 +54,7 @@ sub _with_linear_client ($self, $event, $code) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("Sorry, I don't know who you are.");
+    return $event->error_reply("Sorry, I don't know who you are.");
   }
 
   my $token = $self->get_user_preference($user, 'api-token');
@@ -60,8 +65,9 @@ sub _with_linear_client ($self, $event, $code) {
   }
 
   my $linear = Linear::Client->new({
-    auth_token       => $token,
-    default_team_id  => $self->default_team_id,
+    auth_token      => $token,
+    default_team_id => $self->default_team_id,
+    _cache_guts     => $self->_linear_shared_cache,
   });
 
   return $code->($linear);
