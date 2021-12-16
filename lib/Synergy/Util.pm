@@ -6,7 +6,6 @@ use utf8;
 use experimental qw(lexical_subs signatures);
 
 use charnames ();
-use Acme::Zalgo ();
 use Carp;
 use DateTime;
 use DateTime::Format::Natural;
@@ -386,7 +385,10 @@ my %Trans = (
   sans    => _wonky_style('ss'),
   double  => _wonky_style('double'),
 
-  zalgo   => sub ($s) { Acme::Zalgo::zalgo($s, 0, 2, 0, 0, 0, 2); },
+  zalgo   => sub ($s) {
+    require Acme::Zalgo;
+    Acme::Zalgo::zalgo($s, 0, 2, 0, 0, 0, 2);
+  },
 );
 
 sub _wonky_style ($style) {
