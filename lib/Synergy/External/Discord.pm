@@ -416,7 +416,7 @@ sub send_message ($self, $channel_id, $text, $alts = {}) {
   }
 
   my $http_future = $self->api_post("/channels/$channel_id/messages", {
-    content => $text,
+    content => $alts->{discord} // $text,
     # XXX attachments and stuff
   });
 }
