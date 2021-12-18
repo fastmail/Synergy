@@ -148,15 +148,6 @@ has ptn_expansion_format => (
   predicate => 'has_ptn_expansion_format',
 );
 
-# This is totally absurd; at work we are in the midst of switching ticketing
-# systems, and ticket numbers over one million are in the new system. This
-# will go away eventually. -- michael, 2021-06-11
-has large_ptn_expansion_format => (
-  is => 'ro',
-  isa => 'Str',
-  predicate => 'has_large_ptn_expansion_format',
-);
-
 my $ERR_NO_LP = "You don't seem to be a LiquidPlanner-enabled user.";
 
 sub _lp_base_uri ($self) {
@@ -2174,10 +2165,6 @@ sub task_plan_from_spec ($self, $event, $spec) {
 }
 
 sub _expand_ptn_link ($self, $id) {
-  if ($id >= 1_000_000 && $self->has_large_ptn_expansion_format) {
-    return sprintf($self->large_ptn_expansion_format, $id);
-  }
-
   return sprintf($self->ptn_expansion_format, $id);
 }
 
