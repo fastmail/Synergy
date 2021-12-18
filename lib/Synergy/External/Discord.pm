@@ -153,6 +153,7 @@ has client => (
       },
     );
   },
+  clearer => 'clear_client',
 );
 
 has own_name => (
@@ -276,8 +277,9 @@ sub handle_reconnect {
   my ($self, $data) = @_;
 
   $Logger->log("Discord: handle_reconnect: attempting to reconnect");
-  $self->loop->remove($self->client);
 
+  $self->loop->remove($self->client);
+  $self->clear_client;
   $self->_clear_heartbeat_timer;
 
   $self->connect;
