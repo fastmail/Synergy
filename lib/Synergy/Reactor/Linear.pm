@@ -45,7 +45,9 @@ package Synergy::Reactor::Linear::LinearHelper {
   }
 
   sub normalize_username ($self, $username) {
-    my $user = $self->{reactor}->resolve_name($username);
+    # Really we *probably* shouldn't pass in undef for resolving user, but
+    # look, this is all a bit of a bodge at the moment. -- rjbs, 2021-12-20
+    my $user = $self->{reactor}->resolve_name($username, undef);
     return unless $user;
     return $user->username;
   }
