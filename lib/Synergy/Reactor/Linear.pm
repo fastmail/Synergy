@@ -12,6 +12,8 @@ use namespace::clean;
 
 use Linear::Client;
 
+use Synergy::Logger '$Logger';
+
 use utf8;
 
 sub listener_specs {
@@ -40,6 +42,8 @@ sub listener_specs {
 }
 
 package Synergy::Reactor::Linear::LinearHelper {
+  use Synergy::Logger '$Logger';
+
   sub new_for_reactor ($class, $reactor) {
     bless { reactor => $reactor }, $class;
   }
@@ -47,12 +51,14 @@ package Synergy::Reactor::Linear::LinearHelper {
   sub normalize_username ($self, $username) {
     # Really we *probably* shouldn't pass in undef for resolving user, but
     # look, this is all a bit of a bodge at the moment. -- rjbs, 2021-12-20
+    $Logger->log("doing username normalization for $username");
     my $user = $self->{reactor}->resolve_name($username, undef);
     return unless $user;
     return $user->username;
   }
 
   sub team_id_for_username ($self, $username) {
+    $Logger->log("doing team lookup for $username");
     my $team_id = $self->{reactor}
                        ->get_user_preference($username, 'default-team');
     return $team_id;
