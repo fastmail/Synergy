@@ -121,21 +121,27 @@ sub handle_new_issue ($self, $event) {
 
     # XXX: I do not like our current error-returning scheme. -- rjbs, 2021-12-10
     $plan_f
-      ->else(sub ($error) { $event->error_reply("Couldn't make task: $error") })
       ->then(sub ($plan)  { $linear->create_issue($plan) })
       ->then(sub ($query_result) {
         # XXX The query result is stupid and very low-level.  This will
         # change.
         my $id = $query_result->{data}{issueCreate}{issue}{identifier};
-        $event->reply(
-          sprintf("I made that task, %s.", $id),
-          {
-            slack => sprintf("I made that task, <%s|%s>.",
-              "https://linear.app/fastmail/issue/$id/...",
-              $id),
-          },
-        )
-      });
+        if ($id) {
+          return $event->reply(
+            sprintf("I made that task, %s.", $id),
+            {
+              slack => sprintf("I made that task, <%s|%s>.",
+                "https://linear.app/fastmail/issue/$id/...",
+                $id),
+            },
+          );
+        } else {
+          return $event->error_reply(
+            "Sorry, something went wrong and I can't say what!"
+          );
+        }
+      })
+      ->else(sub ($error) { $event->error_reply("Couldn't make task: $error") });
   });
 }
 
