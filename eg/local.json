@@ -11,6 +11,8 @@
     "twilio" : { "class": "Synergy::Channel::Console", "send_only": true }
   },
   "reactors": {
+    "linear"  : { "class": "Synergy::Reactor::Linear" },
+
     "clox"    : { "class": "Synergy::Reactor::Clox" },
     "agenda"  : { "class": "Synergy::Reactor::Agendoizer" },
     "help"    : { "class": "Synergy::Reactor::Help" },

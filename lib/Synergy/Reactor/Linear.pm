@@ -146,4 +146,22 @@ __PACKAGE__->add_preference(
   },
 );
 
+__PACKAGE__->add_preference(
+  name        => 'default-team',
+  help        => "Default team in Linear. Make sure to enter the three letter team key.",
+  description => "Default team for your Linear tasks",
+  describer   => sub ($value) {
+    return $value;
+  },
+  validator   => sub ($self, $value, $event) {
+    $self->_with_linear_client($event, sub ($linear) {
+      my $team_obj = $linear->lookup_team(lc $value)->get;
+      return (undef, "can't find team for $value") unless $team_obj;
+      my $team_id = $team_obj->{id};
+      return ($team_id);
+    })
+  },
+  default     => undef,
+);
+
 1;
