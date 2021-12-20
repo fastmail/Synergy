@@ -39,15 +39,27 @@ sub listener_specs {
   );
 }
 
+package Synergy::Reactor::Linear::LinearHelper {
+  sub new_for_reactor ($class, $reactor) {
+    bless { reactor => $reactor }, $class;
+  }
+
+  sub normalize_username ($self, $username) {
+    my $user = $self->{reactor}->resolve_name($username);
+    return unless $user;
+    return $user->username;
+  }
+
+  sub team_id_for_username ($self, $username) {
+    my $team_id = $self->{reactor}
+                       ->get_user_preference($username, 'default-team');
+    return $team_id;
+  }
+}
+
 has _linear_shared_cache => (
   is => 'ro',
   default => sub {  {}  },
-);
-
-has default_team_id => (
-  is => 'ro',
-  isa => 'Str',
-  default => 'c4196244-4381-498b-ae0b-9288fc459cdd', # move to config!!
 );
 
 sub _with_linear_client ($self, $event, $code) {
@@ -66,8 +78,9 @@ sub _with_linear_client ($self, $event, $code) {
 
   my $linear = Linear::Client->new({
     auth_token      => $token,
-    default_team_id => $self->default_team_id,
     _cache_guts     => $self->_linear_shared_cache,
+
+    helper => Synergy::Reactor::Linear::LinearHelper->new_for_reactor($self),
   });
 
   return $code->($linear);
