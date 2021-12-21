@@ -204,18 +204,21 @@ sub handle_triage ($self, $event) {
   my (undef, $team_name) = split $event->text, /\s+/, 2;
 
   $self->_with_linear_client($event, sub ($linear) {
-    my $when = length $team_name
-             ? $linear->lookup_team($team_name)
-             : Future->done;
+    my $when  = length $team_name
+              ? $linear->lookup_team($team_name)->then(sub ($team) {
+                  return Future->fail("no such team") unless $team;
+                  return Future->done(team => $team->{id});
+                })
+              : Future->done;
 
     $when->then(sub {
-      my ($team) = @_;
+      my (%extra_search) = @_;
       $self->_handle_search_urgent(
         $event,
         {
           state    => 'Triage',
           assignee => undef,
-          ($team ? (team => $team->{id}) : ()),
+          %extra_search,
         },
         "No unassigned tasks in triage!  Great!",
         "Current unassigned triage work",
