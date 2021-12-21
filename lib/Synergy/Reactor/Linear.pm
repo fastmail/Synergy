@@ -128,6 +128,7 @@ sub handle_urgent ($self, $event) {
       $linear->search_issues({
         assignee => $user->{id},
         priority => 1,
+        closed   => 0,
       })->then(sub ($result) {
         unless ($result->{data}{issues}{nodes}->@*) {
           return $event->reply("There's nothing urgent, so take it easy!");
