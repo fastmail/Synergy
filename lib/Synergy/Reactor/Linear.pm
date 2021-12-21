@@ -38,6 +38,15 @@ sub listener_specs {
         return unless $e->text =~ /\A L ( \+\+ | >> ) \s+/x;
       },
     },
+    {
+      name      => 'urgent',
+      method    => 'handle_urgent',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text eq 'Lurgent'; # XXX temporary
+      },
+    },
   );
 }
 
@@ -107,6 +116,30 @@ sub handle_list_teams ($self, $event) {
       }
 
       return $event->reply($text, { slack => $slack });
+    });
+  });
+}
+
+sub handle_urgent ($self, $event) {
+  $event->mark_handled;
+  $self->_with_linear_client($event, sub ($linear) {
+    my $user = $linear->get_authenticated_user;
+    $user->then(sub ($user) {
+      $linear->search_issues({
+        assignee => $user->{id},
+        priority => 1,
+      })->then(sub ($result) {
+        unless ($result->{data}{issues}{nodes}->@*) {
+          return $event->reply("There's nothing urgent, so take it easy!");
+        }
+
+        my $text = q{};
+        for my $node ($result->{data}{issues}{nodes}->@*) {
+          $text .= "$node->{identifier} - $node->{title}\n";
+        }
+        chomp $text;
+        return $event->reply("Urgent issues for you:\n$text");
+      });
     });
   });
 }
