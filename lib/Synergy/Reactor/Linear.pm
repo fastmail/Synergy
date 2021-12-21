@@ -114,6 +114,7 @@ sub _with_linear_client ($self, $event, $code) {
   my $linear = Linear::Client->new({
     auth_token      => $token,
     _cache_guts     => $self->_linear_shared_cache,
+    debug_flogger   => $Logger,
 
     helper => Synergy::Reactor::Linear::LinearHelper->new_for_reactor($self),
   });
