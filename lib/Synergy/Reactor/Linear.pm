@@ -35,7 +35,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\A L ( \+\+ | >> ) \s+/x;
+        return unless $e->text =~ /\A L ( \+\+ | >> ) \s+/x; # temporary L
       },
     },
     {
