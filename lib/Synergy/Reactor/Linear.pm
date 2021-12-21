@@ -133,12 +133,24 @@ sub handle_urgent ($self, $event) {
           return $event->reply("There's nothing urgent, so take it easy!");
         }
 
-        my $text = q{};
+        my $text  = q{};
+        my $slack = q{};
+
         for my $node ($result->{data}{issues}{nodes}->@*) {
-          $text .= "$node->{identifier} - $node->{title}\n";
+          $text  .= "$node->{identifier} - $node->{title}\n";
+          $slack .= sprintf "<%s|%s> - %s\n",
+            "https://linear.app/fastmail/issue/$node->{identifier}/...",
+            $node->{identifier},
+            $node->{title};
         }
+
         chomp $text;
-        return $event->reply("Urgent issues for you:\n$text");
+        chomp $slack;
+
+        return $event->reply(
+          "Urgent issues for you:\n$text",
+          { slack => "*Urgent issues for you:*\n$slack" },
+        );
       });
     });
   });
