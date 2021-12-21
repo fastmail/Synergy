@@ -201,7 +201,7 @@ sub handle_urgent ($self, $event) {
 }
 
 sub handle_triage ($self, $event) {
-  my (undef, $team_name) = split $event->text, /\s+/, 2;
+  my (undef, $team_name) = split /\s/, $event->text, 2;
 
   $self->_with_linear_client($event, sub ($linear) {
     my $when  = length $team_name
