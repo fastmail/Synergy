@@ -201,6 +201,8 @@ sub handle_urgent ($self, $event) {
 }
 
 sub handle_triage ($self, $event) {
+  $event->mark_handled;
+
   my (undef, $team_name) = split /\s/, $event->text, 2;
 
   $self->_with_linear_client($event, sub ($linear) {
