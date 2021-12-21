@@ -415,7 +415,15 @@ sub setup ($self) {
 }
 
 sub username ($self, $id) {
-  return $self->users->{$id}->{name};
+  my $users = $self->users;
+
+  # This stinks!  Sometimes we try to decode an event before we have finished
+  # initializing the users structure.  This really shouldn't happen, but we
+  # recently flew very close to the sun.  In a perfect world, we'd make it
+  # possible to sequence on this, but it isn't.  So we have this silly
+  # fallback… -- rjbs, 2021-12-21
+  return $users->{$id}->{name} if $users;
+  return "<unknown user $id>";
 }
 
 sub dm_channel_for_user ($self, $user, $channel) {
