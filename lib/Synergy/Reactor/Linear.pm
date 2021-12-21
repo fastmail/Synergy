@@ -18,7 +18,7 @@ use utf8;
 
 sub listener_specs {
   return (
-     {
+    {
       name      => 'list_teams',
       method    => 'handle_list_teams',
       exclusive => 1,
