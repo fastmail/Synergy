@@ -129,9 +129,10 @@ sub handle_list_teams ($self, $event) {
   });
 }
 
-sub _handle_search_urgent ($self, $event, $search, $zero, $header) {
+sub _handle_search_urgent ($self, $event, $search, $zero, $header, $linear = undef) {
   $event->mark_handled;
-  $self->_with_linear_client($event, sub ($linear) {
+
+  my $code = sub ($linear) {
     my $user = $linear->get_authenticated_user;
     $user->then(sub ($user) {
       $linear->search_issues($search)->then(sub ($result) {
@@ -159,23 +160,34 @@ sub _handle_search_urgent ($self, $event, $search, $zero, $header) {
         );
       });
     });
-  });
+  };
+
+  if ($linear) {
+    return $code->($linear);
+  }
+
+  return $self->_with_linear_client($event, $code);
 }
 
 sub handle_urgent ($self, $event) {
-  $self->_handle_search_urgent(
-    $event,
-    {
-      # Total bodge.  We want to use authenticated user id, but the plumbing is
-      # wrong. -- rjbs, 2021-12-20
-      # assignee => $user->{id},
-      assignee => { displayName => { eq => $event->from_user->username } },
-      priority => 1,
-      closed   => 0,
-    },
-    "There's nothing urgent, so take it easy!",
-    "Urgent issues for you",
-  );
+  $self->_with_linear_client($event, sub ($linear) {
+    $linear->get_authenticated_user->then(sub ($user) {
+      $self->_handle_search_urgent(
+        $event,
+        {
+          # Total bodge.  We want to use authenticated user id, but the plumbing is
+          # wrong. -- rjbs, 2021-12-20
+          # assignee => $user->{id},
+          assignee => $user->{id},
+          priority => 1,
+          closed   => 0,
+        },
+        "There's nothing urgent, so take it easy!",
+        "Urgent issues for you",
+        $linear,
+      );
+    });
+  });
 }
 
 sub handle_support_blockers ($self, $event) {
