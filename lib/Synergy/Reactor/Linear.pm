@@ -48,6 +48,15 @@ sub listener_specs {
       },
     },
     {
+      name      => 'support_triage',
+      method    => 'handle_triage',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text =~ /\ALtriage(\s|$)/; # XXX temporary
+      },
+    },
+    {
       name      => 'urgent',
       method    => 'handle_urgent',
       exclusive => 1,
@@ -190,16 +199,31 @@ sub handle_urgent ($self, $event) {
   });
 }
 
-sub handle_support_blockers ($self, $event) {
-  $self->_handle_search_urgent(
-    $event,
-    {
-      label   => 'support blocker',
-      closed  => 0,
-    },
-    "No support blockers!  Great!",
-    "Current support blockers",
-  );
+sub handle_triage ($self, $event) {
+  my (undef, $team_name) = split $event->text, /\s+/, 2;
+
+  $self->_with_linear_client($event, sub ($linear) {
+    my $when = length $team_name
+             ? $linear->lookup_team($team_name)
+             : Future->done;
+
+    $when->then(sub {
+      my ($team) = @_;
+      $self->_handle_search_urgent(
+        $event,
+        {
+          state    => 'Triage',
+          assignee => undef,
+          ($team ? (team => $team->{id}) : ()),
+        },
+        "No unassigned tasks in triage!  Great!",
+        "Current unassigned triage work",
+        $linear,
+      );
+    })->else(sub {
+      $event->error_reply("I couldn't find the team you asked about!");
+    });
+  });
 }
 
 sub handle_new_issue ($self, $event) {
