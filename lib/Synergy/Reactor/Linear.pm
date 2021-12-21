@@ -200,6 +200,18 @@ sub handle_urgent ($self, $event) {
   });
 }
 
+sub handle_support_blockers ($self, $event) {
+  $self->_handle_search_urgent(
+    $event,
+    {
+      label   => 'support blocker',
+      closed  => 0,
+    },
+    "No support blockers!  Great!",
+    "Current support blockers",
+  );
+}
+
 sub handle_triage ($self, $event) {
   $event->mark_handled;
 
