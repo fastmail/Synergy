@@ -39,6 +39,15 @@ sub listener_specs {
       },
     },
     {
+      name      => 'support_blockers',
+      method    => 'handle_support_blockers',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text eq 'Lsb'; # XXX temporary
+      },
+    },
+    {
       name      => 'urgent',
       method    => 'handle_urgent',
       exclusive => 1,
@@ -120,18 +129,14 @@ sub handle_list_teams ($self, $event) {
   });
 }
 
-sub handle_urgent ($self, $event) {
+sub _handle_search_urgent ($self, $event, $search, $zero, $header) {
   $event->mark_handled;
   $self->_with_linear_client($event, sub ($linear) {
     my $user = $linear->get_authenticated_user;
     $user->then(sub ($user) {
-      $linear->search_issues({
-        assignee => $user->{id},
-        priority => 1,
-        closed   => 0,
-      })->then(sub ($result) {
+      $linear->search_issues($search)->then(sub ($result) {
         unless ($result->{data}{issues}{nodes}->@*) {
-          return $event->reply("There's nothing urgent, so take it easy!");
+          return $event->reply($zero);
         }
 
         my $text  = q{};
@@ -149,12 +154,40 @@ sub handle_urgent ($self, $event) {
         chomp $slack;
 
         return $event->reply(
-          "Urgent issues for you:\n$text",
-          { slack => "*Urgent issues for you:*\n$slack" },
+          "$header:\n$text",
+          { slack => "*$header:*\n$slack" },
         );
       });
     });
   });
+}
+
+sub handle_urgent ($self, $event) {
+  $self->_handle_search_urgent(
+    $event,
+    {
+      # Total bodge.  We want to use authenticated user id, but the plumbing is
+      # wrong. -- rjbs, 2021-12-20
+      # assignee => $user->{id},
+      assignee => { displayName => { eq => $event->from_user->username } },
+      priority => 1,
+      closed   => 0,
+    },
+    "There's nothing urgent, so take it easy!",
+    "Urgent issues for you",
+  );
+}
+
+sub handle_support_blockers ($self, $event) {
+  $self->_handle_search_urgent(
+    $event,
+    {
+      label   => 'support blocker',
+      closed  => 0,
+    },
+    "No support blockers!  Great!",
+    "Current support blockers",
+  );
 }
 
 sub handle_new_issue ($self, $event) {
