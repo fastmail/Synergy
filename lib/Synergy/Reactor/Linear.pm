@@ -48,6 +48,15 @@ sub listener_specs {
       },
     },
     {
+      name      => 'ptn_blocked',
+      method    => 'handle_ptn_blocked',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text =~ m{\Aptn\s*([0-9]+) blocked:}i;
+      },
+    },
+    {
       name      => 'support_triage',
       method    => 'handle_triage',
       exclusive => 1,
@@ -244,17 +253,24 @@ sub handle_triage ($self, $event) {
   });
 }
 
-sub handle_new_issue ($self, $event) {
+sub _handle_creation_event ($self, $event, $arg = {}) {
   $event->mark_handled;
 
-  $self->_with_linear_client($event, sub ($linear) {
+  my $plan_munger = $arg->{plan_munger};
+  my $linear      = $arg->{linear};
+  my $ersatz_text = $arg->{ersatz_text};
+
+  my $code = sub ($linear) {
     my $text = $event->text =~ s/\AL//r;
 
-    my $plan_f = $linear->plan_from_input($text);
+    my $plan_f = $linear->plan_from_input($ersatz_text // $text);
 
     # XXX: I do not like our current error-returning scheme. -- rjbs, 2021-12-10
     $plan_f
-      ->then(sub ($plan)  { $linear->create_issue($plan) })
+      ->then(sub ($plan) {
+        $plan_munger->($plan) if $plan_munger;
+        $linear->create_issue($plan);
+      })
       ->then(sub ($query_result) {
         # XXX The query result is stupid and very low-level.  This will
         # change.
@@ -275,6 +291,42 @@ sub handle_new_issue ($self, $event) {
         }
       })
       ->else(sub ($error) { $event->error_reply("Couldn't make task: $error") });
+  };
+
+  if ($linear) {
+    return $code->($linear);
+  }
+
+  $self->_with_linear_client($event, $code);
+}
+
+sub handle_new_issue ($self, $event) {
+  $self->_handle_creation_event($self, $event);
+}
+
+sub handle_ptn_blocked ($self, $event) {
+  $event->mark_handled;
+  my ($ptn, $rest) = $event->text =~ m{\Aptn\s*([0-9]+) blocked:\s*(.+)}is;
+  my $new_text = ">> plumb $2";
+
+  $self->_with_linear_client($event, sub ($linear) {
+    my $label_f = $linear->lookup_label("support blocker");
+    $label_f->then(sub ($label_id) {
+      return $self->_handle_creation_event(
+        $event,
+        {
+          plan_munger => sub ($plan) {
+            $plan->{labelIds} = [ $label_id ];
+
+            my $orig = $plan->{description} // q{};
+            my $stub = "This issue created from support ticket PTN $ptn.";
+            $plan->{description} = length $orig ? "$stub\n\n$orig" : $stub;
+            return;
+          },
+          ersatz_text => $new_text,
+        },
+      );
+    });
   });
 }
 
