@@ -93,6 +93,10 @@ package Synergy::Reactor::Linear::LinearHelper {
     return $user->username;
   }
 
+  sub normalize_team_name ($self, $team_name) {
+    return $self->{reactor}->canonical_team_name_for($team_name);
+  }
+
   sub team_id_for_username ($self, $username) {
     $Logger->log("doing team lookup for $username");
     my $team_id = $self->{reactor}
@@ -100,6 +104,14 @@ package Synergy::Reactor::Linear::LinearHelper {
     return $team_id;
   }
 }
+
+has team_aliases => (
+  traits  => [ 'Hash' ],
+  default => sub {  {}  },
+  handles => {
+    canonical_team_name_for => 'get',
+  },
+);
 
 has _linear_shared_cache => (
   is => 'ro',
@@ -306,7 +318,7 @@ sub handle_new_issue ($self, $event) {
     return $event->error_reply("You can't assign directly to triage anymore.  Instead, you want *ptn `NUMBER` blocked: `DESCRIPTION`*.  If there's no ticket, it's not a support blocker!  Just make a task for the right team.");
   }
 
-  $self->_handle_creation_event($self, $event);
+  $self->_handle_creation_event($event);
 }
 
 sub handle_ptn_blocked ($self, $event) {
