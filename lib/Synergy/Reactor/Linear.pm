@@ -74,6 +74,15 @@ sub listener_specs {
         return unless $e->text eq 'Lurgent'; # XXX temporary
       },
     },
+    {
+      name      => 'agenda',
+      method    => 'handle_agenda',
+      exclusive => 1,
+      predicate => sub ($self, $e) {
+        return unless $e->was_targeted;
+        return unless $e->text =~ /\ALagenda(\s|$)/; # XXX temporary
+      },
+    },
   );
 }
 
@@ -254,6 +263,51 @@ sub handle_triage ($self, $event) {
         },
         "No unassigned tasks in triage!  Great!",
         "Current unassigned triage work",
+        $linear,
+      );
+    })->else(sub {
+      $event->error_reply("I couldn't find the team you asked about!");
+    });
+  });
+}
+
+sub handle_agenda ($self, $event) {
+  $event->mark_handled;
+
+  my (undef, $spec) = split /\s/, $event->text, 2;
+
+  $self->_with_linear_client($event, sub ($linear) {
+    my $when  = length $spec
+              ? $linear->who_or_what($spec)->then(sub ($assignee_id, $team_id) {
+                  return Future->fail("no such team") unless $team_id;
+
+                  if ($spec =~ /@/) {
+                    return Future->done(assignee => $assignee_id, team => $team_id);
+                  } else {
+                    # Okay they said 'agenda foo'. Foo could be a team or a user.
+                    # If it's a user, they want all agenda items for that user, so
+                    # we need to ignore the team.
+                    if ($assignee_id) {
+                      return Future->done(assignee => $assignee_id);
+                    } else {
+                      return Future->done(team => $team_id);
+                    }
+                  }
+                })
+              : $linear->get_authenticated_user->then(sub ($user) {
+                  return Future->done(assignee => $user->{id});
+                });
+
+    $when->then(sub {
+      my (%extra_search) = @_;
+      $self->_handle_search_urgent(
+        $event,
+        {
+          state    => 'To Discuss',
+          %extra_search,
+        },
+        "You have nothing on the agenda",
+        "Current agenda",
         $linear,
       );
     })->else(sub {
