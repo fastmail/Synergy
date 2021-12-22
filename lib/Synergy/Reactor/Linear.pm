@@ -206,9 +206,6 @@ sub handle_urgent ($self, $event) {
       $self->_handle_search_urgent(
         $event,
         {
-          # Total bodge.  We want to use authenticated user id, but the plumbing is
-          # wrong. -- rjbs, 2021-12-20
-          # assignee => $user->{id},
           assignee => $user->{id},
           priority => 1,
           closed   => 0,
