@@ -367,12 +367,24 @@ __PACKAGE__->add_preference(
     return $value;
   },
   validator   => sub ($self, $value, $event) {
-    $self->_with_linear_client($event, sub ($linear) {
+    # Look, this is *terrible*.  _with_linear_client will return a reply
+    # future, if we failed.  Otherwise it returns the result of the called sub,
+    # which here is the expected (ok, error) tuple.  We need to detect the
+    # failure case of _with_linear_client and turn it a pref-setting failure.
+    # -- rjbs, 2021-12-21
+    my ($ok, $error) = $self->_with_linear_client($event, sub ($linear) {
       my $team_obj = $linear->lookup_team(lc $value)->get;
       return (undef, "can't find team for $value") unless $team_obj;
       my $team_id = $team_obj->{id};
       return ($team_id);
-    })
+    });
+
+    if ($ok && ref $ok) {
+      # This is the weirdly bad case.
+      return (undef, "can't set your team until you configure your API token");
+    }
+
+    return ($ok, $error);
   },
   default     => undef,
 );
