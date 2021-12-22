@@ -355,6 +355,10 @@ __PACKAGE__->add_preference(
       return (undef, "that doesn't look like a normal API token; check it and try again?");
     }
 
+    if ($event->is_public) {
+      return (undef, "You shouldn't try to set an API token in public.  You should probably revoke that token in Linear, make a new one, and set it in a private message next time.");
+    }
+
     return ($value, undef);
   },
 );
