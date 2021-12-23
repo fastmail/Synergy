@@ -337,14 +337,13 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
       ->then(sub ($query_result) {
         # XXX The query result is stupid and very low-level.  This will
         # change.
-        my $id = $query_result->{data}{issueCreate}{issue}{identifier};
+        my $id  = $query_result->{data}{issueCreate}{issue}{identifier};
+        my $url = $query_result->{data}{issueCreate}{issue}{url};
         if ($id) {
           return $event->reply(
-            sprintf("I made that task, %s.", $id),
+            sprintf("I made that task, %s: %s", $id, $url),
             {
-              slack => sprintf("I made that task, <%s|%s>.",
-                "https://linear.app/fastmail/issue/$id/...",
-                $id),
+              slack => sprintf("I made that task, <%s|%s>.", $url, $id),
             },
           );
         } else {
