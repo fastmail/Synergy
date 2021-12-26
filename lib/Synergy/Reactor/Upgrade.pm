@@ -24,6 +24,12 @@ has fetch_spec => (
   required => 1,
 );
 
+has files_to_not_test => (
+  traits  => [ 'Array' ],
+  handles => { 'files_to_not_test' => 'elements' },
+  default => sub {  []  },
+);
+
 sub start ($self) {
   if (my $state = $self->fetch_state) {
     my $to_channel = $state->{restart_channel_name};
@@ -180,8 +186,8 @@ sub get_version_desc ($self) {
   $output;
 }
 
-my sub add_use_line {
-  my $data = shift;
+my sub add_use_line ($data_ref, $skip) {
+  return if $skip->{$File::Find::name};
 
   return unless -f $_;
   return unless /\.pm$/;
@@ -192,13 +198,15 @@ my sub add_use_line {
   $name =~ s/\//::/g;
   $name =~ s/\.pm//;
 
-  $$data .= "use $name;\n";
+  $$data_ref .= "use $name;\n";
 }
 
-sub check_next {
+sub check_next ($self) {
   my $data = "use lib qw(lib);\n";
 
-  find(sub { add_use_line(\$data) }, 'lib/');
+  my %skip = map {; $_ => 1 } $self->files_to_not_test;
+
+  find(sub { add_use_line(\$data, \%skip) }, 'lib/');
 
   my $f = Path::Tiny->tempfile;
   $f->spew($data);
