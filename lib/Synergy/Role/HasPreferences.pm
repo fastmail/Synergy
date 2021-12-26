@@ -127,6 +127,9 @@ role {
 
   method user_has_preference => sub ($self, $user, $pref_name) {
     my $username = blessed $user ? $user->username : $user;
+
+    return unless $username; # non-user
+
     my $user_prefs = $all_user_prefs{$username};
     return exists $user_prefs->{$pref_name} && defined $user_prefs->{$pref_name};
   };
