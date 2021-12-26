@@ -30,7 +30,7 @@ sub handle_who ($self, $event) {
       qq!I am Synergy, a holographic computer designed to be the ultimate audio-visual entertainment synthesizer.  I also help out with the timekeeping.!);
   }
 
-  return -1 unless $what =~ s/\A(is|am)\s+//n;
+  return unless $what =~ s/\A(is|am)\s+//n;
 
   $event->mark_handled;
 
