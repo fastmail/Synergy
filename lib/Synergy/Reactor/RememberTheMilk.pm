@@ -79,7 +79,11 @@ has pending_frobs => (
 );
 
 sub frob_for ($self, $user) {
-  return if $self->user_has_preference($user, 'api-token');
+  return Future->fail('unknown user')
+    unless $user;
+
+  return Future->fail('already enrolled')
+    if $self->user_has_preference($user, 'api-token');
 
   my $username = $user->username;
 
