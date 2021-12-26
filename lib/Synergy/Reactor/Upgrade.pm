@@ -180,21 +180,7 @@ sub get_version_desc ($self) {
   $output;
 }
 
-sub check_next {
-  my $data = "use lib qw(lib);\n";
-
-  find(sub { wanted(\$data) }, 'lib/');
-
-  my $f = Path::Tiny->tempfile;
-  $f->spew($data);
-
-  my $out = `$^X -cw $f 2>&1`;
-  return $out // "failed" if $?;
-
-  return;
-}
-
-sub wanted {
+my sub add_use_line {
   my $data = shift;
 
   return unless -f $_;
@@ -207,6 +193,20 @@ sub wanted {
   $name =~ s/\.pm//;
 
   $$data .= "use $name;\n";
+}
+
+sub check_next {
+  my $data = "use lib qw(lib);\n";
+
+  find(sub { add_use_line(\$data) }, 'lib/');
+
+  my $f = Path::Tiny->tempfile;
+  $f->spew($data);
+
+  my $out = `$^X -cw $f 2>&1`;
+  return $out // "failed" if $?;
+
+  return;
 }
 
 1;
