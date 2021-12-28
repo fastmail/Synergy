@@ -11,7 +11,7 @@ use namespace::clean;
 
 use Synergy::Logger '$Logger';
 use URI::Escape;
-use JSON 2;
+use JSON::MaybeXS;
 
 has api_token => (
   is       => 'ro',

@@ -17,7 +17,7 @@ use List::Util qw(first sum0 uniq);
 use Net::Async::HTTP;
 use POSIX qw(ceil);
 use IO::Async::Timer::Periodic;
-use JSON 2 ();
+use JSON::MaybeXS ();
 use Time::Duration;
 use Time::Duration::Parse;
 use Synergy::Logger '$Logger';
@@ -33,7 +33,7 @@ use DateTime::Format::ISO8601;
 
 use utf8;
 
-my $JSON = JSON->new->utf8;
+my $JSON = JSON::MaybeXS->new->utf8;
 
 my $TRIAGE_EMOJI = "\N{HELMET WITH WHITE CROSS}";
 
@@ -2068,7 +2068,7 @@ sub _handle_update_for_package ($self, $event, $package, $cmd_line) {
   my $user = $event->from_user;
   my $lpc = $self->f_lp_client_for_user($user);
 
-  $lpc->http_request(PUT => "/packages/$package->{id}", JSON->new->encode($plan))
+  $lpc->http_request(PUT => "/packages/$package->{id}", JSON::MaybeXS->new->encode($plan))
     ->then(sub { $event->reply("Package closed: $name") })
     ->else(sub { $event->reply("Hmm, something went wrong closing $name") })
     ->retain;
@@ -2081,7 +2081,7 @@ sub _execute_item_update_plan ($self, $event, $item, $plan) {
   my %UPDATE_FIELD = map {; $_ => 1 } qw(name is_done);
   if (my @unknown = grep {; ! $UPDATE_FIELD{$_} } keys %$plan) {
     $event->reply( "Update plan for LP$item->{id}: ```"
-                 . JSON->new->canonical->encode($plan)
+                 . JSON::MaybeXS->new->canonical->encode($plan)
                  . "```");
 
     return $event->error_reply(
@@ -2900,7 +2900,7 @@ sub _handle_search ($self, $event, $text, $arg = {}) {
   if (grep {; $_->{field} eq 'debug' and $_->{value} == 255 } @$instructions) {
     return $event->reply(
       "The search compiled as follows: ```"
-      . JSON->new->pretty->canonical->encode($instructions)
+      . JSON::MaybeXS->new->pretty->canonical->encode($instructions)
       . "```"
     );
   }
@@ -3149,7 +3149,7 @@ sub _execute_search ($self, $lpc, $search, $orig_error = undef) {
   if ($flag{debug}) {
     return Future->done(
       reply => "I'm going to run this query: ```"
-             . JSON->new->pretty->canonical->encode(\%to_query)
+             . JSON::MaybeXS->new->pretty->canonical->encode(\%to_query)
              . "```"
     );
   }

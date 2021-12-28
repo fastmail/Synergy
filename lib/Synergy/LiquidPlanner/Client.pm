@@ -6,12 +6,12 @@ use Moose;
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
-use JSON 2 ();
+use JSON::MaybeXS ();
 use DateTime;
 use utf8;
 use URI::Find;
 
-my $JSON = JSON->new->utf8;
+my $JSON = JSON::MaybeXS->new->utf8;
 
 has workspace_id => (
   is  => 'ro',

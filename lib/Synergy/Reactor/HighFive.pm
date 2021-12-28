@@ -11,7 +11,7 @@ use experimental qw(signatures);
 use namespace::clean;
 use Synergy::Logger '$Logger';
 
-use JSON 2 qw(encode_json);
+use JSON::MaybeXS qw(encode_json);
 
 has '+http_path' => (
   default => '/highfive',

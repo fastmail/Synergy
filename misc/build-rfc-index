@@ -6,7 +6,7 @@ use warnings;
 # ...probably retrieved from https://www.rfc-editor.org/in-notes/rfc-index.xml
 
 use DBD::SQLite;
-use JSON;
+use JSON::MaybeXS;
 use XML::LibXML;
 
 die "filename not given or does not exist" unless $ARGV[0] && -r $ARGV[0];
@@ -21,7 +21,7 @@ $dbh->do(
   )"
 ) or die "can't create table";
 
-my $JSON = JSON->new->canonical;
+my $JSON = JSON::MaybeXS->new->canonical;
 
 sub element_text {
   my ($start_elem, $name) = @_;

@@ -12,7 +12,7 @@ use namespace::clean;
 use utf8;
 
 use DBI;
-use JSON ();
+use JSON::MaybeXS ();
 use Synergy::Logger '$Logger';
 
 sub _slink {
@@ -64,7 +64,7 @@ sub rfc_entry_for ($self, $number) {
   );
 
   return unless $json;
-  return JSON->new->decode($json);
+  return JSON::MaybeXS->new->decode($json);
 }
 
 sub handle_rfc_search ($self, $event) {
@@ -78,7 +78,7 @@ sub handle_rfc_search ($self, $event) {
 
   my @results;
   for my $row (@$rows) {
-    my $data = JSON->new->decode($row->{metadata});
+    my $data = JSON::MaybeXS->new->decode($row->{metadata});
     next unless grep {; $_ eq $author } $data->{authors}->@*;
     push @results, $data;
   }
