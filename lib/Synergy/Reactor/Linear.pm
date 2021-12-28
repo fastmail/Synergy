@@ -381,7 +381,7 @@ sub handle_ptn_blocked ($self, $event) {
   my $new_text = ">> plumb $2";
 
   $self->_with_linear_client($event, sub ($linear) {
-    my $label_f = $linear->lookup_label("support blocker");
+    my $label_f = $linear->lookup_team_label("plumb", "support blocker"); 
     $label_f->then(sub ($label_id) {
       return $self->_handle_creation_event(
         $event,
