@@ -35,7 +35,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\A L ( \+\+ | >> ) \s+/x; # temporary L
+        return unless $e->text =~ /\A ( \+\+ | >> ) \s+/x;
       },
     },
     {
@@ -44,7 +44,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text eq 'Lsb'; # XXX temporary
+        return unless $e->text eq 'sb';
       },
     },
     {
@@ -62,7 +62,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\ALtriage(\s|$)/; # XXX temporary
+        return unless $e->text =~ /\Atriage(\s|$)/;
       },
     },
     {
@@ -71,7 +71,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text eq 'Lurgent'; # XXX temporary
+        return unless $e->text eq 'urgent';
       },
     },
     {
@@ -80,7 +80,7 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub ($self, $e) {
         return unless $e->was_targeted;
-        return unless $e->text =~ /\ALagenda(\s|$)/; # XXX temporary
+        return unless $e->text =~ /\Aagenda(\s|$)/;
       },
     },
   );
@@ -328,7 +328,7 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
   my $ersatz_text = $arg->{ersatz_text};
 
   my $code = sub ($linear) {
-    my $text = $event->text =~ s/\AL//r;
+    my $text = $event->text;
 
     my $plan_f = $linear->plan_from_input($ersatz_text // $text);
 
