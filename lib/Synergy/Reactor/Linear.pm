@@ -26,7 +26,7 @@ sub listener_specs {
         return unless $e->was_targeted;
 
         # Silly, but it's a hack. -- rjbs, 2021-12-15
-        return unless lc $e->text eq 'lteams';
+        return unless lc $e->text eq 'linear teams';
       },
     },
     {
