@@ -222,7 +222,7 @@ sub handle_milk ($self, $event) {
     $#lines = 9 if @lines > 10;
 
     $event->reply(join qq{\n},
-      "*Tasks found:*\n",
+      "*Tasks found:*",
       map {; $_->{string} } @lines
     );
   })->retain;
