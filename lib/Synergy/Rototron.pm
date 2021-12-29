@@ -226,6 +226,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
       next if $rotor->excludes_dow($day->day_of_week);
 
       my $user  = $rotor->user_for_day($day, $rotor);
+      my $name  = $user ? ($user->{name} // $user->{username}) : '(nobody)';
 
       # TODO: never change the assignee of the current week when we change
       # rotations, but... this can wait -- rjbs, 2019-01-30
@@ -235,14 +236,13 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
       $want{ $rotor->keyword }{ $start } = {
         '@type'   => 'jsevent',
         prodId    => "$PROGRAM_ID",
-        title     => join(q{ - },
-                      $rotor->description,
-                      $user->{name} // $user->{username}),
+        title     => join(q{ - }, $rotor->description, $name),
         start     => $start,
         duration  => "P1D",
         keywords  => {
           $rotor->keyword => JSON::MaybeXS->true,
-          "username:" . $user->{username} => JSON::MaybeXS->true,
+          ($user  ? ("username:" . $user->{username} => JSON::MaybeXS->true)
+                  : ()),
         },
         calendarId      => $rotor->calendar_id,
         freeBusyStatus  => "free",
