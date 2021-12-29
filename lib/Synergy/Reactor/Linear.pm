@@ -28,6 +28,11 @@ sub listener_specs {
         # Silly, but it's a hack. -- rjbs, 2021-12-15
         return unless lc $e->text eq 'linear teams';
       },
+      help_entries => [
+        { title => 'task', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+*linear teams*: list all the teams in Linear
+EOH
+      ]
     },
     {
       name      => 'new_issue',
@@ -37,6 +42,27 @@ sub listener_specs {
         return unless $e->was_targeted;
         return unless $e->text =~ /\A ( \+\+ | >> ) \s+/x;
       },
+      help_entries => [
+        { title => '++', text => 'This is like using `>>` but supplying yourself as the target.  See *help >>* instead.' },
+        { title => '++', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+*>> `TARGET` `NAME`*: create a new issue in Linear
+
+In the simplest form, this creates a new task with the given name, assigned to
+the given target.  (More on "targets" below.)  Any text after a line break or
+after triple dashes (`---`) becomes part of the long form description of the
+task, using Markdown.
+
+The `TARGET` can be either:
+• a username
+• a team name
+• username@team
+
+If only a username is given, the issue is assigned to that user in their
+default team.  If only a team name is given, the issue is created unassigned in
+that team.  If both are given, the issue is created in the given team and
+assigned to the given user.
+EOH
+      ]
     },
     {
       name      => 'support_blockers',
@@ -46,6 +72,13 @@ sub listener_specs {
         return unless $e->was_targeted;
         return unless $e->text eq 'sb';
       },
+      help_entries => [
+        { title => 'sb', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+*sb*: list unassigned support-blocking issues in Linear
+
+This will list all open, unassigned issues in Linear tagged "support blocker".
+EOH
+      ]
     },
     {
       name      => 'ptn_blocked',
@@ -55,6 +88,17 @@ sub listener_specs {
         return unless $e->was_targeted;
         return unless $e->text =~ m{\Aptn\s*([0-9]+) blocked:}i;
       },
+      help_entries => [
+        { title => 'ptn blocked', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+*ptn `NUMBER` blocked: `DESC`*: create a new support-blocking Linear issue
+
+This command will create a new issue in Linear, much like `>>`.  It assigns the
+issue to plumbing and tags it *support blocker*.  The `DESC` is what you'd put
+after `>> plumbing` if you were using `>>`.
+
+*In general, don't use this!*  Instead, use the Zendesk integration.
+EOH
+      ]
     },
     {
       name      => 'support_triage',
@@ -64,6 +108,15 @@ sub listener_specs {
         return unless $e->was_targeted;
         return unless $e->text =~ /\Atriage(\s|$)/;
       },
+      help_entries => [
+        { title => 'triage', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+*triage `[TEAM]`*: list unassigned issues in the Triage state
+
+This lists (the first page of) all unassigned issues in the Triage state in
+Linear.  You can supply an argument, the name of a team, to see only issues for
+that team.
+EOH
+      ]
     },
     {
       name      => 'urgent',
@@ -73,6 +126,11 @@ sub listener_specs {
         return unless $e->was_targeted;
         return unless $e->text eq 'urgent';
       },
+      help_entries => [
+        { title => 'urgent', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+*urgent*: list urgent issues assigned to you
+EOH
+      ]
     },
     {
       name      => 'agenda',
@@ -82,6 +140,15 @@ sub listener_specs {
         return unless $e->was_targeted;
         return unless $e->text =~ /\Aagenda(\s|$)/;
       },
+      help_entries => [
+        { title => 'agenda', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+*agenda `[TARGET]`*: list issues in the To Discuss state
+
+This command lists issues in the state To Discuss.  If a target is given
+(either a user name, a team name, or user@team), only issues with that
+assignment are listed.
+EOH
+      ]
     },
   );
 }
@@ -235,8 +302,9 @@ sub handle_support_blockers ($self, $event) {
   $self->_handle_search(
     $event,
     {
-      label   => 'support blocker',
-      closed  => 0,
+      label     => 'support blocker',
+      closed    => 0,
+      assignee  => undef,
     },
     "No support blockers!  Great!",
     "Current support blockers",
