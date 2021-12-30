@@ -169,7 +169,7 @@ sub handle_list_teams ($self, $event) {
   });
 }
 
-sub _handle_search_urgent ($self, $event, $search, $zero, $header, $linear = undef) {
+sub _handle_search ($self, $event, $search, $zero, $header, $linear = undef) {
   $event->mark_handled;
 
   my $code = sub ($linear) {
@@ -210,9 +210,11 @@ sub _handle_search_urgent ($self, $event, $search, $zero, $header, $linear = und
 }
 
 sub handle_urgent ($self, $event) {
+  $event->mark_handled;
+
   $self->_with_linear_client($event, sub ($linear) {
     $linear->get_authenticated_user->then(sub ($user) {
-      $self->_handle_search_urgent(
+      $self->_handle_search(
         $event,
         {
           assignee => $user->{id},
@@ -228,7 +230,9 @@ sub handle_urgent ($self, $event) {
 }
 
 sub handle_support_blockers ($self, $event) {
-  $self->_handle_search_urgent(
+  $event->mark_handled;
+
+  $self->_handle_search(
     $event,
     {
       label   => 'support blocker',
@@ -254,7 +258,7 @@ sub handle_triage ($self, $event) {
 
     $when->then(sub {
       my (%extra_search) = @_;
-      $self->_handle_search_urgent(
+      $self->_handle_search(
         $event,
         {
           state    => 'Triage',
@@ -300,7 +304,7 @@ sub handle_agenda ($self, $event) {
 
     $when->then(sub {
       my (%extra_search) = @_;
-      $self->_handle_search_urgent(
+      $self->_handle_search(
         $event,
         {
           state    => 'To Discuss',
