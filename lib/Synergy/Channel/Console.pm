@@ -13,7 +13,14 @@ use Synergy::Logger '$Logger';
 use namespace::autoclean;
 use Data::Dumper::Concise;
 
+use Term::ANSIColor qw(colored);
+
 with 'Synergy::Role::Channel';
+
+has theme => (
+  is  => 'ro',
+  isa => 'Str',
+);
 
 has from_address => (
   is  => 'ro',
@@ -148,7 +155,14 @@ sub _event_from_text ($self, $text) {
   return Synergy::Event->new(\%arg);
 }
 
+my %Theme = (
+  blue    => [  27,  14 ],
+  green   => [  77, 118 ],
+  purple  => [ 140, 201 ],
+);
+
 sub start ($self) {
+  die "bogus theme" if $self->theme && ! $Theme{$self->theme};
   $self->hub->loop->add($self->_stream);
 }
 
@@ -156,9 +170,25 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
   $self->send_message($user->username, $text, $alts);
 }
 
+sub _format_message ($self, $name, $address, $text) {
+  my $theme = $self->theme;
+
+  return ">>> $name!$address > $text\n" unless $theme;
+
+  my @T = $Theme{ $self->theme }->@*;
+  return colored([ "ansi$T[0]" ], ">>> ")
+       . colored([ "ansi$T[1]" ], $name)
+       . colored([ "ansi$T[0]" ], "!")
+       . colored([ "ansi$T[1]" ], $address)
+       . colored([ "ansi$T[0]" ], " > ")
+       . colored([ "ansi$T[1]" ], $text)
+       . "\n";
+}
+
 sub send_message ($self, $address, $text, $alts = {}) {
   my $name = $self->name;
-  print { $self->_stream->write_handle } ">>> $name!$address > $text\n";
+  print { $self->_stream->write_handle }
+    $self->_format_message($name, $address, $text);
   return;
 }
 
