@@ -175,15 +175,15 @@ sub _handle_search ($self, $event, $search, $zero, $header, $linear = undef) {
   my $code = sub ($linear) {
     my $user = $linear->get_authenticated_user;
     $user->then(sub ($user) {
-      $linear->search_issues($search)->then(sub ($result) {
-        unless ($result->{data}{issues}{nodes}->@*) {
+      $linear->search_issues($search)->then(sub ($page) {
+        unless ($page->payload->{nodes}->@*) {
           return $event->reply($zero);
         }
 
         my $text  = q{};
         my $slack = q{};
 
-        for my $node ($result->{data}{issues}{nodes}->@*) {
+        for my $node ($page->payload->{nodes}->@*) {
           $text  .= "$node->{identifier} - $node->{title}\n";
           $slack .= sprintf "<%s|%s> - %s\n",
             "https://linear.app/fastmail/issue/$node->{identifier}/...",
