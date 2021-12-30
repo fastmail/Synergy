@@ -92,10 +92,9 @@ sub handle_page ($self, $event) {
     }
   }
 
-  if ( $paged ) {
+  if ($paged) {
     $event->reply("Page sent!");
-  }
-  else {
+  } else {
     $event->reply("I don't know how to page $who, sorry.");
   }
 }
