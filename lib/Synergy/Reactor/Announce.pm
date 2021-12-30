@@ -40,8 +40,7 @@ sub handle_announce ($self, $event) {
   $event->mark_handled;
 
   if ($event->from_channel->name eq $self->to_channel_name) {
-    $event->error_reply("You're already using the target system!");
-    return 1;
+    return $event->error_reply("You're already using the target system!");
   }
 
   my $to_send = $event->text =~ s/^announce:?\s*//r;
@@ -52,8 +51,7 @@ sub handle_announce ($self, $event) {
   $self->hub->channel_named($self->to_channel_name)
             ->send_message($self->to_address, "$from says: $to_send");
 
-  $event->reply("Sent!");
-  return 1;
+  return $event->reply("Sent!");
 }
 
 1;
