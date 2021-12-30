@@ -19,8 +19,15 @@ STDOUT->autoflush;
 
 use Getopt::Long::Descriptive;
 use Synergy::Hub;
+use Term::ANSIColor qw(colored);
 
-$Logger = $Logger->proxy({ proxy_prefix => "LOG | " });
+my $prefix = -t *STDOUT
+           ? (colored(['ansi226'], "LOG") . colored(['ansi255'], " | "))
+           : "LOG | ";
+
+$Logger = $Logger->proxy({
+  proxy_prefix => $prefix,
+});
 
 my ($opt, $usage) = describe_options(
   '%c %o',
