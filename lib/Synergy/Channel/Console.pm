@@ -513,10 +513,10 @@ sub _format_message ($self, $name, $address, $text) {
 
 sub send_message ($self, $address, $text, $alts = {}) {
   my $name = $self->name;
+
   $self->_stream->write(
     $self->_format_message($name, $address, $text)
   );
-  return;
 }
 
 sub describe_event ($self, $event) {
