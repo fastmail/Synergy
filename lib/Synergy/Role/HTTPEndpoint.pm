@@ -48,7 +48,7 @@ has _app => (
   },
 );
 
-sub BUILD($self, @) {
+sub BUILD ($self, @) {
   confess "http_username and http_password must be supplied together"
     if $self->has_http_username ^ $self->has_http_password;
 }
