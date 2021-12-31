@@ -215,7 +215,7 @@ There are commands for inspecting and tweaking your Console channel.
 
   /set VAR VALUE  - change the default value for one of the following
 
-    from_address    - the default from_address on new events
+    from-address    - the default from_address on new events
     public          - 0 or 1; whether messages should be public by default
     public-address  - the default conversation address for public events
     target-prefix   - token that, at start of text, is stripped, making the
@@ -331,9 +331,18 @@ sub _console_cmd_console ($self, $arg) {
   $output .= sprintf "%-*s: %s\n", $width, 'name', $self->name;
   $output .= sprintf "%-*s: %s\n", $width, 'theme', $self->theme // '(none)';
   $output .= sprintf "%-*s: %s\n", $width, 'default from', $self->from_address;
+
+  $output .= sprintf "%-*s: %s\n",
+    $width, 'default context',
+    $self->public_by_default ? 'public' : 'private';
+
   $output .= sprintf "%-*s: %s\n",
     $width, 'public address',
     $self->public_conversation_address;
+
+  $output .= sprintf "%-*s: %s\n",
+    $width, 'target prefix',
+    $self->target_prefix;
 
   $self->_display_message($output);
 }
