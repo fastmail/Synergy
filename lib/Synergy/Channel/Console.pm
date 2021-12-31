@@ -336,15 +336,41 @@ sub _event_from_text ($self, $text) {
   return Synergy::Event->new(\%arg);
 }
 
-my %Theme = (
-  blue    => [  27,  14 ],
-  green   => [  77, 118 ],
-  purple  => [ 140, 201 ],
-);
+sub _display_notice ($self, $text) {
+  state $width = max map {; length $_->name }
+                 grep {; $_->does('Synergy::Role::Channel') }
+                 $self->hub->channels;
+
+  my $name = $self->name;
+
+  my $message;
+
+  if ($self->theme) {
+    my @T = $Theme{ $self->theme }->@*;
+    $message = colored([ "ansi$T[0]" ], "⬮⬮ ")
+             . colored([ "ansi$T[1]" ], sprintf '%-*s', $width, $name)
+             . colored([ "ansi$T[0]" ], " ⬮⬮ ")
+             . colored([ "ansi$T[1]" ], $text)
+             . "\n";
+  } else {
+    $message = "⬮⬮ $name ⬮⬮ $text\n";
+  }
+
+  $self->_stream->write($message);
+  return;
+}
 
 sub start ($self) {
   die "bogus theme" if $self->theme && ! $Theme{$self->theme};
   $self->hub->loop->add($self->_stream);
+
+  my $boot_message = "Console channel online";
+
+  $boot_message .= "; type /help for help" unless $self->send_only;
+
+  $self->_display_notice($boot_message);
+
+  return;
 }
 
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
