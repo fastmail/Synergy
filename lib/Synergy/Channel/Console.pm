@@ -459,8 +459,10 @@ sub _event_from_text ($self, $text) {
     return undef;
   }
 
+  my $is_public     = $self->public_by_default;
+
   my $target_prefix = $self->target_prefix;
-  my $was_targeted  = $text =~ s/\A\Q$target_prefix\E\s+//;
+  my $was_targeted  = $text =~ s/\A\Q$target_prefix\E\s+// || ! $is_public;
 
   my %arg = (
     type => 'message',
