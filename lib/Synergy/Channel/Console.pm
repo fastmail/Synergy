@@ -459,6 +459,9 @@ sub _event_from_text ($self, $text) {
     return undef;
   }
 
+  my $orig_text = $text;
+  my $meta = ($text =~ s/\A \{ ([^}]+?) \} \s+//x) ? $1 : undef;
+
   my $is_public     = $self->public_by_default;
 
   my $target_prefix = $self->target_prefix;
@@ -471,10 +474,10 @@ sub _event_from_text ($self, $text) {
     is_public     => $self->public_by_default,
     from_channel  => $self,
     from_address  => $self->from_address,
-    transport_data => { text => $text },
+    transport_data => { text => $orig_text },
   );
 
-  if ($arg{text} =~ s/\A \{ ([^}]+?) \} \s+//x) {
+  if (length $meta) {
     # Crazy format for producing custom events by hand! -- rjbs, 2018-03-16
     #
     # If no colon/value, booleans default to becoming true.
@@ -483,7 +486,7 @@ sub _event_from_text ($self, $text) {
     # d:STRING      -- change the default reply address
     # p[ublic]:BOOL -- set whether is public
     # t:BOOL        -- set whether targeted
-    my @flags = split /\s+/, $1;
+    my @flags = split /\s+/, $meta;
     FLAG: for my $flag (@flags) {
       my ($k, $v) = split /:/, $flag;
 
