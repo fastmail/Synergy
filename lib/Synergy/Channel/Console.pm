@@ -105,13 +105,16 @@ sub _build_stream {
   return IO::Async::Stream->new(%arg);
 }
 
-sub _display_message ($self, $text) {
+sub _display_message ($self, $text, $closed = 1, $title = undef) {
   state $B_TL  = q{╔};
   state $B_BL  = q{╚};
   state $B_TR  = q{╗};
   state $B_BR  = q{╝};
   state $B_ver = q{║};
   state $B_hor = q{═};
+
+  state $B_boxleft  = q{╣};
+  state $B_boxright = q{╠};
 
   my $theme = $self->theme ? $Theme{ $self->theme } : undef;
 
@@ -122,12 +125,27 @@ sub _display_message ($self, $text) {
   my $header = "$line_C$B_TL" . ($B_hor x 77) . "$B_TR$null_C\n";
   my $footer = "$line_C$B_BL" . ($B_hor x 77) . "$B_BR$null_C\n";
 
-  my $new_text = q{};
+  if (length $title) {
+    my $width = length $title;
 
+    $header = "$line_C$B_TL"
+            . ($B_hor x 5)
+            . "$B_boxleft $title $B_boxright"
+            . ($B_hor x (72 - $width - 4))
+            . "$B_TR$null_C\n";
+  }
+
+  my $new_text = q{};
   for my $line (split /\n/, $text) {
     $new_text .= "$line_C$B_ver $text_C";
-    $new_text .= sprintf '%-76s', $line;
-    $new_text .= "$line_C$B_ver" if length $line <= 76;
+
+    if ($closed && length $line <= 76) {
+      $new_text .= sprintf '%-76s', $line;
+      $new_text .= "$line_C$B_ver" if length $line <= 76;
+    } else {
+      $new_text .= $line;
+    }
+
     $new_text .= "$null_C\n";
   }
 
