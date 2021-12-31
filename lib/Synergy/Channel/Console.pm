@@ -380,22 +380,23 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
 sub _format_message ($self, $name, $address, $text) {
   my $theme = $self->theme;
 
-  return ">>> $name!$address > $text\n" unless $theme;
+  return "❱❱ $name!$address ❱❱ $text\n" unless $theme;
 
   my @T = $Theme{ $self->theme }->@*;
-  return colored([ "ansi$T[0]" ], ">>> ")
+  return colored([ "ansi$T[0]" ], "❱❱ ")
        . colored([ "ansi$T[1]" ], $name)
-       . colored([ "ansi$T[0]" ], "!")
+       . colored([ "ansi$T[0]" ], '!')
        . colored([ "ansi$T[1]" ], $address)
-       . colored([ "ansi$T[0]" ], " > ")
+       . colored([ "ansi$T[0]" ], " ❱❱ ")
        . colored([ "ansi$T[1]" ], $text)
        . "\n";
 }
 
 sub send_message ($self, $address, $text, $alts = {}) {
   my $name = $self->name;
-  print { $self->_stream->write_handle }
-    $self->_format_message($name, $address, $text);
+  $self->_stream->write(
+    $self->_format_message($name, $address, $text)
+  );
   return;
 }
 
