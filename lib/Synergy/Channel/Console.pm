@@ -482,10 +482,21 @@ sub _format_message_chonky ($self, $name, $address, $text) {
 
   my $new_text = q{};
 
-  for my $line (split /\n/, $text) {
+  my @lines = split /\n/, $text;
+  while (my $line = shift @lines) {
     $new_text .= "$line_C$B_ver $text_C";
-    $new_text .= sprintf '%-76s', $line;
-    $new_text .= "$line_C$B_ver" if length $line <= 76;
+    if (length $line > 76) {
+      my ($old, $rest) = $line =~ /\A(.{1,76})\s+(.+)/;
+      if (length $old) {
+        $new_text .= $old;
+        unshift @lines, $rest;
+      } else {
+        # Oh well, nothing to do about it!
+        $new_text = $line;
+      }
+    } else {
+      $new_text .= $line;
+    }
     $new_text .= "$null_C\n";
   }
 
