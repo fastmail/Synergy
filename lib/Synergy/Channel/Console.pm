@@ -87,6 +87,22 @@ sub _build_stream {
 }
 
 sub _event_from_text ($self, $text) {
+  # Remove any leading "/".  If there's a leading slash, we're just sending a
+  # normal message with a leading slash.  (The now-removed slash was here to
+  # escape this one.)  Otherwise, we're looking for a Console channel slash
+  # command.
+  if ($text =~ s{\A/}{} && $text !~ m{\A/}) {
+    my ($cmd, $rest) = split /\s+/, $text, 2;
+
+    if (my $code =$self->can("_console_cmd_$cmd")) {
+      $self->$code($rest);
+      return undef;
+    }
+
+    $self->_display_message("No such console command: /$cmd");
+    return undef;
+  }
+
   my %arg = (
     type => 'message',
     text => $text,
