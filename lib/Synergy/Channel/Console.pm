@@ -2,6 +2,8 @@ use v5.24.0;
 use warnings;
 package Synergy::Channel::Console;
 
+use utf8;
+
 use Moose;
 use experimental qw(signatures);
 use JSON::MaybeXS;
