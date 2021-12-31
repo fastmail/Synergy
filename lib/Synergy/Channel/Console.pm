@@ -4,6 +4,21 @@ package Synergy::Channel::Console;
 
 use utf8;
 
+package Synergy::Channel::Console::Compartment {
+  use v5.24.0;
+  use warnings;
+  use experimental qw(signatures);
+
+  sub _evaluate ($S, $code) {
+    my $result = eval $code;
+    if ($@) {
+      return (undef, $@);
+    }
+
+    return ($result, undef);
+  }
+}
+
 use Moose;
 use experimental qw(signatures);
 use JSON::MaybeXS;
@@ -60,6 +75,12 @@ has stream => (
   init_arg  => undef,
   lazy      => 1,
   builder   => '_build_stream',
+);
+
+has allow_eval => (
+  is  => 'ro',
+  isa => 'Bool',
+  default => 0,
 );
 
 has message_format => (
@@ -312,6 +333,36 @@ sub _console_cmd_format ($self, $arg) {
     $_->_display_notice("Message format set to $format");
   }
 
+  return;
+}
+
+sub _console_cmd_eval ($self, $arg) {
+  unless ($self->allow_eval) {
+    $_->_display_notice("/eval is not enabled");
+    return;
+  }
+
+  my ($result, $error) = Synergy::Channel::Console::Compartment::_evaluate(
+    $self->hub,
+    $arg,
+  );
+
+  require Data::Dumper::Concise;
+
+  if ($error) {
+    my $display = ref $error      ? Data::Dumper::Concise::Dumper($error)
+                : defined $error  ? $error
+                :                   '(undef)';
+
+    $self->_display_message($display, 0, 'ERROR');
+    return;
+  }
+
+  my $display = ref $result     ? Data::Dumper::Concise::Dumper($result)
+              : defined $result ? $result
+              :                   '(undef)';
+
+  $self->_display_message($display, 0, 'RESULT');
   return;
 }
 
