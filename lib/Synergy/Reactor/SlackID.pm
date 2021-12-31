@@ -71,21 +71,20 @@ sub handle_event ($self, $event) {
 sub handle_reload_slack ($self, $event) {
   my ($what) = $event->text =~ /^reload slack (users|channels)/i;
 
+  $event->mark_handled;
+
   if ($what eq 'users') {
-    $event->mark_handled;
     $event->from_channel->slack->load_users;
     $event->from_channel->slack->load_dm_channels;
     return $event->reply('Slack users reloaded');
   }
 
   if ($what eq 'channels') {
-    $event->mark_handled;
     $event->from_channel->slack->load_channels;
     return $event->reply('Slack channels reloaded');
   }
 
-  # Don't mark handled, will fall back to "does not compute"
-  return -1;
+  return $event->reply_error("Sorry, I didn't understand your reload command.");
 }
 
 1;
