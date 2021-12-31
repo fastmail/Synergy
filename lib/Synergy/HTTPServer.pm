@@ -61,7 +61,8 @@ has http_server => (
           $Logger->log("HTTPServer: access: $msg");
         }
       )->wrap(sub ($env) {
-        my $path_info = $env->{PATH_INFO} // '/';
+        my $path_info = $env->{PATH_INFO};
+        $path_info = "/" unless length $path_info;
 
         unless ($self->path_is_registered($path_info)) {
           $Logger->log([
