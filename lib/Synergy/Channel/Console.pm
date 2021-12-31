@@ -231,6 +231,8 @@ probably change over time.
   /reactors - print the registered reactors
   /users    - print unknown users
 
+  /config   - print a summary of top-level Synergy configuration
+
   /console  - print configuration of this Console channel
 EOH
 
@@ -277,6 +279,28 @@ sub _console_cmd_help ($self, $arg) {
 
   $self->_display_message($for);
   return;
+}
+
+sub _console_cmd_config ($self, $arg) {
+  my $output = "Synergy Configuration\n\n";
+
+  my $url = sprintf 'http://localhost:%i/', $self->hub->server_port;
+
+  my $width = 8;
+  $output .= sprintf "  %-*s - %s\n", $width, 'name', $self->hub->name;
+  $output .= sprintf "  %-*s - %s\n", $width, 'http', $url;
+  $output .= sprintf "  %-*s - %s\n", $width, 'db',
+    $self->hub->env->state_dbfile;
+
+  my $userfile = $self->hub->env->has_user_directory_file
+               ? $self->hub->env->user_directory_file
+               : "(none)";
+
+  $output .= sprintf "  %-*s - %s\n", $width, 'userfile', $userfile;
+
+  $output .= "\nSee also /channels and /reactors and /users";
+
+  $self->_display_message($output);
 }
 
 sub _console_cmd_channels ($self, $arg) {
