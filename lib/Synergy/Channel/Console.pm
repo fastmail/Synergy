@@ -26,6 +26,12 @@ my %Theme = (
   purple  => [        140,    13 ],
 );
 
+has ignore_blank_lines => (
+  is => 'rw',
+  isa => 'Bool',
+  default => 1,
+);
+
 has theme => (
   is  => 'ro',
   isa => 'Str',
@@ -256,6 +262,10 @@ sub _event_from_text ($self, $text) {
     }
 
     $self->_display_message("No such console command: /$cmd");
+    return undef;
+  }
+
+  if (not length $text && $self->ignore_blank_lines) {
     return undef;
   }
 
