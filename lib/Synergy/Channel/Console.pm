@@ -74,6 +74,7 @@ sub _build_stream {
           chomp $text;
 
           my $event = $channel->_event_from_text($text);
+          next unless $event;
 
           $channel->hub->handle_event($event);
        }
