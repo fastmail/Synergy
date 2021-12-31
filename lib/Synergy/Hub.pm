@@ -343,10 +343,10 @@ sub http_request ($self, $method, $url, %args) {
   # sychronous as far as the caller is concerned.
   my $future = $self->http_client->do_request(
     @args
-  )->on_fail( sub {
+  )->on_fail(sub {
     my $failure = shift;
     $Logger->log("Failed to $method $url: $failure");
-  } );
+  });
 
   return $future;
 }
