@@ -53,7 +53,7 @@ sub BUILD($self, @) {
     if $self->has_http_username ^ $self->has_http_password;
 }
 
-after 'start' => sub ($self) {
+after start => sub ($self) {
   $self->hub->server->register_path($self->http_path, $self->_app);
 };
 
