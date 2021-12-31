@@ -82,7 +82,7 @@ sub handle_remind ($self, $event) {
     \z
   /xi;
 
-  $_ = fc $_ for ($who, $prep, $dur_str, $want_page);
+  $_ = fc $_ for grep {; defined } ($who, $prep, $dur_str, $want_page);
 
   my $fail = sub {
     $event->error_reply('usage: remind WHO (in|at|on) (time) [with page]: (reminder)');
