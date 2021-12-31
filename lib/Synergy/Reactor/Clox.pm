@@ -145,6 +145,8 @@ sub handle_clox ($self, $event) {
   my $reply = "In Internet Time\N{TRADE MARK SIGN} $its $beats.  That's...\n";
   $reply .= join q{}, map {; "> $_\n" } @strs;
 
+  chomp $reply;
+
   $event->reply($reply);
 }
 
