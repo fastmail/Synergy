@@ -55,7 +55,7 @@ sub handle_my_projects ($self, $event) {
     'User-Agent'      => 'Synergy/2021.05',
     Authorization     => "Bearer $token",
     'Notion-Version'  => '2021-08-16',
-    'Content-Type'    => 'application/json',
+    Content_Type      => 'application/json',
     Content => "{}", # TODO: filter here for real
   )->then(sub ($res) {
     my $data  = JSON::MaybeXS->new->utf8->decode(
