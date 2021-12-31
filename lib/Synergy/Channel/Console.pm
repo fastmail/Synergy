@@ -52,13 +52,20 @@ sub _build_stream {
   my ($channel) = @_;
   Scalar::Util::weaken($channel);
 
+  open(my $cloned_stdout, ">&STDOUT") or die "Can't dup STDOUT: $!";
+  open(my $cloned_stdin , ">&STDIN")  or die "Can't dup STDIN: $!";
+
+  binmode $cloned_stdout, ':pop'; # remove utf8
+  binmode $cloned_stdin,  ':pop'; # remove utf8
+
   my %arg = (
-    write_handle => \*STDOUT,
+    write_handle => $cloned_stdout,
+    encoding     => 'UTF-8',
     # autoflush    => 1,
   );
 
   unless($channel->send_only) {
-    $arg{read_handle} = \*STDIN;
+    $arg{read_handle} = $cloned_stdin,
     $arg{on_read}     = sub {
       my ( $self, $buffref, $eof ) = @_;
 
