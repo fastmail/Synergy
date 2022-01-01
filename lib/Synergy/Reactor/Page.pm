@@ -29,7 +29,8 @@ sub listener_specs {
     name      => 'page',
     method    => 'handle_page',
     exclusive => 1,
-    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^page/i },
+    targeted  => 1,
+    predicate => sub ($, $e) { $e->text =~ /^page/i },
     help_entries => [
       { title => 'page', text => <<'END'
 *page* tries to page somebody via their phone or pager.  This is generally

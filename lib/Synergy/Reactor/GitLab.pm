@@ -178,9 +178,8 @@ sub listener_specs {
       name      => 'r?',
       method    => 'handle_r_hook',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text eq 'r?'
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text eq 'r?' },
       help_entries => [
         { title => 'r?',
           text  => 'This is short for `mrsearch for:me backlogged:no` -- in other words, "what can I act on right now?".'
@@ -191,10 +190,8 @@ sub listener_specs {
       name      => 'mr-search',
       method    => 'handle_mr_search',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted &&
-        $e->text =~ /^mrs(?:earch)?(?:\z|\s+)/i;
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /^mrs(?:earch)?(?:\z|\s+)/i },
       help_entries => [
         {
           title => 'mrs',

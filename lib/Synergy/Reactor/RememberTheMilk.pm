@@ -112,25 +112,22 @@ sub listener_specs {
       name      => 'milk',
       method    => 'handle_milk',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /\Amilk(?:\s|\z)/
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Amilk(?:\s|\z)/ },
     },
     {
       name      => 'todo',
       method    => 'handle_todo',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /\Atodo(?:\s|\z)/
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Atodo(?:\s|\z)/ },
     },
     {
       name      => 'auth',
       method    => 'handle_auth',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /\Amilkauth(?:\s|\z)/i
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Amilkauth(?:\s|\z)/i },
     },
   );
 }

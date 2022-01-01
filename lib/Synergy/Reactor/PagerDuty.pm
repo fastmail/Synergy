@@ -170,7 +170,8 @@ sub listener_specs {
     {
       name      => 'maint-query',
       method    => 'handle_maint_query',
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^maint(\s+status)?\s*$/in },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /^maint(\s+status)?\s*$/in },
       help_entries => [
         # start /force is not documented here because it will mention itself to
         # the user when needed -- rjbs, 2020-06-15
@@ -191,15 +192,16 @@ EOH
     {
       name      => 'maint-start',
       method    => 'handle_maint_start',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ m{^maint\s+start\s*(/force)?\s*$}i },
+      targeted  => 1,
+      predicate => sub ($, $e) {
+        $e->text =~ m{^maint\s+start\s*(/force)?\s*$}i
+      },
     },
     {
       name      => 'maint-end',
       method    => 'handle_maint_end',
+      targeted  => 1,
       predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
         return 1 if $e->text =~ /^maint\s+(end|stop)\b/i;
         return 1 if $e->text =~ /^unmaint\b/i;
         return 1 if $e->text =~ /^demaint\b/i;
@@ -208,7 +210,8 @@ EOH
     {
       name      => 'oncall',
       method    => 'handle_oncall',
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^oncall\s*$/i },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /^oncall\s*$/i },
       help_entries => [
         { title => 'oncall', text => '*oncall*: show a list of who is on call in PagerDuty right now' },
       ],
@@ -216,7 +219,8 @@ EOH
     {
       name      => 'ack-all',
       method    => 'handle_ack_all',
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^ack all\s*$/i },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /^ack all\s*$/i },
       help_entries => [
         { title => 'ack', text => '*ack all*: acknowledge all triggered alerts in PagerDuty' },
       ],
@@ -224,15 +228,14 @@ EOH
     {
       name      => 'incident-summary',
       method    => '_handle_incidents',
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^incidents\s*$/i },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /^incidents\s*$/i },
     },
     {
       name      => 'resolve-all',
       method    => 'handle_resolve_all',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ m{^resolve\s+all\s*$}i
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+all\s*$}i },
       help_entries => [
         { title => 'resolve', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
 *resolve*: manage resolving alerts in PagerDuty
@@ -248,16 +251,14 @@ EOH
     {
       name      => 'resolve-acked',
       method    => 'handle_resolve_acked',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ m{^resolve\s+acked\s*$}i },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+acked\s*$}i },
     },
     {
       name      => 'resolve-mine',
       method    => 'handle_resolve_mine',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ m{^resolve\s+mine\s*$}i },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+mine\s*$}i },
     },
   );
 }

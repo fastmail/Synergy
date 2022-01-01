@@ -131,8 +131,8 @@ sub listener_specs {
   return {
     name      => 'highfive',
     method    => 'highfive',
+    targeted  => 1,
     predicate => sub ($, $e) {
-      $e->was_targeted &&
       $e->text =~ /^(highfive|:raised_hands:(?::skin-tone-\d:)?|$HIGHFIVE_EMOJI)\s/in;
     },
   };

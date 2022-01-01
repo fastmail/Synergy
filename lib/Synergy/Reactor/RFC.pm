@@ -25,17 +25,17 @@ sub listener_specs {
       name      => 'rfc-search',
       method    => 'handle_rfc_search',
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\Arfcs\s+author:[“”"][^"]+[“”"]\z/;
-        return 1;
+        return $e->text =~ /\Arfcs\s+author:[“”"][^"]+[“”"]\z/;
       },
     },
     {
       name      => 'rfc-mention',
       method    => 'handle_rfc',
       predicate => sub ($self, $e) {
-        return unless $e->text =~ /(^|\s|\/)RFC\s*[0-9]+/in; },
+        return unless $e->text =~ /(^|\s|\/)RFC\s*[0-9]+/in;
+      },
     },
   );
 }

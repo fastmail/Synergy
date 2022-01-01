@@ -15,7 +15,8 @@ sub listener_specs {
     name      => 'who',
     method    => 'handle_who',
     exclusive => 1,
-    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^who/i },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /^who/i },
   };
 }
 

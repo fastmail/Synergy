@@ -14,9 +14,8 @@ sub listener_specs {
     name      => 'emit',
     method    => 'handle_emit',
     exclusive => 1,
-    predicate => sub ($self, $e) {
-      return unless $e->was_targeted;
-      return unless $e->text =~ /\Aemit(?:\s+.+)?/i; },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /\Aemit(?:\s+.+)?/i },
   };
 }
 

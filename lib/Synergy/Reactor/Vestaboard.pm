@@ -69,9 +69,8 @@ sub listener_specs {
       name      => 'vesta_edit',
       method    => 'handle_vesta_edit',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && lc $e->text =~ /\Avesta edit /i;
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { lc $e->text =~ /\Avesta edit /i },
       help_entries => [
         {
           title => 'vesta',
@@ -83,9 +82,8 @@ sub listener_specs {
       name      => 'vesta_delete_design',
       method    => 'handle_vesta_delete_design',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && lc $e->text =~ /\Avesta delete design /;
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { lc $e->text =~ /\Avesta delete design / },
       help_entries => [
         {
           title => 'vesta',
@@ -97,9 +95,8 @@ sub listener_specs {
       name      => 'vesta_designs',
       method    => 'handle_vesta_designs',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && lc $e->text eq 'vesta designs';
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { lc $e->text eq 'vesta designs' },
       help_entries => [
         {
           title => 'vesta',
@@ -111,7 +108,8 @@ sub listener_specs {
       name      => 'vesta_post_text',
       method    => 'handle_vesta_post_text',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta post text:? .+\z/i },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta post text:? .+\z/i },
       help_entries => [
         {
           title => 'vesta',
@@ -123,7 +121,8 @@ sub listener_specs {
       name      => 'vesta_post',
       method    => 'handle_vesta_post',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta post \S+\z/i },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta post \S+\z/i },
       help_entries => [
         {
           title => 'vesta',
@@ -135,7 +134,8 @@ sub listener_specs {
       name      => 'vesta_status',
       method    => 'handle_vesta_status',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta status\z/i },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta status\z/i },
       help_entries => [
         {
           title => 'vesta',
@@ -147,7 +147,8 @@ sub listener_specs {
       name      => 'vesta_show_design',
       method    => 'handle_vesta_show_design',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta show design /i },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta show design /i },
       help_entries => [
         {
           title => 'vesta',
@@ -159,7 +160,8 @@ sub listener_specs {
       name      => 'vesta_show',
       method    => 'handle_vesta_show',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta show\z/i },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta show\z/i },
       help_entries => [
         {
           title => 'vesta',
@@ -171,7 +173,8 @@ sub listener_specs {
       name      => 'vesta_lock',
       method    => 'handle_vesta_lock',
       exclusive => 1,
-      predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /\Avesta (un)?lock\z/i },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta (un)?lock\z/i },
       help_entries => [
         {
           title => 'vesta',

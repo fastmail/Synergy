@@ -33,7 +33,7 @@ sub potential_reactions_to ($self, $event) {
   my @matches = grep {; $_->{predicate}->($self, $event) } $self->listeners;
 
   unless ($event->was_targeted) {
-    @matches = grep {; ! $_->{targeted_only} } @matches;
+    @matches = grep {; ! $_->{targeted} } @matches;
   }
 
   return unless @matches;

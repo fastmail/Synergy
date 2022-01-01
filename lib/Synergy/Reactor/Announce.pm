@@ -25,7 +25,8 @@ sub listener_specs {
   return {
     name      => 'announce',
     method    => 'handle_announce',
-    predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^announce/i },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /^announce/i },
   };
 }
 
