@@ -32,9 +32,11 @@ my $synergy = Synergy::Hub->synergize(
   }
 );
 
-$synergy->server->register_path('/ok', sub {
-  return Plack::Response->new(200)->finalize;
-});
+$synergy->server->register_path(
+  '/ok',
+  sub { return Plack::Response->new(200)->finalize; },
+  'test file',
+);
 
 my $http = Net::Async::HTTP->new(timeout => 2, SSL_verify_mode => IO::Socket::SSL::SSL_VERIFY_NONE);
 $synergy->loop->add($http);

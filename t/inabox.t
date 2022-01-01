@@ -44,11 +44,16 @@ my $channel = $s->channel_named('test-channel');
 # Fake up responses from VO.
 my @DO_RESPONSES;
 my $DO_RESPONSE = gen_response(200, {});
-$s->server->register_path('/do', sub {
-  return shift @DO_RESPONSES if @DO_RESPONSES;
-  return $DO_RESPONSE;
-});
-my $url = sprintf("http://localhost:%s/do", $s->server->server_port);
+$s->server->register_path(
+  '/digital-ocean',
+  sub {
+    return shift @DO_RESPONSES if @DO_RESPONSES;
+    return $DO_RESPONSE;
+  },
+  'test file',
+);
+
+my $url = sprintf("http://localhost:%s/digital-ocean", $s->server->server_port);
 
 # Muck with the guts of VO reactor to catch our fakes.
 my $endpoint = Sub::Override->new(

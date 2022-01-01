@@ -28,9 +28,11 @@ my $synergy = Synergy::Hub->synergize(
   }
 );
 
-$synergy->server->register_path('/ok', sub {
-  return Plack::Response->new(200)->finalize;
-});
+$synergy->server->register_path(
+  '/ok',
+  sub { return Plack::Response->new(200)->finalize; },
+  'test file',
+);
 
 # Tests begin here.
 testing_loop($synergy->loop);

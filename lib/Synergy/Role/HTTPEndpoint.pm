@@ -54,7 +54,7 @@ sub BUILD ($self, @) {
 }
 
 after start => sub ($self) {
-  $self->hub->server->register_path($self->http_path, $self->_app);
+  $self->hub->server->register_path($self->http_path, $self->_app, $self->name);
 };
 
 no Moose::Role;
