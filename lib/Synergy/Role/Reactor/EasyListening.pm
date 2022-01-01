@@ -32,6 +32,10 @@ around help_entries => sub ($orig, $self, @rest) {
 sub potential_reactions_to ($self, $event) {
   my @matches = grep {; $_->{predicate}->($self, $event) } $self->listeners;
 
+  unless ($event->was_targeted) {
+    @matches = grep {; ! $_->{targeted_only} } @matches;
+  }
+
   return unless @matches;
   my $reactor = $self;
 
