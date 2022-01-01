@@ -26,9 +26,9 @@ has _registered_paths => (
   traits  => [ 'Hash' ],
   default => sub { {} },
   handles => {
-    register_pathname  => 'set',
-    path_is_registered => 'exists',
-    app_for_path       => 'get',
+    _register_path    => 'set',
+    registered_paths  => 'keys',
+    _registrations    => 'kv',
   },
 );
 
@@ -53,41 +53,51 @@ has http_server => (
   isa => 'Net::Async::HTTP::Server::PSGI',
   init_arg => undef,
   lazy => 1,
-  default => sub ($self) {
+  default   => sub ($self) {
     my $server = Net::Async::HTTP::Server::PSGI->new(
       app => Plack::Middleware::AccessLog->new(
         logger => sub ($msg) {
           chomp($msg);
           $Logger->log("HTTPServer: access: $msg");
         }
-      )->wrap(sub ($env) {
-        my $path_info = $env->{PATH_INFO};
-        $path_info = "/" unless length $path_info;
-
-        unless ($self->path_is_registered($path_info)) {
-          $Logger->log([
-            "could not find app for %s, ignoring",
-            $path_info,
-          ]);
-          return Plack::Response->new(404)->finalize;
-        }
-
-        return $self->app_for_path($path_info)->($env);
-      }),
+      )->wrap(
+        $self->_urlmap->to_app
+      )
     );
   },
 );
 
+has _urlmap => (
+  is => 'ro',
+  lazy => 1,
+  init_arg  => undef,
+  default   => sub {
+    Plack::App::URLMap->new;
+  },
+);
+
 # $app is a PSGI app
-sub register_path ($self, $path, $app) {
-  confess "$path is already registered with HTTP server!"
-    if $self->path_is_registered($path);
+sub register_path ($self, $path, $app, $by) {
+  my @known = $self->registered_paths;
 
-  confess "refusing to register $path"
-    unless $path =~ m{^/} && (1 == ($path =~ m{/}g));
+  my ($is_prefix_of) = grep {; index($_, $path) == 0 } @known;
+  confess "refusing to register $path because it is a prefix of $is_prefix_of"
+    if $is_prefix_of;
 
-  $self->register_pathname($path, $app);
-  $Logger->log("registered $path");
+  my ($is_suffix_of) = grep {; index($path, $_) == 0 } @known;
+  confess "refusing to register $path because it is a suffix of $is_suffix_of"
+    if $is_suffix_of;
+
+  $self->_register_path($path, $by);
+
+  $self->_urlmap->map($path => $app);
+
+  # We need to re-prepare the app every time we map a new path, because it
+  # rebuilds state used in routing.  Why doesn't URLMap do this implicitly?  I
+  # couldn't say, but I'm guessing "faster startup". -- rjbs, 2021-12-31
+  $self->_urlmap->prepare_app;
+
+  $Logger->log("HTTP path $path registered" . (length $by ? " by $by" : q{}));
 }
 
 sub start ($self) {
