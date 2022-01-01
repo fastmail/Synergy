@@ -7,8 +7,6 @@ use Moose::Role;
 use experimental qw(signatures);
 use namespace::clean;
 
-use Synergy::Listener;
-
 with 'Synergy::Role::Reactor';
 
 has listeners => (
@@ -17,15 +15,7 @@ has listeners => (
   handles => { listeners => 'elements' },
   lazy => 1,
   default => sub ($self, @) {
-    my @listeners;
-    for my $spec ($self->listener_specs) {
-      push @listeners, Synergy::Listener->new({
-        reactor => $self,
-        $spec->%{ qw( exclusive name predicate method ) },
-        (exists $spec->{help_entries} ? (help_entries => $spec->{help_entries})
-                                      : ()),
-      });
-    }
+    my @listeners = $self->listener_specs;
 
     return \@listeners;
   },
@@ -35,12 +25,28 @@ around help_entries => sub ($orig, $self, @rest) {
   my $entries = $self->$orig(@rest);
   return [
     @$entries,
-    (map {; $_->help_entries } $self->listeners),
+    (map {; @{ $_->{help_entries} // [] } } $self->listeners),
   ];
 };
 
-sub listeners_matching ($self, $event) {
-  return grep {; $_->matches_event($event) } $self->listeners;
+sub potential_reactions_to ($self, $event) {
+  my @matches = grep {; $_->{predicate}->($self, $event) } $self->listeners;
+
+  return unless @matches;
+  my $reactor = $self;
+
+  my @potential = map {;
+    my $method = $_->{method};
+    require Synergy::PotentialReaction;
+    Synergy::PotentialReaction->new({
+      reactor => $reactor,
+      is_exclusive => $_->{exclusive},
+      name         => $_->{name},
+      event_handler => sub { $reactor->$method($_[0]) },
+    });
+  } @matches;
+
+  return @potential;
 }
 
 no Moose::Role;
