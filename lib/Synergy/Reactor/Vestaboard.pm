@@ -195,77 +195,102 @@ has '+http_path' => (
   },
 );
 
+sub _handle_post ($self, $req) {
+  my $payload = eval { JSON::MaybeXS->new->decode($req->content); };
+
+  unless ($payload) {
+    return [
+      400,
+      [ "Content-Type" => "application/json" ],
+      [ qq({ "error": "garbled payload" }\n) ],
+    ];
+  }
+
+  state $i = 1;
+  my $username = $payload->{username};
+  my $secret   = $payload->{secret};
+  my $design   = $payload->{board};
+
+  # This idiotic fallback is just in case I have done something else idiotic
+  # somewhere that causes us to almost drop a design on the floor.
+  # -- rjbs, 2021-05-31
+  my $save_as  = $payload->{design} // join q{.}, $i++, $^T;
+
+  my $user     = $username && $self->hub->user_directory->user_named($username);
+  my $is_valid = $user && $self->_validate_secret_for($user, $secret);
+
+  unless ($is_valid) {
+    return [
+      403,
+      [ "Content-Type" => "application/json" ],
+      [ qq({ "error": "authentication failed" }\n) ],
+    ];
+  }
+
+  unless ($self->_validate_design($design)) {
+    return [
+      400,
+      [ "Content-Type" => "application/json" ],
+      [ qq({ "error": "invalid design" }\n) ],
+    ];
+  }
+
+  # This is stupid, but should get the job done. -- rjbs, 2021-05-30
+  my $name = length $save_as ? $save_as : ("design " . time);
+  $name =~ s/[^\pL\pN\pM]/-/g;
+  $name =~ s/-{2,}/-/g;
+
+  my $name_key = NFD(fc $name);
+
+  my $this_user_state = $self->_user_state->{ $username } //= {};
+  $this_user_state->{designs}{$name_key} = {
+    name       => $name,
+    characters => $design,
+  };
+
+  $self->save_state;
+
+  $Logger->log("Saved new design <$name> for $username");
+
+  if ($self->default_channel_name) {
+    my $channel = $self->hub->channel_named($self->default_channel_name);
+    $channel->send_message_to_user($user, "I've updated a board design called `$name`.");
+  }
+
+  return [
+    200,
+    [ "Content-Type" => "application/json" ],
+    [ qq({ "ok": true }\n) ],
+  ];
+}
+
 sub http_app ($self, $env) {
   my $req = Plack::Request->new($env);
 
-  if ($req->method eq 'POST') {
-    my $payload  = eval { JSON::MaybeXS->new->decode($req->content); };
-
-    unless ($payload) {
-      return [
-        400,
-        [ "Content-Type" => "application/json" ],
-        [ qq({ "error": "garbled payload" }\n) ],
-      ];
-    }
-
-    state $i = 1;
-    my $username = $payload->{username};
-    my $secret   = $payload->{secret};
-    my $design   = $payload->{board};
-
-    # This idiotic fallback is just in case I have done something else idiotic
-    # somewhere that causes us to almost drop a design on the floor.
-    # -- rjbs, 2021-05-31
-    my $save_as  = $payload->{design} // join q{.}, $i++, $^T;
-
-    my $user     = $username && $self->hub->user_directory->user_named($username);
-    my $is_valid = $user && $self->_validate_secret_for($user, $secret);
-
-    unless ($is_valid) {
-      return [
-        403,
-        [ "Content-Type" => "application/json" ],
-        [ qq({ "error": "authentication failed" }\n) ],
-      ];
-    }
-
-    unless ($self->_validate_design($design)) {
-      return [
-        400,
-        [ "Content-Type" => "application/json" ],
-        [ qq({ "error": "invalid design" }\n) ],
-      ];
-    }
-
-    # This is stupid, but should get the job done. -- rjbs, 2021-05-30
-    my $name = length $save_as ? $save_as : ("design " . time);
-    $name =~ s/[^\pL\pN\pM]/-/g;
-    $name =~ s/-{2,}/-/g;
-
-    my $name_key = NFD(fc $name);
-
-    my $this_user_state = $self->_user_state->{ $username } //= {};
-    $this_user_state->{designs}{$name_key} = {
-      name       => $name,
-      characters => $design,
-    };
-
-    $self->save_state;
-
-    $Logger->log("Saved new design <$name> for $username");
-
-    if ($self->default_channel_name) {
-      my $channel = $self->hub->channel_named($self->default_channel_name);
-      $channel->send_message_to_user($user, "I've updated a board design called `$name`.");
-    }
-
+  if ($req->path_info eq '') {
+    # We need to use .../ and not ... so that relative URLs in the editor
+    # source resolve properly!
     return [
-      200,
-      [ "Content-Type" => "application/json" ],
-      [ qq({ "ok": true }\n) ],
+      307,
+      [ Location => $req->uri . "/" ],
+      []
     ];
-  } else {
+  }
+
+  if ($req->method eq 'POST') {
+    unless ($req->path_info eq '/') {
+      return [
+        400,
+        [ 'Content-Type' => 'text/plain' ],
+        [ "Bad method." ]
+      ];
+    }
+
+    return $self->_handle_post($req);
+  }
+
+  # Not a POST, act like GET.
+  if ($req->path_info eq '/') {
     $Logger->log("Serving raw editor");
 
     open my $fh, '<', join(q{/}, $self->asset_directory, 'index.html');
@@ -275,6 +300,70 @@ sub http_app ($self, $env) {
       $fh,
     ];
   }
+
+  my $res_404 = [
+    404,
+    [ 'Content-Type' => 'text/plain' ],
+    [ "Not found." ],
+  ];
+
+  my $path_info = $req->path_info;
+  unless ($path_info =~ s{\A/}{}) {
+    # What the heck was that?  Well, it's not /vesta/us/foo-like, so just call
+    # it 404 and move on. -- rjbs, 2021-12-31
+    return $res_404;
+  }
+
+  if (my $secret = $self->secret_url_component) {
+    if ($path_info eq $secret) {
+      my $curr = $self->_current_characters;
+      return $res_404 unless $curr;
+
+      return [
+        200,
+        [
+          'Content-Type', 'application/json',
+        ],
+        [ JSON::MaybeXS->new->encode($curr) ],
+      ];
+    }
+
+    if ($path_info eq "$secret/current") {
+      return $res_404 unless $self->vesta_image_base;
+
+      my $curr = $self->_current_characters;
+      return $res_404 unless $curr;
+
+      my $url = join q{/},
+                ($self->vesta_image_base =~ s{/\z}{}r),
+                Synergy::VestaUtil->encode_board($curr);
+
+      return [
+        302,
+        [
+          'Location', $url
+        ],
+        [ ],
+      ];
+    }
+  }
+
+  my $asset_dir = eval { path($self->asset_directory)->realpath };
+  my $wanted    = eval { $asset_dir->child($path_info)->realpath };
+
+  return $res_404 unless $asset_dir && $wanted;
+  return $res_404 unless $asset_dir->subsumes($wanted);
+  return $res_404 unless -e $wanted;
+
+  open my $fh, '<', $wanted or die "can't read asset file $wanted: $!";
+
+  return [
+    200,
+    [
+      'Content-Type', Plack::MIME->mime_type($wanted),
+    ],
+    $fh,
+  ];
 }
 
 sub _validate_design ($self, $design) {
@@ -359,94 +448,8 @@ after register_with_hub => sub ($self, @) {
       if $self->_current_characters;
   }
 
-  $self->_setup_asset_servers;
-
-  $self->_setup_content_server if $self->secret_url_component;
-
   return;
 };
-
-sub _setup_asset_servers ($self) {
-  # I know, this is incredibly stupid, but it gets the job done.  We can talk
-  # about better ways to do this at some future date. -- rjbs, 2021-05-31
-
-  my $root = $self->asset_directory;
-  my @files = `find $root -type f`;
-  chomp @files;
-
-  my $server = $self->hub->server;
-  my $base   = $self->http_path;
-
-  for my $path (@files) {
-    my $mount_as = $path =~ s{\A$root/}{}r;
-
-    $server->register_path("$base$mount_as", sub ($env) {
-      open my $fh, '<', $path or die "can't read asset file $path: $!";
-
-      return [
-        200,
-        [
-          'Content-Type', Plack::MIME->mime_type($path),
-        ],
-        $fh,
-      ];
-    });
-  }
-
-  return;
-}
-
-sub _setup_content_server ($self) {
-  my $secret = $self->secret_url_component;
-
-  {
-    my $base = $self->http_path;
-    $base =~ s{/\z}{};
-    my $path = "${base}/$secret";
-
-    $self->hub->server->register_path($path, sub ($env) {
-      return [
-        200,
-        [
-          'Content-Type', 'application/json',
-        ],
-        [ JSON::MaybeXS->new->encode($self->_current_characters) ],
-      ];
-    });
-  }
-
-  {
-    my $base = $self->http_path;
-    $base =~ s{/\z}{};
-    my $path = "${base}/$secret/current";
-
-    my $curr = $self->_current_characters;
-
-    unless ($curr) {
-      return [
-        404,
-        [ 'Content-Type', 'text/plain', ],
-        'Unknown.'
-      ];
-    }
-
-    my $url = join q{/},
-              ($self->vesta_image_base =~ s{/\z}{}r),
-              Synergy::VestaUtil->encode_board($curr);
-
-    $self->hub->server->register_path($path, sub ($env) {
-      return [
-        302,
-        [
-          'Location', $url
-        ],
-        [ ],
-      ];
-    });
-  }
-
-  return;
-}
 
 sub handle_vesta_show ($self, $event) {
   $event->mark_handled;
