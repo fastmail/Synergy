@@ -7,8 +7,6 @@ use Moose::Role;
 use experimental qw(signatures);
 use namespace::clean;
 
-use Synergy::Listener;
-
 with 'Synergy::Role::HubComponent';
 
 sub help_entries {
