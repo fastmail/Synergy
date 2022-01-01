@@ -123,9 +123,8 @@ sub handle_event ($self, $event) {
 
   if (1 < grep {; $_->[1]->is_exclusive } @hits) {
     my @names = sort map {; join q{},
-      $_->[1]->is_exclusive ? ('**') : (),
       $_->[0]->name, '/', $_->[1]->name,
-      $_->[1]->is_exclusive ? ('**') : (),
+      $_->[1]->is_exclusive ? (' (exclusive)') : (),
     } @hits;
     $event->error_reply("Sorry, I find that message ambiguous.\n" .
                     "The following reactors matched: " . join(", ", @names));
