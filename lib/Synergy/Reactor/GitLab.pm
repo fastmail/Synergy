@@ -610,18 +610,22 @@ sub _queue_produce_page_list ($self, $queue_arg) {
   $http_future->then(sub ($res) {
     unless ($res->is_success) {
       $Logger->log([ "Error: %s", $res->as_string ]);
-      return;
+      Future->fail("response no good");
     }
 
     my $data = $JSON->decode($res->decoded_content);
 
-    return $event->error_reply("No results!")
-      if ! @$data;
+    unless (@$data) {
+      $event->error_reply("No results!");
+      return Future->fail('no result'); # Failure seems wrong.
+    }
 
     my $zero = ($display_page-1) * 10;
 
-    return $event->error_reply("You've gone past the last page!")
-      if $zero > $#$data;
+    if ($zero > $#$data) {
+      $event->error_reply("You've gone past the last page!");
+      return Future->fail('past last page'); # Failure seems wrong.
+    }
 
     my $is_last_page = ($res->header('x-page')        // -1)
                     == ($res->header('x-total-pages') // -2);
