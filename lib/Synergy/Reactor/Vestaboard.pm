@@ -59,6 +59,10 @@ has secret_url_component => (
   is => 'ro',
 );
 
+has is_simulation => (
+  is => 'ro',
+);
+
 sub listener_specs {
   return (
     {
@@ -811,6 +815,25 @@ sub handle_vesta_post_text ($self, $event) {
   );
 }
 
+sub _post_payload ($self, $payload) {
+  if ($self->is_simulation) {
+    return Future->done( HTTP::Response->new(200 => 'OK') );
+  }
+
+  my $uri = sprintf 'https://platform.vestaboard.com/subscriptions/%s/message',
+    $self->subscription_id;
+
+  return $self->hub->http_post(
+    $uri,
+    Content => JSON::MaybeXS->new->encode($payload),
+    Content_Type => 'application/json',
+
+    'X-Vestaboard-Api-Key'    => $self->api_key,
+    'X-Vestaboard-Api-Secret' => $self->api_secret,
+    'User-Agent'  => __PACKAGE__,
+  );
+}
+
 sub _pay_to_post_payload ($self, $event, $user, $payload) {
   my $lock = $self->current_lock;
   if ($lock && $lock->{locked_by} ne $user->username) {
@@ -825,18 +848,7 @@ sub _pay_to_post_payload ($self, $event, $user, $payload) {
     return;
   }
 
-  my $uri = sprintf 'https://platform.vestaboard.com/subscriptions/%s/message',
-    $self->subscription_id;
-
-  my $res_f = $self->hub->http_post(
-    $uri,
-    Content => JSON::MaybeXS->new->encode($payload),
-    Content_Type => 'application/json',
-
-    'X-Vestaboard-Api-Key'    => $self->api_key,
-    'X-Vestaboard-Api-Secret' => $self->api_secret,
-    'User-Agent'  => __PACKAGE__,
-  );
+  my $res_f = $self->_post_payload($payload);
 
   return $res_f
     ->then(sub ($res) {
