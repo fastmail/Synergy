@@ -41,7 +41,7 @@ EOH
       predicate => sub ($, $e) { $e->text =~ /\A ( \+\+ | >> ) \s+/x; },
       help_entries => [
         { title => '++', text => 'This is like using `>>` but supplying yourself as the target.  See *help >>* instead.' },
-        { title => '++', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+        { title => '>>', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
 *>> `TARGET` `NAME`*: create a new issue in Linear
 
 In the simplest form, this creates a new task with the given name, assigned to
@@ -107,7 +107,7 @@ This lists (the first page of) all unassigned issues in the Triage state in
 Linear.  You can supply an argument, the name of a team, to see only issues for
 that team.
 EOH
-      ]
+      ],
     },
     {
       name      => 'urgent',
