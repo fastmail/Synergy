@@ -232,6 +232,7 @@ probably change over time.
   /users    - print unknown users
 
   /config   - print a summary of top-level Synergy configuration
+  /http     - print a summary of registered HTTP endpoints
 
   /console  - print configuration of this Console channel
 EOH
@@ -299,6 +300,20 @@ sub _console_cmd_config ($self, $arg) {
   $output .= sprintf "  %-*s - %s\n", $width, 'userfile', $userfile;
 
   $output .= "\nSee also /channels and /reactors and /users";
+
+  $self->_display_message($output);
+}
+
+sub _console_cmd_http ($self, $arg) {
+  my $output = "HTTP Endpoints\n\n";
+
+  my @kv = $self->hub->server->_registrations;
+  my $url = sprintf 'http://localhost:%i/', $self->hub->server_port;
+
+  my $width = max map {; length $_->[0] } @kv;
+
+  $output .= sprintf "  %-*s routes to %s\n", $width, $_->[0], $_->[1]
+    for sort { $a->[0] cmp $b->[0] } @kv;
 
   $self->_display_message($output);
 }
