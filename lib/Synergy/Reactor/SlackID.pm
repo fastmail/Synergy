@@ -14,28 +14,19 @@ sub listener_specs {
     {
       name      => 'slackid',
       method    => 'handle_event',
+      targeted  => 1,
       predicate => sub ($self, $event) {
-        return unless $event->type eq 'message';
-
         return unless $event->from_channel->can('slack');
-
-        return unless $event->was_targeted;
-
-        return unless $event->text =~ /\A\s*slackid [@#]?(\w+)\s*\z/i;
-
-        return 1;
+        return $event->text =~ /\A\s*slackid [@#]?(\w+)\s*\z/i;
       },
     },
     {
       name      => 'reload-slack-users',
       method    => 'handle_reload_slack',
+      targeted  => 1,
       predicate => sub ($self, $event) {
-        return unless $event->type eq 'message';
-        return unless $event->was_targeted;
         return unless $event->from_channel->can('slack');
-
-        return unless $event->text =~ /\Areload slack (users|channels)\z/in;
-        return 1;
+        return $event->text =~ /\Areload slack (users|channels)\z/in;
       },
     },
   );

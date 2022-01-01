@@ -13,11 +13,9 @@ sub listener_specs {
     {
       name      => 'learn',
       method    => 'handle_learn',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ /\Alearn\s+([^,:]+): (.+)\z/;
-      },
       exclusive => 1,
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Alearn\s+([^,:]+): (.+)\z/ },
       help_entries => [
         { title => 'learn',
           text  => '*learn `WHAT`: `TEXT`*: learn a new factoid; see also lookup, forget',
@@ -27,11 +25,9 @@ sub listener_specs {
     {
       name      => 'lookup',
       method    => 'handle_lookup',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ /\Alookup\s+\S/;
-      },
       exclusive => 1,
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Alookup\s+\S/ },
       help_entries => [
         { title => 'lookup',
           text  => '*lookup `WHAT`*: look up a factoid in the knowledge base; see also learn, forget',
@@ -41,11 +37,9 @@ sub listener_specs {
     {
       name      => 'forget',
       method    => 'handle_forget',
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ /\Aforget\s+\S/;
-      },
       exclusive => 1,
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Aforget\s+\S/ },
       help_entries => [
         { title => 'forget',
           text  => '*forget `WHAT`*: delete a factoid from the knowledge base; see also learn, lookup',

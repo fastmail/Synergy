@@ -21,9 +21,8 @@ sub listener_specs ($reactor) {
       name      => 'doing',
       method    => 'handle_doing',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /^doing\s+/i
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /^doing\s+/i },
       help_entries => [
         { title => 'doing',
           text  => "doing SOMETHING: set what you're doing; something can end with some options, like…
@@ -40,8 +39,9 @@ sub listener_specs ($reactor) {
       name      => 'status',
       method    => 'handle_status',
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /^status\s+(for\s+)?@?(\w+)\s*$/i
+        $e->text =~ /^status\s+(for\s+)?@?(\w+)\s*$/i
       },
       help_entries => [
         { title => 'status',
@@ -51,10 +51,7 @@ sub listener_specs ($reactor) {
     {
       name      => "listen-for-chatter",
       method    => "handle_chatter",
-      predicate => sub ($self, $e) {
-        return unless $e->is_public;
-        return 1;
-      },
+      predicate => sub ($self, $e) { $e->is_public; },
     },
   );
 }

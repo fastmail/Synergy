@@ -52,35 +52,31 @@ EOH
       name      => 'set',
       method    => 'handle_set',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\Aset\s+(my|\w+[’']s)/in;
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Aset\s+(my|\w+[’']s)/in },
     },
     {
       name      => 'clear',
       method    => 'handle_clear',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\Aclear\s+(my|\w+[’']s)/in;
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Aclear\s+(my|\w+[’']s)/in },
     },
     {
       name      => 'list_all_preferences',
       method    => 'handle_list',
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\Alist(\s+all)?\s+(settings|pref(erence)s?)\s*\z/i;
+        $e->text =~ /\Alist(\s+all)?\s+(settings|pref(erence)s?)\s*\z/i;
       },
     },
     {
       name      => 'dump',
       method    => 'handle_dump',
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
         return 1 if $e->text =~ /\Apref(erence)?s\z/in;
         return 1 if $e->text =~ /\A(dump|show)(\s+my)?\s+(settings|pref(erence)?s)/in;
         return 1 if $e->text =~ /\A(dump|show)\s+(settings|pref(erence)?s)\s+for/in;
@@ -92,7 +88,7 @@ EOH
 
 sub handle_set ($self, $event) {
   my ($who, $pref_name, $pref_value) =
-    $event->text =~ m{\A set \s+ (my|\w+[’']s) \s+         # set my
+    $event->text =~ m{\A set \s+ (my|\w+[’']s) \s+      # set my
                       ([-_a-z0-9]+  \.   [-_a-z0-9]+)   # component.pref
                       \s+ to \s+ (.*)                   # to value
                      }ix;
@@ -102,7 +98,7 @@ sub handle_set ($self, $event) {
 
 sub handle_clear ($self, $event) {
   my ($who, $pref_name, $rest) =
-    $event->text =~ m{\A clear \s+ (my|\w+[’']s) \s+       # set my
+    $event->text =~ m{\A clear \s+ (my|\w+[’']s) \s+    # set my
                       ([-_a-z0-9]+  \.  [-_a-z0-9]+)    # component.pref
                       \s* (.+)?
                      }ix;

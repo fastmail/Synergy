@@ -27,7 +27,8 @@ sub listener_specs {
       name      => 'duty',
       method    => 'handle_duty',
       exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^duty(?:\s|$)/i },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /^duty(?:\s|$)/i },
 
       help_entries => [
         {
@@ -43,13 +44,15 @@ EOH
       name      => 'replan',
       method    => 'handle_replan',
       exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /\Areplan rotors\z/i },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Areplan rotors\z/i },
     },
     {
       name      => 'rotors',
       method    => 'handle_rotors',
       exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /\Arotors\z/i },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Arotors\z/i },
 
       help_entries => [
         {
@@ -83,14 +86,16 @@ EOH
       name      => 'unavailable',
       method    => 'handle_set_availability',
       exclusive => 1,
-      predicate => sub ($self, $e) { $e->was_targeted && $e->text =~ /^(?:(\S+)\s+is\s+)?(un)?available\b/in },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /^(?:(\S+)\s+is\s+)?(un)?available\b/in },
     },
     {
       name      => 'manual_assignment',
       method    => 'handle_manual_assignment',
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /^assign rotor (\S+) to (\S+) /ni;
+        $e->text =~ /^assign rotor (\S+) to (\S+) /ni;
       },
     },
   );

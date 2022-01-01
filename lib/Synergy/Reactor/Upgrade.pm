@@ -49,24 +49,19 @@ sub listener_specs {
   return {
     name      => 'Upgrade',
     method    => 'handle_upgrade',
+    targeted  => 1,
     predicate => sub ($self, $e) {
       my $text = lc $e->text;
-
-      $e->was_targeted && (
-           $text eq 'upgrade'
-        || $text eq 'upgrade your grey matter'
-        || $text eq 'upgrade your gray matter'
-      );
+      return $text eq 'upgrade'
+          || $text eq 'upgrade your grey matter'
+          || $text eq 'upgrade your gray matter'
     },
   },
   {
     name      => 'Version',
     method    => 'handle_version',
-    predicate => sub ($self, $e) {
-      my $text = lc $e->text;
-
-      $e->was_targeted && $text eq 'version';
-    },
+    targeted  => 1,
+    predicate => sub ($self, $e) { lc $e->text eq 'version' },
   };
 }
 

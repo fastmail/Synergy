@@ -11,9 +11,8 @@ sub listener_specs {
     name      => 'initial registration',
     method    => 'handle_register_me',
     exclusive => 1,
-    predicate => sub ($self, $e) {
-      return $e->was_targeted && $e->text =~ /^register me/i;
-    },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /^register me/i },
   };
 }
 

@@ -17,10 +17,8 @@ sub listener_specs {
       name      => 'my_projects',
       method    => 'handle_my_projects',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless fc $e->text eq 'my projects';
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { fc $e->text eq 'my projects'; },
     },
   );
 }

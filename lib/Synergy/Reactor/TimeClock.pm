@@ -24,28 +24,22 @@ sub listener_specs {
       name      => 'now_working',
       method    => 'handle_now_working',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ /\Anow\s+working\s*\z/;
-      }
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Anow\s+working\s*\z/; }
     },
     {
       name      => 'hours_for',
       method    => 'handle_hours_for',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ /\Ahours(\s+for)?\s+/i;
-      }
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Ahours(\s+for)?\s+/i; }
     },
     {
       name      => 'clock_out',
       method    => 'handle_clock_out',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return $e->text =~ /\Aclock\s*(?:out|off):/;
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Aclock\s*(?:out|off):/; },
       help_entries => [
         {
           title => 'clock out',
@@ -62,10 +56,8 @@ sub listener_specs {
       name      => 'recent_clockouts',
       method    => 'handle_recent_clockouts',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return lc $e->text eq 'recent clockouts';
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { lc $e->text eq 'recent clockouts'; },
       help_entries => [
         {
           title => 'clockouts',

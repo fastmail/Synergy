@@ -14,11 +14,8 @@ sub listener_specs {
     name      => 'transliterate',
     method    => 'handle_transliterate',
     exclusive => 1,
-    predicate => sub ($self, $e) {
-      return unless $e->was_targeted;
-      return 1 if $e->text =~ /\Atransliterate to (\S+):\s+/i;
-      return;
-    },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /\Atransliterate to (\S+):\s+/i },
     help_entries => [
       {
         title => 'transliterate',

@@ -20,9 +20,8 @@ sub listener_specs {
       name      => 'create',
       method    => 'handle_create',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /^agenda create\s/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /^agenda create\s/i },
       help_entries => [
         { title => 'agenda', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
 The *agenda* command lets you manage simple agendas.  It's not even much of
@@ -74,75 +73,68 @@ EOH
       name      => 'list',
       method    => 'handle_list',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aagenda list\z/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Aagenda list\z/i },
     },
     {
       name      => 'for',
       method    => 'handle_for',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aagenda for\s/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Aagenda for\s/i }
     },
     {
       name      => 'add',
       method    => 'handle_add',
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted
-        && ($e->text =~ /\Aagenda add\s/i || $e->text =~ /^\[[^-\]]+\]\s/)
+        ($e->text =~ /\Aagenda add\s/i || $e->text =~ /^\[[^-\]]+\]\s/)
       },
     },
     {
       name      => 'strike',
       method    => 'handle_strike',
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($, $e) {
-        $e->was_targeted
-        && ($e->text =~ /\Aagenda strike\s/i || $e->text =~ /^\[-[^\]]+\]\s/)
+        ($e->text =~ /\Aagenda strike\s/i || $e->text =~ /^\[-[^\]]+\]\s/)
       },
     },
     {
       name      => 'clear',
       method    => 'handle_clear',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aagenda clear\s/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Aagenda clear\s/i },
     },
     {
       name      => 'delete',
       method    => 'handle_delete',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aagenda delete\s/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Aagenda delete\s/i },
     },
     {
       name      => 'share',
       method    => 'handle_share',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aagenda share \S+ with\s/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Aagenda share \S+ with\s/i },
     },
     {
       name      => 'unshare',
       method    => 'handle_unshare',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aagenda unshare\s/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Aagenda unshare\s/i },
     },
     {
       name      => 'sharing',
       method    => 'handle_sharing',
       exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted && $e->text =~ /\Aagenda sharing\s/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Aagenda sharing\s/i },
     },
   );
 }

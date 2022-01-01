@@ -26,9 +26,8 @@ sub listener_specs ($self) {
     name      => 'box',
     method    => 'handle_box',
     exclusive => 1,
-    predicate => sub ($self, $event) {
-      $event->was_targeted && $event->text =~ /\Abox\b/i;
-    },
+    targeted  => 1,
+    predicate => sub ($self, $event) { $event->text =~ /\Abox\b/i },
     help_entries => [
       # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2019-06-03
       { title => 'box', text => <<"END"

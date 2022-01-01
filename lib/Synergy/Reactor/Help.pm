@@ -16,11 +16,8 @@ sub listener_specs {
     name      => 'help',
     method    => 'handle_help',
     exclusive => 1,
-    predicate => sub ($self, $e) {
-      return unless $e->was_targeted;
-      return 1 if $e->text =~ /\A h[ae]lp (?: \s+ (.+) )? \z/ix;
-      return;
-    },
+    targeted  => 1,
+    predicate => sub ($, $e) { $e->text =~ /\A h[ae]lp (?: \s+ (.+) )? \z/ix },
     help_entries => [
       { title => "help", text => "help: list all the topics with help" },
       { title => "help", text => "help TOPIC: provide help on " },
