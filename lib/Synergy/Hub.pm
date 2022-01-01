@@ -58,8 +58,6 @@ has server => (
   },
 );
 
-my %channel_and_reactor_names;
-
 for my $pair (
   [ qw( channel channels ) ],
   [ qw( reactor reactors ) ],
@@ -87,11 +85,12 @@ for my $pair (
     code  => sub ($self, $thing) {
       my $name = $thing->name;
 
-      if (my $what = $channel_and_reactor_names{$name}) {
-        confess("$what named '$name' exists: cannot register $s named '$name'");
+      for my $what (qw(channel reactor)) {
+        my $what_exists = "_$what\_exists";
+        if ($self->$what_exists($name)) {
+          confess("$what named '$name' exists: cannot register $s named that");
+        }
       }
-
-      $channel_and_reactor_names{$name} = $s;
 
       $self->$add($name, $thing);
       $thing->register_with_hub($self);
