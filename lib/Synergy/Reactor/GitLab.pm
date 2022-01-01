@@ -697,7 +697,7 @@ sub _handle_mr_search_string ($self, $text, $event) {
   unless ($query) {
     # if _compile_search returned undef, we should have already done an error
     # reply, so we can just return here
-    return;
+    return Future->done;
   }
 
   my $reply_with_list = sub ($header, $mrs) {
