@@ -209,7 +209,7 @@ sub listener_specs {
       predicate => sub ($self, $e) {
         return 1 if $e->text =~ /\b[-_a-z]+!\d+(\W|$)/in;
 
-        my $base = $self->reactor->url_base;
+        my $base = $self->url_base;
         return 1 if $e->text =~ /\Q$base\E.*?merge_requests/;
       }
     },
@@ -219,7 +219,7 @@ sub listener_specs {
       predicate => sub ($self, $e) {
         return 1 if $e->text =~ /(^|\s)[-_a-z]+\@[0-9a-f]{7,40}(\W|$)/in;
 
-        state $base = $self->reactor->url_base;
+        state $base = $self->url_base;
         return 1 if $e->text =~ /\Q$base\E.*?commit/;
       }
     },
