@@ -21,13 +21,11 @@ has listeners => (
   },
 );
 
-around help_entries => sub ($orig, $self, @rest) {
-  my $entries = $self->$orig(@rest);
+sub help_entries ($self) {
   return [
-    @$entries,
     (map {; @{ $_->{help_entries} // [] } } $self->listeners),
   ];
-};
+}
 
 sub potential_reactions_to ($self, $event) {
   my @matches = $self->listeners;
