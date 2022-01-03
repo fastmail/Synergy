@@ -53,9 +53,8 @@ sub listener_specs {
     predicate => sub ($self, $e) {
       return unless $e->from_channel->isa('Synergy::Channel::Slack');
 
-      my $r = $self->reactor;
-      my $channel = $r->_slack_channel_name_from_event($e);
-      return unless $channel eq $r->yelling_channel_name;
+      my $channel = $self->_slack_channel_name_from_event($e);
+      return unless $channel eq $self->yelling_channel_name;
 
       my @words = split /\s+/, $e->text;
       for (@words) {
