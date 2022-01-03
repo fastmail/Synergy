@@ -191,7 +191,7 @@ has [ qw( subscription_id api_key api_secret ) ] => (
 has '+http_path' => (
   default => sub {
     my ($self) = @_;
-    return '/vesta/' . $self->name . '/';
+    return '/vesta/' . $self->name;
   },
 );
 
