@@ -437,7 +437,7 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
 sub handle_new_issue ($self, $event) {
   if ($event->text =~ /\AL?>> triage /i) {
     $event->mark_handled;
-    return $event->error_reply("You can't assign directly to triage anymore.  Instead, you want *ptn `NUMBER` blocked: `DESCRIPTION`*.  If there's no ticket, it's not a support blocker!  Just make a task for the right team.");
+    return $event->error_reply(q{You can't assign directly to triage anymore.  Instead, use the Zendesk integration!  You can also look at help for "ptn blocked".});
   }
 
   $self->_handle_creation_event($event);
@@ -449,7 +449,7 @@ sub handle_ptn_blocked ($self, $event) {
   my $new_text = ">> plumb $2";
 
   $self->_with_linear_client($event, sub ($linear) {
-    my $label_f = $linear->lookup_team_label("plumb", "support blocker"); 
+    my $label_f = $linear->lookup_team_label("plumb", "support blocker");
     $label_f->then(sub ($label_id) {
       return $self->_handle_creation_event(
         $event,
