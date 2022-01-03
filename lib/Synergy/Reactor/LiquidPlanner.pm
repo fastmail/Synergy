@@ -571,10 +571,6 @@ sub listener_specs {
         return unless $event->type eq 'message';
         return unless $event->was_targeted;
 
-        # Slack now "helpfully" corrects '>>' in DM to '> >', which means our
-        # regex doesn't match. -- michael, 2019-10-27
-        return 1 if $event->text =~ /^> >/;
-
         my ($what) = $event->text =~ /^(\S+)(?: \z | \s)/x;
         $what &&= lc $what;
 
