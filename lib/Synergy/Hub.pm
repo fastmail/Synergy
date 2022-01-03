@@ -116,26 +116,22 @@ sub handle_event ($self, $event) {
     $event->text,
   ]);
 
-  my @hits;
-  for my $reactor ($self->reactors) {
-    push @hits, map {; [ $reactor, $_ ] } $reactor->listeners_matching($event);
-  }
+  my @hits = map {; $_->potential_reactions_to($event) } $self->reactors;
 
-  if (1 < grep {; $_->[1]->is_exclusive } @hits) {
+  if (1 < grep {; $_->is_exclusive } @hits) {
     my @names = sort map {; join q{},
-      $_->[1]->is_exclusive ? ('**') : (),
-      $_->[0]->name, '/', $_->[1]->name,
-      $_->[1]->is_exclusive ? ('**') : (),
+      $_->description,
+      $_->is_exclusive ? (' (exclusive)') : (),
     } @hits;
     $event->error_reply("Sorry, I find that message ambiguous.\n" .
                     "The following reactors matched: " . join(", ", @names));
+
     return;
   }
 
   for my $hit (@hits) {
-    my $reactor = $hit->[0];
+    my $reactor = $hit->reactor;
     my $rname   = $reactor->name;
-    my $method  = $hit->[1]->method;
 
     try {
       # We should always return a future -- specifically, a single future that
@@ -147,7 +143,7 @@ sub handle_event ($self, $event) {
       #
       # (Michael notes that if this is a pain to fix, we can use Future->wrap
       # here.  Legit.)
-      my $result = $reactor->$method($event);
+      my $result = $hit->handle_event($event);
       return unless $result;
 
       # The retain here should be harmless, but I have low-key anxiety that
@@ -156,9 +152,8 @@ sub handle_event ($self, $event) {
       $result->else(sub {
         my (@args) = @_;
         $Logger->log([
-          "reactor %s, method %s resulted in failure: %s",
-          $rname,
-          $method,
+          "reaction %s resulted in failure: %s",
+          $hit->description,
           "@args", # stupid, but avoids json serialization guff
         ]);
 
@@ -171,9 +166,8 @@ sub handle_event ($self, $event) {
 
       $event->reply("My $rname reactor crashed while handling your message.  Sorry!");
       $Logger->log([
-        "error with %s listener on %s: %s",
-        $hit->[1]->name,
-        $reactor->name,
+        "error with reaction %s: %s",
+        $hit->description,
         $error,
       ]);
     };

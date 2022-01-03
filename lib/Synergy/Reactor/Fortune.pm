@@ -78,11 +78,8 @@ sub listener_specs {
       name      => 'provide fortune',
       method    => 'handle_fortune',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return 1 if $e->text =~ /\Afortune\s*\z/i;
-        return;
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Afortune\s*\z/i; },
       help_entries => [
         { title => 'fortune', text => <<'END', },
 • *fortune*: get a random statement of wisdom, wit, or whatever
@@ -94,11 +91,8 @@ END
       name => 'add fortune',
       method => 'handle_add_fortune',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return 1 if $e->text =~ /\Aadd\s+fortune:/i;
-        return;
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Aadd\s+fortune:/i; },
     },
   );
 }

@@ -24,9 +24,8 @@ sub listener_specs {
   return {
     name      => 'DC',
     method    => 'handle_dc',
-    predicate => sub ($self, $e) {
-      $e->was_targeted && $e->text =~ /^dc\s+/i;
-    },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /^dc\s+/i },
     help_entries => [
       { title => 'dc', text => "dc [commands] - Execute [commands] with the dc calculator" },
     ],

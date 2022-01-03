@@ -30,9 +30,8 @@ sub listener_specs {
     name      => 'weather',
     method    => 'handle_weather',
     exclusive => 1,
-    predicate => sub ($self, $e) {
-      $e->was_targeted && $e->text =~ /\Aweather\b/i;
-    },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /\Aweather\b/i; },
   };
 }
 

@@ -20,10 +20,8 @@ sub listener_specs {
       name      => 'clox',
       method    => 'handle_clox',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\Aclo(?:x|cks)(?:\s+.+)?/i;
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Aclo(?:x|cks)(?:\s+.+)?/i },
       help_entries => [
         # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2020-09-23
         { title => 'clox', text => <<'END'
@@ -39,10 +37,8 @@ END
       name      => 'when',
       method    => 'handle_when',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\Awhen\s+is\s+/i;
-      },
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /\Awhen\s+is\s+/i },
       help_entries => [
         # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2020-09-23
         { title => 'when', text => <<'END'

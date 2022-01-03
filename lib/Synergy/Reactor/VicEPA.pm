@@ -44,10 +44,8 @@ sub listener_specs {
     name      => 'airwatch',
     method    => 'handle_airwatch',
     exclusive => 1,
-    predicate => sub ($self, $e) {
-      return unless $e->was_targeted;
-      return unless $e->text =~ /\Aairwatch\z/i;
-    },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /\Aairwatch\z/i; },
     help_entries => [
       { title => "airwatch", text => "airwatch: report on recent air quality" },
     ],

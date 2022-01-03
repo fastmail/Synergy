@@ -22,9 +22,8 @@ sub listener_specs {
       name      => 'list_teams',
       method    => 'handle_list_teams',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-
+      targeted  => 1,
+      predicate => sub ($, $e) {
         # Silly, but it's a hack. -- rjbs, 2021-12-15
         return unless lc $e->text eq 'linear teams';
       },
@@ -38,13 +37,11 @@ EOH
       name      => 'new_issue',
       method    => 'handle_new_issue',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\A ( \+\+ | >> ) \s+/x;
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\A ( \+\+ | >> ) \s+/x; },
       help_entries => [
         { title => '++', text => 'This is like using `>>` but supplying yourself as the target.  See *help >>* instead.' },
-        { title => '++', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
+        { title => '>>', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
 *>> `TARGET` `NAME`*: create a new issue in Linear
 
 In the simplest form, this creates a new task with the given name, assigned to
@@ -68,10 +65,8 @@ EOH
       name      => 'support_blockers',
       method    => 'handle_support_blockers',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text eq 'sb';
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text eq 'sb'; },
       help_entries => [
         { title => 'sb', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
 *sb*: list unassigned support-blocking issues in Linear
@@ -84,10 +79,8 @@ EOH
       name      => 'ptn_blocked',
       method    => 'handle_ptn_blocked',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ m{\Aptn\s*([0-9]+) blocked:}i;
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ m{\Aptn\s*([0-9]+) blocked:}i; },
       help_entries => [
         { title => 'ptn blocked', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
 *ptn `NUMBER` blocked: `DESC`*: create a new support-blocking Linear issue
@@ -104,10 +97,8 @@ EOH
       name      => 'support_triage',
       method    => 'handle_triage',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\Atriage(\s|$)/;
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Atriage(\s|$)/; },
       help_entries => [
         { title => 'triage', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
 *triage `[TEAM]`*: list unassigned issues in the Triage state
@@ -116,30 +107,26 @@ This lists (the first page of) all unassigned issues in the Triage state in
 Linear.  You can supply an argument, the name of a team, to see only issues for
 that team.
 EOH
-      ]
+      ],
     },
     {
       name      => 'urgent',
       method    => 'handle_urgent',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text eq 'urgent';
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text eq 'urgent'; },
       help_entries => [
         { title => 'urgent', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
 *urgent*: list urgent issues assigned to you
 EOH
-      ]
+      ],
     },
     {
       name      => 'agenda',
       method    => 'handle_agenda',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        return unless $e->was_targeted;
-        return unless $e->text =~ /\Aagenda(\s|$)/;
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Aagenda(\s|$)/; },
       help_entries => [
         { title => 'agenda', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
 *agenda `[TARGET]`*: list issues in the To Discuss state

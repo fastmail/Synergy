@@ -19,7 +19,8 @@ sub listener_specs {
     name      => 'remind',
     method    => 'handle_remind',
     exclusive => 1,
-    predicate => sub ($, $e) { $e->was_targeted && $e->text =~ /^remind /i },
+    targeted  => 1,
+    predicate => sub ($, $e) { $e->text =~ /^remind /i },
     help_entries => [
       {
         title => 'remind',

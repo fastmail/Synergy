@@ -567,10 +567,8 @@ sub listener_specs {
       name      => "lookup-events",
       method    => "dispatch_event",
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($self, $event) {
-        return unless $event->type eq 'message';
-        return unless $event->was_targeted;
-
         my ($what) = $event->text =~ /^(\S+)(?: \z | \s)/x;
         $what &&= lc $what;
 
@@ -594,28 +592,22 @@ sub listener_specs {
     #   name      => "reload-clients",
     #   method    => "reload_clients",
     #   exclusive => 1,
-    #   predicate => sub ($, $e) {
-    #     $e->was_targeted &&
-    #     $e->text =~ /^reload\s+clients\s*$/i;
-    #   },
+    #   targeted  => 1,
+    #   predicate => sub ($, $e) { $e->text =~ /^reload\s+clients\s*$/i },
     # },
     # {
     #   name      => "reload-tags",
     #   method    => "reload_tags",
     #   exclusive => 1,
-    #   predicate => sub ($, $e) {
-    #     $e->was_targeted &&
-    #     $e->text =~ /^reload-tags\s*$/i;
-    #   },
+    #   targeted  => 1,
+    #   predicate => sub ($, $e) { $e->text =~ /^reload-tags\s*$/i },
     # },
     # {
     #   name      => "reload-shortcuts",
     #   method    => "reload_shortcuts",
     #   exclusive => 1,
-    #   predicate => sub ($, $e) {
-    #     $e->was_targeted &&
-    #     $e->text =~ /^reload\s+shortcuts\s*$/i;
-    #   },
+    #   targeted  => 1,
+    #   predicate => sub ($, $e) { $e->text =~ /^reload\s+shortcuts\s*$/i },
     # },
     {
       name      => "lp-mention-in-passing",

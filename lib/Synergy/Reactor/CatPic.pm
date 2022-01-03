@@ -205,23 +205,23 @@ sub listener_specs {
       name      => 'dog-pic',
       method    => 'handle_dog_pic',
       exclusive => 1,
+      targeted  => 1,
       predicate => sub ($self, $e) {
-        $e->was_targeted && ($e->text =~ /\Adog\s+pic\z/i ||
-                             $e->text =~ /\Aunleash\s+the\s+hounds\z/i);
+            $e->text =~ /\Adog\s+pic\z/i
+        ||  $e->text =~ /\Aunleash\s+the\s+hounds\z/i;
       },
     },
     {
       name      => 'cat-pic',
       method    => 'handle_cat_pic',
       exclusive => 1,
-      predicate => sub ($self, $e) {
-        $e->was_targeted && $e->text =~ /\Acat\s+(pic|jpg|gif|png)\z/i
-      },
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Acat\s+(pic|jpg|gif|png)\z/i },
     },
     {
       name      => 'jazz-pic',
       method    => 'handle_jazz_pic',
-      predicate => sub ($self, $e) { $e->text =~ /jazz/i },
+      predicate => sub ($, $e) { $e->text =~ /jazz/i },
     },
   );
 }

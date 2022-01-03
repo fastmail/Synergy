@@ -16,9 +16,8 @@ sub listener_specs {
     name      => 'roll',
     method    => 'handle_roll',
     exclusive => 1,
-    predicate => sub ($self, $e) {
-      $e->was_targeted && $e->text =~ /\Aroll\b/i;
-    },
+    targeted  => 1,
+    predicate => sub ($self, $e) { $e->text =~ /\Aroll\b/i },
   };
 }
 

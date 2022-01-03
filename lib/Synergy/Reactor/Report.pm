@@ -14,10 +14,9 @@ sub listener_specs {
     name      => "report",
     method    => "report",
     exclusive => 1,
+    targeted  => 1,
     predicate => sub ($, $e) {
-      return unless $e->was_targeted;
-      return unless $e->text =~ /^\s*report(\s+[a-z]+)?(\s+for\s+([a-z]+))?\s*$/i;
-      return 1;
+      $e->text =~ /^\s*report(\s+[a-z]+)?(\s+for\s+([a-z]+))?\s*$/i;
     },
     help_entries => [
       {
