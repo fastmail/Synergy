@@ -78,13 +78,16 @@ has _urlmap => (
 
 # $app is a PSGI app
 sub register_path ($self, $path, $app, $by) {
-  my @known = $self->registered_paths;
+  confess "bogus HTTP path" unless $path && $path =~ m{\A(/[-_0-9a-z]+)+\z};
 
-  my ($is_prefix_of) = grep {; index($_, $path) == 0 } @known;
+  my $path_slash = "$path/";
+  my @known = map {; "$_/" } $self->registered_paths;
+
+  my ($is_prefix_of) = grep {; index($_, $path_slash) == 0 } @known;
   confess "refusing to register $path because it is a prefix of $is_prefix_of"
     if $is_prefix_of;
 
-  my ($is_suffix_of) = grep {; index($path, $_) == 0 } @known;
+  my ($is_suffix_of) = grep {; index($path_slash, $_) == 0 } @known;
   confess "refusing to register $path because it is a suffix of $is_suffix_of"
     if $is_suffix_of;
 
