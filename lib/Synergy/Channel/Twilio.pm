@@ -152,7 +152,7 @@ sub send_message ($self, $target, $text, $alts) {
     unless ($res->is_success) {
       $Logger->log("failed to send sms to $target: " . $res->as_string);
     }
-  });
+  })->retain;
 }
 
 sub describe_event ($self, $event) {
