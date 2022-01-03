@@ -355,7 +355,9 @@ sub _slack_item_link_with_name ($self, $item, $input_arg = undef) {
   return $text;
 }
 
-my %KNOWN = (
+# This is stupid, right?  But it's all the commands we have un-registered
+# because Linear makes them obsolete. -- rjbs, 2021-12-28
+my %REMOVED = (
   # SHORTCUTS
   '++'      =>  [ \&_handle_plus_plus,
                   "++ TASK: short for `task for me: TASK`, so see `help task`"],
@@ -411,12 +413,6 @@ EOH
   showtime  =>  [ \&_handle_showtime,    ],
   zzz       =>  [ \&_handle_triple_zed,  ],
 
-  # SILLY NONSENSE
-  good      =>  [ \&_handle_good   ],
-  gruß      =>  [ \&_handle_good   ],
-  happy     =>  [ \&_handle_good   ],
-  merry     =>  [ \&_handle_good   ],
-
   # MISCELLANEOUS STUFF
   iteration =>  [ \&_handle_iteration,
                   "iteration: show details of the current iteration",
@@ -424,61 +420,6 @@ EOH
                   "iteration N: show the iteration numbered N",
                 ],
   last      =>  [ \&_handle_last   ],
-
-  # SEARCH AND REPORT COMMANDS
-  search    =>  [
-    \&_handle_search,
-    join("\n",
-      "*search `SEARCH`*: find items in LiquidPlanner matching term",
-      "Additional search fields include:",
-      "• *done:`{yes,no,both}`*, search for completed items",
-      "• *in:`{inbox,urgent,discuss,recurring,staging,LP-ID}`*, search for scheduled items",
-      "• *onhold:`{yes,no,both}`*, search for items on hold",
-      "• *page:`N`*, get the Nth page of 10 results",
-      "• *phase:`P`*, only find work in projects in phase P",
-      "• *project:`PROJECT`*, search in this project shortcut",
-      "• *scheduled:`{yes,no,both}`*, search for scheduled items",
-      "• *type:`TYPE`*, pick what type of items to find (package, project, task)",
-      "• *tags:`TAG`*, find items with the given tag",
-      "• *o[wner]:`USER`*, items owned by the named user",
-      "• *closed:`{before,after}`:`YYYY-MM-DD`*, items closed in the time range",
-      "• *creator:`USER`*, items created by the named user",
-      "• *created:`{before,after}`:`YYYY-MM-DD`*, items created in the time range",
-      "• *lastupdated:`{before,after}`:`YYYY-MM-DD`*, items last updated in the time range",
-      "• *client:`NAME`*, find items with the given client",
-      "• *escalation:`USER`*, items with the user NAME as escalation point (*~* for unset)",
-      "• *stakeholder:`USER`*, items where named user is a stakeholder",
-      "• *shortcut:`~`*, items without shortcuts (must also use *type*)",
-      "• *shortcut:`*`*, items with shortcuts (must also use *type*)",
-      "• *force:`1`*, search even if Synergy says it's too broad",
-      "• *debug:`1`*, turn on debugging and dump the query to be run",
-      "",
-      "You can also say *show:`FIELD`* or *show:`FIELD`:`{yes,no}`* to toggle what fields are displayed.",
-      "The available fields include:",
-      "",
-      "• *age*: how long ago the item was created",
-      "• *assignees*: who has undone assignments on the item",
-      "• *due*: when the item is expected to be complete",
-      "• *emoji*: the custom emoji for projects that have one",
-      "• *estimates*: the estimates on undone assignments",
-      "• *lastcomment*: how long since the last comment on the item",
-      "• *phase*: the project phase on projects",
-      "• *project*: show an item's containing project",
-      "• *shortcuts*: item shortcuts, if defined",
-      "• *staleness*: how long since the last update to the item",
-      "• *urgency*: note when items are urgent",
-    ),
-  ],
-
-  psearch    =>  [
-    \&_handle_psearch,
-    "just like search, but with an implicit *type:project*",
-  ],
-
-  tsearch    =>  [
-    \&_handle_tsearch,
-    "just like search, but with an implicit *type:task*",
-  ],
 
   inbox     =>  [ \&_handle_inbox,
                   "*inbox `[PAGE]`*: list the tasks in your inbox",
@@ -537,26 +478,91 @@ The slash commands understood are:
 EOH
   ],
 
-  comment   =>  [ \&_handle_comment,
-                  "comment on THING: comment on a LiquidPlanner task, project, or whatever",
-                ],
-
   contents  =>  [ \&_handle_contents,
                   "contents CONTAINER: show what's in a package or project",
                 ],
 
   update    =>  [ \&_handle_update,      ],
 
+);
+
+my %KNOWN = (
+  # SILLY NONSENSE
+  good      =>  [ \&_handle_good   ],
+  gruß      =>  [ \&_handle_good   ],
+  happy     =>  [ \&_handle_good   ],
+  merry     =>  [ \&_handle_good   ],
+
+  # SEARCH AND REPORT COMMANDS
+  search    =>  [
+    \&_handle_search,
+    join("\n",
+      "*search `SEARCH`*: find items in LiquidPlanner matching term",
+      "Additional search fields include:",
+      "• *done:`{yes,no,both}`*, search for completed items",
+      "• *in:`{inbox,urgent,discuss,recurring,staging,LP-ID}`*, search for scheduled items",
+      "• *onhold:`{yes,no,both}`*, search for items on hold",
+      "• *page:`N`*, get the Nth page of 10 results",
+      "• *phase:`P`*, only find work in projects in phase P",
+      "• *project:`PROJECT`*, search in this project shortcut",
+      "• *scheduled:`{yes,no,both}`*, search for scheduled items",
+      "• *type:`TYPE`*, pick what type of items to find (package, project, task)",
+      "• *tags:`TAG`*, find items with the given tag",
+      "• *o[wner]:`USER`*, items owned by the named user",
+      "• *closed:`{before,after}`:`YYYY-MM-DD`*, items closed in the time range",
+      "• *creator:`USER`*, items created by the named user",
+      "• *created:`{before,after}`:`YYYY-MM-DD`*, items created in the time range",
+      "• *lastupdated:`{before,after}`:`YYYY-MM-DD`*, items last updated in the time range",
+      "• *client:`NAME`*, find items with the given client",
+      "• *escalation:`USER`*, items with the user NAME as escalation point (*~* for unset)",
+      "• *stakeholder:`USER`*, items where named user is a stakeholder",
+      "• *shortcut:`~`*, items without shortcuts (must also use *type*)",
+      "• *shortcut:`*`*, items with shortcuts (must also use *type*)",
+      "• *force:`1`*, search even if Synergy says it's too broad",
+      "• *debug:`1`*, turn on debugging and dump the query to be run",
+      "",
+      "You can also say *show:`FIELD`* or *show:`FIELD`:`{yes,no}`* to toggle what fields are displayed.",
+      "The available fields include:",
+      "",
+      "• *age*: how long ago the item was created",
+      "• *assignees*: who has undone assignments on the item",
+      "• *due*: when the item is expected to be complete",
+      "• *emoji*: the custom emoji for projects that have one",
+      "• *estimates*: the estimates on undone assignments",
+      "• *lastcomment*: how long since the last comment on the item",
+      "• *phase*: the project phase on projects",
+      "• *project*: show an item's containing project",
+      "• *shortcuts*: item shortcuts, if defined",
+      "• *staleness*: how long since the last update to the item",
+      "• *urgency*: note when items are urgent",
+    ),
+  ],
+
+  psearch    =>  [
+    \&_handle_psearch,
+    "just like search, but with an implicit *type:project*",
+  ],
+
+  tsearch    =>  [
+    \&_handle_tsearch,
+    "just like search, but with an implicit *type:task*",
+  ],
+
+
+  comment   =>  [ \&_handle_comment,
+                  "comment on THING: comment on a LiquidPlanner task, project, or whatever",
+                ],
+
   close    =>  [ \&_handle_close, "close TASK: mark a task done" ],
 );
 
 sub listener_specs {
   return (
-    {
-      name      => "you're-back",
-      method    => 'see_if_back',
-      predicate => sub { 1 },
-    },
+    # {
+    #   name      => "you're-back",
+    #   method    => 'see_if_back',
+    #   predicate => sub { 1 },
+    # },
     {
       name      => "lookup-events",
       method    => "dispatch_event",
@@ -588,43 +594,43 @@ sub listener_specs {
         } keys %KNOWN
       ]
     },
-    {
-      name      => "reload-clients",
-      method    => "reload_clients",
-      exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted &&
-        $e->text =~ /^reload\s+clients\s*$/i;
-      },
-    },
-    {
-      name      => "reload-tags",
-      method    => "reload_tags",
-      exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted &&
-        $e->text =~ /^reload-tags\s*$/i;
-      },
-    },
-    {
-      name      => "reload-shortcuts",
-      method    => "reload_shortcuts",
-      exclusive => 1,
-      predicate => sub ($, $e) {
-        $e->was_targeted &&
-        $e->text =~ /^reload\s+shortcuts\s*$/i;
-      },
-    },
+    # {
+    #   name      => "reload-clients",
+    #   method    => "reload_clients",
+    #   exclusive => 1,
+    #   predicate => sub ($, $e) {
+    #     $e->was_targeted &&
+    #     $e->text =~ /^reload\s+clients\s*$/i;
+    #   },
+    # },
+    # {
+    #   name      => "reload-tags",
+    #   method    => "reload_tags",
+    #   exclusive => 1,
+    #   predicate => sub ($, $e) {
+    #     $e->was_targeted &&
+    #     $e->text =~ /^reload-tags\s*$/i;
+    #   },
+    # },
+    # {
+    #   name      => "reload-shortcuts",
+    #   method    => "reload_shortcuts",
+    #   exclusive => 1,
+    #   predicate => sub ($, $e) {
+    #     $e->was_targeted &&
+    #     $e->text =~ /^reload\s+shortcuts\s*$/i;
+    #   },
+    # },
     {
       name      => "lp-mention-in-passing",
       method    => "provide_lp_link",
       predicate => sub { 1 },
     },
-    {
-      name      => "last-thing-said",
-      method    => 'record_utterance',
-      predicate => sub { 1 },
-    },
+    # {
+    #   name      => "last-thing-said",
+    #   method    => 'record_utterance',
+    #   predicate => sub { 1 },
+    # },
   );
 }
 
@@ -1259,22 +1265,22 @@ sub task_for_shortcut ($self, $shortcut) {
 }
 
 sub start ($self) {
-  my $nag_timer = IO::Async::Timer::Periodic->new(
-    interval => 300,
-    on_tick  => sub ($timer, @arg) { $self->nag($timer); },
-  );
+  # my $nag_timer = IO::Async::Timer::Periodic->new(
+  #   interval => 300,
+  #   on_tick  => sub ($timer, @arg) { $self->nag($timer); },
+  # );
 
-  Carp::confess("requested aggressive nag channel does not exist")
-    if $self->aggressive_nag_channel_name
-    && ! $self->hub->channel_named($self->aggressive_nag_channel_name);
+  # Carp::confess("requested aggressive nag channel does not exist")
+  #   if $self->aggressive_nag_channel_name
+  #   && ! $self->hub->channel_named($self->aggressive_nag_channel_name);
 
-  Carp::confess("requested primary nag channel does not exist")
-    if $self->primary_nag_channel_name
-    && ! $self->hub->channel_named($self->primary_nag_channel_name);
+  # Carp::confess("requested primary nag channel does not exist")
+  #   if $self->primary_nag_channel_name
+  #   && ! $self->hub->channel_named($self->primary_nag_channel_name);
 
-  $self->hub->loop->add($nag_timer);
+  # $self->hub->loop->add($nag_timer);
 
-  $nag_timer->start;
+  # $nag_timer->start;
 }
 
 after register_with_hub => sub ($self, @) {
