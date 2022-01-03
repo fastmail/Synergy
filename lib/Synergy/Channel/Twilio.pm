@@ -138,7 +138,7 @@ sub send_message ($self, $target, $text, $alts) {
   }
 
   my $sid = $self->sid;
-  my $res = $self->http_post(
+  my $res_f = $self->http_post(
     "https://api.twilio.com/2010-04-01/Accounts/$sid/Messages.json",
     Content => [
       From => $from,
@@ -146,13 +146,13 @@ sub send_message ($self, $target, $text, $alts) {
       Body => $text,
     ],
     Authorization => "Basic " . $self->auth,
-  )->get;
+  );
 
-  unless ($res->is_success) {
-    $Logger->log("failed to send sms to $target: " . $res->as_string);
-  }
-
-  return $res;
+  return $res_f->then(sub ($res) {
+    unless ($res->is_success) {
+      $Logger->log("failed to send sms to $target: " . $res->as_string);
+    }
+  });
 }
 
 sub describe_event ($self, $event) {
