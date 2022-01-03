@@ -16,8 +16,21 @@ use Synergy::Logger '$Logger';
 
 use utf8;
 
-sub listener_specs {
+sub listener_specs ($self){
+
+  my $issue_id = $self->_issue_regex; 
+  
   return (
+    {
+      name      => 'mentions',
+      method    => 'handle_mentions',
+      exclusive => 1,
+      targeted  => 1,
+      predicate => sub ($, $e) { 
+        return 1 if $e->text =~ /$issue_id/;  
+        return;
+      } 
+    },
     {
       name      => 'list_teams',
       method    => 'handle_list_teams',
@@ -181,6 +194,14 @@ has _linear_shared_cache => (
   default => sub {  {}  },
 );
 
+has _issue_regex => (
+  is => 'ro',
+  lazy => 1,
+  default => sub {
+    return qr/(?:^|\W)(plumb-[0-9]*)/i; # we're matching only plumbing here for now
+  }
+);
+
 sub _with_linear_client ($self, $event, $code) {
   my $user = $event->from_user;
 
@@ -204,6 +225,12 @@ sub _with_linear_client ($self, $event, $code) {
   });
 
   return $code->($linear);
+}
+
+sub handle_mentions ($self, $event) {
+  $event->mark_handled if $event->was_targeted;
+  my $issue_id = $event->text =~ $self->_issue_regex;
+  $event->reply("https://linear.app/fastmail/issue/$1/...");
 }
 
 sub handle_list_teams ($self, $event) {
