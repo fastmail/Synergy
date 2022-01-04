@@ -38,7 +38,7 @@ EOH
       method    => 'handle_new_issue',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($, $e) { $e->text =~ /\A ( \+\+ | >> ) \s+/x; },
+      predicate => sub ($, $e) { $e->text =~ /\A ( \+\+ | >\s?> ) \s+/x; },
       help_entries => [
         { title => '++', text => 'This is like using `>>` but supplying yourself as the target.  See *help >>* instead.' },
         { title => '>>', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
@@ -385,6 +385,10 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
   my $code = sub ($linear) {
     my $text = $event->text;
 
+
+    # Slack now "helpfully" corrects '>>' in DM to '> >'.
+    $text =~ s/\A> >/>>/;
+
     my $plan_f = $linear->plan_from_input($ersatz_text // $text);
 
     # XXX: I do not like our current error-returning scheme. -- rjbs, 2021-12-10
@@ -422,7 +426,7 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
 }
 
 sub handle_new_issue ($self, $event) {
-  if ($event->text =~ /\AL?>> triage /i) {
+  if ($event->text =~ /\A>> triage /i) {
     $event->mark_handled;
     return $event->error_reply(q{You can't assign directly to triage anymore.  Instead, use the Zendesk integration!  You can also look at help for "ptn blocked".});
   }
