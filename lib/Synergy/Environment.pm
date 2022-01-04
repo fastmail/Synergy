@@ -40,6 +40,11 @@ has server_port => (
   default => 8118,
 );
 
+has metrics_path => (
+  is => 'ro',
+  isa => 'Str',
+);
+
 has tls_cert_file => (
   is => 'ro',
   isa => 'Str',

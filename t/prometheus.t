@@ -21,6 +21,7 @@ my $synergy = Synergy::Hub->synergize(
   {
     user_directory => "t/data/users.yaml",
     server_port => empty_port(),
+    metrics_path => '/metrics',
     channels => {
       'test-channel' => {
         class     => 'Synergy::Channel::Test',
