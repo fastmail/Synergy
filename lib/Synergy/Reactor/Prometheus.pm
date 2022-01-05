@@ -8,8 +8,6 @@ with 'Synergy::Role::Reactor::EasyListening';
 use experimental qw(signatures);
 use namespace::clean;
 
-use Prometheus::Tiny 0.002;
-
 sub listener_specs {
   return {
     name      => 'prometheus',
