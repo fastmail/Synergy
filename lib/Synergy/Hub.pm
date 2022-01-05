@@ -15,6 +15,7 @@ with (
 use Synergy::Logger '$Logger';
 
 use DBI;
+use IO::Async::Timer::Periodic;
 use Module::Runtime qw(require_module);
 use Net::Async::HTTP;
 use Synergy::UserDirectory;
@@ -219,7 +220,35 @@ sub set_loop ($self, $loop) {
     $self->server->register_path($metrics_path, $self->prom->psgi, 'the hub');
   }
 
+  $self->_setup_diagnostic_metrics_timer;
+
   return $loop;
+}
+
+sub _setup_diagnostic_metrics_timer ($self) {
+  my $prom = $self->prom;
+  my $loop = $self->loop;
+
+  $self->prom->declare('synergy_ioasync_notifiers',
+    help => 'Number of IO::Async notifiers on the loop',
+    type => 'gauge',
+  );
+
+  my $diag_timer = IO::Async::Timer::Periodic->new(
+    interval => 60,
+    on_tick  => sub ($timer, @arg) {
+      my $notifier_count = $loop->notifiers;
+      $prom->set(synergy_ioasync_notifiers => $notifier_count);
+    },
+  );
+
+  # We're not keeping a reference to the diagnostic timer, so we can never stop
+  # it.  We can address this later, if needed. -- rjbs, 2022-01-05
+  $loop->add($diag_timer);
+
+  $diag_timer->start;
+
+  return;
 }
 
 sub synergize {
