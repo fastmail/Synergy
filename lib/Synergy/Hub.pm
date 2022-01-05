@@ -313,12 +313,16 @@ sub synergize_file {
   );
 }
 
+package Synergy::HTTPClient {
+  use parent 'Net::Async::HTTP';
+}
+
 has http_client => (
   is => 'ro',
   isa => 'Net::Async::HTTP',
   lazy => 1,
   default => sub ($self) {
-    my $http = Net::Async::HTTP->new(
+    my $http = Synergy::HTTPClient->new(
       max_connections_per_host => 5, # seems good?
       max_in_flight => 10,           # default is 4; bump a bit
     );

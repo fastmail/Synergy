@@ -48,13 +48,17 @@ has tls_key_file => (
   isa => 'Str',
 );
 
+package Synergy::HTTPServer::PSGI {
+  use parent 'Net::Async::HTTP::Server::PSGI';
+}
+
 has http_server => (
   is => 'ro',
   isa => 'Net::Async::HTTP::Server::PSGI',
   init_arg => undef,
   lazy => 1,
   default   => sub ($self) {
-    my $server = Net::Async::HTTP::Server::PSGI->new(
+    my $server = Synergy::HTTPServer::PSGI->new(
       app => Plack::Middleware::AccessLog->new(
         logger => sub ($msg) {
           chomp($msg);
