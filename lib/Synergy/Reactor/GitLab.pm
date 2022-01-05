@@ -136,6 +136,8 @@ sub start ($self) {
 
   my $timer = IO::Async::Timer::Countdown->new(
     delay => 60,
+    notifier_name => 'gitlab-load-shortcuts',
+    remove_on_expire => 1,
     on_expire => sub {
       $Logger->log("loading shortcuts from GitLab");
       $self->_load_auto_shortcuts;
