@@ -236,6 +236,7 @@ sub _setup_diagnostic_metrics_timer ($self) {
   );
 
   my $diag_timer = IO::Async::Timer::Periodic->new(
+    notifier_name => 'diag-metrics',
     interval => 60,
     on_tick  => sub ($timer, @arg) {
       my $notifier_count = $loop->notifiers;
