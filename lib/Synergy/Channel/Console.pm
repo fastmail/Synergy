@@ -486,6 +486,30 @@ sub _console_cmd_set ($self, $rest) {
   return;
 }
 
+sub _console_cmd_notifiers ($self, $rest) {
+  # $rest should be empty but ignore it for now
+  my %notifier_count;
+
+  for my $notifier ($self->hub->loop->notifiers) {
+    my $key = ref $notifier;
+
+    my $name = $notifier->notifier_name;
+
+    $key .= "/$name" if length $name;
+
+    $notifier_count{$key}++;
+  }
+
+  my $width = max map {; length } keys %notifier_count;
+
+  my $msg = q{};
+  $msg .= sprintf "%-*s - %4i\n", $width, $_, $notifier_count{$_}
+    for sort keys %notifier_count;
+
+  $self->_display_message($msg);
+  return;
+};
+
 sub _event_from_text ($self, $text) {
   # Remove any leading "/".  If there's a leading slash, we're just sending a
   # normal message with a leading slash.  (The now-removed slash was here to
