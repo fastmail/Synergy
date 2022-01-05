@@ -141,10 +141,11 @@ sub _todo_to_notifier ($self, $todo) {
 sub _compile_send ($self, $arg) {
   my $timer = IO::Async::Timer::Countdown->new(
     delay => 0,
+    remove_on_expire => 1,
+    notifier_name => 'test-send-delayed',
     on_expire => sub {
       my ($timer) = @_;
       $self->_inject_event($arg);
-      $self->hub->loop->remove($timer);
       $self->do_next;
     },
   );
