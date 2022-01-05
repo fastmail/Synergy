@@ -1,11 +1,11 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Channel::Console;
 
 use utf8;
 
 package Synergy::Channel::Console::Compartment {
-  use v5.24.0;
+  use v5.28.0;
   use warnings;
   use experimental qw(signatures);
 
