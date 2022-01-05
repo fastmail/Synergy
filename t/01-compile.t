@@ -9,6 +9,11 @@ my %to_skip = map {; $_ => 1 } qw(
   Synergy::Reactor::Zendesk
 );
 
+my %allow_fail = map {; $_ => 1 } qw(
+  Synergy::Reactor::Linear
+);
+
+
 for my $file (sort @files) {
   my $mod = $file;
   $mod =~ s{^lib/}{};
@@ -18,7 +23,11 @@ for my $file (sort @files) {
 
   next if $to_skip{ $mod };
 
-  require_ok $mod or BAIL_OUT("compilation failure: $mod");
+  next if require_ok $mod;
+
+  unless ($allow_fail{$mod}) {
+    BAIL_OUT("compilation failure: $mod");
+  }
 }
 
 done_testing;
