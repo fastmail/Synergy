@@ -780,6 +780,14 @@ sub send_message ($self, $address, $text, $alts = {}) {
   );
 }
 
+sub send_ephemeral_message ($self, $conv_address, $to_address, $text) {
+  my $name = $self->name;
+
+  $self->_stream->write(
+    $self->_format_message($name, $to_address, "[ephemeral] $text")
+  );
+}
+
 sub describe_event ($self, $event) {
   return "(a console event)";
 }
