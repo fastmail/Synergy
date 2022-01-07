@@ -93,6 +93,7 @@ sub state ($self) {
 
 sub start ($self) {
   my $timer = IO::Async::Timer::Periodic->new(
+    notifier_name => 'timeclock-shift-change',
     interval => 15 * 60,
     on_tick  => sub { $self->check_for_shift_changes; },
   );
