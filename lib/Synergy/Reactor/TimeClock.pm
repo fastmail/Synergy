@@ -88,6 +88,7 @@ has clock_out_channel => (
 sub state ($self) {
   return {
     last_report_time => $self->last_report_time,
+    user_last_report_times => $self->user_last_report_times,
   };
 }
 
@@ -109,6 +110,10 @@ after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
     if (my $epoch = $state->{last_report_time}) {
       $self->last_report_time($epoch);
+    }
+
+    if (my $times = $state->{user_last_report_times}) {
+      $self->_set_user_last_report_times($times);
     }
   }
 };
@@ -295,6 +300,23 @@ has last_report_time => (
   default => $^T - 900
 );
 
+# username => time
+has user_last_report_times => (
+  is => 'ro',
+  lazy => 1,
+  default => sub { {} },
+  traits => [ 'Hash' ],
+  writer => '_set_user_last_report_times',
+  handles => {
+    last_report_time_for => 'get',
+    set_last_report_time_for  => 'set',
+  }
+);
+
+after set_last_report_time_for => sub ($self, @) {
+  $self->save_state;
+};
+
 sub check_for_shift_changes ($self) {
   my $report_reactor = $self->hub->reactor_named('report');
   return unless $report_reactor; # TODO: fatalize during startup..?
@@ -316,11 +338,11 @@ sub check_for_shift_changes ($self) {
   # Secondly, it will prevent us from doing weird things like sending both
   # morning and evening reports. -- rjbs, 2019-11-08
   my $now  = time;
-  my $last = max($self->last_report_time, $now - 7200);
+  my $global_last = max($self->last_report_time, $now - 7200);
 
   my %if = (
-    morning => sub ($s, $e) { $s > $last       && $s <= $now },
-    evening => sub ($s, $e) { $e > $last + 900 && $e <= $now + 900 },
+    morning => sub ($s, $e) { $s > $global_last       && $s <= $now },
+    evening => sub ($s, $e) { $e > $global_last + 900 && $e <= $now + 900 },
   );
 
   my %report = map {; $_ => $report_reactor->report_named($_) } keys %if;
@@ -338,13 +360,18 @@ sub check_for_shift_changes ($self) {
 
     next if $self->get_user_preference($user, 'suppress-reports');
 
+    my $user_last = $self->last_report_time_for($user->username) // 0;
+
+    next if $now - $user_last < 300;  # not more than one every 5m
+
     for my $which (sort keys %if) {
       my $will_send = $if{$which}->($shift->@{ qw(start end) });
 
       $Logger->log([
         "TimeClock: DEBUG: %s",
         {
-          last      => $last,
+          global_last => $global_last,
+          user_last   => $user_last,
           now       => $now,
           which     => $which,
           who       => $user->username,
@@ -363,6 +390,8 @@ sub check_for_shift_changes ($self) {
 
       $Logger->log([ "sending %s report for %s", $which, $user->username ]);
       $channel->send_message_to_user($user, $text, $alts);
+
+      $self->set_last_report_time_for($user->username, $now);
 
       next USER;
     }
