@@ -239,8 +239,15 @@ sub _setup_diagnostic_metrics_timer ($self) {
     notifier_name => 'diag-metrics',
     interval => 60,
     on_tick  => sub ($timer, @arg) {
-      my $notifier_count = $loop->notifiers;
-      $prom->set(synergy_ioasync_notifiers => $notifier_count);
+      my %notifier_count;
+      $notifier_count{ ref $_ }++ for $loop->notifiers;
+
+      for my $class (keys %notifier_count) {
+        $prom->set(
+          synergy_ioasync_notifiers => $notifier_count{$class},
+          { class => $class },
+        );
+      }
     },
   );
 
