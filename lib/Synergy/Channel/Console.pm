@@ -116,22 +116,22 @@ sub _build_stream {
     # autoflush    => 1,
   );
 
-  unless($channel->send_only) {
+  unless ($channel->send_only) {
     $arg{read_handle} = $cloned_stdin,
     $arg{on_read}     = sub {
-      my ( $self, $buffref, $eof ) = @_;
+      my ($self, $buffref, $eof) = @_;
 
-       while( $$buffref =~ s/^(.*\n)// ) {
-          my $text = $1;
-          chomp $text;
+      while ($$buffref =~ s/^(.*\n)//) {
+        my $text = $1;
+        chomp $text;
 
-          my $event = $channel->_event_from_text($text);
-          next unless $event;
+        my $event = $channel->_event_from_text($text);
+        next unless $event;
 
-          $channel->hub->handle_event($event);
-       }
+        $channel->hub->handle_event($event);
+      }
 
-       return 0;
+      return 0;
     };
   }
 
