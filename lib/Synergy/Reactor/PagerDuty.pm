@@ -144,6 +144,7 @@ around '_set_oncall_list' => sub ($orig, $self, @rest) {
 sub start ($self) {
   if ($self->oncall_channel && $self->oncall_group_address) {
     my $check_oncall_timer = IO::Async::Timer::Periodic->new(
+      notifier_name  => 'pagerduty-oncall',
       first_interval => 30,   # don't start immediately
       interval       => 150,
       on_tick        => sub { $self->_check_at_oncall },
@@ -155,6 +156,7 @@ sub start ($self) {
     # No maint warning timer unless we can warn oncall
     if ($self->oncall_group_address && $self->maint_warning_address) {
       my $maint_warning_timer = IO::Async::Timer::Periodic->new(
+        notifier_name  => 'pagerduty-maint',
         first_interval => 45,
         interval => $self->maint_timer_interval,
         on_tick  => sub {  $self->_check_long_maint },
