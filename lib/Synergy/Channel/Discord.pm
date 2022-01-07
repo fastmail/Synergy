@@ -6,7 +6,6 @@ use Moose;
 use experimental qw(signatures);
 use utf8;
 use JSON::MaybeXS;
-use IO::Async::Timer::Periodic;
 use Defined::KV;
 
 use Synergy::External::Discord;
