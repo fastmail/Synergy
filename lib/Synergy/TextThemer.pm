@@ -17,6 +17,7 @@ my %THEME = (
   cyan    => { decoration_color =>   75,  text_color => 117 },
   green   => { decoration_color =>   10,  text_color =>  84 },
   purple  => { decoration_color =>  140,  text_color =>  13 },
+  rwhite  => { decoration_color =>    9,  text_color =>  15 },
 );
 
 has decoration_color => (is => 'ro', isa => 'Int', required => 1);
