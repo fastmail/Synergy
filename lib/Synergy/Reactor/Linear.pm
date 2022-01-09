@@ -157,7 +157,7 @@ package Synergy::Reactor::Linear::LinearHelper {
   }
 
   sub normalize_team_name ($self, $team_name) {
-    return $self->{reactor}->canonical_team_name_for($team_name);
+    return $self->{reactor}->canonical_team_name_for(lc $team_name);
   }
 
   sub team_id_for_username ($self, $username) {
