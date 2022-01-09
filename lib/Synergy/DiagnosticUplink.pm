@@ -67,6 +67,46 @@ package Synergy::DiagnosticUplink::Connection {
   no Moose;
 }
 
+sub banner_message {
+  my sub rstr ($str, $rev = 0) {
+    my @col = (9, 11, 209, 10, 14, 12, 99);
+    @col = reverse @col if $rev;
+
+    join q{}, map {; Term::ANSIColor::colored([ "ansi$_" ], $str . ' ') } @col;
+  }
+
+  my sub line ($col, $line) {
+    Term::ANSIColor::colored(["ansi$col"], sprintf '%-40s', $line)
+  }
+
+  my $tl = q{⎛};  # q{//}
+  my $ml = q{⎜};  # q{||}
+  my $bl = q{⎝};  # q{\\\\}
+  my $tr = q{⎞};  # q{\\\\}
+  my $mr = q{⎟};  # q{||}
+  my $br = q{⎠};  # q{//}
+
+  join qq{\n},
+    "",
+    "  "
+      . rstr('//')
+      . "    "
+      . line(99, 'Synergy Diagnostic Uplink')
+      . rstr('\\\\', 1),
+    "  "
+      . rstr('||')
+      . "    "
+      . line(15, 'Try /help for help')
+      . rstr('||', 1),
+    "  "
+      . rstr('\\\\')
+      . "    "
+      . line(15, 'For more information, please reread.')
+      . rstr('//', 1),
+    "",
+    "";
+}
+
 sub start ($self) {
   my $hub = $self->hub;
 
@@ -80,7 +120,11 @@ sub start ($self) {
 
       $self->loop->add($stream);
 
-      $stream->write("Diagnostic interface online.\n");
+      $stream->write(
+        # Synergy::TextThemer->null_themer->_format_box(
+          $self->banner_message
+        # )
+      );
       return;
     },
   );
