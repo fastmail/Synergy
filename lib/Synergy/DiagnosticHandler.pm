@@ -106,6 +106,16 @@ probably change over time.
 
   /config   - print a summary of top-level Synergy configuration
   /http     - print a summary of registered HTTP endpoints
+
+  /eval     - evaluate a Perl string, if enabled; $S refers to the hub
+EOH
+
+$HELP{eval} = <<'EOH';
+If enabled, the /eval command will evaluate its argument as a string of Perl
+code.  The variable $S will refer to the active Synergy hub.  The result (or
+the exception thrown) will be pretty-printed.
+
+Obviously: caveat evaluator!
 EOH
 
 sub _help_for ($self, $arg) {
