@@ -66,12 +66,14 @@ EOH
       method    => 'handle_support_blockers',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($, $e) { $e->text eq 'sb'; },
+      predicate => sub ($, $e) { $e->text =~ /\Asb(\s|$)/ni; },
       help_entries => [
         { title => 'sb', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
-*sb*: list unassigned support-blocking issues in Linear
+*sb `WHO`*: list unassigned support-blocking issues in Linear
 
-This will list all open, unassigned issues in Linear tagged "support blocker".
+This will list open issues in Linear tagged "support blocker".  If you name
+someone, it will list issues assigned to that person.  Otherwise, it lists
+unassigned support blockers.
 EOH
       ]
     },
@@ -286,16 +288,41 @@ sub handle_urgent ($self, $event) {
 sub handle_support_blockers ($self, $event) {
   $event->mark_handled;
 
-  $self->_handle_search(
-    $event,
-    {
-      label     => 'support blocker',
-      closed    => 0,
-      assignee  => undef,
-    },
-    "No support blockers!  Great!",
-    "Current support blockers",
-  );
+  my (undef, $who) = split /\s/, $event->text, 2;
+
+  if ($who) {
+    my $user = $self->resolve_name($who, $event->from_user);
+    unless ($user) {
+      return $event->error_reply(qq{I can't figure out who "$who" is.});
+    }
+
+    $who = $user->username;
+  }
+
+  $self->_with_linear_client($event, sub ($linear) {
+    my $when  = length $who
+              ? $linear->lookup_user($who)->then(sub ($user) {
+                  return Future->fail("no such user") unless $user;
+                  return Future->done(assignee => $user->{id});
+                })
+              : Future->done(assignee => undef);
+
+    $when->then(sub {
+      my (%extra_search) = @_;
+
+      $self->_handle_search(
+        $event,
+        {
+          label     => 'support blocker',
+          closed    => 0,
+          %extra_search
+        },
+        "No support blockers!  Great!",
+        "Current support blockers",
+        $linear,
+      );
+    });
+  });
 }
 
 sub handle_triage ($self, $event) {
