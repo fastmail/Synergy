@@ -305,6 +305,11 @@ EOH
     return;
   }
 
+  sub _display_notice ($self, $text) {
+    $self->stream->write($self->_format_notice($self->channel->name, $text));
+    return;
+  }
+
   no Moose;
 }
 
