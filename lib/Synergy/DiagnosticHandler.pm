@@ -313,7 +313,7 @@ sub _do_diagnostic_command ($self, $text) {
 
   my ($cmd, $rest) = split /\s+/, $text, 2;
 
-  if (my $code =$self->can("_diagnostic_cmd_$cmd")) {
+  if (my $code = $self->can("_diagnostic_cmd_$cmd")) {
     $self->$code($rest);
     return 1;
   }

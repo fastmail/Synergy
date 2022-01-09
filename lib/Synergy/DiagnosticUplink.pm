@@ -89,20 +89,20 @@ sub banner_message {
   join qq{\n},
     "",
     "  "
-      . rstr('//')
+      . rstr($tl)
       . "    "
       . line(99, 'Synergy Diagnostic Uplink')
-      . rstr('\\\\', 1),
+      . rstr($tr, 1),
     "  "
-      . rstr('||')
+      . rstr($ml)
       . "    "
       . line(15, 'Try /help for help')
-      . rstr('||', 1),
+      . rstr($mr, 1),
     "  "
-      . rstr('\\\\')
+      . rstr($bl)
       . "    "
       . line(15, 'For more information, please reread.')
-      . rstr('//', 1),
+      . rstr($br, 1),
     "",
     "";
 }
