@@ -33,22 +33,33 @@ use Term::ANSIColor qw(colored);
 
 with 'Synergy::Role::Channel';
 
-my %Theme = (
-             # decoration   text
-  cyan    => [         75,   117 ],
-  green   => [         10,    84 ],
-  purple  => [        140,    13 ],
+has color_scheme => (
+  is  => 'ro',
+  isa => 'Str',
+);
+
+has theme => (
+  is    => 'ro',
+  lazy  => 1,
+  init_arg  => undef,
+  handles   => [ qw(
+    _format_wide_message
+    _format_notice
+    _format_message_compact
+    _format_message_chonky
+  ) ],
+  default   => sub ($self) {
+    return Synergy::TextThemer->from_name($self->color_scheme)
+      if $self->color_scheme;
+
+    return Synergy::TextThemer->null_themer;
+  },
 );
 
 has ignore_blank_lines => (
   is => 'rw',
   isa => 'Bool',
   default => 1,
-);
-
-has theme => (
-  is  => 'ro',
-  isa => 'Str',
 );
 
 has from_address => (
@@ -656,31 +667,11 @@ sub _event_from_text ($self, $text) {
 }
 
 sub _display_notice ($self, $text) {
-  state $width = max map {; length $_->name }
-                 grep {; $_->does('Synergy::Role::Channel') }
-                 $self->hub->channels;
-
-  my $name = $self->name;
-
-  my $message;
-
-  if ($self->theme) {
-    my @T = $Theme{ $self->theme }->@*;
-    $message = colored([ "ansi$T[0]" ], "⬮⬮ ")
-             . colored([ "ansi$T[1]" ], sprintf '%-*s', $width, $name)
-             . colored([ "ansi$T[0]" ], " ⬮⬮ ")
-             . colored([ "ansi$T[1]" ], $text)
-             . "\n";
-  } else {
-    $message = "⬮⬮ $name ⬮⬮ $text\n";
-  }
-
-  $self->_stream->write($message);
+  $self->_stream->write($self->_format_notice($self->name, $text));
   return;
 }
 
 sub start ($self) {
-  die "bogus theme" if $self->theme && ! $Theme{$self->theme};
   $self->hub->loop->add($self->_stream);
 
   my $boot_message = "Console channel online";
@@ -694,73 +685,6 @@ sub start ($self) {
 
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
   $self->send_message($user->username, $text, $alts);
-}
-
-sub _format_message_compact ($self, $name, $address, $text) {
-  my $theme = $self->theme;
-
-  return "❱❱ $name!$address ❱❱ $text\n" unless $theme;
-
-  my @T = $Theme{ $self->theme }->@*;
-  return colored([ "ansi$T[0]" ], "❱❱ ")
-       . colored([ "ansi$T[1]" ], $name)
-       . colored([ "ansi$T[0]" ], '!')
-       . colored([ "ansi$T[1]" ], $address)
-       . colored([ "ansi$T[0]" ], " ❱❱ ")
-       . colored([ "ansi$T[1]" ], $text)
-       . "\n";
-}
-
-sub _format_message_chonky ($self, $name, $address, $text) {
-  state $B_TL  = q{╭};
-  state $B_BL  = q{╰};
-  state $B_TR  = q{╮};
-  state $B_BR  = q{╯};
-  state $B_ver = q{│};
-  state $B_hor = q{─};
-
-  state $B_boxleft  = q{┤};
-  state $B_boxright = q{├};
-
-  my $theme = $self->theme ? $Theme{ $self->theme } : undef;
-
-  my $text_C = $theme ? Term::ANSIColor::color("ansi$theme->[1]") : q{};
-  my $line_C = $theme ? Term::ANSIColor::color("ansi$theme->[0]") : q{};
-  my $null_C = $theme ? Term::ANSIColor::color('reset')           : q{};
-
-  my $dest_width = length "$name/$address";
-
-  my $dest = "$text_C$name$line_C!$text_C$address$line_C";
-
-  my $header = "$line_C$B_TL"
-             . ($B_hor x 5)
-             . "$B_boxleft $dest $B_boxright"
-             . ($B_hor x (72 - $dest_width - 4))
-             . "$B_TR$null_C\n";
-
-  my $footer = "$line_C$B_BL" . ($B_hor x 77) . "$B_BR$null_C\n";
-
-  my $new_text = q{};
-
-  my @lines = split /\n/, $text;
-  while (my $line = shift @lines) {
-    $new_text .= "$line_C$B_ver $text_C";
-    if (length $line > 76) {
-      my ($old, $rest) = $line =~ /\A(.{1,76})\s+(.+)/;
-      if (length $old) {
-        $new_text .= $old;
-        unshift @lines, $rest;
-      } else {
-        # Oh well, nothing to do about it!
-        $new_text = $line;
-      }
-    } else {
-      $new_text .= $line;
-    }
-    $new_text .= "$null_C\n";
-  }
-
-  return "$header$new_text$footer";
 }
 
 sub _format_message ($self, $name, $address, $text) {
