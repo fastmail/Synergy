@@ -82,9 +82,8 @@ sub _display_wide_message ($self, $text, $title = undef) {
 
 my %HELP;
 $HELP{''} = <<'EOH';
-You're using the Console channel, which is generally used for testing or
-diagnostics.  You can just type a message and hit enter.  Some funky
-options exist to aid testing.
+You're using a Synergy diagnostic interface.  Diagnostic commands begin
+with a slash, like "/help".
 
 You can use "/help TOPIC" to read more about topics.
 
