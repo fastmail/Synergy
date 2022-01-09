@@ -190,5 +190,21 @@ sub _format_message_chonky ($self, $name, $address, $text) {
   return "$header$new_text$footer";
 }
 
+sub _format ($self, $what) {
+  unless (
+       ref $what
+    && ref $what eq 'ARRAY'
+    && $what->[0]
+    && $self->can("_format_$what->[0]")
+  ) {
+    return $self->_format_box(
+      "Internal error!  Don't know how to display result.",
+      "ERROR",
+    );
+  }
+
+  my $method = "_format_$what->[0]";
+  $self->$method($what->@[ 1 .. $what->$#* ]);
+}
 
 1;

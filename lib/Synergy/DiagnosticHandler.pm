@@ -39,6 +39,7 @@ has theme => (
   is    => 'ro',
   lazy  => 1,
   handles   => [ qw(
+    _format
     _format_box
     _format_wide_box
     _format_notice
@@ -67,18 +68,6 @@ has allow_eval => (
   isa => 'Bool',
   default => 0,
 );
-
-sub _display_message ($self, $text, $title = undef) {
-  my $output = $self->_format_box($text, $title);
-  $self->stream->write($output);
-  return;
-}
-
-sub _display_wide_message ($self, $text, $title = undef) {
-  my $output = $self->_format_wide_box($text, $title);
-  $self->stream->write($output);
-  return;
-}
 
 my %HELP;
 $HELP{''} = <<'EOH';
@@ -128,12 +117,10 @@ sub _diagnostic_cmd_help ($self, $arg) {
   my $help = $self->_help_for($arg);
 
   unless ($help) {
-    $self->_display_message("No help on that topic!");
-    return;
+    return [ box => 'No help on that topic!' ];
   }
 
-  $self->_display_message($help);
-  return;
+  return [ box => $help ];
 }
 
 sub _diagnostic_cmd_config ($self, $arg) {
@@ -155,7 +142,7 @@ sub _diagnostic_cmd_config ($self, $arg) {
 
   $output .= "\nSee also /channels and /reactors and /users";
 
-  $self->_display_message($output);
+  return [ box => $output ];
 }
 
 sub _diagnostic_cmd_http ($self, $arg) {
@@ -169,7 +156,7 @@ sub _diagnostic_cmd_http ($self, $arg) {
   $output .= sprintf "  %-*s routes to %s\n", $width, $_->[0], $_->[1]
     for sort { $a->[0] cmp $b->[0] } @kv;
 
-  $self->_display_message($output);
+  return [ box => $output ];
 }
 
 sub _diagnostic_cmd_channels ($self, $arg) {
@@ -179,7 +166,7 @@ sub _diagnostic_cmd_channels ($self, $arg) {
   my $output = "Registered Channels\n\n";
   $output .= sprintf "  %-*s - %s\n", $width, $_->name, ref($_) for @channels;
 
-  $self->_display_message($output);
+  return [ box => $output ];
 }
 
 sub _diagnostic_cmd_reactors ($self, $arg) {
@@ -189,7 +176,7 @@ sub _diagnostic_cmd_reactors ($self, $arg) {
   my $output = "Registered Reactors\n\n";
   $output .= sprintf "  %-*s - %s\n", $width, $_->name, ref($_) for @reactors;
 
-  $self->_display_message($output);
+  return [ box => $output ];
 }
 
 sub _diagnostic_cmd_users ($self, $arg) {
@@ -214,13 +201,12 @@ sub _diagnostic_cmd_users ($self, $arg) {
       join q{; }, @status;
   }
 
-  $self->_display_message($output);
+  return [ box => $output ];
 }
 
 sub _diagnostic_cmd_eval ($self, $arg) {
   unless ($self->allow_eval) {
-    $self->_display_message("/eval is not enabled");
-    return;
+    return [ box => "/eval is not enabled" ];
   }
 
   my ($result, $error) = Synergy::DiagnosticHandler::Compartment::_evaluate(
@@ -235,16 +221,14 @@ sub _diagnostic_cmd_eval ($self, $arg) {
                 : defined $error  ? $error
                 :                   '(undef)';
 
-    $self->_display_wide_message($display, 'ERROR');
-    return;
+    return [ wide_box => $display, 'ERROR' ];
   }
 
   my $display = ref $result     ? Data::Dumper::Concise::Dumper($result)
               : defined $result ? $result
               :                   '(undef)';
 
-  $self->_display_wide_message($display, 'RESULT');
-  return;
+  return [ wide_box => $display, 'RESULT' ];
 }
 
 sub _diagnostic_cmd_nlist ($self, $rest) {
@@ -267,8 +251,7 @@ sub _diagnostic_cmd_nlist ($self, $rest) {
   $msg .= sprintf "%-*s - %4i\n", $width, $_, $notifier_count{$_}
     for sort keys %notifier_count;
 
-  $self->_display_message($msg);
-  return;
+  return [ box => $msg ];
 }
 
 sub _diagnostic_cmd_ntree ($self, $rest) {
@@ -304,8 +287,7 @@ sub _diagnostic_cmd_ntree ($self, $rest) {
   my @roots = grep {; ! $_->parent } $self->hub->loop->notifiers;
   my $msg = nlist(\@roots);
 
-  $self->_display_message($msg);
-  return;
+  return [ box => $msg ];
 }
 
 sub _do_diagnostic_command ($self, $text) {
@@ -314,17 +296,12 @@ sub _do_diagnostic_command ($self, $text) {
   my ($cmd, $rest) = split /\s+/, $text, 2;
 
   if (my $code = $self->can("_diagnostic_cmd_$cmd")) {
-    $self->$code($rest);
+    my $to_display = $self->$code($rest);
+    $self->stream->write( $self->_format($to_display) );
     return 1;
   }
 
   return undef;
-}
-
-sub _display_notice ($self, $text) {
-  my $output = $self->_format_notice($text);
-  $self->stream->write($output);
-  return;
 }
 
 1;

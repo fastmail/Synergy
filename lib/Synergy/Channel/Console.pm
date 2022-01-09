@@ -232,20 +232,18 @@ EOH
       $width, 'target prefix',
       $channel->target_prefix;
 
-    $self->_display_message($output);
+    return [ box => $output ];
   }
 
   sub _diagnostic_cmd_format ($self, $arg) {
     unless (length $arg) {
-      $self->_display_notice("Current format: " .  $self->channel->message_format);
-      return;
+      return [ notice => "Current format: " .  $self->channel->message_format ];
     }
 
     my ($format, $channel) = split /\s+/, $arg, 2;
 
     unless ($format eq 'chonky' or $format eq 'compact') {
-      $self->_display_notice("Not a valid message format.");
-      return;
+      return [ notice => "Not a valid message format." ];
     }
 
     $channel //= $self->channel->name;
@@ -255,8 +253,7 @@ EOH
                    $self->hub->channels;
 
     unless (@channels) {
-      $self->_display_notice("Couldn't find target Console reactor.");
-      return;
+      return [ notice => "Couldn't find target Console reactor." ];
     }
 
     for (@channels) {
@@ -264,7 +261,7 @@ EOH
       $_->_display_notice("Message format set to $format");
     }
 
-    return;
+    return [ notice => 'Updated.' ];
   }
 
   # from-address    - the default from_address on new events
@@ -274,15 +271,13 @@ EOH
   #                   event targeted
   sub _diagnostic_cmd_set ($self, $rest) {
     unless (length $rest) {
-      $self->_display_message("Usage: /set VAR VALUE");
-      return;
+      return [ box => "Usage: /set VAR VALUE" ];
     }
 
     my ($var, $value) = split /\s+/, $rest, 2;
 
     unless (length $var && length $value) {
-      $self->_display_message("Usage: /set VAR VALUE");
-      return;
+      return [ box => "Usage: /set VAR VALUE" ];
     }
 
     my %var_handler = (
@@ -295,19 +290,16 @@ EOH
     my $handler = $var_handler{$var};
 
     unless ($handler) {
-      $self->_display_message("Unknown Console channel variable: $var");
-      return;
+      return [ box => "Unknown Console channel variable: $var" ];
     }
 
     eval {; $handler->($value) };
 
     if ($@) {
-      $self->_display_message("Error occurred setting $var");
-      return;
+      return [ box => "Error occurred setting $var" ];
     }
 
-    $self->_display_message("Updated $var");
-    return;
+    return [ box => "Updated $var" ];
   }
 
   sub _display_notice ($self, $text) {
@@ -340,7 +332,7 @@ sub _event_from_text ($self, $text) {
   if ($text =~ m{\A/} && $text !~ s{\A//}{/}) {
     return if $self->_do_diagnostic_command($text);
 
-    $self->_display_message("Didn't understand that diagnostic command.");
+    $self->_display_notice("Didn't understand that diagnostic command.");
     return undef;
   }
 
