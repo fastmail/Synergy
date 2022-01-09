@@ -236,6 +236,11 @@ EOH
   }
 
   sub _diagnostic_cmd_format ($self, $arg) {
+    unless (length $arg) {
+      $self->_display_notice("Current format: " .  $self->channel->message_format);
+      return;
+    }
+
     my ($format, $channel) = split /\s+/, $arg, 2;
 
     unless ($format eq 'chonky' or $format eq 'compact') {
