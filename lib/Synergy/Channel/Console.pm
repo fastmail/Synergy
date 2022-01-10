@@ -320,7 +320,7 @@ has _diagnostic_handler => (
       hub     => $self->hub,
       channel => $self,
       theme   => $self->theme,
-      color_scheme => $self->color_scheme,
+      ($self->color_scheme ? (color_scheme => $self->color_scheme) : ()),
     });
   },
 );
