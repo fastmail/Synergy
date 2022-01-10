@@ -429,6 +429,11 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
         # change.
         my $id  = $query_result->{data}{issueCreate}{issue}{identifier};
         my $url = $query_result->{data}{issueCreate}{issue}{url};
+        my $priority = $query_result->{data}{issueCreate}{issue}{priority};
+        my $assignee = $query_result->{data}{issueCreate}{issue}{assignee};
+        if ($priority == 1 && !defined $assignee) {
+          return $event->error_reply("You can't create an urgent issue with no assignee!");
+        }
         if ($id) {
           return $event->reply(
             sprintf("I made that task, %s: %s", $id, $url),
