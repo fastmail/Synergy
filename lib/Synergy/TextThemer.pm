@@ -170,7 +170,7 @@ sub _format_message_chonky ($self, $name, $address, $text) {
   my $new_text = q{};
 
   my @lines = split /\n/, $text;
-  while (my $line = shift @lines) {
+  while (defined(my $line = shift @lines)) {
     $new_text .= "$line_C$B_ver $text_C";
     if (length $line > 76) {
       my ($old, $rest) = $line =~ /\A(.{1,76})\s+(.+)/;
