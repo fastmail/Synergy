@@ -18,6 +18,11 @@ use Term::ANSIColor qw(colored);
 
 with 'Synergy::Role::Channel';
 
+has allow_eval => (
+  is => 'ro',
+  default => 0,
+);
+
 has color_scheme => (
   is  => 'ro',
   isa => 'Str',
@@ -320,6 +325,7 @@ has _diagnostic_handler => (
       hub     => $self->hub,
       channel => $self,
       theme   => $self->theme,
+      allow_eval => $self->allow_eval,
       ($self->color_scheme ? (color_scheme => $self->color_scheme) : ()),
     });
   },
