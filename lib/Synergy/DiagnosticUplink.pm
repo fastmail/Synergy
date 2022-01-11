@@ -50,9 +50,8 @@ package Synergy::DiagnosticUplink::Connection {
   }
 
   sub on_read ($self, $buffref, $eof) {
-    while ($$buffref =~ s/^(.*\n)//) {
+    while ($$buffref =~ s/^(.*?)\R//) {
       my $line = $1;
-      chomp $line;
 
       my $ok = $self->_diagnostic_handler->_do_diagnostic_command($line);
 
