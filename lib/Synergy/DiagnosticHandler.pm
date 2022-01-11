@@ -106,6 +106,21 @@ the exception thrown) will be pretty-printed.
 Obviously: caveat evaluator!
 EOH
 
+$HELP{nlist} = <<'EOH';
+Prints a list of every notifier attached to the event loop.  They're printed as
+the class of the notifier and, if it has a name, a slash then the name.  If
+more than one notifier exists with that class/name combination, they're counted
+up and the count for each combination is shown.
+
+See also /help ntree
+EOH
+
+$HELP{ntree} = <<'EOH';
+Prints a tree of every notifier attached to the event loop.
+
+See also /help nlist
+EOH
+
 sub _help_for ($self, $arg) {
   $arg = defined $arg ? lc $arg : '';
 
