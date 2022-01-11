@@ -189,7 +189,7 @@ package Synergy::Channel::Console::DiagnosticHandler {
 
   $EXTRA{''} = <<~'EOH';
 You've connected to a Console channel, which also functions as a messaging
-channel with Synergy.  If you sent text that doesn't start with a slash, it
+channel with Synergy.  If you send text that doesn't start with a slash, it
 will become a message.  The following slash commands are also provided:
 
   console - commands for inspecting and configuring your Console channel
