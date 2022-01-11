@@ -75,6 +75,11 @@ has user_directory => (
   },
 );
 
+has diagnostic_uplink_config => (
+  is => 'ro',
+  init_arg => 'diagnostic_uplink',
+);
+
 has state_dbh => (
   is  => 'ro',
   init_arg => undef,

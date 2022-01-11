@@ -221,9 +221,32 @@ sub set_loop ($self, $loop) {
     $self->server->register_path($metrics_path, $self->prom->psgi, 'the hub');
   }
 
+  $self->_maybe_setup_diagnostic_uplink;
   $self->_setup_diagnostic_metrics_timer;
 
   return $loop;
+}
+
+has diagnostic_uplink => (
+  is => 'ro',
+  writer => '_set_diagnostic_uplink',
+);
+
+sub _maybe_setup_diagnostic_uplink ($self) {
+  my $config = $self->env->diagnostic_uplink_config;
+  return unless $config;
+
+  require Synergy::DiagnosticUplink;
+  my $uplink = Synergy::DiagnosticUplink->new({
+    name => 'diagnostic_uplink',
+    %$config,
+  });
+  $uplink->register_with_hub($self);
+  $uplink->start;
+
+  $self->_set_diagnostic_uplink($uplink);
+
+  return;
 }
 
 sub _setup_diagnostic_metrics_timer ($self) {
