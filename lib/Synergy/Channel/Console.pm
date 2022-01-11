@@ -237,13 +237,13 @@ EOH
 
   sub _diagnostic_cmd_format ($self, $arg) {
     unless (length $arg) {
-      return [ notice => "Current format: " .  $self->channel->message_format ];
+      return [ box => "Current format: " .  $self->channel->message_format ];
     }
 
     my ($format, $channel) = split /\s+/, $arg, 2;
 
     unless ($format eq 'chonky' or $format eq 'compact') {
-      return [ notice => "Not a valid message format." ];
+      return [ box => "Not a valid message format." ];
     }
 
     $channel //= $self->channel->name;
@@ -253,7 +253,7 @@ EOH
                    $self->hub->channels;
 
     unless (@channels) {
-      return [ notice => "Couldn't find target Console reactor." ];
+      return [ box => "Couldn't find target Console reactor." ];
     }
 
     for (@channels) {
@@ -261,7 +261,7 @@ EOH
       $_->_display_notice("Message format set to $format");
     }
 
-    return [ notice => 'Updated.' ];
+    return [ box => 'Updated.' ];
   }
 
   # from-address    - the default from_address on new events
