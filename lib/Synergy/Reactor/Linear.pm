@@ -171,11 +171,36 @@ package Synergy::Reactor::Linear::LinearHelper {
 }
 
 has team_aliases => (
-  traits  => [ 'Hash' ],
+  reader  => '_team_aliases',
   default => sub {  {}  },
+  traits  => [ 'Hash' ],
   handles => {
+    known_team_names  => 'keys',
+  }
+);
+
+has _name_mappings => (
+  init_arg => undef,
+  lazy     => 1,
+  traits   => [ 'Hash' ],
+  handles  => {
     canonical_team_name_for => 'get',
   },
+  default  => sub ($self) {
+    my $names = $self->_team_aliases;
+
+    my %mapping;
+    for my $team (keys %$names) {
+      for ($team, $names->{$team}->@*) {
+        Carp::confess("Attempted to give two names for $_")
+          if exists $mapping{$_};
+
+        $mapping{$_} = $team;
+      }
+    }
+
+    return \%mapping;
+  }
 );
 
 has _linear_shared_cache => (
