@@ -153,6 +153,10 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
   $from_ymd .= "T00:00:00" unless $from_ymd =~ /T/;
   $to_ymd   .= "T00:00:00" unless $to_ymd   =~ /T/;
 
+  # Don't try to serailize DateTime
+  $from_ymd .= "" if ref $from_ymd;
+  $to_ymd .= "" if ref $to_ymd;
+
   my $res = eval {
     my $res = $self->jmap_client->request({
       using       => [ @USING ],
@@ -180,6 +184,8 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
     $res->assert_successful;
     $res;
   };
+
+  warn "_get_duty_items_between failed: $@\n" unless $res;
 
   # Error condition. -- rjbs, 2019-01-31
   return undef unless $res;
