@@ -148,12 +148,12 @@ sub duties_on ($self, $dt) {
 sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
   my %want_calendar_id = map {; $_->{calendar_id} => 1 } $self->rotors;
 
-  my $from = $from_ymd =~ /Z\z/ ? $from_ymd : "${from_ymd}T00:00:00Z";
-  my $to   = $to_ymd   =~ /Z\z/ ? $to_ymd   : "${to_ymd}T00:00:00Z";
+  my $from = $from_ymd =~ /:00\z/ ? $from_ymd : "${from_ymd}T00:00:00";
+  my $to   = $to_ymd   =~ /:00\z/ ? $to_ymd   : "${to_ymd}T00:00:00";
 
   my $res = eval {
     my $res = $self->jmap_client->request({
-      using       => [ 'urn:ietf:params:jmap:mail', 'https://cyrusimap.org/ns/jmap/calendars', ],
+      using       => [ @USING ],
       methodCalls => [
         [
           'CalendarEvent/query' => {
@@ -183,7 +183,7 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
   return undef unless $res;
 
   my @events =
-    grep {; $want_calendar_id{ $_->{calendarId} } }
+    grep {; grep { $want_calendar_id{ $_ } } keys $_->{calendarIds}->%* }
     $res->sentence_named('CalendarEvent/get')->as_stripped_pair->[1]{list}->@*;
 
   return \@events;
@@ -234,7 +234,6 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
       my $start = $day->ymd . "T00:00:00";
 
       $want{ $rotor->keyword }{ $start } = {
-        '@type'   => 'jsevent',
         prodId    => "$PROGRAM_ID",
         title     => join(q{ - }, $rotor->description, $name),
         start     => $start,
@@ -244,7 +243,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
           ($user  ? ("username:" . $user->{username} => JSON::MaybeXS->true)
                   : ()),
         },
-        calendarId      => $rotor->calendar_id,
+        calendarIds     => { $rotor->calendar_id => JSON::MaybeXS->true },
         freeBusyStatus  => "free",
         showWithoutTime => JSON::MaybeXS->true,
       }
@@ -511,14 +510,14 @@ package Synergy::Rototron::AvailabilityChecker {
     CALENDAR: for my $calendar ($self->calendars) {
       my $res = eval {
         my $res = $self->jmap_client->request({
-          using       => [ 'urn:ietf:params:jmap:mail', 'https://cyrusimap.org/ns/jmap/calendars', ],
+          using       => [ @USING ],
           methodCalls => [
             [
               'CalendarEvent/query' => {
                 accountId   => $calendar->{accountId},
                 filter => {
                   inCalendars => [ $calendar->{calendarId} ],
-                  after       => DateTime->now->ymd . "T00:00:00Z", # endAfter
+                  after       => DateTime->now->ymd . "T00:00:00", # endAfter
                 },
               },
               'a',
