@@ -150,8 +150,8 @@ sub duties_on ($self, $dt) {
 sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
   my %want_calendar_id = map {; $_->{calendar_id} => 1 } $self->rotors;
 
-  my $from = $from_ymd =~ /:00\z/ ? $from_ymd : "${from_ymd}T00:00:00";
-  my $to   = $to_ymd   =~ /:00\z/ ? $to_ymd   : "${to_ymd}T00:00:00";
+  $from_ymd .= "T00:00:00" unless $from_ymd =~ /T/;
+  $to_ymd   .= "T00:00:00" unless $to_ymd   =~ /T/;
 
   my $res = eval {
     my $res = $self->jmap_client->request({
@@ -161,8 +161,8 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
           'CalendarEvent/query' => {
             filter => {
               inCalendars => [ keys %want_calendar_id ],
-              after       => $from,
-              before      => $to,
+              after       => $from_ymd,
+              before      => $to_ymd,
             },
           },
           'a',
