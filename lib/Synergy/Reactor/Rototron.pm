@@ -286,9 +286,8 @@ sub current_officers_for_duty ($self, $duty_name) {
   my $rototron = $self->rototron;
 
   my $now  = DateTime->now(time_zone => 'UTC');
-  my $znow = $now->iso8601 . 'Z';
 
-  my $items = $self->rototron->_get_duty_items_between($znow, $znow);
+  my $items = $self->rototron->_get_duty_items_between($now, $now);
 
   my @users = grep {; defined && $_->is_working_now }
               map  {; $self->_user_from_duty($_) }
