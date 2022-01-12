@@ -56,6 +56,8 @@ my @USING = qw(
   urn:ietf:params:jmap:core
   urn:ietf:params:jmap:mail
   urn:ietf:params:jmap:submission
+  urn:ietf:params:jmap:calendars
+  urn:ietf:params:jmap:principals
   https://cyrusimap.org/ns/jmap/mail
   https://cyrusimap.org/ns/jmap/contacts
   https://cyrusimap.org/ns/jmap/calendars
