@@ -15,8 +15,6 @@ package Synergy::CommandPost::Object {
 
   use experimental 'signatures';
 
-  has is_final => (is => 'rw');
-
   has commands => (
     isa => 'HashRef',
     init_arg  => undef,
