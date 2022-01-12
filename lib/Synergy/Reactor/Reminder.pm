@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Reactor::Reminder;
 
@@ -204,6 +204,7 @@ sub _setup_next_timer ($self) {
 
   my $timer = IO::Async::Timer::Absolute->new(
     time => $when,
+    notifier_name => 'reminder-due',
     on_expire => sub { $reactor->_send_due_reminders },
   );
 

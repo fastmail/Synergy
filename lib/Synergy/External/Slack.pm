@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::External::Slack;
 
@@ -338,6 +338,7 @@ sub _register_slack_rtm ($self, $res) {
 
       # Send pings to slack so it knows we're still alive
       my $timer = IO::Async::Timer::Periodic->new(
+        notifier_name => 'slack-ping',
         interval => 10,
         on_tick  => sub {
           $self->send_frame({ type => 'ping' });

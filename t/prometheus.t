@@ -1,6 +1,6 @@
 #!perl
 
-use v5.24.0;
+use v5.28.0;
 use warnings;
 
 use lib 'lib';
@@ -21,6 +21,7 @@ my $synergy = Synergy::Hub->synergize(
   {
     user_directory => "t/data/users.yaml",
     server_port => empty_port(),
+    metrics_path => '/metrics',
     channels => {
       'test-channel' => {
         class     => 'Synergy::Channel::Test',
@@ -50,10 +51,15 @@ $synergy->loop->add($http);
 my $port = $synergy->server_port;
 
 my ($res) = $http->do_request(uri => "http://localhost:$port/metrics")->get;
-is($res->content, <<EOF, 'metrics report three events receieved');
+my $expect = <<'END';
 # HELP synergy_events_received_total Number of events received by reactors
 # TYPE synergy_events_received_total counter
 synergy_events_received_total{channel="test-channel",in="test",targeted="0",user="tester"} 3
-EOF
+END
+
+isnt(
+  index($res->content, $expect), -1,
+  'metrics report three events receieved'
+) or diag "Have: " . $res->content;
 
 done_testing;

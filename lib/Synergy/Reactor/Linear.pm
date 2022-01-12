@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Reactor::Linear;
 
@@ -16,19 +16,16 @@ use Synergy::Logger '$Logger';
 
 use utf8;
 
-sub listener_specs ($self){
+sub listener_specs ($self) {
 
-  my $issue_id = $self->_issue_regex; 
-  
   return (
     {
       name      => 'mentions',
       method    => 'handle_mentions',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($, $e) { 
-        return 1 if $e->text =~ /$issue_id/;  
-        return;
+      predicate => sub ($, $e) {
+        my @team_names = $self->known_team_names;
+        my $is_mentioned = grep { $e->text =~ /(?:^|\W)($_-[0-9]*)/i } @team_names;
+        return $is_mentioned;
       } 
     },
     {
@@ -51,7 +48,7 @@ EOH
       method    => 'handle_new_issue',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($, $e) { $e->text =~ /\A ( \+\+ | >> ) \s+/x; },
+      predicate => sub ($, $e) { $e->text =~ /\A ( \+\+ | >\s?> ) \s+/x; },
       help_entries => [
         { title => '++', text => 'This is like using `>>` but supplying yourself as the target.  See *help >>* instead.' },
         { title => '>>', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
@@ -79,12 +76,14 @@ EOH
       method    => 'handle_support_blockers',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($, $e) { $e->text eq 'sb'; },
+      predicate => sub ($, $e) { $e->text =~ /\Asb(\s|$)/ni; },
       help_entries => [
         { title => 'sb', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg }
-*sb*: list unassigned support-blocking issues in Linear
+*sb `WHO`*: list unassigned support-blocking issues in Linear
 
-This will list all open, unassigned issues in Linear tagged "support blocker".
+This will list open issues in Linear tagged "support blocker".  If you name
+someone, it will list issues assigned to that person.  Otherwise, it lists
+unassigned support blockers.
 EOH
       ]
     },
@@ -170,7 +169,7 @@ package Synergy::Reactor::Linear::LinearHelper {
   }
 
   sub normalize_team_name ($self, $team_name) {
-    return $self->{reactor}->canonical_team_name_for($team_name);
+    return $self->{reactor}->canonical_team_name_for(lc $team_name);
   }
 
   sub team_id_for_username ($self, $username) {
@@ -182,24 +181,41 @@ package Synergy::Reactor::Linear::LinearHelper {
 }
 
 has team_aliases => (
-  traits  => [ 'Hash' ],
+  reader  => '_team_aliases',
   default => sub {  {}  },
+  traits  => [ 'Hash' ],
   handles => {
+    known_team_names  => 'keys',
+  }
+);
+
+has _name_mappings => (
+  init_arg => undef,
+  lazy     => 1,
+  traits   => [ 'Hash' ],
+  handles  => {
     canonical_team_name_for => 'get',
   },
+  default  => sub ($self) {
+    my $names = $self->_team_aliases;
+
+    my %mapping;
+    for my $team (keys %$names) {
+      for ($team, $names->{$team}->@*) {
+        Carp::confess("Attempted to give two names for $_")
+          if exists $mapping{$_};
+
+        $mapping{$_} = $team;
+      }
+    }
+
+    return \%mapping;
+  }
 );
 
 has _linear_shared_cache => (
   is => 'ro',
   default => sub {  {}  },
-);
-
-has _issue_regex => (
-  is => 'ro',
-  lazy => 1,
-  default => sub {
-    return qr/(?:^|\W)(plumb-[0-9]*)/i; # we're matching only plumbing here for now
-  }
 );
 
 sub _with_linear_client ($self, $event, $code) {
@@ -227,10 +243,29 @@ sub _with_linear_client ($self, $event, $code) {
   return $code->($linear);
 }
 
+sub _slack_item_link ($self, $issue) {
+  sprintf "<%s|%s>\N{THIN SPACE}",
+    "https://linear.app/fastmail/issue/$issue->{identifier}/...",
+    $issue->{identifier};
+}
+
 sub handle_mentions ($self, $event) {
   $event->mark_handled if $event->was_targeted;
-  my $issue_id = $event->text =~ $self->_issue_regex;
-  $event->reply("https://linear.app/fastmail/issue/$1/...");
+  my $issue_id = $event->text;
+  $self->_with_linear_client($event, sub ($linear) {
+    $linear->fetch_issue($issue_id)->then(sub ($issue) {
+      if (defined $issue) {
+        my $title = $issue->{title};
+        my $link = $self->_slack_item_link($issue);
+        return $event->reply("$link: $title");
+      } else {
+        if ($event->was_targeted) {
+          return $event->error_reply("Couldn't find an issue with the id $issue->{identifier}");
+        } else {
+          return;
+        }
+    });
+  });
 }
 
 sub handle_list_teams ($self, $event) {
@@ -313,16 +348,41 @@ sub handle_urgent ($self, $event) {
 sub handle_support_blockers ($self, $event) {
   $event->mark_handled;
 
-  $self->_handle_search(
-    $event,
-    {
-      label     => 'support blocker',
-      closed    => 0,
-      assignee  => undef,
-    },
-    "No support blockers!  Great!",
-    "Current support blockers",
-  );
+  my (undef, $who) = split /\s/, $event->text, 2;
+
+  if ($who) {
+    my $user = $self->resolve_name($who, $event->from_user);
+    unless ($user) {
+      return $event->error_reply(qq{I can't figure out who "$who" is.});
+    }
+
+    $who = $user->username;
+  }
+
+  $self->_with_linear_client($event, sub ($linear) {
+    my $when  = length $who
+              ? $linear->lookup_user($who)->then(sub ($user) {
+                  return Future->fail("no such user") unless $user;
+                  return Future->done(assignee => $user->{id});
+                })
+              : Future->done(assignee => undef);
+
+    $when->then(sub {
+      my (%extra_search) = @_;
+
+      $self->_handle_search(
+        $event,
+        {
+          label     => 'support blocker',
+          closed    => 0,
+          %extra_search
+        },
+        "No support blockers!  Great!",
+        "Current support blockers",
+        $linear,
+      );
+    });
+  });
 }
 
 sub handle_triage ($self, $event) {
@@ -412,6 +472,10 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
   my $code = sub ($linear) {
     my $text = $event->text;
 
+
+    # Slack now "helpfully" corrects '>>' in DM to '> >'.
+    $text =~ s/\A> >/>>/;
+
     my $plan_f = $linear->plan_from_input($ersatz_text // $text);
 
     # XXX: I do not like our current error-returning scheme. -- rjbs, 2021-12-10
@@ -449,7 +513,7 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
 }
 
 sub handle_new_issue ($self, $event) {
-  if ($event->text =~ /\AL?>> triage /i) {
+  if ($event->text =~ /\A>> triage /i) {
     $event->mark_handled;
     return $event->error_reply(q{You can't assign directly to triage anymore.  Instead, use the Zendesk integration!  You can also look at help for "ptn blocked".});
   }

@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Environment;
 
@@ -40,6 +40,11 @@ has server_port => (
   default => 8118,
 );
 
+has metrics_path => (
+  is => 'ro',
+  isa => 'Str',
+);
+
 has tls_cert_file => (
   is => 'ro',
   isa => 'Str',
@@ -68,6 +73,11 @@ has user_directory => (
     require Synergy::UserDirectory;
     Synergy::UserDirectory->new({ env => $self });
   },
+);
+
+has diagnostic_uplink_config => (
+  is => 'ro',
+  init_arg => 'diagnostic_uplink',
 );
 
 has state_dbh => (

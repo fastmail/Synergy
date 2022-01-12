@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Reactor::Preferences;
 
@@ -22,6 +22,8 @@ sub listener_specs {
       exclusive => 1,
       predicate => sub { return; },
       help_entries => [
+        (map {; +{ title => $_, unlisted => 1, text => "See *help preferences*" } }
+          qw( clear dump prefs set show )),
         {
           title => 'preferences',
           text  => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,

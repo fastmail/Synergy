@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Event;
 use Moose;
@@ -114,7 +114,7 @@ sub source_identifier ($self) {
 }
 
 # Ephemeral replies cannot have alts. -- michael, 2019-02-05
-sub ephemeral_reply($self, $text) {
+sub ephemeral_reply ($self, $text) {
   return $self->reply($text)
     unless $self->from_channel->can('send_ephemeral_message');
 

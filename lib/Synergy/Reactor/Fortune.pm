@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Reactor::Fortune;
 
@@ -41,36 +41,18 @@ has _fortunes => (
 has _scolding_counts => (
   is => 'ro',
   isa => 'HashRef',
-  traits => ['Hash'],
-  lazy => 1,
   default => sub { {} },
-  handles => {
-    remove_scolding    => 'delete',
-    recent_scoldings   => 'keys',
-    scolding_data_for  => 'get',
-    note_scolding_data => 'set',
-  },
 );
 
-# If it's been more than 5 minutes since the last time you asked for a fortune
-# in this channel, you can ask again.
-has scold_reaper => (
-  is => 'ro',
-  lazy => 1,
-  default => sub ($self) {
-    return IO::Async::Timer::Periodic->new(
-      interval => 30,
-      on_tick  => sub {
-        my $then = time - (60 * 5);
+sub _update_scolding_count_for ($self, $key) {
+  my $counts = $self->_scolding_counts;
 
-        for my $key ($self->recent_scoldings) {
-          my ($count, $ts) = $self->scolding_data_for($key)->@*;
-          $self->remove_scolding($key) if $ts lt $then;
-        }
-      },
-    );
-  }
-);
+  delete $counts->{$key} if $counts->{$key} && time - 300 > $counts->{$key}[1];
+
+  $counts->{$key} //= [ 0, time ];
+
+  return ++$counts->{$key}[0];
+}
 
 sub listener_specs {
   return (
@@ -97,10 +79,6 @@ END
   );
 }
 
-sub start ($self) {
-  $self->hub->loop->add($self->scold_reaper->start);
-}
-
 sub handle_fortune ($self, $event) {
   $event->mark_handled;
 
@@ -112,10 +90,7 @@ sub handle_fortune ($self, $event) {
   if ($event->is_public) {
     my $src = $event->source_identifier;
 
-    my $data = $self->scolding_data_for($src) // [];
-    my $count = $data->[0] // 0;
-
-    $self->note_scolding_data($src, [ $count + 1, time]);
+    my $count = $self->_update_scolding_count_for($src);
 
     if ($count >= 3) {
       $event->ephemeral_reply("No fishing for your favorite fortunes in public!");

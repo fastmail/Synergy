@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::HTTPServer;
 
@@ -48,13 +48,17 @@ has tls_key_file => (
   isa => 'Str',
 );
 
+package Synergy::HTTPServer::PSGI {
+  use parent 'Net::Async::HTTP::Server::PSGI';
+}
+
 has http_server => (
   is => 'ro',
   isa => 'Net::Async::HTTP::Server::PSGI',
   init_arg => undef,
   lazy => 1,
   default   => sub ($self) {
-    my $server = Net::Async::HTTP::Server::PSGI->new(
+    my $server = Synergy::HTTPServer::PSGI->new(
       app => Plack::Middleware::AccessLog->new(
         logger => sub ($msg) {
           chomp($msg);
@@ -78,7 +82,7 @@ has _urlmap => (
 
 # $app is a PSGI app
 sub register_path ($self, $path, $app, $by) {
-  confess "bogus HTTP path" unless $path && $path =~ m{\A(/[-_0-9a-z]+)+\z};
+  confess "bogus HTTP path" unless $path && $path =~ m{\A(/[-_0-9a-z]+)+\z}i;
 
   my $path_slash = "$path/";
   my @known = map {; "$_/" } $self->registered_paths;

@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::External::Discord;
 
@@ -299,6 +299,7 @@ sub handle_hello {
   $self->_clear_heartbeat_timer;
 
   my $timer = IO::Async::Timer::Periodic->new(
+    notifier_name => 'discord-heartbeat',
     interval  => $interval,
     on_tick   => sub { $self->send_heartbeat; },
   );

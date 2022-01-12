@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Role::HubComponent;
 
@@ -25,7 +25,7 @@ has hub => (
   predicate => '_has_hub',
   init_arg  => undef,
   weak_ref  => 1,
-  handles   => [ qw( loop ) ],
+  handles   => [ qw( loop prom ) ],
 );
 
 sub hub ($self) {

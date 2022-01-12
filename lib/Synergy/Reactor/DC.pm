@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Reactor::DC;
 
@@ -106,6 +106,8 @@ sub handle_dc($self, $event) {
 
   my $timer = IO::Async::Timer::Countdown->new(
     delay => 5,
+    notifier_name    => 'dc-timeout',
+    remove_on_expire => 1,
     on_expire => sub {
       $process->is_running && $process->kill('KILL');
     },

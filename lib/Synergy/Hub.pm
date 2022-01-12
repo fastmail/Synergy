@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Hub;
 
@@ -15,11 +15,13 @@ with (
 use Synergy::Logger '$Logger';
 
 use DBI;
+use IO::Async::Timer::Periodic;
 use Module::Runtime qw(require_module);
 use Net::Async::HTTP;
 use Synergy::UserDirectory;
 use Path::Tiny ();
 use Plack::App::URLMap;
+use Prometheus::Tiny 0.002;
 use Synergy::Environment;
 use Synergy::HTTPServer;
 use Synergy::Util qw(read_config_file);
@@ -56,6 +58,12 @@ has server => (
     $s->register_with_hub($self);
     return $s;
   },
+);
+
+has prom => (
+  is => 'ro',
+  lazy => 1,
+  default => sub { Prometheus::Tiny->new },
 );
 
 for my $pair (
@@ -209,7 +217,70 @@ sub set_loop ($self, $loop) {
   $_->start for $self->reactors;
   $_->start for $self->channels;
 
+  if (my $metrics_path = $self->env->metrics_path) {
+    $self->server->register_path($metrics_path, $self->prom->psgi, 'the hub');
+  }
+
+  $self->_maybe_setup_diagnostic_uplink;
+  $self->_setup_diagnostic_metrics_timer;
+
   return $loop;
+}
+
+has diagnostic_uplink => (
+  is => 'ro',
+  writer => '_set_diagnostic_uplink',
+);
+
+sub _maybe_setup_diagnostic_uplink ($self) {
+  my $config = $self->env->diagnostic_uplink_config;
+  return unless $config;
+
+  require Synergy::DiagnosticUplink;
+  my $uplink = Synergy::DiagnosticUplink->new({
+    name => 'diagnostic_uplink',
+    %$config,
+  });
+  $uplink->register_with_hub($self);
+  $uplink->start;
+
+  $self->_set_diagnostic_uplink($uplink);
+
+  return;
+}
+
+sub _setup_diagnostic_metrics_timer ($self) {
+  my $prom = $self->prom;
+  my $loop = $self->loop;
+
+  $self->prom->declare('synergy_ioasync_notifiers',
+    help => 'Number of IO::Async notifiers on the loop',
+    type => 'gauge',
+  );
+
+  my $diag_timer = IO::Async::Timer::Periodic->new(
+    notifier_name => 'diag-metrics',
+    interval => 60,
+    on_tick  => sub ($timer, @arg) {
+      my %notifier_count;
+      $notifier_count{ ref $_ }++ for $loop->notifiers;
+
+      for my $class (keys %notifier_count) {
+        $prom->set(
+          synergy_ioasync_notifiers => $notifier_count{$class},
+          { class => $class },
+        );
+      }
+    },
+  );
+
+  # We're not keeping a reference to the diagnostic timer, so we can never stop
+  # it.  We can address this later, if needed. -- rjbs, 2022-01-05
+  $loop->add($diag_timer);
+
+  $diag_timer->start;
+
+  return;
 }
 
 sub synergize {
@@ -272,12 +343,16 @@ sub synergize_file {
   );
 }
 
+package Synergy::HTTPClient {
+  use parent 'Net::Async::HTTP';
+}
+
 has http_client => (
   is => 'ro',
   isa => 'Net::Async::HTTP',
   lazy => 1,
   default => sub ($self) {
-    my $http = Net::Async::HTTP->new(
+    my $http = Synergy::HTTPClient->new(
       max_connections_per_host => 5, # seems good?
       max_in_flight => 10,           # default is 4; bump a bit
     );

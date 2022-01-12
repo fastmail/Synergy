@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 use utf8;
 package Synergy::Reactor::GitLab;
@@ -70,59 +70,41 @@ has relevant_owners => (
   default => sub { [] },
 );
 
-has _recent_mr_expansions => (
-  is => 'ro',
+# key => time
+has _expansion_cache_guts => (
+  is  => 'ro',
   isa => 'HashRef',
-  traits => ['Hash'],
-  lazy => 1,
-  default => sub { {} },
-  handles => {
-    has_expanded_mr_recently => 'exists',
-    note_mr_expansion        => 'set',
-    remove_mr_expansion      => 'delete',
-    recent_mr_expansions     => 'keys',
-    mr_expansion_for         => 'get',
-  },
+  traits  => [ 'Hash' ],
+  default => sub {  {}  },
 );
 
-has _recent_commit_expansions => (
-  is => 'ro',
-  isa => 'HashRef',
-  traits => ['Hash'],
-  lazy => 1,
-  default => sub { {} },
-  handles => {
-    has_expanded_commit_recently => 'exists',
-    note_commit_expansion        => 'set',
-    remove_commit_expansion      => 'delete',
-    recent_commit_expansions     => 'keys',
-    commit_expansion_for         => 'get',
-  },
-);
+sub _expansion_cache ($self) {
+  my $guts = $self->_expansion_cache_guts;
 
-# We'll only keep records of expansions for 5m or so.
-has expansion_record_reaper => (
-  is => 'ro',
-  lazy => 1,
-  default => sub ($self) {
-    return IO::Async::Timer::Periodic->new(
-      interval => 30,
-      on_tick  => sub {
-        my $then = time - (60 * 5);
-
-        for my $key ($self->recent_mr_expansions) {
-          my $ts = $self->mr_expansion_for($key);
-          $self->remove_mr_expansion($key) if $ts lt $then;
-        }
-
-        for my $key ($self->recent_commit_expansions) {
-          my $ts = $self->commit_expansion_for($key);
-          $self->remove_commit_expansion($key) if $ts lt $then;
-        }
-      },
-    );
+  for my $key (keys %$guts) {
+    delete $guts->{$key} if time - 300 > $guts->{$key};
   }
-);
+
+  return $guts;
+}
+
+sub has_expanded_mr_recently ($self, $key) {
+  return exists $self->_expansion_cache->{"MR_$key"};
+}
+
+sub note_mr_expansion ($self, $key) {
+  $self->_expansion_cache_guts->{"MR_$key"} = time;
+  return;
+}
+
+sub has_expanded_commit_recently ($self, $key) {
+  return exists $self->_expansion_cache->{"COMMIT_$key"};
+}
+
+sub note_commit_expansion ($self, $key) {
+  $self->_expansion_cache_guts->{"COMMIT_$key"} = time;
+  return;
+}
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
@@ -136,6 +118,8 @@ sub start ($self) {
 
   my $timer = IO::Async::Timer::Countdown->new(
     delay => 60,
+    notifier_name => 'gitlab-load-shortcuts',
+    remove_on_expire => 1,
     on_expire => sub {
       $Logger->log("loading shortcuts from GitLab");
       $self->_load_auto_shortcuts;
@@ -143,7 +127,6 @@ sub start ($self) {
   );
 
   $self->hub->loop->add($timer->start);
-  $self->hub->loop->add($self->expansion_record_reaper->start);
 }
 
 sub state ($self) {
@@ -826,7 +809,7 @@ sub handle_merge_request ($self, $event) {
         return;
       }
 
-      $self->note_mr_expansion($key, time);
+      $self->note_mr_expansion($key);
 
       my $state = $data->{state};
 
@@ -972,7 +955,7 @@ sub handle_commit ($self, $event) {
         return;
       }
 
-      $self->note_commit_expansion($key, time);
+      $self->note_commit_expansion($key);
 
       my $commit_url = sprintf("%s/%s/commit/%s",
         $self->url_base,

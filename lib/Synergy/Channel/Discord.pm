@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Channel::Discord;
 
@@ -6,7 +6,6 @@ use Moose;
 use experimental qw(signatures);
 use utf8;
 use JSON::MaybeXS;
-use IO::Async::Timer::Periodic;
 use Defined::KV;
 
 use Synergy::External::Discord;

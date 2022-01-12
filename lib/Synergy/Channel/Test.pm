@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Channel::Test;
 
@@ -141,10 +141,11 @@ sub _todo_to_notifier ($self, $todo) {
 sub _compile_send ($self, $arg) {
   my $timer = IO::Async::Timer::Countdown->new(
     delay => 0,
+    notifier_name => 'test-send-delayed',
+    remove_on_expire => 1,
     on_expire => sub {
       my ($timer) = @_;
       $self->_inject_event($arg);
-      $self->hub->loop->remove($timer);
       $self->do_next;
     },
   );
@@ -155,9 +156,10 @@ sub _compile_send ($self, $arg) {
 sub _compile_wait ($self, $arg) {
   my $timer = IO::Async::Timer::Countdown->new(
     delay => $arg->{seconds} // 0.05,
+    notifier_name => 'test-wait',
+    remove_on_expire => 1,
     on_expire => sub {
       my ($timer) = @_;
-      $self->hub->loop->remove($timer);
       $self->do_next;
     },
   );
@@ -171,6 +173,7 @@ sub _compile_repeat ($self, $arg) {
 
   my $timer = IO::Async::Timer::Periodic->new(
     interval => $sleep,
+    notifier_name => 'test-repeat',
     on_tick  => sub {
       my ($timer) = @_;
 

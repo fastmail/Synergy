@@ -111,42 +111,31 @@ has _ticket_mapping_dbh => (
 
 # This is stolen from the GitLab reactor; I might make this abstract later but
 # it'll require a parameterized role. -- michael, 2021-06-18
-has _recent_ticket_expansions => (
-  is => 'ro',
+# key => time
+has _expansion_cache_guts => (
+  is  => 'ro',
   isa => 'HashRef',
-  traits => ['Hash'],
-  lazy => 1,
-  default => sub { {} },
-  handles => {
-    has_expanded_ticket_recently => 'exists',
-    note_ticket_expansion        => 'set',
-    remove_ticket_expansion      => 'delete',
-    recent_ticket_expansions     => 'keys',
-    ticket_expansion_for         => 'get',
-  },
+  traits  => [ 'Hash' ],
+  default => sub {  {}  },
 );
 
-# We'll only keep records of expansions for 5m or so.
-has expansion_record_reaper => (
-  is => 'ro',
-  lazy => 1,
-  default => sub ($self) {
-    return IO::Async::Timer::Periodic->new(
-      interval => 30,
-      on_tick  => sub {
-        my $then = time - (60 * 5);
+sub _expansion_cache ($self) {
+  my $guts = $self->_expansion_cache_guts;
 
-        for my $key ($self->recent_ticket_expansions) {
-          my $ts = $self->ticket_expansion_for($key);
-          $self->remove_ticket_expansion($key) if $ts lt $then;
-        }
-      },
-    );
+  for my $key (keys %$guts) {
+    delete $guts->{$key} if time - 300 > $guts->{$key};
   }
-);
 
-sub start ($self) {
-  $self->hub->loop->add($self->expansion_record_reaper->start);
+  return $guts;
+}
+
+sub has_expanded_ticket_recently ($self, $key) {
+  return exists $self->_expansion_cache->{"TICKET_$key"};
+}
+
+sub note_ticket_expansion ($self, $key) {
+  $self->_expansion_cache_guts->{"TICKET_$key"} = time;
+  return;
 }
 
 sub listener_specs ($self) {
@@ -291,7 +280,7 @@ sub _output_ticket ($self, $event, $id) {
       });
 
       my $key = $self->_expansion_key_for_ticket($event, $ticket->id);
-      $self->note_ticket_expansion($key, time);
+      $self->note_ticket_expansion($key);
 
       return Future->done(1);
     })

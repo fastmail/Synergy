@@ -1,4 +1,4 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::Reactor::Rototron;
 
@@ -382,6 +382,7 @@ sub handle_duty ($self, $event) {
 
 sub start ($self) {
   my $timer = IO::Async::Timer::Periodic->new(
+    notifier_name => 'rototron-planner',
     interval => 15 * 60,
     on_tick  => sub {
       try {
