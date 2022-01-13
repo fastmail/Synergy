@@ -93,9 +93,9 @@ package Synergy::CommandPost::Object {
     my $targeted = $event->was_targeted;
 
     ### First, is there a command to match the first word of the message?
-    my ($first, $rest) = split /\s+/, $event->text, 2;
-
     if ($targeted) {
+      my ($first, $rest) = split /\s+/, $event->text, 2;
+
       if (my $command = $self->_command_named($first)) {
         my $method = $command->{method};
 
@@ -149,6 +149,7 @@ package Synergy::CommandPost::Object {
 
 sub _generate_command_system ($class, $, $arg, @) {
   my $object = Synergy::CommandPost::Object->new;
+
   return {
     potential_reactions_to => sub ($reactor, $event) {
       $object->potential_reactions_to($reactor, $event);
