@@ -13,6 +13,7 @@ use DateTime;
 use namespace::autoclean;
 
 use Synergy::Logger '$Logger';
+use Synergy::Timer;
 
 has directory => (
   is => 'ro',
