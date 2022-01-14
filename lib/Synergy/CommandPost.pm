@@ -97,10 +97,10 @@ package Synergy::CommandPost::Object {
 
   sub potential_reactions_to ($self, $reactor, $event) {
     my @reactions;
-    my $targeted = $event->was_targeted;
+    my $event_was_targeted = $event->was_targeted;
 
     ### First, is there a command to match the first word of the message?
-    if ($targeted) {
+    if ($event_was_targeted) {
       my ($first, $rest) = split /\s+/, $event->text, 2;
       $first = lc $first;
 
@@ -133,7 +133,11 @@ package Synergy::CommandPost::Object {
 
     ### Finally, reactions are the last-resort flexible option.
     my @reaction_kv = $self->_reaction_kv;
-    @reaction_kv = grep {; $_->[1]{targeted} } @reaction_kv if ! $targeted;
+
+    unless ($event_was_targeted) {
+      @reaction_kv = grep {; ! $_->[1]{targeted} } @reaction_kv;
+    }
+
     for my $reaction_pair (@reaction_kv) {
       my ($name, $reaction) = @$reaction_pair;
       my $match = $reaction->{matcher}->($event);
