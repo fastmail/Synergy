@@ -273,6 +273,7 @@ listener misc_pic => sub ($self, $event) {
 # Sometimes, respond in passing to a mention of "jazz" with a saxophone
 # slackmoji. -- michael, 2019-02-06
 listener jazz_pic => sub ($self, $event) {
+  return unless $event->text =~ /jazz/i;
   return unless $event->from_channel->isa('Synergy::Channel::Slack');
   return unless rand() < 0.1;
 
