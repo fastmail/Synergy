@@ -58,6 +58,13 @@ package Synergy::CommandPost::Object {
       Sub::Install::install_sub({
         as    => "add_$thing",
         code  => sub ($self, $name, $arg, $method) {
+          # Look, there's not reason you can't actually have two listeners,
+          # named Zorch and zorch.  But there's no reason you really ought to
+          # do that either.  So don't.  I'll be proscribing any
+          # case-insensitive conflict for the same of commands, where it _does_
+          # matter. -- rjbs, 2022-01-14
+          $name = lc $name;
+
           Carp::confess("already have a $thing named $name")
             if $self->$check($name);
 
@@ -95,6 +102,7 @@ package Synergy::CommandPost::Object {
     ### First, is there a command to match the first word of the message?
     if ($targeted) {
       my ($first, $rest) = split /\s+/, $event->text, 2;
+      $first = lc $first;
 
       if (my $command = $self->_command_named($first)) {
         my $method = $command->{method};
