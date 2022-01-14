@@ -172,7 +172,6 @@ sub _generate_command_system ($class, $, $arg, @) {
     },
     listener => sub ($name, $code) {
       $object->add_listener($name, {}, $code);
-
       return;
     },
     reaction => sub ($name, $arg, $code) {
