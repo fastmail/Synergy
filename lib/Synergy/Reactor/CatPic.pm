@@ -6,12 +6,13 @@ use utf8;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor';
+
+use Synergy::CommandPost;
 
 use Synergy::Logger '$Logger';
 
 use experimental qw(lexical_subs signatures);
-use namespace::clean;
 
 my $EMOJI_CONFIG = <<'END_EMOJI';
 🐀 rat
@@ -190,46 +191,17 @@ sub _build_reactions ($self, @) {
   return $reactions;
 }
 
-sub listener_specs {
-  my ($reactor) = @_;
-
-  return (
-    {
-      name      => 'misc-pic',
-      method    => 'handle_misc_pic',
-      predicate => sub ($self, $e) {
-        $e->text =~ /(\w+)\s+pic/i && $reactor->has_reaction_for(lc $1);
-      },
-    },
-    {
-      name      => 'dog-pic',
-      method    => 'handle_dog_pic',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) {
-            $e->text =~ /\Adog\s+pic\z/i
-        ||  $e->text =~ /\Aunleash\s+the\s+hounds\z/i;
-      },
-    },
-    {
-      name      => 'cat-pic',
-      method    => 'handle_cat_pic',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($, $e) { $e->text =~ /\Acat\s+(pic|jpg|gif|png)\z/i },
-    },
-    {
-      name      => 'jazz-pic',
-      method    => 'handle_jazz_pic',
-      predicate => sub ($, $e) { $e->text =~ /jazz/i },
-    },
-  );
-}
-
-sub handle_cat_pic ($self, $event) {
+reaction cat_pic => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher   => sub ($event) {
+    # TODO: make this an error instead of a give-up?
+    return unless $event->text =~ /\Acat(?:\s+(pic|jpg|gif|png))?\z/i;
+    return [ $1 || 'jpg,gif,png' ];
+  },
+}, sub ($self, $event, $fmt) {
   $event->mark_handled;
 
-  my (undef, $fmt) = split /\s+/, lc $event->text, 2;
   $fmt = q{jpg,gif,png} if $fmt eq 'pic';
 
   my $http_future = $self->hub->http_client->GET(
@@ -237,7 +209,7 @@ sub handle_cat_pic ($self, $event) {
     max_redirects => 0,
   );
 
-  $http_future->on_done(sub ($res) {
+  return $http_future->on_done(sub ($res) {
     if ($res->code =~ /\A3..\z/) {
       my $loc = $res->header('Location');
       $event->reply($loc);
@@ -246,11 +218,9 @@ sub handle_cat_pic ($self, $event) {
 
     $event->reply("Something went wrong getting the kitties! \N{CRYING CAT FACE}");
   });
+};
 
-  return;
-}
-
-sub handle_misc_pic ($self, $event) {
+listener misc_pic => sub ($self, $event) {
   my $text = $event->text;
   while ($text =~ /(\w+)\s+pic/ig) {
     my $name = lc $1;
@@ -284,21 +254,25 @@ sub handle_misc_pic ($self, $event) {
       );
     }
 
-    # This is sort of a mess.  If someone addresses us from not-Slack, we don't
-    # want to play dumb, but we don't want to give stupid replies to SMS
-    # because they contained "cat pic" embedded in them.  So if we're not Slack
-    # (and by this point we know we're not) and the message is exactly a pic
-    # request, we'll give an emoji reply.
+    if ($event->from_channel->isa('Synergy::Channel::Console')) {
+      return $event->reply("[ pretend you got this cute reaction: $emoji ]");
+    }
+
+    # This is sort of a mess.  If someone addresses us from an unsupported
+    # channel, we don't want to play dumb, but we don't want to give stupid
+    # replies to SMS because they contained "cat pic" embedded in them.  So if
+    # we're not Slack (and by this point we know we're not) and the message is
+    # exactly a pic request, we'll give an emoji reply.
     $event->reply($emoji) if $exact;
     return;
   }
 
   return;
-}
+};
 
 # Sometimes, respond in passing to a mention of "jazz" with a saxophone
 # slackmoji. -- michael, 2019-02-06
-sub handle_jazz_pic ($self, $event) {
+listener jazz_pic => sub ($self, $event) {
   return unless $event->from_channel->isa('Synergy::Channel::Slack');
   return unless rand() < 0.1;
 
@@ -310,9 +284,20 @@ sub handle_jazz_pic ($self, $event) {
   );
 
   return;
-}
+};
 
-sub handle_dog_pic ($self, $event) {
+# TODO: we want a way to write some kind of custom prefix matching hybrid
+# listener / command?
+reaction dog_pic => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher   => sub ($event) {
+    my $text = $event->text;
+    return unless $text =~ /\Adog\s+pic\z/i
+               || $text =~ /\Aunleash\s+the\s+hounds\z/i;
+    return [];
+  },
+} => sub ($self, $event) {
   $event->mark_handled;
 
   my $http_future = $self->hub->http_get(
@@ -333,6 +318,6 @@ sub handle_dog_pic ($self, $event) {
   });
 
   return;
-}
+};
 
 1;

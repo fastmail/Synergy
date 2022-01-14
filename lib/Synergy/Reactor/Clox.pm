@@ -4,51 +4,16 @@ package Synergy::Reactor::Clox;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor';
+
+use Synergy::CommandPost;
 
 use experimental qw(signatures lexical_subs);
-use namespace::clean;
 use List::Util qw(first uniq);
 use Synergy::Util qw(parse_date_for_user);
 use Time::Duration::Parse;
 
 use utf8;
-
-sub listener_specs {
-  return (
-    {
-      name      => 'clox',
-      method    => 'handle_clox',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Aclo(?:x|cks)(?:\s+.+)?/i },
-      help_entries => [
-        # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2020-09-23
-        { title => 'clox', text => <<'END'
-*clox* tells you what time it is in any time zone with a user in it (or that
-has been set up to always show up in the clocks).  You can also write:
-
-• *clox `TIME`*: when it's the given time _for you_, see the time elsewhere
-END
-        },
-      ],
-    },
-    {
-      name      => 'when',
-      method    => 'handle_when',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Awhen\s+is\s+/i },
-      help_entries => [
-        # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2020-09-23
-        { title => 'when', text => <<'END'
-*when is `WHEN`*: tells you how the given "when" string would be interpreted
-END
-        },
-      ],
-    },
-  );
-}
 
 # For testing. -- rjbs, 2018-07-14
 our $NOW_FACTORY = sub { DateTime->now };
@@ -60,13 +25,16 @@ has always_include => (
   handles => { always_include => 'elements' },
 );
 
-sub handle_clox ($self, $event) {
-  $event->mark_handled;
+command clox => {
+  help => <<'END'
+*clox* tells you what time it is in any time zone with a user in it (or that
+has been set up to always show up in the clocks).  You can also write:
 
-  my (undef, $spec) = split /\s+/, $event->text, 2;
-
+• *clox `TIME`*: when it's the given time _for you_, see the time elsewhere
+END
+} => sub ($self, $event, $spec) {
   my $time;
-  if ($spec) {
+  if (length $spec) {
     return $event->error_reply(qq{Sorry, I couldn't understand the time "$time".})
       unless $time = parse_date_for_user($spec, $event->from_user, 1);
   } else {
@@ -144,20 +112,20 @@ sub handle_clox ($self, $event) {
   chomp $reply;
 
   $event->reply($reply);
-}
+};
 
-sub handle_when ($self, $event) {
-  $event->mark_handled;
-
-  my $text = $event->text;
-
+command when => {
+  help => <<'END'
+*when is `WHEN`*: tells you how the given "when" string would be interpreted
+END
+} => sub ($self, $event, $rest) {
   return $event->reply_error("Sorry, I don't understand your *when* request.")
-    unless $text =~ s/\Awhen\s+is\s+//;
+    unless $rest =~ s/\Ais\s+//;
 
-  if ($text =~ s/\Anow\s+(plus|\+|-|minus)\s+//) {
+  if ($rest =~ s/\Anow\s+(plus|\+|-|minus)\s+//) {
     my $sign = ($1 eq '+' || $1 eq 'plus') ? 1 : -1;
     my $now  = time;
-    my $dur  = parse_duration($text);
+    my $dur  = parse_duration($rest);
 
     return $event->reply_error("Sorry, I don't understand that duration.")
       unless defined $dur;
@@ -174,7 +142,7 @@ sub handle_when ($self, $event) {
     return $event->reply("That would be: $str");
   }
 
-  my $time = parse_date_for_user($text, $event->from_user);
+  my $time = parse_date_for_user($rest, $event->from_user);
 
   return $event->reply("Sorry, I didn't understand that time.")
     unless $time;
@@ -188,6 +156,6 @@ sub handle_when ($self, $event) {
   );
 
   return $event->reply("That would be: $str");
-}
+};
 
 1;

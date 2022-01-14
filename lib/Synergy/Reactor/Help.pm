@@ -30,7 +30,14 @@ sub handle_help ($self, $event) {
 
   my ($help, $rest) = split /\s+/, $event->text, 2;
 
-  my @help = map {; $_->help_entries->@* } $self->hub->reactors;
+  # Another option here would be to add "requires 'help_entries'" to the
+  # Reactor role, but this gets to be a bit of a pain with CommandPost, because
+  # it's not a role and so its imported function isn't respected as a method.
+  # This could (and probably should) be fixed by making CommandPost a role, but
+  # it's a little complicated, so I'm just doing this, because this is easy to
+  # do and easy to understand. -- rjbs, 2022-01-02
+  my @help = map {; $_->can('help_entries') && $_->help_entries->@* }
+             $self->hub->reactors;
 
   unless ($rest) {
     my $help_str = join q{, }, uniq sort map  {; $_->{title} }
