@@ -195,9 +195,9 @@ sub _build_reactions ($self, @) {
 reaction cat_pic => {
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($event) {
+  matcher   => sub ($text, @) {
     # TODO: make this an error instead of a give-up?
-    return unless $event->text =~ /\Acat(?:\s+(pic|jpg|gif|png))?\z/i;
+    return unless $text =~ /\Acat(?:\s+(pic|jpg|gif|png))?\z/i;
     return [ $1 || 'jpg,gif,png' ];
   },
 }, sub ($self, $event, $fmt) {
@@ -293,8 +293,7 @@ listener jazz_pic => sub ($self, $event) {
 reaction dog_pic => {
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($event) {
-    my $text = $event->text;
+  matcher   => sub ($text, @) {
     return unless $text =~ /\Adog\s+pic\z/i
                || $text =~ /\Aunleash\s+the\s+hounds\z/i;
     return [];
