@@ -176,6 +176,12 @@ sub _generate_command_system ($class, $, $arg, @) {
         $object->add_help($name, {}, $arg->{help});
       }
 
+      if ($arg->{aliases}) {
+        for my $alias ($arg->{aliases}->@*) {
+          $object->add_command($alias, $arg, $code);
+        }
+      }
+
       return;
     },
     help => sub ($name, $text) {
