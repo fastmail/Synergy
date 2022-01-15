@@ -38,8 +38,12 @@ package Synergy::CommandPost::TestOutpost::Plan {
   }
 
   sub cmp_prs ($self, @expect) {
-    my $desc = 'potential reactions met expectations';
-    $desc = pop @expect if ! ref $expect[-1];
+    my $desc  = @expect && ! ref $expect[-1]
+              ? (pop @expect)
+              : do {
+                  my (undef, $file, $line) = caller;
+                  "potential reactions met expectations ($file, $line)"
+                };
 
     local $Test::Builder::Level = $Test::Builder::Level + 1;
     return Test::Deep::cmp_deeply(
@@ -50,8 +54,12 @@ package Synergy::CommandPost::TestOutpost::Plan {
   }
 
   sub cmp_results ($self, @expect) {
-    my $desc = 'actual reaction results met expectations';
-    $desc = pop @expect if ! ref $expect[-1];
+    my $desc  = @expect && ! ref $expect[-1]
+              ? (pop @expect)
+              : do {
+                  my (undef, $file, $line) = caller;
+                  "actual reactions met expectations ($file, $line)"
+                };
 
     local $Test::Builder::Level = $Test::Builder::Level + 1;
     return Test::Deep::cmp_deeply(

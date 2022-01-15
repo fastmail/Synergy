@@ -150,6 +150,10 @@ package Synergy::CommandPost::Object {
       $first = lc $first;
 
       if (my $command = $self->_command_named($first)) {
+        my $args = $command->{parser}
+                 ? ($command->{parser}->($rest, $event) || [])
+                 : [ $rest ];
+
         my $method = $command->{method};
 
         push @reactions, Synergy::PotentialReaction->new({
@@ -158,7 +162,7 @@ package Synergy::CommandPost::Object {
           is_exclusive  => 1,
           event_handler => sub {
             $event->mark_handled;
-            $reactor->$method($event, $rest)
+            $reactor->$method($event, @$args)
           },
         });
       }
@@ -185,7 +189,10 @@ package Synergy::CommandPost::Object {
 
     for my $reaction_pair (@reaction_kv) {
       my ($name, $reaction) = @$reaction_pair;
-      my $match = $reaction->{matcher}->($event);
+
+      my $match = $reaction->{matcher}
+                ? $reaction->{matcher}->($event->text, $event)
+                : [];
       next unless $match;
 
       my $method = $reaction->{method};

@@ -30,10 +30,28 @@ subtest "the absolute basics" => sub {
   );
 };
 
-subtest "matchers" => sub {
+subtest "aliases" => sub {
+  my $outpost = create_outpost(
+    [ command => foo => { aliases => [ qw(bar) ] } => tail_echoer ],
+  );
+
+  $outpost->consider_targeted("foo bar")->cmp_results(
+    { name => 'command-foo', result  => [ 'bar' ] },
+  );
+
+  # Right now, the name of the reaction comes from the name that matched,
+  # rather than the name under which the command was declared.  This isn't
+  # really the kind of thing to guarantee, so we'll allow either one here.
+  # (In a perfect world, I might always use the declared name, but it's not
+  # worth the time to fiddle.) -- rjbs, 2022-01-15
+  $outpost->consider_targeted("bar quux")->cmp_results(
+    { name => any('command-bar', 'command-foo'), result  => [ 'quux' ] },
+  );
+};
+
+subtest "matchers and parsers" => sub {
   my sub split_if_matching ($regex) {
-    return sub ($event) {
-      my $text = $event->text;
+    return sub ($text, @) {
       return unless $text =~ $regex;
       return [ split //, $text ];
     }
@@ -41,6 +59,7 @@ subtest "matchers" => sub {
 
   my $outpost = create_outpost(
     [ reaction => demo => { matcher => split_if_matching(q{0}) } => tail_echoer ],
+    [ command  => demo => { parser  => split_if_matching(q{9}) } => tail_echoer ],
   );
 
   $outpost->consider_targeted("gorp")->cmp_prs("we won't react without matches");
@@ -48,6 +67,11 @@ subtest "matchers" => sub {
   $outpost->consider_targeted("g0rp")->cmp_results(
     { name => 'reaction-demo', result => [ qw( g 0 r p ) ] },
     'matcher sub determines args to reaction',
+  );
+
+  $outpost->consider_targeted("demo g9rp")->cmp_results(
+    { name => 'command-demo', result => [ qw( g 9 r p ) ] },
+    'parser sub determines args to command',
   );
 };
 
