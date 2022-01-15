@@ -1,14 +1,59 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::CommandPost;
 
 use experimental 'signatures';
-
 use Synergy::PotentialReaction;
 
 use Sub::Exporter -setup => {
   groups => { default => \'_generate_command_system' },
 };
+
+sub _generate_command_system ($class, $, $arg, $) {
+  my $commandpost_override = $arg->{commandpost}; # Used for testing.
+  my $get_cmdpost = $commandpost_override
+                  ? sub { $commandpost_override }
+                  : sub { caller(1)->_commandpost };
+
+  return {
+    command => sub ($name, $arg, $code) {
+      my $object = $get_cmdpost->();
+      $object->add_command($name, $arg, $code);
+
+      if ($arg->{help}) {
+        $object->add_help($name, {}, $arg->{help});
+      }
+
+      if ($arg->{aliases}) {
+        for my $alias ($arg->{aliases}->@*) {
+          $object->add_command($alias, $arg, $code);
+        }
+      }
+
+      return;
+    },
+    help => sub ($name, $text) {
+      my $object = $get_cmdpost->();
+      $object->add_help($name, {}, $text);
+      return;
+    },
+    listener => sub ($name, $code) {
+      my $object = $get_cmdpost->();
+      $object->add_listener($name, {}, $code);
+      return;
+    },
+    reaction => sub ($name, $arg, $code) {
+      my $object = $get_cmdpost->();
+      $object->add_reaction($name, $arg, $code);
+
+      if ($arg->{help}) {
+        $object->add_help($name, {}, $arg->{help});
+      }
+
+      return;
+    },
+  };
+}
 
 package Synergy::CommandPost::Object {
   use Moose;
@@ -157,51 +202,6 @@ package Synergy::CommandPost::Object {
   }
 
   no Moose;
-}
-
-sub _generate_command_system ($class, $, $arg, @) {
-  my $object = Synergy::CommandPost::Object->new;
-
-  return {
-    potential_reactions_to => sub ($reactor, $event) {
-      $object->potential_reactions_to($reactor, $event);
-    },
-    help_entries => sub ($self) {
-      [ $object->_help_entries ];
-    },
-    command => sub ($name, $arg, $code) {
-      $object->add_command($name, $arg, $code);
-
-      if ($arg->{help}) {
-        $object->add_help($name, {}, $arg->{help});
-      }
-
-      if ($arg->{aliases}) {
-        for my $alias ($arg->{aliases}->@*) {
-          $object->add_command($alias, $arg, $code);
-        }
-      }
-
-      return;
-    },
-    help => sub ($name, $text) {
-      $object->add_help($name, {}, $text);
-      return;
-    },
-    listener => sub ($name, $code) {
-      $object->add_listener($name, {}, $code);
-      return;
-    },
-    reaction => sub ($name, $arg, $code) {
-      $object->add_reaction($name, $arg, $code);
-
-      if ($arg->{help}) {
-        $object->add_help($name, {}, $arg->{help});
-      }
-
-      return;
-    },
-  };
 }
 
 1;

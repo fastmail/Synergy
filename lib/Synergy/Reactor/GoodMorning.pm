@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Reactor::GoodMorning;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
