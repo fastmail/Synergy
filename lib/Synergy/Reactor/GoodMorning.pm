@@ -46,6 +46,7 @@ reaction good_morning => {
   elsif ($what eq 'happychristmas') { $reply  = "Bless us, every one!"; }
   elsif ($what eq 'happynewyear')   { $reply  = "\N{BOTTLE WITH POPPING CORK}"; }
   elsif ($what eq 'gday')           { $reply  = "How ya goin'?"; }
+  elsif ($what eq 'gdaymate')       { $reply  = "How ya goin'?"; }
   elsif ($what eq 'grußgott')       { $reply  = "Doch, wenn du ihn siehst!"; }
   elsif ($what eq 'goodday')        { $reply  = "Long days and pleasant nights!"; }
   elsif ($what eq 'goodafternoon')  { $reply  = "You, too!"; }
