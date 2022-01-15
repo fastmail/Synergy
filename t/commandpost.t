@@ -39,6 +39,11 @@ subtest "aliases" => sub {
     { name => 'command-foo', result  => [ 'bar' ] },
   );
 
+  $outpost->consider_targeted("FOO bar")->cmp_results(
+    { name => 'command-foo', result  => [ 'bar' ] },
+    "commands match case insensitively, but args are not munged",
+  );
+
   # Right now, the name of the reaction comes from the name that matched,
   # rather than the name under which the command was declared.  This isn't
   # really the kind of thing to guarantee, so we'll allow either one here.
