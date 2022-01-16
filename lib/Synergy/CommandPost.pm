@@ -27,6 +27,14 @@ sub _generate_command_system ($class, $, $arg, $) {
       if ($arg->{aliases}) {
         for my $alias ($arg->{aliases}->@*) {
           $object->add_command($alias, $arg, $code);
+
+          if ($arg->{help}) {
+            $object->add_help(
+              $alias,
+              { unlisted => 1 },
+              qq{$alias is an alias for $name.  See "help $name".}
+            );
+          }
         }
       }
 
