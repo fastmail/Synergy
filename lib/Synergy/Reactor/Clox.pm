@@ -33,18 +33,30 @@ has been set up to always show up in the clocks).  You can also write:
 • *clox `TIME`*: when it's the given time _for you_, see the time elsewhere
 END
 } => sub ($self, $event, $spec) {
-  my $time;
-  if (length $spec) {
-    return $event->error_reply(qq{Sorry, I couldn't understand the time "$time".})
-      unless $time = parse_date_for_user($spec, $event->from_user, 1);
-  } else {
-    $time = $NOW_FACTORY->();
-  }
+  my $user = $event->from_user;
 
   # Some of our Australian colleagues feel very strongly about being able to
   # write 'Australian/Melbourne' rather than 'Australia/Sydney'.
   my sub mel_to_syd ($tzname) {
     return $tzname eq 'Australia/Melbourne' ? 'Australia/Sydney' : $tzname;
+  }
+
+  my $time;
+  my $user_tz;
+  my $prefix;
+
+  if ($user) {
+    $user_tz = mel_to_syd($user->time_zone);
+  } else {
+    $user_tz = q{America/New_York};
+    $prefix  = "I don't know who you are, so I'm assuming you're in Philadelphia.";
+  }
+
+  if (length $spec) {
+    return $event->error_reply(qq{Sorry, I couldn't understand the time "$time".})
+      unless $time = parse_date_for_user($spec, $user, 1);
+  } else {
+    $time = $NOW_FACTORY->();
   }
 
   my @tzs = sort {; $a cmp $b }
@@ -59,7 +71,6 @@ END
   @tzs = ('America/New_York') unless @tzs;
 
   my $tz_nick = $self->hub->env->time_zone_names;
-  my $user_tz = mel_to_syd($event->from_user->time_zone);
 
   my %tz_objs = map {; $_ => DateTime::TimeZone->new(name => $_) } @tzs;
 
@@ -107,6 +118,7 @@ END
   my $its = $spec ? "$spec is" : "it's";
 
   my $reply = "In Internet Time\N{TRADE MARK SIGN} $its $beats.  That's...\n";
+  $reply = "$prefix\n\n$reply" if length $prefix;
   $reply .= join q{}, map {; "> $_\n" } @strs;
 
   chomp $reply;
