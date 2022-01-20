@@ -36,7 +36,7 @@ END
   my $user = $event->from_user;
 
   # Some of our Australian colleagues feel very strongly about being able to
-  # write 'Australian/Melbourne' rather than 'Australia/Sydney'.
+  # write 'Australia/Melbourne' rather than 'Australia/Sydney'.
   my sub mel_to_syd ($tzname) {
     return $tzname eq 'Australia/Melbourne' ? 'Australia/Sydney' : $tzname;
   }
