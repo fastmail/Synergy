@@ -182,6 +182,13 @@ sub listener_specs {
         }
       ],
     },
+    {
+      name      => 'vesta_grant',
+      method    => 'handle_vesta_grant',
+      exclusive => 1,
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta grant/i },
+    },
   );
 }
 
@@ -573,6 +580,44 @@ sub handle_vesta_lock ($self, $event) {
 
   $event->reply("The board is locked!  Don't forget to unlock it later.");
   return
+}
+
+sub handle_vesta_grant ($self, $event) {
+  $event->mark_handled;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    return $event->error_reply("I don't know who you are, so I can't help you out!");
+  }
+
+  unless (grep {; $_ eq $user->username } $self->board_admins) {
+    return $event->error_reply("Sorry, only board admins can grant tokens");
+  }
+
+  my ($who, $count) = $event->text =~ /^vesta grant\s+(\S+)\s+([0-9]+)\s+tokens/;
+
+  unless ($who && length $count) {
+    return $event->error_reply(q{Hmm, I don't understand: use "vesta grant WHO COUNT tokens"});
+  }
+
+  my $target = $self->resolve_name($who, $event->from_user);
+
+  unless ($target) {
+    return $event->error_reply("Sorry, I don't know who $who is.");
+  }
+
+  $count = 10 if $count > 10;  # this isn't Nam, Walter.
+
+  my $state = $self->_user_state->{ $target->username } //= {};
+  my $token_state = $state->{tokens} //= {};
+
+  $token_state->{count} += $count;
+  $self->save_state;
+
+  return $event->reply(sprintf("Ok! I've given %s %s %s.",
+    $target->username, $count, PL_N('token', $count)
+  ));
 }
 
 sub handle_vesta_designs ($self, $event) {
