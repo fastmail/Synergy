@@ -141,11 +141,14 @@ sub http_app ($self, $env) {
           return Future->done($by_id{$payload->{data}->{creatorId}}->{displayName} // 'unknown');
         })->then(sub ($who) {
           my $desc = $was_create ? 'New task created for' : 'Existing task moved to';
+          my $app = $was_create ? 'Zendesk' : 'Linear';
+          $who = 'someone' unless $was_create;
 
           my $text = sprintf
-            "$ESCALATION_EMOJI %s escalation by %s in zendesk: %s (%s)",
+            "$ESCALATION_EMOJI %s escalation by %s in %s: %s (%s)",
             $desc,
             $who,
+            $app
             $payload->{data}{title},
             $payload->{url};
 
