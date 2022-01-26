@@ -415,6 +415,7 @@ sub handle_agenda ($self, $event) {
         $event,
         {
           state    => 'To Discuss',
+          project  => { null => \1 },
           %extra_search,
         },
         "You have nothing on the agenda",
