@@ -148,7 +148,7 @@ sub http_app ($self, $env) {
             "$ESCALATION_EMOJI %s escalation by %s in %s: %s (%s)",
             $desc,
             $who,
-            $app
+            $app,
             $payload->{data}{title},
             $payload->{url};
 
