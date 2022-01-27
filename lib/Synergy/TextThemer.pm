@@ -179,7 +179,7 @@ sub _format_message_chonky ($self, $name, $address, $text) {
         unshift @lines, $rest;
       } else {
         # Oh well, nothing to do about it!
-        $new_text = $line;
+        $new_text .= $line;
       }
     } else {
       $new_text .= $line;
