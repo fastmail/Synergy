@@ -115,6 +115,12 @@ sub _slack_item_link ($self, $issue) {
     $issue->{identifier};
 }
 
+sub _icon_for_issue ($self, $issue) {
+  return '✓' if $issue->{state}{type} =~ /\A(canceled|completed)\z/n;
+  return "\N{FIRE}" if $issue->{priority} == 1;
+  return "•";
+}
+
 listener issue_mention => sub ($self, $event) {
   my $text = $event->text;
 
@@ -160,9 +166,11 @@ listener issue_mention => sub ($self, $event) {
       for my $found (@found) {
         my $issue = $future_for{$found}->get;
 
-        my $text = "$found — $issue->{title} — $issue->{url}";
+        my $icon = $self->_icon_for_issue($issue);
+
+        my $text = "$found $icon $issue->{title} • $issue->{url}";
         my $slack_link = $self->_slack_item_link($issue);
-        $event->reply($text, { slack => "$slack_link: $issue->{title}" });
+        $event->reply($text, { slack => "$slack_link $icon $issue->{title}" });
       }
 
       Future->done;
