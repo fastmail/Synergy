@@ -27,17 +27,17 @@ package Synergy::CommandPost::TestOutpost::Plan {
   has event  => (is => 'ro', required => 1);
   has _prs   => (is => 'ro', required => 1, init_arg => 'prs');
 
-  sub prs { $_[0]->_prs->@* }
+  sub potential_reactions { $_[0]->_prs->@* }
 
   sub reaction_results ($self) {
     my $event   = $self->event;
     my @results = map {; { name => $_->name, result => scalar $_->handle_event($event) } }
-                  $self->prs;
+                  $self->potential_reactions;
 
     return @results;
   }
 
-  sub cmp_prs ($self, @expect) {
+  sub cmp_potential ($self, @expect) {
     my $desc  = @expect && ! ref $expect[-1]
               ? (pop @expect)
               : do {
@@ -47,7 +47,7 @@ package Synergy::CommandPost::TestOutpost::Plan {
 
     local $Test::Builder::Level = $Test::Builder::Level + 1;
     return Test::Deep::cmp_deeply(
-      [ $self->prs ],
+      [ $self->potential_reactions ],
       [ @expect ],
       $desc,
     );
