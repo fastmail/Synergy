@@ -16,7 +16,7 @@ role {
   };
 
   method help_entries => sub ($self) {
-    $self->_commandpost->_help_entries;
+    [ $self->_commandpost->_help_entries ];
   };
 };
 
