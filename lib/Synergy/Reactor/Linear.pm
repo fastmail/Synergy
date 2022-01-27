@@ -138,6 +138,8 @@ listener issue_mention => sub ($self, $event) {
 
   my $matched_like_command = $event->was_targeted && $text !~ /\S/;
 
+  $event->mark_handled if $matched_like_command;
+
   # Let's uppercase everything here so it's consistent for the rest of the
   # subroutine.  We'll also drop out dupes while we're here.  -- rjbs,
   # 2022-01-26
@@ -145,8 +147,6 @@ listener issue_mention => sub ($self, $event) {
     my %seen;
     map {; $seen{uc $_}++ ? () : uc $_ } @matches;
   };
-
-  $event->mark_handled if $matched_like_command;
 
   $self->_with_linear_client($event, sub ($linear) {
     # We're being a bit gross here.  I'm going to wait_all a collection of
