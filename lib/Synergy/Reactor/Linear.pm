@@ -51,7 +51,7 @@ has team_aliases => (
   default => sub {  {}  },
   traits  => [ 'Hash' ],
   handles => {
-    known_team_names  => 'keys',
+    known_team_keys  => 'keys',
   }
 );
 
@@ -108,6 +108,67 @@ sub _with_linear_client ($self, $event, $code) {
 
   return $code->($linear);
 }
+
+sub _slack_item_link ($self, $issue) {
+  sprintf "<%s|%s>\N{THIN SPACE}",
+    $issue->{url},
+    $issue->{identifier};
+}
+
+listener issue_mention => sub ($self, $event) {
+  my $text = $event->text;
+
+  my $team_name_re = join q{|}, map {; quotemeta } $self->known_team_keys;
+  my @matches = $text =~ /\b((?:$team_name_re)-[0-9]+)\b/ig;
+
+  return unless @matches;
+
+  # If there's anything in the message other than identifiers and whitespace,
+  # this message had some content other than the identifier.  We remove all the
+  # identifiers, then look for anything other than whitespace.  If we were
+  # targeted and there was no other payload, it's like this listener was
+  # invoked as a command. -- rjbs, 2022-01-26
+  $text =~ s/\Q$_\E//g for @matches;
+
+  my $matched_like_command = $event->was_targeted && $text !~ /\S/;
+
+  # Let's uppercase everything here so it's consistent for the rest of the
+  # subroutine.  We'll also drop out dupes while we're here.  -- rjbs,
+  # 2022-01-26
+  @matches = do {
+    my %seen;
+    map {; $seen{uc $_}++ ? () : uc $_ } @matches;
+  };
+
+  $event->mark_handled if $matched_like_command;
+
+  $self->_with_linear_client($event, sub ($linear) {
+    # We're being a bit gross here.  I'm going to wait_all a collection of
+    # futures, then not worry about them being passed into the ->then, because
+    # what I really want to do is operate on a key-by-key basis, and hey,
+    # they're shared references.  -- rjbs, 2022-01-26
+    my %future_for = map {; $_ => $linear->fetch_issue($_) } @matches;
+
+    Future->wait_all(values %future_for)->then(sub {
+      my @missing = grep {; ! defined $future_for{$_}->get } @matches;
+      my @found   = grep {;   defined $future_for{$_}->get } @matches;
+
+      if (@missing && $matched_like_command) {
+        $event->error_reply("I couldn't find some issues you mentioned: @missing");
+      }
+
+      for my $found (@found) {
+        my $issue = $future_for{$found}->get;
+
+        my $text = "$found — $issue->{title} — $issue->{url}";
+        my $slack_link = $self->_slack_item_link($issue);
+        $event->reply($text, { slack => "$slack_link: $issue->{title}" });
+      }
+
+      Future->done;
+    });
+  });
+};
 
 command teams => {
   help => "*teams*: list all the teams in Linear",
