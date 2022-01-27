@@ -215,9 +215,10 @@ sub _handle_search ($self, $event, $search, $zero, $header, $linear = undef) {
         my $slack = q{};
 
         for my $node ($page->payload->{nodes}->@*) {
-          $text  .= "$node->{identifier} - $node->{title}\n";
-          $slack .= sprintf "<%s|%s> - %s\n",
-            "https://linear.app/fastmail/issue/$node->{identifier}/...",
+          my $icon = $self->_icon_for_issue($node);
+          $text  .= "$node->{identifier} $icon $node->{title}\n";
+          $slack .= sprintf "<%s|%s> $icon %s\n",
+            $node->{url},
             $node->{identifier},
             $node->{title};
         }
