@@ -37,6 +37,8 @@ use Sub::Exporter -setup => [ qw(
 
   validate_business_hours describe_business_hours
   day_name_from_abbr
+
+  reformat_help
 ) ];
 
 sub read_config_file ($filename) {
@@ -568,6 +570,10 @@ sub day_name_from_abbr ($dow) {
   };
 
   return $days->{$dow};
+}
+
+sub reformat_help ($string) {
+  return $string =~ s/(\S)\n([^\s•])/$1 $2/rg;
 }
 
 1;

@@ -15,6 +15,7 @@ use Linear::Client;
 
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(reformat_help);
 
 use utf8;
 
@@ -242,9 +243,9 @@ sub _handle_search ($self, $event, $search, $zero, $header, $linear = undef) {
 }
 
 command urgent => {
-  help => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
-*urgent*: list urgent issues assigned to you
-EOH
+  help => reformat_help(<<~'EOH'),
+    *urgent*: list urgent issues assigned to you
+    EOH
 } => sub ($self, $event, $rest) {
   if (length $rest) {
     return $event->error_reply(q{"urgent" doesn't take any arguments.});
@@ -268,13 +269,13 @@ EOH
 };
 
 command sb => {
-  help => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
-*sb `WHO`*: list unassigned support-blocking issues in Linear
+  help => reformat_help(<<~'EOH'),
+    *sb `WHO`*: list unassigned support-blocking issues in Linear
 
-This will list open issues in Linear tagged "support blocker".  If you name
-someone, it will list issues assigned to that person.  Otherwise, it lists
-unassigned support blockers.
-EOH
+    This will list open issues in Linear tagged "support blocker".  If you name
+    someone, it will list issues assigned to that person.  Otherwise, it lists
+    unassigned support blockers.
+    EOH
 } => sub ($self, $event, $who) {
   if (length $who) {
     my $user = $self->resolve_name($who, $event->from_user);
@@ -312,13 +313,13 @@ EOH
 };
 
 command triage => {
-  help => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
-*triage `[TEAM]`*: list unassigned issues in the Triage state
+  help => reformat_help(<<~'EOH'),
+    *triage `[TEAM]`*: list unassigned issues in the Triage state
 
-This lists (the first page of) all unassigned issues in the Triage state in
-Linear.  You can supply an argument, the name of a team, to see only issues for
-that team.
-EOH
+    This lists (the first page of) all unassigned issues in the Triage state in
+    Linear.  You can supply an argument, the name of a team, to see only issues
+    for that team.
+    EOH
 } => sub ($self, $event, $team_name) {
   $self->_with_linear_client($event, sub ($linear) {
     my $when  = length $team_name
@@ -348,13 +349,13 @@ EOH
 };
 
 command agenda => {
-  help => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
-*agenda `[TARGET]`*: list issues in the To Discuss state
+  help => reformat_help(<<~'EOH'),
+    *agenda `[TARGET]`*: list issues in the To Discuss state
 
-This command lists issues in the state To Discuss.  If a target is given
-(either a user name, a team name, or user@team), only issues with that
-assignment are listed.
-EOH
+    This command lists issues in the state To Discuss.  If a target is given
+    (either a user name, a team name, or user@team), only issues with that
+    assignment are listed.
+    EOH
 } => sub ($self, $event, $spec) {
   $self->_with_linear_client($event, sub ($linear) {
     my $when  = length $spec
@@ -456,25 +457,25 @@ responder new_issue => {
 
     return [ $which, $text ];
   },
-  help      => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
-*>> `TARGET` `NAME`*: create a new issue in Linear
-*++ `NAME`*: create a new issue in Linear, with you as the target
+  help      => reformat_help(<<~'EOH'),
+    *>> `TARGET` `NAME`*: create a new issue in Linear
+    *++ `NAME`*: create a new issue in Linear, with you as the target
 
-In the simplest form, this creates a new task with the given name, assigned to
-the given target.  (More on "targets" below.)  Any text after a line break or
-after triple dashes (`---`) becomes part of the long form description of the
-task, using Markdown.
+    In the simplest form, this creates a new task with the given name, assigned
+    to the given target.  (More on "targets" below.)  Any text after a line
+    break or after triple dashes (`---`) becomes part of the long form
+    description of the task, using Markdown.
 
-The `TARGET` can be either:
-• a username
-• a team name
-• username@team
+    The `TARGET` can be either:
+    • a username
+    • a team name
+    • username@team
 
-If only a username is given, the issue is assigned to that user in their
-default team.  If only a team name is given, the issue is created unassigned in
-that team.  If both are given, the issue is created in the given team and
-assigned to the given user.
-EOH
+    If only a username is given, the issue is assigned to that user in their
+    default team.  If only a team name is given, the issue is created
+    unassigned in that team.  If both are given, the issue is created in the
+    given team and assigned to the given user.
+    EOH
 } => sub ($self, $event, $which, $text) {
   if ($event->text =~ /\A>> triage /i) {
     $event->mark_handled;
@@ -493,15 +494,15 @@ responder ptn_blocked => {
 
     return [ $ptn, $rest ];
   },
-  help      => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg,
-*ptn `NUMBER` blocked: `DESC`*: create a new support-blocking Linear issue
+  help      => reformat_help(<<~'EOH'),
+    *ptn `NUMBER` blocked: `DESC`*: create a new support-blocking Linear issue
 
-This command will create a new issue in Linear, much like `>>`.  It assigns the
-issue to plumbing and tags it *support blocker*.  The `DESC` is what you'd put
-after `>> plumbing` if you were using `>>`.
+    This command will create a new issue in Linear, much like `>>`.  It assigns
+    the issue to plumbing and tags it *support blocker*.  The `DESC` is what
+    you'd put after `>> plumbing` if you were using `>>`.
 
-*In general, don't use this!*  Instead, use the Zendesk integration.
-EOH
+    *In general, don't use this!*  Instead, use the Zendesk integration.
+    EOH
 } => sub ($self, $event, $ptn, $rest) {
   my $new_text = ">> plumb $rest";
 
