@@ -63,15 +63,15 @@ subtest "matchers and parsers" => sub {
   }
 
   my $outpost = create_outpost(
-    [ reaction => demo => { matcher => split_if_matching(q{0}) } => tail_echoer ],
-    [ command  => demo => { parser  => split_if_matching(q{9}) } => tail_echoer ],
+    [ responder => demo => { matcher => split_if_matching(q{0}) } => tail_echoer ],
+    [ command   => demo => { parser  => split_if_matching(q{9}) } => tail_echoer ],
   );
 
   $outpost->consider_targeted("gorp")->cmp_prs("we won't react without matches");
 
   $outpost->consider_targeted("g0rp")->cmp_results(
-    { name => 'reaction-demo', result => [ qw( g 0 r p ) ] },
-    'matcher sub determines args to reaction',
+    { name => 'responder-demo', result => [ qw( g 0 r p ) ] },
+    'matcher sub determines args to responder',
   );
 
   $outpost->consider_targeted("demo g9rp")->cmp_results(

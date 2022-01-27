@@ -192,7 +192,7 @@ sub _build_reactions ($self, @) {
   return $reactions;
 }
 
-reaction cat_pic => {
+responder cat_pic => {
   exclusive => 1,
   targeted  => 1,
   matcher   => sub ($text, @) {
@@ -290,7 +290,7 @@ listener jazz_pic => sub ($self, $event) {
 
 # TODO: we want a way to write some kind of custom prefix matching hybrid
 # listener / command?
-reaction dog_pic => {
+responder dog_pic => {
   exclusive => 1,
   targeted  => 1,
   matcher   => sub ($text, @) {

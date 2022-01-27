@@ -33,8 +33,9 @@ my @BYE = (
   "Farewell, %n.",
 );
 
-reaction good_morning => {
-  targeted => 1, matcher => sub {[]}
+responder good_morning => {
+  targeted => 1,
+  matcher => sub {[]}
 } => sub ($self, $event) {
   my $what = $event->text =~ s/\Pl//igr;
   $what = lc $what;

@@ -50,9 +50,9 @@ sub _generate_command_system ($class, $, $arg, $) {
       $object->add_listener($name, {}, $code);
       return;
     },
-    reaction => sub ($name, $arg, $code) {
+    responder => sub ($name, $arg, $code) {
       my $object = $get_cmdpost->();
-      $object->add_reaction($name, $arg, $code);
+      $object->add_responder($name, $arg, $code);
 
       if ($arg->{help}) {
         $object->add_help($name, {}, $arg->{help});
@@ -91,20 +91,20 @@ package Synergy::CommandPost::Object {
     },
   );
 
-  has reactions => (
+  has responders => (
     isa => 'HashRef',
     init_arg  => undef,
     default   => sub {  {}  },
     traits    => [ 'Hash' ],
     handles   => {
-      _reaction_kv    => 'kv',
-      _reaction_named => 'get',
-      _register_reaction  => 'set',
+      _responder_kv    => 'kv',
+      _responder_named => 'get',
+      _register_responder  => 'set',
     },
   );
 
   BEGIN {
-    for my $thing (qw(command listener reaction)) {
+    for my $thing (qw(command listener responder)) {
       my $check = "_$thing\_named";
       my $add   = "_register_$thing";
 
@@ -189,26 +189,26 @@ package Synergy::CommandPost::Object {
     }
 
     ### Finally, reactions are the last-resort flexible option.
-    my @reaction_kv = $self->_reaction_kv;
+    my @responder_kv = $self->_responder_kv;
 
     unless ($event_was_targeted) {
-      @reaction_kv = grep {; ! $_->[1]{targeted} } @reaction_kv;
+      @responder_kv = grep {; ! $_->[1]{targeted} } @responder_kv;
     }
 
-    for my $reaction_pair (@reaction_kv) {
-      my ($name, $reaction) = @$reaction_pair;
+    for my $responder_pair (@responder_kv) {
+      my ($name, $responder) = @$responder_pair;
 
-      my $match = $reaction->{matcher}
-                ? $reaction->{matcher}->($event->text, $event)
+      my $match = $responder->{matcher}
+                ? $responder->{matcher}->($event->text, $event)
                 : [];
       next unless $match;
 
-      my $method = $reaction->{method};
+      my $method = $responder->{method};
 
       push @reactions, Synergy::PotentialReaction->new({
         reactor => $reactor,
-        name    => "reaction-$name",
-        is_exclusive  => $reaction->{exclusive},
+        name    => "responder-$name",
+        is_exclusive  => $responder->{exclusive},
         event_handler => sub { $reactor->$method($event, @$match) },
       });
     }

@@ -377,7 +377,7 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
   $self->_with_linear_client($event, $code);
 }
 
-reaction new_issue => {
+responder new_issue => {
   exclusive => 1,
   targeted  => 1,
   matcher   => sub ($text, @) {
@@ -414,7 +414,7 @@ EOH
   $self->_handle_creation_event($event);
 };
 
-reaction ptn_blocked => {
+responder ptn_blocked => {
   targeted  => 1,
   exclusive => 1,
   matcher   => sub ($text, @) {
