@@ -1,5 +1,4 @@
-use v5.24;
-use warnings;
+use v5.28;
 package Synergy::Reactor::Zendesk;
 
 use Moose;

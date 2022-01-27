@@ -11,6 +11,8 @@ with 'Synergy::Role::HubComponent';
 
 sub start ($self) { }
 
+requires 'potential_reactions_to';
+
 sub resolve_name ($self, $name, $resolving_user) {
   $self->hub->user_directory->resolve_name($name, $resolving_user);
 }

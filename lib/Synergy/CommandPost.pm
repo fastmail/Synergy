@@ -1,14 +1,67 @@
-use v5.24.0;
+use v5.28.0;
 use warnings;
 package Synergy::CommandPost;
 
 use experimental 'signatures';
-
 use Synergy::PotentialReaction;
 
 use Sub::Exporter -setup => {
   groups => { default => \'_generate_command_system' },
 };
+
+sub _generate_command_system ($class, $, $arg, $) {
+  my $commandpost_override = $arg->{commandpost}; # Used for testing.
+  my $get_cmdpost = $commandpost_override
+                  ? sub { $commandpost_override }
+                  : sub { caller(1)->_commandpost };
+
+  return {
+    command => sub ($name, $arg, $code) {
+      my $object = $get_cmdpost->();
+      $object->add_command($name, $arg, $code);
+
+      if ($arg->{help}) {
+        $object->add_help($name, {}, $arg->{help});
+      }
+
+      if ($arg->{aliases}) {
+        for my $alias ($arg->{aliases}->@*) {
+          $object->add_command($alias, $arg, $code);
+
+          if ($arg->{help}) {
+            $object->add_help(
+              $alias,
+              { unlisted => 1 },
+              qq{$alias is an alias for $name.  See "help $name".}
+            );
+          }
+        }
+      }
+
+      return;
+    },
+    help => sub ($name, $text) {
+      my $object = $get_cmdpost->();
+      $object->add_help($name, {}, $text);
+      return;
+    },
+    listener => sub ($name, $code) {
+      my $object = $get_cmdpost->();
+      $object->add_listener($name, {}, $code);
+      return;
+    },
+    responder => sub ($name, $arg, $code) {
+      my $object = $get_cmdpost->();
+      $object->add_responder($name, $arg, $code);
+
+      if ($arg->{help}) {
+        $object->add_help($name, {}, $arg->{help});
+      }
+
+      return;
+    },
+  };
+}
 
 package Synergy::CommandPost::Object {
   use Moose;
@@ -38,20 +91,20 @@ package Synergy::CommandPost::Object {
     },
   );
 
-  has reactions => (
+  has responders => (
     isa => 'HashRef',
     init_arg  => undef,
     default   => sub {  {}  },
     traits    => [ 'Hash' ],
     handles   => {
-      _reaction_kv    => 'kv',
-      _reaction_named => 'get',
-      _register_reaction  => 'set',
+      _responder_kv    => 'kv',
+      _responder_named => 'get',
+      _register_responder  => 'set',
     },
   );
 
   BEGIN {
-    for my $thing (qw(command listener reaction)) {
+    for my $thing (qw(command listener responder)) {
       my $check = "_$thing\_named";
       my $add   = "_register_$thing";
 
@@ -105,6 +158,10 @@ package Synergy::CommandPost::Object {
       $first = lc $first;
 
       if (my $command = $self->_command_named($first)) {
+        my $args = $command->{parser}
+                 ? ($command->{parser}->($rest, $event) || [])
+                 : [ $rest ];
+
         my $method = $command->{method};
 
         push @reactions, Synergy::PotentialReaction->new({
@@ -113,7 +170,7 @@ package Synergy::CommandPost::Object {
           is_exclusive  => 1,
           event_handler => sub {
             $event->mark_handled;
-            $reactor->$method($event, $rest)
+            $reactor->$method($event, @$args)
           },
         });
       }
@@ -132,23 +189,26 @@ package Synergy::CommandPost::Object {
     }
 
     ### Finally, reactions are the last-resort flexible option.
-    my @reaction_kv = $self->_reaction_kv;
+    my @responder_kv = $self->_responder_kv;
 
     unless ($event_was_targeted) {
-      @reaction_kv = grep {; ! $_->[1]{targeted} } @reaction_kv;
+      @responder_kv = grep {; ! $_->[1]{targeted} } @responder_kv;
     }
 
-    for my $reaction_pair (@reaction_kv) {
-      my ($name, $reaction) = @$reaction_pair;
-      my $match = $reaction->{matcher}->($event);
+    for my $responder_pair (@responder_kv) {
+      my ($name, $responder) = @$responder_pair;
+
+      my $match = $responder->{matcher}
+                ? $responder->{matcher}->($event->text, $event)
+                : [];
       next unless $match;
 
-      my $method = $reaction->{method};
+      my $method = $responder->{method};
 
       push @reactions, Synergy::PotentialReaction->new({
         reactor => $reactor,
-        name    => "reaction-$name",
-        is_exclusive  => $reaction->{exclusive},
+        name    => "responder-$name",
+        is_exclusive  => $responder->{exclusive},
         event_handler => sub { $reactor->$method($event, @$match) },
       });
     }
@@ -157,45 +217,6 @@ package Synergy::CommandPost::Object {
   }
 
   no Moose;
-}
-
-sub _generate_command_system ($class, $, $arg, @) {
-  my $object = Synergy::CommandPost::Object->new;
-
-  return {
-    potential_reactions_to => sub ($reactor, $event) {
-      $object->potential_reactions_to($reactor, $event);
-    },
-    help_entries => sub ($self) {
-      [ $object->_help_entries ];
-    },
-    command => sub ($name, $arg, $code) {
-      $object->add_command($name, $arg, $code);
-
-      if ($arg->{help}) {
-        $object->add_help($name, {}, $arg->{help});
-      }
-
-      return;
-    },
-    help => sub ($name, $text) {
-      $object->add_help($name, {}, $text);
-      return;
-    },
-    listener => sub ($name, $code) {
-      $object->add_listener($name, {}, $code);
-      return;
-    },
-    reaction => sub ($name, $arg, $code) {
-      $object->add_reaction($name, $arg, $code);
-
-      if ($arg->{help}) {
-        $object->add_help($name, {}, $arg->{help});
-      }
-
-      return;
-    },
-  };
 }
 
 1;

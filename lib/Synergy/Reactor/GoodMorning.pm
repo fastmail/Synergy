@@ -3,7 +3,8 @@ use warnings;
 package Synergy::Reactor::GoodMorning;
 
 use Moose;
-with 'Synergy::Role::Reactor';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
@@ -32,8 +33,9 @@ my @BYE = (
   "Farewell, %n.",
 );
 
-reaction good_morning => {
-  targeted => 1, matcher => sub {[]}
+responder good_morning => {
+  targeted => 1,
+  matcher => sub {[]}
 } => sub ($self, $event) {
   my $what = $event->text =~ s/\Pl//igr;
   $what = lc $what;
