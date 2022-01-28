@@ -339,10 +339,11 @@ package Synergy::Rototron::Rotor {
   my %substitutions = (
     'flag-au'   => flag('au'),
     'flag-us'   => flag('us'),
-    'sparkles'  => "\N{SPARKLES}",
-    'helmet'    => "\N{HELMET WITH WHITE CROSS}",
-    'wrench'    => "\N{WRENCH}",
     'crown'     => "\N{CROWN}",
+    'gear'      => "\N{GEAR}\N{VARIATION SELECTOR-16}", # emoji whiz
+    'helmet'    => "\N{HELMET WITH WHITE CROSS}",
+    'sparkles'  => "\N{SPARKLES}",
+    'wrench'    => "\N{WRENCH}",
     'frame_with_picture' => "\N{FRAME WITH PICTURE}",
     'hammer_and_wrench'  => "\N{HAMMER AND WRENCH}",
   );
