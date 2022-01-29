@@ -56,7 +56,7 @@ command todo => {
     method => 'PUT',
     uri    => "https://caldav.fastmail.com/dav/calendars/user/$uri_username/$calendar/$uid.ics",
     content_type => 'text/calendar',
-    content      => encode('UTF-8', $ical),
+    content      => $ical,
     headers => [
       Authorization => 'Basic ' . encode_base64("$username:$password", ""),
     ],
