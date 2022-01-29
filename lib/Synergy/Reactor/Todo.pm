@@ -28,9 +28,6 @@ command todo => {
   return $event->error_reply("I can't tell you to do nothing!")
     unless length $rest;
 
-  return $event->error_reply("Sorry, new todo items with line breaks!")
-    if $rest =~ /\v/;
-
   my $password = $self->get_user_preference($user, 'password');
   my $username = $self->get_user_preference($user, 'calendar-user');
   my $calendar = $self->get_user_preference($user, 'calendar-id');
@@ -38,7 +35,20 @@ command todo => {
   return $event->error_reply("You haven't configured your todo calendar")
     unless $password and $username and $calendar;
 
-  my ($uid, $ical) = $self->_make_icalendar($rest);
+  my ($summary, $description) = split /\n+/, $rest, 2;
+
+  my $priority;
+  if ($summary =~ s/\s+(!+)\z//) {
+    my $bangs = $1;
+    $priority = length $bangs == 1 ? 1
+              : length $bangs == 2 ? 5
+              :                      9;
+  }
+
+  my ($uid, $ical) = $self->_make_icalendar($summary, {
+    (length $description  ? (DESCRIPTION  => $description)  : ()),
+    ($priority            ? (PRIORITY     => $priority)     : ()),
+  });
 
   my $uri_username = $username =~ s/@/%40/gr;
 
@@ -60,18 +70,56 @@ command todo => {
   });
 };
 
-sub _make_icalendar ($self, $summary) {
-  my $template = <<~'END';
+# SUMMARY is the one-line summary.
+#
+# DESCRIPTION is the multi-line (maybe) description.
+#   When Apple puts a line break into the DESCRIPTION, they use U+02028 - LINE
+#   SEPARATOR, and that seems good to me.
+#
+#   Long lines SHOULD be wrapped to be no longer than 75b.  The spec says you
+#   can split between "characters", but I bet in practice it means codepoints,
+#   but who can say?  It's just not a great spec.
+#
+# DUE is when the task is meant to be done by.  If it's not done by this time,
+#   it's overdue.
+# DTSTART is the date/time of the "start" of the task.  You don't actually need
+#   a DTSTART.  If you don't have a DTSTART, the task is associated with each
+#   successive day until it's done.  What are the implications of this?
+#   Honestly, I can't tell.  The important things seem to be...
+#
+#   * DUE and DTSTART, if both given, must have the same type.
+#   * DUE must be at or later than DTSTART.
+#   * DTSTART is the first occurrence of a repeating task.
+#
+# STATUS is, well, the status of the event.  It can be:
+#   * NEEDS-ACTION  - open
+#   * COMPLETED     - done
+#   * CANCELLED     - not supported by Apple
+#   * IN-PROCESS    - not supported by Apple
+#
+# ALARMS are ... a whole thing.
+#
+# PRIORITY
+#   high    = 1
+#   medium  = 5
+#   low     = 9
+#
+# URL is supported by Fantastical but not Apple, so what's the point?
+
+sub _make_icalendar ($self, $summary, $arg = {}) {
+  my $before = <<~'END';
   BEGIN:VCALENDAR
   CALSCALE:GREGORIAN
   PRODID:-//Synergy//Todo
   VERSION:2.0
   BEGIN:VTODO
+  STATUS:NEEDS-ACTION
+  UID:%s
   CREATED:%s
   DTSTAMP:%s
-  STATUS:INCOMPLETE
-  SUMMARY:%s
-  UID:%s
+  END
+
+  my $after = <<~'END';
   END:VTODO
   END:VCALENDAR
   END
@@ -81,11 +129,25 @@ sub _make_icalendar ($self, $summary) {
 
   my $uid = guid_string();
 
-  my $vtodo = sprintf $template,
-    $ztime,
-    $ztime,
-    $summary,
-    $uid;
+  my sub foldencode ($name, $value_str) {
+    my $value_buf = Encode::encode('UTF-8', $value_str);
+    my $line = "$name:$value_buf";
+    my @hunks = $line =~ /(.{1,70})/g;
+    return(join(qq{\n }, @hunks) . "\n");
+  }
+
+  Carp::confess("vertical whitespace in summary") if $summary =~ /\v/;
+
+  my $extra = foldencode(SUMMARY => $summary);
+  for my $key (keys %$arg) {
+    my $value = $arg->{$key};
+    $value =~ s/\v/\N{LINE SEPARATOR}/g;
+    $extra .= foldencode($key=> $value);
+  }
+
+  my $vtodo = sprintf($before, $uid, $ztime, $ztime)
+            . $extra
+            . $after;
 
   return ($uid, $vtodo);
 }
