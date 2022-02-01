@@ -232,6 +232,9 @@ EOH
       method    => '_handle_incidents',
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ /^incidents\s*$/i },
+      help_entries => [
+        { title => 'incidents', text => '*incidents*: list current active incidents' },
+      ],
     },
     {
       name      => 'resolve-all',
