@@ -6,7 +6,10 @@ use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor',
      'Synergy::Role::Reactor::CommandPost',
-     'Synergy::Role::HasPreferences';
+     'Synergy::Role::HasPreferences',
+     'Synergy::Role::DeduplicatesExpandos' => {
+       expandos => [ 'issue' ],
+     };
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
@@ -149,6 +152,20 @@ listener issue_mention => sub ($self, $event) {
     my %seen;
     map {; $seen{uc $_}++ ? () : uc $_ } @matches;
   };
+
+  my $declined_to_reply = 0;
+
+  for my $match (@matches) {
+    if ($self->has_expanded_issue_recently($event, $match)) {
+      $declined_to_reply++;
+      next;
+    } else {
+      $self->note_issue_expansion($event, $match);
+    }
+  }
+
+  return $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
+    if $declined_to_reply;
 
   $self->_with_linear_client($event, sub ($linear) {
     # We're being a bit gross here.  I'm going to wait_all a collection of
