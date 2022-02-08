@@ -55,7 +55,8 @@ sub _generate_command_system ($class, $, $arg, $) {
       $object->add_responder($name, $arg, $code);
 
       if ($arg->{help}) {
-        $object->add_help($name, {}, $arg->{help});
+        my @help_titles = ($arg->{help_titles} || [ $name ])->@*;
+        $object->add_help($_, {}, $arg->{help}) for @help_titles
       }
 
       return;
