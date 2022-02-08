@@ -457,8 +457,11 @@ responder new_issue => {
 
     return [ $which, $text ];
   },
-  help      => reformat_help(<<~'EOH'),
-    *>> `TARGET` `NAME`*: create a new issue in Linear
+  # The stupid zero width space below is to prevent Slack from turning >> into
+  # a block quoted >. -- rjbs, 2022-02-08
+  help_titles => [ qw( >> ++ ) ],
+  help      => reformat_help(<<~"EOH"),
+    *\N{ZERO WIDTH SPACE}>> `TARGET` `NAME`*: create a new issue in Linear
     *++ `NAME`*: create a new issue in Linear, with you as the target
 
     In the simplest form, this creates a new task with the given name, assigned
@@ -469,7 +472,7 @@ responder new_issue => {
     The `TARGET` can be either:
     • a username
     • a team name
-    • username@team
+    • username\@team
 
     If only a username is given, the issue is assigned to that user in their
     default team.  If only a team name is given, the issue is created
