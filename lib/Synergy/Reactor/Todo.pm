@@ -40,9 +40,9 @@ command todo => {
   my $priority;
   if ($summary =~ s/\s+(!+)\z//) {
     my $bangs = $1;
-    $priority = length $bangs == 1 ? 1
-              : length $bangs == 2 ? 5
-              :                      9;
+    $priority = length $bangs == 1 ? 9  # LOW
+              : length $bangs == 2 ? 5  # MEDIUM
+              :                      1; # HIGH
   }
 
   my ($uid, $ical) = $self->_make_icalendar($summary, {
