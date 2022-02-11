@@ -33,6 +33,8 @@ use Storable qw(dclone);
 use Defined::KV;
 use IO::Async::Process;
 
+sub environment_class { "Synergy::Environment" }
+
 sub env;
 has env => (
   is => 'ro',
@@ -294,7 +296,7 @@ sub synergize {
   my $channels = delete $config->{channels};
   my $reactors = delete $config->{reactors};
 
-  my $env = Synergy::Environment->new($config);
+  my $env = $class->environment_class->new($config);
 
   $loop //= do {
     require IO::Async::Loop;
