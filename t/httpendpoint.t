@@ -19,6 +19,7 @@ use MIME::Base64 'encode_base64';
 use Synergy::Hub;
 
 package Synergy::Channel::Test::HTTPEndpoint {
+
   use Moose;
   extends 'Synergy::Channel::Test';
   with 'Synergy::Role::HTTPEndpoint';
@@ -33,6 +34,7 @@ package Synergy::Channel::Test::HTTPEndpoint {
 }
 
 package Synergy::Channel::Test::HTTPEndpointAuth {
+
   use Moose;
   extends 'Synergy::Channel::Test::HTTPEndpoint';
 

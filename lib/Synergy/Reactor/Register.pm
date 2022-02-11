@@ -1,5 +1,6 @@
 use v5.28.0;
 package Synergy::Reactor::Register;
+
 use Moose;
 with 'Synergy::Role::Reactor::EasyListening';
 

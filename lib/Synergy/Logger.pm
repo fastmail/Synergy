@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 package Synergy::Logger;
+
 use parent 'Log::Dispatchouli::Global';
 
 use Log::Dispatchouli 2.019; # enable_stderr
@@ -21,7 +22,8 @@ sub default_logger_args {
 }
 
 {
-  package Synergy::Logger::_Logger;
+  package
+    Synergy::Logger::_Logger;
   use parent 'Log::Dispatchouli';
 
   sub env_prefix { 'SYNERGY_LOG' }

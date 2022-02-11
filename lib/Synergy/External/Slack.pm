@@ -7,7 +7,7 @@ use experimental qw(lexical_subs signatures);
 use namespace::autoclean;
 use utf8;
 
-use Cpanel::JSON::XS qw(decode_json encode_json);
+use JSON::MaybeXS qw(decode_json encode_json);
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Net::Async::WebSocket::Client;
@@ -212,27 +212,10 @@ sub send_message ($self, $channel, $text, $alts = {}) {
       && $e->from_channel->isa('Synergy::Channel::Slack')
       && $e->from_channel->slack == $self # O_O -- rjbs, 2018-06-13
     ) {
-      my $remove = $r->{reaction} =~ s/^-//;
-
-      my $http_future = $self->api_call(
-        ($remove ? 'reactions.remove' : 'reactions.add'),
-        {
-          name      => $r->{reaction},
-          channel   => $e->transport_data->{channel},
-          timestamp => $e->transport_data->{ts},
-        }
-      );
-
-      my $f = $self->loop->new_future;
-      $http_future->on_done(sub ($http_res) {
-        my $res = decode_json($http_res->decoded_content(charset => undef));
-        $f->done({
-          type => 'slack',
-          transport_data => $res
-        });
+      return $self->send_reaction($r->{reaction}, {
+        channel   => $e->transport_data->{channel},
+        timestamp => $e->transport_data->{ts},
       });
-
-      return $f;
     }
   }
 
@@ -240,6 +223,31 @@ sub send_message ($self, $channel, $text, $alts = {}) {
     if $alts->{slack};
 
   return $self->_send_plain_text($channel, $text);
+}
+
+sub send_reaction ($self, $reaction, $arg) {
+  my $remove = $reaction =~ s/^-//;
+
+  my $http_future = $self->api_call(
+    ($remove ? 'reactions.remove' : 'reactions.add'),
+    {
+      name      => $reaction,
+      channel   => $arg->{channel},
+      timestamp => $arg->{timestamp},
+    }
+  );
+
+  my $f = $self->loop->new_future;
+
+  $http_future->on_done(sub ($http_res) {
+    my $res = decode_json($http_res->decoded_content);
+    return $f->done({
+      type => 'slack',
+      transport_data => $res
+    });
+  });
+
+  return $f;
 }
 
 sub _send_plain_text ($self, $channel, $text) {

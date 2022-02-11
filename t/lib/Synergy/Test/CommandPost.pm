@@ -21,6 +21,7 @@ use Sub::Exporter -setup => {
 };
 
 package Synergy::CommandPost::TestOutpost::Plan {
+
   use Moose;
   use experimental 'signatures';
 
@@ -73,6 +74,7 @@ package Synergy::CommandPost::TestOutpost::Plan {
 }
 
 package Synergy::CommandPost::TestOutpost {
+
   sub consider_targeted ($self, $text) {
     my $event = Synergy::Test::CommandPost::_event($text);
     $self->consider_event($event);

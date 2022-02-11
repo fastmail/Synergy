@@ -1,6 +1,7 @@
 use v5.28.0;
 use warnings;
 package Synergy::Event;
+
 use Moose;
 
 use experimental qw(signatures);

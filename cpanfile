@@ -11,7 +11,6 @@ requires 'Date::Parse', '2.32';
 requires 'DateTime';
 requires 'DateTime::Format::ISO8601';
 requires 'DateTime::Format::Natural';
-requires 'DateTimeX::Format::Ago';
 requires 'Defined::KV';
 requires 'Future', '0.36';
 requires 'Future::Utils';

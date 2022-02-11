@@ -12,6 +12,7 @@ use DateTime::Format::Natural;
 use JSON::MaybeXS;
 use List::Util qw(first any);
 use Path::Tiny ();
+use Synergy::Logger '$Logger';
 use Time::Duration::Parse;
 use Time::Duration;
 use TOML;
@@ -310,88 +311,96 @@ my %MORSE_FOR = do {
   );
 };
 
-my %Trans = (
-  latin => sub ($s) { $s },
-  rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
-  morse => sub ($s) {
-    $s =~ s/\s+/ /g;
+my %Trans;
 
-    my @cps = split //, $s;
-    join q{ }, map {; exists $MORSE_FOR{uc $_} ? $MORSE_FOR{ uc $_} : $_ } @cps;
-  },
-  alexandrian => sub ($s) {
-    my %letter = qw(
-      a Σ     b h     c /     d ﻝ     e Ф
-      f Ŧ     g ߔ     h b     i 𝑜     j i
-      k ✓     l _     m ㇵ    n ߣ     o □
-      p Г     q ᒣ     r w     s |     t Δ
-      u ゝ    v ˧     w +     x ⌿     y A
-      z ∞
-    );
+sub _load_alphabets {
+  return if keys %Trans;  # already done
 
-    my @cps = split //, $s;
-    return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
-  },
-  futhark => sub ($s) {
-    my $map = {
-      'a' => 'ᚨ',
-      'b' => 'ᛒ',
-      'c' => 'ᚲ',
-      'd' => 'ᛞ',
-      'e' => 'ᛖ',
-      'ei' => 'ᛇ',
-      'f' => 'ᚠ',
-      'g' => 'ᚷ',
-      'h' => 'ᚺ',
-      'i' => 'ᛁ',
-      'j' => 'ᛃ',
-      'k' => 'ᚲ',
-      'l' => 'ᛚ',
-      'm' => 'ᛗ',
-      'n' => 'ᚾ',
-      'o' => 'ᛟ',
-      'p' => 'ᛈ',
-      'q' => 'ᚲᚹ',
-      'r' => 'ᚱ',
-      's' => 'ᛊ',
-      't' => 'ᛏ',
-      'th' => 'ᚦ',
-      'u' => 'ᚢ',
-      'v' => 'ᚢ',
-      'w' => 'ᚹ',
-      'x' => 'ᚲᛊ',
-      'y' => 'ᛃ',
-      'z' => 'ᛉ',
-    };
-    my $transliterated = '';
-    LETTER:
-    while ( $s ) {
-      MATCH:
-      foreach my $try ( sort { length $b cmp length $a } keys %$map ) {
-        if ( $s =~ /^$try/i ) {
-          $transliterated .= $map->{$try};
-          $s =~ s/^$try//i;
-          next LETTER;
+  %Trans = (
+    latin => sub ($s) { $s },
+    rot13 => sub ($s) { $s =~ tr/A-Za-z/N-ZA-Mn-za-m/; $s },
+    morse => sub ($s) {
+      $s =~ s/\s+/ /g;
+
+      my @cps = split //, $s;
+      join q{ }, map {; exists $MORSE_FOR{uc $_} ? $MORSE_FOR{ uc $_} : $_ } @cps;
+    },
+    alexandrian => sub ($s) {
+      my %letter = qw(
+        a Σ     b h     c /     d ﻝ     e Ф
+        f Ŧ     g ߔ     h b     i 𝑜     j i
+        k ✓     l _     m ㇵ    n ߣ     o □
+        p Г     q ᒣ     r w     s |     t Δ
+        u ゝ    v ˧     w +     x ⌿     y A
+        z ∞
+      );
+
+      my @cps = split //, $s;
+      return join q{}, map {; exists $letter{lc $_} ? $letter{lc $_} : $_ } @cps;
+    },
+    futhark => sub ($s) {
+      my $map = {
+        'a' => 'ᚨ',
+        'b' => 'ᛒ',
+        'c' => 'ᚲ',
+        'd' => 'ᛞ',
+        'e' => 'ᛖ',
+        'ei' => 'ᛇ',
+        'f' => 'ᚠ',
+        'g' => 'ᚷ',
+        'h' => 'ᚺ',
+        'i' => 'ᛁ',
+        'j' => 'ᛃ',
+        'k' => 'ᚲ',
+        'l' => 'ᛚ',
+        'm' => 'ᛗ',
+        'n' => 'ᚾ',
+        'o' => 'ᛟ',
+        'p' => 'ᛈ',
+        'q' => 'ᚲᚹ',
+        'r' => 'ᚱ',
+        's' => 'ᛊ',
+        't' => 'ᛏ',
+        'th' => 'ᚦ',
+        'u' => 'ᚢ',
+        'v' => 'ᚢ',
+        'w' => 'ᚹ',
+        'x' => 'ᚲᛊ',
+        'y' => 'ᛃ',
+        'z' => 'ᛉ',
+      };
+      my $transliterated = '';
+      LETTER:
+      while ( $s ) {
+        MATCH:
+        foreach my $try ( sort { length $b cmp length $a } keys %$map ) {
+          if ( $s =~ /^$try/i ) {
+            $transliterated .= $map->{$try};
+            $s =~ s/^$try//i;
+            next LETTER;
+          }
         }
+        $transliterated .= substr($s,0,1);
+        $s = substr($s,1);
       }
-      $transliterated .= substr($s,0,1);
-      $s = substr($s,1);
-    }
-    return $transliterated;
-  },
+      return $transliterated;
+    },
 
-  # Further wonky styles, which come from github.com/rjbs/misc/unicode-style,
-  # are left up to wonkier people than me. -- rjbs, 2019-02-12
-  script  => _wonky_style('script'),
-  fraktur => _wonky_style('fraktur'),
-  sans    => _wonky_style('ss'),
-  double  => _wonky_style('double'),
+    # Further wonky styles, which come from github.com/rjbs/misc/unicode-style,
+    # are left up to wonkier people than me. -- rjbs, 2019-02-12
+    script  => _wonky_style('script'),
+    fraktur => _wonky_style('fraktur'),
+    sans    => _wonky_style('ss'),
+    double  => _wonky_style('double'),
+  );
 
-  zalgo   => sub ($s) {
-    require Acme::Zalgo;
-    Acme::Zalgo::zalgo($s, 0, 2, 0, 0, 0, 2);
-  },
-);
+  eval "require Acme::Zalgo";
+  if ($@) {
+    $Logger->log("ignoring Zalgo alphabet because Acme::Zalgo isn't installed");
+  } else {
+    $Trans{zalgo} = sub ($s) { Acme::Zalgo::zalgo($s, 0, 2, 0, 0, 0, 2); };
+  }
+}
 
 sub _wonky_style ($style) {
   my $i = 0;
@@ -441,10 +450,12 @@ sub _wonky_style ($style) {
 }
 
 sub known_alphabets {
+  _load_alphabets();
   map {; ucfirst } keys %Trans;
 }
 
 sub transliterate ($alphabet, $str) {
+  _load_alphabets();
   return $str unless exists $Trans{lc $alphabet};
   return $Trans{lc $alphabet}->($str);
 }

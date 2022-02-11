@@ -65,6 +65,7 @@ sub _generate_command_system ($class, $, $arg, $) {
 }
 
 package Synergy::CommandPost::Object {
+
   use Moose;
 
   use experimental 'signatures';
