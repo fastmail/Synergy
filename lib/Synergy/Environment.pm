@@ -85,6 +85,13 @@ has diagnostic_uplink_config => (
   init_arg => 'diagnostic_uplink',
 );
 
+has wtf_replies => (
+  isa => 'ArrayRef',
+  lazy => 1,
+  default => sub { [] },
+  handles => { wtf_replies => 'elements' },
+);
+
 has state_dbh => (
   is  => 'ro',
   init_arg => undef,
