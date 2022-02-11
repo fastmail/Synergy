@@ -432,6 +432,8 @@ sub http_request ($self, $method, $url, %args) {
 sub run_process ($self, $command) {
   my ($stdout, $stderr);
 
+  $Logger->log("running @$command");
+
   my $process = IO::Async::Process->new(
     command => $command,
     on_finish => sub {},
