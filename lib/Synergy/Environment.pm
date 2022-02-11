@@ -45,6 +45,11 @@ has metrics_path => (
   isa => 'Str',
 );
 
+has log_all_incoming_messages => (
+  is => 'ro',
+  default => 1,
+);
+
 has tls_cert_file => (
   is => 'ro',
   isa => 'Str',

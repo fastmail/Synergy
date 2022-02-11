@@ -120,7 +120,12 @@ sub component_named ($self, $name) {
 }
 
 sub handle_event ($self, $event) {
-  $Logger->log([
+  # Using 'state' here is not *technically* correct, but the hub is a
+  # singleton anyway, and I don't want to incur two extra method invocations
+  # on every event just to figure out how we should log this message.
+  # -- michael, 2022-02-11
+  state $log_method = $self->env->log_all_incoming_messages ? 'log' : 'log_debug';
+  $Logger->$log_method([
     "%s event from %s/%s: %s",
     $event->type,
     $event->from_channel->name,
