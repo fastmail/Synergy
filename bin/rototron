@@ -1,4 +1,5 @@
 #!perl
+# PODNAME: synergy
 use v5.28.0;
 use warnings;
 use utf8;
