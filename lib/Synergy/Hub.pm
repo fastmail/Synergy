@@ -193,10 +193,10 @@ sub handle_event ($self, $event) {
   unless ($event->was_handled) {
     return unless $event->was_targeted;
 
-    my @replies = $event->from_user
-                ? $event->from_user->wtf_replies
-                : $self->env->wtf_replies;
-    @replies = 'Does not compute.' unless @replies;
+    my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
+    @replies  = $self->env->wtf_replies unless @replies;
+    @replies  = 'Does not compute.'     unless @replies;
+
     $event->error_reply($replies[int(rand @replies)]);
     return;
   }

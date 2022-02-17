@@ -87,6 +87,7 @@ has diagnostic_uplink_config => (
 
 has wtf_replies => (
   isa => 'ArrayRef',
+  traits => ['Array'],
   lazy => 1,
   default => sub { [] },
   handles => { wtf_replies => 'elements' },
