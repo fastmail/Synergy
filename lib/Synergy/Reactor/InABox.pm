@@ -86,6 +86,12 @@ has box_domain => (
   required => 1,
 );
 
+has box_project_id => (
+  is        => 'ro',
+  isa       => 'Str',
+  predicate => 'has_project_id',
+);
+
 my %command_handler = (
   info     => \&handle_status,
   status   => \&handle_status,
@@ -293,6 +299,9 @@ sub handle_create ($self, $event, $switches) {
           "Box was created, but now I can't find it! Check the DigitalOcean console and maybe try again."
         );
       }
+
+      # Add it to the relevant project. If this fails, then...oh well.
+      $self->_add_box_to_project($droplet)->retain;
 
       # update the DNS name. we will assume this succeeds; if it fails the box
       # is still good and there's not really much else we can do.
@@ -638,6 +647,27 @@ sub _update_dns ($self, $name, $ip) {
       # We don't actually care if this fails (what can we do?), so we
       # transform a failure into a success.
       $Logger->log("ignoring error when updating DNS with DO ($name)");
+      return Future->done;
+    });
+}
+
+sub _add_box_to_project ($self, $droplet) {
+  return Future->done unless $self->has_project_id;
+
+  my $id = $droplet->{id};
+  my $name = $droplet->{name};
+
+  my $base = '/projects/' . $self->box_project_id . '/resources';
+
+  return $self->_do_request(POST => $base, {
+    resources => [ "do:droplet:$id" ],
+  })->then(sub {
+    $Logger->log("added $name to project " . $self->box_project_id);
+    return Future->done;
+  })->else(sub {
+      # We don't actually care if this fails (what can we do?), so we
+      # transform a failure into a success.
+      $Logger->log("ignoring error when adding $name to project");
       return Future->done;
     });
 }
