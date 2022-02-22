@@ -45,7 +45,7 @@ All subcommands can take /version and /tag can be used to target a specific box.
 
 The following preferences exist:
 
-* $ns.version: which version to create by default (default: buster)
+* $ns.version: which version to create by default (default: bullseye)
 * $ns.datacentre: which datacentre to create boxes in (if unset, chooses one near you)
 END
       },
@@ -686,7 +686,7 @@ __PACKAGE__->add_preference(
 
     return $value;
   },
-  default   => 'buster',
+  default   => 'bullseye',
   description => 'Default Debian version for your fminabox',
 );
 
