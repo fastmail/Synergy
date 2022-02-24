@@ -110,8 +110,10 @@ sub decode_discord_formatting ($self, $text) {
 }
 
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
-  my $where = $self->discord->dm_channel_for_user($user, $self);
-  return $self->send_message($where, $text, $alts);
+  Carp::cluck("send_message_to_user not implemented on Discord");
+  return;
+  # my $where = $self->discord->dm_channel_for_user($user, $self);
+  # return $self->send_message($where, $text, $alts);
 }
 
 sub send_message ($self, $target, $text, $alts = {}) {
