@@ -91,6 +91,8 @@ sub parse_date_for_user ($str, $user, $allow_midnight = 0) {
 
   my $dt = $parser_for{$tz}->parse_datetime($str);
 
+  return undef unless $parser_for{$tz}->success;
+
   return $dt if $allow_midnight;
 
   if ($dt->hour == 0 && $dt->minute == 0 && $dt->second == 0) {
