@@ -167,7 +167,7 @@ sub start ($self) {
     }
 
     if ($subtype && ! $allowable_subtypes{$subtype}) {
-      $Logger->log([
+      $Logger->log_debug([
         "refusing to respond to message with subtype %s",
         $slack_event->{subtype},
       ]);
