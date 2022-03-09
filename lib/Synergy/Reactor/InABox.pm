@@ -677,6 +677,8 @@ __PACKAGE__->add_preference(
   validator => sub ($self, $value, @) {
     my %known = map {; $_ => 1 } qw( buster bullseye );
 
+    return undef unless defined $value;
+
     $value = lc $value;
 
     unless ($known{$value}) {
