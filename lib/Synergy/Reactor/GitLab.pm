@@ -157,6 +157,7 @@ sub listener_specs {
       name => 'mention-mr',
       method => 'handle_merge_request',
       predicate => sub ($self, $e) {
+        return if $e->text =~ /^\s*\@?bort/i;
         return 1 if $e->text =~ /\b[-_a-z]+!\d+(\W|$)/in;
 
         my $base = $self->url_base;
