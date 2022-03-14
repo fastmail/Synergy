@@ -891,12 +891,14 @@ sub _updated_tokens_for ($self, $user) {
   my $state = $self->_user_state->{ $user->username } //= {};
   my $token_state = $state->{tokens} //= {};
 
-  $token_state->{count} //= 0;
   $token_state->{next}  //= time - 1;
+  $token_state->{count} //= 0;
+  $token_state->{count}   = 0 if $token_state->{count} < 0;
 
   if ($token_state->{count} < $self->max_token_count && time > $token_state->{next}) {
     $token_state->{count}++;
     $token_state->{next} = time + $self->token_regen_period;
+    $self->save_state;
   }
 
   return $token_state->{count};
