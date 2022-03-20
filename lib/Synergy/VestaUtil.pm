@@ -168,12 +168,12 @@ sub _text_to_board ($self, $text) {
 
   # 2. add blank lines at top and bottom
   my $addlines = 6 - @lines;
-  my $front    = int($addlines / 2) + ($addlines % 2);
+  my $back     = int($addlines / 2) + ($addlines % 2);
 
   @lines = (
-    (map {; [ (0) x 22 ] } (1 .. $front)),
+    (map {; [ (0) x 22 ] } (1 .. $addlines - $back)),
     @lines,
-    (map {; [ (0) x 22 ] } (1 .. $addlines - $front))
+    (map {; [ (0) x 22 ] } (1 .. $back)),
   );
 
   return \@lines;
