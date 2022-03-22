@@ -11,6 +11,10 @@ use namespace::clean;
 
 use utf8;
 
+use JSON::MaybeXS;
+
+my $JSON = JSON::MaybeXS->new->utf8;
+
 sub listener_specs {
   return (
     {
@@ -19,6 +23,19 @@ sub listener_specs {
       exclusive => 1,
       targeted  => 1,
       predicate => sub ($self, $e) { fc $e->text eq 'my projects'; },
+    },
+    {
+      name      => 'trends',
+      method    => 'handle_trends',
+      exclusive => 1,
+      targeted  => 1,
+      predicate => sub ($self, $e) { fc $e->text eq 'support trends' },
+      help_entries => [
+        {
+          title => 'support_trends',
+          text  => 'Show all the Issues & Trends support is tracking in Notion',
+        }
+      ]
     },
   );
 }
@@ -31,6 +48,12 @@ has api_token => (
 
 has project_db_id => (
   is  => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
+has trends_db_id => (
+  is => 'ro',
   isa => 'Str',
   required => 1,
 );
@@ -56,9 +79,7 @@ sub handle_my_projects ($self, $event) {
     Content_Type      => 'application/json',
     Content => "{}", # TODO: filter here for real
   )->then(sub ($res) {
-    my $data  = JSON::MaybeXS->new->utf8->decode(
-      $res->decoded_content(charset => undef)
-    );
+    my $data  = $JSON->decode($res->decoded_content(charset => undef));
     my @pages = $data->{results}->@*;
 
     my $reply = q{};
@@ -108,6 +129,71 @@ sub handle_my_projects ($self, $event) {
 
     unless (length $reply) {
       return $event->reply("Looks like you've got no projects right now!");
+    }
+
+    $event->reply($reply, { slack => $slack });
+  })->retain;
+}
+
+sub handle_trends ($self, $event) {
+  $event->mark_handled;
+
+  my $db_id = $self->trends_db_id;
+  my $token = $self->api_token;
+
+  $self->hub->http_post(
+    "https://api.notion.com/v1/databases/$db_id/query",
+
+    'User-Agent'      => 'Synergy/2021.05',
+    Authorization     => "Bearer $token",
+    'Notion-Version'  => '2021-08-16',
+    Content_Type      => 'application/json',
+    Content => $JSON->encode({
+      filter => {
+        property => "Resolved",
+        date => {
+          is_empty => \1,
+        }
+      }
+    }),
+  )->then(sub ($res) {
+    my $data  = $JSON->decode($res->decoded_content(charset => undef));
+
+    my @pages =
+      map  {; $_->[0] }
+      sort {; $a->[1] cmp $b->[1] || $a->[2] cmp $b->[2] }
+      map  {;
+        [
+          $_,
+          $_->{properties}{Began}{date}{start} // '',
+          $_->{properties}{created_time},   # just for sort stability
+        ]
+      } $data->{results}->@*;
+
+    my $reply = q{};
+    my $slack = q{};
+
+    for my $page (@pages) {
+      my $title = join q{ - },
+        map {; $_->{plain_text} } $page->{properties}{Name}{title}->@*;
+
+      my $emoji = $page->{icon}{emoji} // "\N{WARNING SIGN}";
+
+      my $since = $page->{properties}{Began}{date}{start};
+
+      my $safe_title = $title;
+      $safe_title =~ s{[^A-Za-z0-9]}{-}g;
+
+      my $id = $page->{id} =~ s/-//gr;
+
+      my $href = "https://www.notion.so/$safe_title-$id";
+
+      $reply .= "$emoji $title (since $since)\n";
+      $slack .= sprintf "<%s|%s %s> (since %s)\n", $href, $emoji, $title, $since;
+    }
+
+    unless (length $reply) {
+      return $event->reply("Looks like everything has been under control!");
     }
 
     $event->reply($reply, { slack => $slack });
