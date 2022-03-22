@@ -29,11 +29,12 @@ sub listener_specs {
       method    => 'handle_trends',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($self, $e) { fc $e->text eq 'support trends' },
+      predicate => sub ($self, $e) { fc $e->text =~ /^support trends/ },
       help_entries => [
         {
           title => 'support_trends',
-          text  => 'Show all the Issues & Trends support is tracking in Notion',
+          text  => 'Show all the Issues & Trends support is tracking in Notion; '
+                 . 'you can add /future to show things resolved in the future.',
         }
       ]
     },
@@ -138,8 +139,11 @@ sub handle_my_projects ($self, $event) {
 sub handle_trends ($self, $event) {
   $event->mark_handled;
 
+  my $want_future = $event->text =~ m{/future};
+
   my $db_id = $self->trends_db_id;
   my $token = $self->api_token;
+  my $now = DateTime->now(time_zone => 'Etc/UTC')->iso8601;
 
   $self->hub->http_post(
     "https://api.notion.com/v1/databases/$db_id/query",
@@ -150,10 +154,16 @@ sub handle_trends ($self, $event) {
     Content_Type      => 'application/json',
     Content => $JSON->encode({
       filter => {
-        property => "Resolved",
-        date => {
-          is_empty => \1,
-        }
+        or => [
+          {
+            property => "Resolved",
+            date => { is_empty => \1 },
+          },
+          {
+            property => "Resolved",
+            date => { after => $now },
+          },
+        ]
       }
     }),
   )->then(sub ($res) {
@@ -179,7 +189,14 @@ sub handle_trends ($self, $event) {
 
       my $emoji = $page->{icon}{emoji} // "\N{WARNING SIGN}";
 
-      my $since = $page->{properties}{Began}{date}{start};
+      my $start = $page->{properties}{Began}{date}{start};
+      my $end = $page->{properties}{Resolved}{date}{start};
+
+      next if $end && ! $want_future;
+
+      my $since = $end
+                ? sprintf("%s – %s", $start, $end)
+                : sprintf("since %s", $start);
 
       my $safe_title = $title;
       $safe_title =~ s{[^A-Za-z0-9]}{-}g;
@@ -188,8 +205,8 @@ sub handle_trends ($self, $event) {
 
       my $href = "https://www.notion.so/$safe_title-$id";
 
-      $reply .= "$emoji $title (since $since)\n";
-      $slack .= sprintf "<%s|%s %s> (since %s)\n", $href, $emoji, $title, $since;
+      $reply .= "$emoji $title ($since)\n";
+      $slack .= sprintf "<%s|%s %s> (%s)\n", $href, $emoji, $title, $since;
     }
 
     unless (length $reply) {
