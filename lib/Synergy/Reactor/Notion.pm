@@ -29,7 +29,7 @@ sub listener_specs {
       method    => 'handle_trends',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($self, $e) { fc $e->text =~ /^support trends/ },
+      predicate => sub ($self, $e) { fc $e->text =~ /^support trends/i },
       help_entries => [
         {
           title => 'support_trends',
@@ -139,7 +139,7 @@ sub handle_my_projects ($self, $event) {
 sub handle_trends ($self, $event) {
   $event->mark_handled;
 
-  my $want_future = $event->text =~ m{/future};
+  my $want_future = $event->text =~ m{/future}i;
 
   my $db_id = $self->trends_db_id;
   my $token = $self->api_token;
