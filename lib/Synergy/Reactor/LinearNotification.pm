@@ -80,6 +80,15 @@ has name => (
   default => 'lin',
 );
 
+sub attach_mr_to_issue ($payload, $mr) {
+  my %attachment;
+  $attachment{issueId} = $payload->{data}{issueId};
+  $attachment{title} = "hm!".$mr;
+  $attachment{url} = "https://gitlab.fm/fastmail/hm/-/merge_requests/$mr";
+  $attachment{iconUrl} =  "https://about.gitlab.com/images/press/logo/png/gitlab-icon-rgb.png";
+  $self->linear->add_attachment(\%attachment)->get;
+}
+
 sub http_app ($self, $env) {
   my $req = Plack::Request->new($env);
 
@@ -169,6 +178,12 @@ sub http_app ($self, $env) {
         })->retain;
       }
     }
+  }
+
+  # add MR mentioned in comment as attachment to issue
+  my $commented = $payload->{type} eq 'Comment';
+  if ($commented && $payload->{data}{body} =~ /hm!(\d*)/) {
+    attach_mr_to_issue($payload, $1);
   }
 
   return [ "200", [], [ '{"o":"k"}' ] ];
