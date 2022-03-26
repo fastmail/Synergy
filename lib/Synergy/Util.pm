@@ -387,6 +387,36 @@ sub _load_alphabets {
       }
       return $transliterated;
     },
+    flags => sub ($s) {
+      require Locale::Codes;
+
+      my %char_for = qw(
+        a 🇦  b 🇧  c 🇨  d 🇩  e 🇪  f 🇫  g 🇬  h 🇭  i 🇮
+        j 🇯  k 🇰  l 🇱  m 🇲  n 🇳  o 🇴  p 🇵  q 🇶  r 🇷
+        s 🇸  t 🇹  u 🇺  v 🇻  w 🇼  x 🇽  y 🇾  z 🇿
+      );
+
+      my $lc = Locale::Codes->new('country');
+      my %is_country = map {; $_ => 1 } $lc->all_codes('alpha-2');
+
+      my $out = '';
+
+      for (my $i = 0; $i < (length $s) - 1; $i++) {
+        my $digraph = lc substr $s, $i, 2;
+
+        if ($is_country{$digraph}) {
+          $out .= $char_for{$_} for split //, $digraph;
+          $i++; # no double-counting
+        } else {
+          $out .= substr $s, $i, 1;
+        }
+
+        # make sure we don't drop the last char the last char if we need to
+        $out .= substr $s, -1, 1 if $i == (length $s) - 2;
+      }
+
+      return $out;
+    },
 
     # Further wonky styles, which come from github.com/rjbs/misc/unicode-style,
     # are left up to wonkier people than me. -- rjbs, 2019-02-12

@@ -33,6 +33,7 @@ requires "Linear::Client" => "0";
 requires "Lingua::EN::Inflect" => "0";
 requires "List::AllUtils" => "0";
 requires "List::Util" => "0";
+requires "Locale::Codes" => "0";
 requires "Log::Dispatchouli" => "2.019";
 requires "Log::Dispatchouli::Global" => "0";
 requires "MIME::Base64" => "0";

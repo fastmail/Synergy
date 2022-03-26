@@ -4,7 +4,7 @@ use warnings;
 
 use 5.028000;
 
-use ExtUtils::MakeMaker 6.78;
+use ExtUtils::MakeMaker;
 
 use File::ShareDir::Install;
 $File::ShareDir::Install::INCLUDE_DOTFILES = 1;
@@ -16,7 +16,7 @@ my %WriteMakefileArgs = (
   "ABSTRACT" => "synergy's brain",
   "AUTHOR" => "Michael McClimon <michael\@mcclimon.org>",
   "CONFIGURE_REQUIRES" => {
-    "ExtUtils::MakeMaker" => "6.78",
+    "ExtUtils::MakeMaker" => 0,
     "File::ShareDir::Install" => "0.06"
   },
   "DISTNAME" => "Synergy",
@@ -60,6 +60,7 @@ my %WriteMakefileArgs = (
     "Lingua::EN::Inflect" => 0,
     "List::AllUtils" => 0,
     "List::Util" => 0,
+    "Locale::Codes" => 0,
     "Log::Dispatchouli" => "2.019",
     "Log::Dispatchouli::Global" => 0,
     "MIME::Base64" => 0,
@@ -160,6 +161,7 @@ my %FallbackPrereqs = (
   "Lingua::EN::Inflect" => 0,
   "List::AllUtils" => 0,
   "List::Util" => 0,
+  "Locale::Codes" => 0,
   "Log::Dispatchouli" => "2.019",
   "Log::Dispatchouli::Global" => 0,
   "MIME::Base64" => 0,
