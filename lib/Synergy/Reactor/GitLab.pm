@@ -810,11 +810,14 @@ sub handle_merge_request ($self, $event) {
         ($data->{work_in_progress} ? 'Work in progress' : ()),
         ($is_approved ? "Approved" : "Not yet approved");
 
+      my $dv = $data->{downvotes};
+      my $downvote_str = $dv
+                       ? sprintf(' (%s %s)', $dv, PL_N('downvote', $dv))
+                       : '';
+
       push @fields, {
         title => "Review status",
-        value => sprintf('%s (%s %s)',
-          $approval_str,
-          $data->{downvotes}, PL_N('downvote', $data->{downvotes})),
+        value => $approval_str . $downvote_str,
         short => \1
       };
 
