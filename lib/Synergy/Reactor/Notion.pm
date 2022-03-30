@@ -32,7 +32,7 @@ sub listener_specs {
       predicate => sub ($self, $e) { fc $e->text =~ /^support trends/i },
       help_entries => [
         {
-          title => 'support_trends',
+          title => 'support trends',
           text  => 'Show all the Issues & Trends support is tracking in Notion; '
                  . 'you can add /future to show things resolved in the future.',
         }
