@@ -518,6 +518,7 @@ sub load_channels ($self) {
   $self->api_call('conversations.list', {
     exclude_archived => 'true',
     types => 'public_channel',
+    limit => 200,
     form_encoded => 1,
   })->on_done(sub ($http_res) {
     my $res = decode_json($http_res->decoded_content(charset => undef));
