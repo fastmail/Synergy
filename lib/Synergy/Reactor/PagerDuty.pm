@@ -19,7 +19,8 @@ use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use List::Util qw(first);
 use Synergy::Logger '$Logger';
-use Time::Duration qw(ago);
+use Time::Duration qw(ago duration);
+use Time::Duration::Parse qw(parse_duration);
 
 my $ISO8601 = DateTime::Format::ISO8601->new;
 
@@ -263,6 +264,17 @@ EOH
       method    => 'handle_resolve_mine',
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+mine\s*$}i },
+    },
+    {
+      name      => 'snooze',
+      method    => 'handle_snooze',
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ m{^snooze\s}i },
+      help_entries => [
+        { title => 'snooze', text => <<'EOH' },
+Snooze a single PagerDuty incident. Usage: snooze ALERT-NUMBER for DURATION
+EOH
+      ],
     },
   );
 }
@@ -956,6 +968,59 @@ sub _active_incidents_summary ($self) {
 
       return Future->done({ text => $text, slack => $slack });
   });
+}
+
+sub handle_snooze ($self, $event) {
+  $event->mark_handled;
+
+  my ($num, $dur) = $event->text =~ /^snooze\s+#?(\d+)\s+for\s+(.*)/i;
+
+  unless ($num && $dur) {
+    return $event->error_reply(
+      "Sorry, I don't understand. Say 'snooze INCIDENT-NUM for DURATION'."
+    );
+  }
+
+  my $seconds = eval { parse_duration($dur) };
+
+  unless ($seconds) {
+    return $event->error_reply("Sorry, I couldn't parse '$dur' into a duration!");
+  }
+
+  return $self->_get_incidents(qw(triggered acknowledged))
+    ->then(sub (@incidents) {
+      my ($relevant) = grep {; $_->{incident_number} == $num } @incidents;
+      unless ($relevant) {
+        $event->error_reply("I couldn't find an active incident for #$num");
+        return Future->fail('no-incident');
+      }
+
+      my $id = $relevant->{id};
+
+      return $self->_pd_request_for_user(
+        $event->from_user,
+        POST => "/incidents/$id/snooze",
+        { duration => $seconds }
+      );
+    })->then(sub ($res) {
+      if (my $incident = $res->{incident}) {
+        my $title = $incident->{title};
+        my $duration = duration($seconds);
+        return $event->reply(
+          "#$num ($title) snoozed for $duration; enjoy the peace and quiet!"
+        );
+      }
+
+      my $msg = $res->{message};
+      return $event->reply(
+        "Something went wrong talking to PagerDuty; they said: $msg"
+      );
+    })->else(sub ($type, @extra) {
+      return Future->done if $type eq 'no-incident';
+
+      $Logger->log([ "PD snooze failed: %s, %s", $type, \@extra ]);
+      return $event->reply("Sorry, something went wrong talking to PagerDuty");
+    })->retain;
 }
 
 sub _get_pd_account ($self, $token) {
