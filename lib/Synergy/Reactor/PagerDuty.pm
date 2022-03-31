@@ -900,7 +900,7 @@ sub _announce_oncall_change ($self, $before, $after) {
   })->retain;
 }
 
-sub _handle_incidents($self, $event) {
+sub _handle_incidents ($self, $event) {
   $event->mark_handled;
   $self->_active_incidents_summary->then(sub ($summary = undef) {
     my $text = delete $summary->{text} // "The board is clear!";
@@ -908,7 +908,7 @@ sub _handle_incidents($self, $event) {
   })->retain;
 }
 
-sub _active_incidents_summary($self) {
+sub _active_incidents_summary ($self) {
   return $self->_get_incidents(qw(triggered acknowledged))
     ->then(sub (@incidents) {
       return Future->done() unless @incidents;
