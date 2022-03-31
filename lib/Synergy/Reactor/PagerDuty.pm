@@ -17,6 +17,7 @@ use DateTime::Format::ISO8601;
 use Future;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
+use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(first);
 use Synergy::Logger '$Logger';
 use Time::Duration qw(ago duration);
@@ -925,7 +926,12 @@ sub _active_incidents_summary ($self) {
     ->then(sub (@incidents) {
       return Future->done() unless @incidents;
 
-      my $title = "🚨 There are " . @incidents . " incidents on the board: 🚨";
+      my $count = @incidents;
+      my $title = sprintf("🚨 There %s %d %s on the board: 🚨",
+        PL_V('is', $count),
+        $count,
+        PL_N('incident', $count)
+      );
 
       my (@text, @slack);
 
