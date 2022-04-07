@@ -425,8 +425,8 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
   my $ersatz_text = $arg->{ersatz_text};
 
   my $code = sub ($linear) {
-    my $text = $event->text;
-
+    my $slack_link = $event->event_uri;
+    my $text = $event->text . "\ncreated at: $slack_link";
 
     # Slack now "helpfully" corrects '>>' in DM to '> >'.
     $text =~ s/\A> >/>>/;
