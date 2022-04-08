@@ -32,7 +32,13 @@ sub listener_specs {
       method    => 'handle_hours_for',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Ahours(\s+for)?\s+/i; }
+      predicate => sub ($self, $e) { $e->text =~ /\Ahours(\s+for)?\s+/i; },
+      help_entries => [
+        {
+          title => 'hours',
+          text  => "*hours PERSON* (or *hours for PERSON*): find out when PERSON is likely to be working",
+        },
+      ],
     },
     {
       name      => 'clock_out',
