@@ -56,6 +56,7 @@ EOH
       exclusive => 1,
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ /\Aset\s+(my|\w+[’']s)/in },
+      allow_empty_help => 1,  # provided by preferences above
     },
     {
       name      => 'clear',
@@ -63,6 +64,7 @@ EOH
       exclusive => 1,
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ /\Aclear\s+(my|\w+[’']s)/in },
+      allow_empty_help => 1,  # provided by preferences above
     },
     {
       name      => 'list_all_preferences',
@@ -72,6 +74,7 @@ EOH
       predicate => sub ($self, $e) {
         $e->text =~ /\Alist(\s+all)?\s+(settings|pref(erence)s?)\s*\z/i;
       },
+      allow_empty_help => 1,  # provided by preferences above
     },
     {
       name      => 'dump',
@@ -84,6 +87,7 @@ EOH
         return 1 if $e->text =~ /\A(dump|show)\s+(settings|pref(erence)?s)\s+for/in;
         return;
       },
+      allow_empty_help => 1,  # provided by preferences above
     }
   );
 }

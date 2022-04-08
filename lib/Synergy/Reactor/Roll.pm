@@ -18,6 +18,10 @@ sub listener_specs {
     exclusive => 1,
     targeted  => 1,
     predicate => sub ($self, $e) { $e->text =~ /\Aroll\b/i },
+    help_entries => [{
+      title => 'roll',
+      text  => '*roll SPEC*: roll some dice, D&D style (roll 2d6, roll 1d20)'
+    }],
   };
 }
 

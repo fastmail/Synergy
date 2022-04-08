@@ -23,6 +23,12 @@ sub listener_specs {
       exclusive => 1,
       targeted  => 1,
       predicate => sub ($self, $e) { fc $e->text eq 'my projects'; },
+      help_entries => [
+        {
+          title => 'my projects',
+          text  => "*my projects*: show all the projects you're working on in Notion",
+        }
+      ],
     },
     {
       name      => 'trends',

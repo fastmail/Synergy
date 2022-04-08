@@ -32,6 +32,10 @@ sub listener_specs {
     exclusive => 1,
     targeted  => 1,
     predicate => sub ($self, $e) { $e->text =~ /\Aweather\b/i; },
+    help_entries => [{
+      title => 'weather',
+      text  => "*weather*: what's the weather like in all the places?"
+    }],
   };
 }
 

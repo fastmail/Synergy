@@ -16,6 +16,7 @@ sub listener_specs {
     exclusive => 1,
     targeted  => 1,
     predicate => sub ($self, $e) { lc $e->text eq 'eject warp core' },
+    allow_empty_help => 1,
   };
 }
 

@@ -7,6 +7,8 @@ with 'Synergy::Role::Reactor::EasyListening';
 use experimental qw(signatures);
 use namespace::clean;
 
+use Synergy::Util qw(reformat_help);
+
 sub listener_specs {
   return {
     name      => 'initial registration',
@@ -14,6 +16,17 @@ sub listener_specs {
     exclusive => 1,
     targeted  => 1,
     predicate => sub ($self, $e) { $e->text =~ /^register me/i },
+    help_entries => [{
+      title => 'register',
+      text => reformat_help(<<'EOH'),
+Welcome aboard and nice to meet you! To introduce yourself, say
+
+*register me as USERNAME*
+
+USERNAME will become the name I'll know you by. This is the beginning of a
+long and prosperous friendship, I can tell.
+EOH
+    }],
   };
 }
 

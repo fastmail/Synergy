@@ -75,6 +75,7 @@ END
       exclusive => 1,
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ /\Aadd\s+fortune:/i; },
+      allow_empty_help => 1,  # handled above
     },
   );
 }

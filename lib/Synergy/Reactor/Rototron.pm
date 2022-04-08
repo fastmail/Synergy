@@ -46,6 +46,7 @@ EOH
       exclusive => 1,
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ /\Areplan rotors\z/i },
+      allow_empty_help => 1,
     },
     {
       name      => 'rotors',
@@ -88,6 +89,7 @@ EOH
       exclusive => 1,
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ /^(?:(\S+)\s+is\s+)?(un)?available\b/in },
+      allow_empty_help => 1,  # handled above
     },
     {
       name      => 'manual_assignment',
@@ -97,6 +99,7 @@ EOH
       predicate => sub ($self, $e) {
         $e->text =~ /^assign rotor (\S+) to (\S+) /ni;
       },
+      allow_empty_help => 1,  # handled above
     },
   );
 }

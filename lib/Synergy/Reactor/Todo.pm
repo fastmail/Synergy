@@ -19,6 +19,7 @@ use MIME::Base64;
 use Synergy::Logger '$Logger';
 
 command todo => {
+  help => 'add something to your personal todo list'
 } => sub ($self, $event, $rest) {
   my $user = $event->from_user;
 

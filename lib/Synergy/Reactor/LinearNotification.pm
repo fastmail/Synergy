@@ -181,6 +181,7 @@ sub listener_specs {
     name      => 'linear_notification',
     method    => 'linear_notification',
     predicate => sub ($, $e) { 0 },
+    allow_empty_help => 1,
   };
 }
 

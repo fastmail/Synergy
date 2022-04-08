@@ -17,6 +17,10 @@ sub listener_specs {
     exclusive => 1,
     targeted  => 1,
     predicate => sub ($self, $e) { $e->text =~ /^who/i },
+    help_entries => [{
+      title => 'who',
+      text  => '*who is NAME*: get details on another Synergy user named NAME',
+    }]
   };
 }
 

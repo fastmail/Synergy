@@ -35,7 +35,9 @@ my @BYE = (
 
 responder good_morning => {
   targeted => 1,
-  matcher => sub {[]}
+  matcher => sub {[]},
+  help_titles => [ 'good morning', 'good evening' ],
+  help    => 'be polite; say good morning or good night',
 } => sub ($self, $event) {
   my $what = $event->text =~ s/\Pl//igr;
   $what = lc $what;

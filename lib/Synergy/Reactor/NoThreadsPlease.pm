@@ -19,6 +19,7 @@ sub listener_specs {
       return unless $td->{thread_ts} && $td->{thread_ts} ne $td->{ts};
       return 1;
     },
+    allow_empty_help => 1,
   };
 }
 

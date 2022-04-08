@@ -16,6 +16,7 @@ sub listener_specs {
     exclusive => 1,
     targeted  => 1,
     predicate => sub ($self, $e) { $e->text =~ /\Aemit(?:\s+.+)?/i },
+    allow_empty_help => 1,  # command only for testing
   };
 }
 

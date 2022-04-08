@@ -52,6 +52,7 @@ sub listener_specs ($reactor) {
       name      => "listen-for-chatter",
       method    => "handle_chatter",
       predicate => sub ($self, $e) { $e->is_public; },
+      allow_empty_help => 1,
     },
   );
 }

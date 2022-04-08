@@ -68,6 +68,7 @@ sub listener_specs {
 
       return;
     },
+    allow_empty_help => 1,
   };
 }
 

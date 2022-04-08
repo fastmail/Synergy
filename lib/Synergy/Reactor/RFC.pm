@@ -29,6 +29,7 @@ sub listener_specs {
       predicate => sub ($self, $e) {
         return $e->text =~ /\Arfcs\s+author:[“”"][^"]+[“”"]\z/;
       },
+      allow_empty_help => 1,  # this command is too weird for public consumption
     },
     {
       name      => 'rfc-mention',
@@ -36,6 +37,7 @@ sub listener_specs {
       predicate => sub ($self, $e) {
         return unless $e->text =~ /(^|\s|\/)RFC\s*[0-9]+/in;
       },
+      allow_empty_help => 1,
     },
   );
 }

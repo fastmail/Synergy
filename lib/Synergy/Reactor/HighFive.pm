@@ -135,6 +135,10 @@ sub listener_specs {
     predicate => sub ($, $e) {
       $e->text =~ /^(highfive|:raised_hands:(?::skin-tone-\d:)?|$HIGHFIVE_EMOJI)\s/in;
     },
+    help_entries => [{
+      title => 'highfive',
+      text => '*highfive WHO: REASON* - give someone a high five for a job well done',
+    }],
   };
 }
 

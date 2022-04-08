@@ -47,7 +47,7 @@ sub start ($self) {
 }
 sub listener_specs {
   return {
-    name      => 'Upgrade',
+    name      => 'upgrade',
     method    => 'handle_upgrade',
     targeted  => 1,
     predicate => sub ($self, $e) {
@@ -56,12 +56,17 @@ sub listener_specs {
           || $text eq 'upgrade your grey matter'
           || $text eq 'upgrade your gray matter'
     },
+    allow_empty_help => 1,  # people who want to do this can read source
   },
   {
-    name      => 'Version',
+    name      => 'version',
     method    => 'handle_version',
     targeted  => 1,
     predicate => sub ($self, $e) { lc $e->text eq 'version' },
+    help_entries => [{
+      title => 'version',
+      text  => "show the version of my current brain",
+    }],
   };
 }
 

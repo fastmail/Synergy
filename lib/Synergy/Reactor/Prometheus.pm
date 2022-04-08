@@ -13,6 +13,7 @@ sub listener_specs {
     name      => 'prometheus',
     method    => 'count_event',
     predicate => sub { 1 },
+    allow_empty_help => 1,
   };
 }
 

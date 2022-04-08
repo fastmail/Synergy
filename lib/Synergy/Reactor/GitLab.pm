@@ -162,7 +162,8 @@ sub listener_specs {
 
         my $base = $self->url_base;
         return 1 if $e->text =~ /\Q$base\E.*?merge_requests/;
-      }
+      },
+      allow_empty_help => 1,
     },
     {
       name => 'mention-commit',
@@ -172,7 +173,8 @@ sub listener_specs {
 
         state $base = $self->url_base;
         return 1 if $e->text =~ /\Q$base\E.*?commit/;
-      }
+      },
+      allow_empty_help => 1,
     },
   );
 }

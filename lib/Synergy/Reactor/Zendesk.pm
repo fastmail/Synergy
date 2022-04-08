@@ -124,6 +124,7 @@ sub listener_specs ($self) {
         return 1 if $e->text =~ /$url_re/;
         return;
       },
+      allow_empty_help => 1,
     },
   );
 }

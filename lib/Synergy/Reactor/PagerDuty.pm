@@ -199,6 +199,7 @@ EOH
       predicate => sub ($, $e) {
         $e->text =~ m{^maint\s+start\s*(/force)?\s*$}i
       },
+      allow_empty_help => 1,  # provided by maint-query
     },
     {
       name      => 'maint-end',
@@ -209,6 +210,7 @@ EOH
         return 1 if $e->text =~ /^unmaint\b/i;
         return 1 if $e->text =~ /^demaint\b/i;
       },
+      allow_empty_help => 1,  # provided by maint-query
     },
     {
       name      => 'oncall',
@@ -259,12 +261,14 @@ EOH
       method    => 'handle_resolve_acked',
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+acked\s*$}i },
+      allow_empty_help => 1,  # provided by resolve-all
     },
     {
       name      => 'resolve-mine',
       method    => 'handle_resolve_mine',
       targeted  => 1,
       predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+mine\s*$}i },
+      allow_empty_help => 1,  # provided by resolve-all
     },
     {
       name      => 'snooze',

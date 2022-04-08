@@ -19,6 +19,7 @@ sub listener_specs {
         return unless $event->from_channel->can('slack');
         return $event->text =~ /\A\s*slackid [@#]?(\w+)\s*\z/i;
       },
+      allow_empty_help => 1,
     },
     {
       name      => 'reload-slack-users',
@@ -28,6 +29,7 @@ sub listener_specs {
         return unless $event->from_channel->can('slack');
         return $event->text =~ /\Areload slack (users|channels)\z/in;
       },
+      allow_empty_help => 1,
     },
   );
 }

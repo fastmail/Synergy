@@ -27,6 +27,10 @@ sub listener_specs {
     method    => 'handle_announce',
     targeted  => 1,
     predicate => sub ($self, $e) { $e->text =~ /^announce/i },
+    help_entries => [{
+      title => 'announce',
+      text  => '*announce MESSAGE*: send a message to the general announcement place'
+    }],
   };
 }
 
