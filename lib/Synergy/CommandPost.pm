@@ -56,7 +56,7 @@ sub _generate_command_system ($class, $, $arg, $) {
 
       if ($arg->{help}) {
         my @help_titles = ($arg->{help_titles} || [ $name ])->@*;
-        $object->add_help($_, {}, $arg->{help}) for @help_titles
+        $object->add_help($_, { _thing_name => $name }, $arg->{help}) for @help_titles;
       }
 
       return;
@@ -78,6 +78,7 @@ package Synergy::CommandPost::Object {
     handles   => {
       _command_named    => 'get',
       _register_command => 'set',
+      _command_names    => 'keys',
     },
   );
 
@@ -102,6 +103,7 @@ package Synergy::CommandPost::Object {
       _responder_kv    => 'kv',
       _responder_named => 'get',
       _register_responder  => 'set',
+      _responder_names     => 'keys',
     },
   );
 
@@ -144,7 +146,22 @@ package Synergy::CommandPost::Object {
     },
   );
 
+  # This is just bookkeeping so we can report on missing help entries
+  has _help_registry => (
+    isa       => 'HashRef',
+    init_arg  => undef,
+    default   => sub { {} },
+    traits    => [ 'Hash' ],
+    handles   => {
+      _register_help => 'set',
+      _has_registered_help_for => 'get',
+    },
+  );
+
   sub add_help ($self, $name, $arg, $text) {
+    my $registry_name = delete $arg->{_thing_name} // $name;
+    $self->_register_help($registry_name, 1);
+
     my $to_store = { %$arg, title => $name, text => $text };
     $self->_add_help($to_store);
     return;

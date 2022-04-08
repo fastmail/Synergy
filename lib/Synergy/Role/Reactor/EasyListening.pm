@@ -9,6 +9,8 @@ use namespace::clean;
 
 with 'Synergy::Role::Reactor';
 
+use Synergy::Logger '$Logger';
+
 has listeners => (
   isa => 'ArrayRef',
   traits  => [ 'Array' ],
@@ -20,6 +22,18 @@ has listeners => (
     return \@listeners;
   },
 );
+
+around start => sub ($orig, $self, @args) {
+  $self->$orig(@args);
+
+  my $pkg = ref $self;
+  my @helpless = grep {; ! ($_->{help_entries} // [])->@* } $self->listeners;
+
+  for my $l (@helpless) {
+    next if $l->{allow_empty_help};
+    $Logger->log("notice: missing help in $pkg for listener $l->{name}");
+  }
+};
 
 sub help_entries ($self) {
   return [
