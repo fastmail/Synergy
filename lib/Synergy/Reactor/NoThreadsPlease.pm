@@ -8,6 +8,23 @@ with 'Synergy::Role::Reactor::EasyListening';
 use experimental qw(signatures);
 use namespace::clean;
 
+has allow_channels => (
+  is => 'ro',
+  isa =>  'ArrayRef' ,
+  default => sub { [] },
+);
+
+has _channels_allowed => (
+  is => 'ro',
+  isa =>  'HashRef' ,
+  traits => ['Hash'],
+  lazy => 1,
+  default => sub { +{ map {; $_ => 1 } $_[0]->allow_channels->@* } },
+  handles => {
+    is_allowed_channel => 'get',
+  }
+);
+
 sub listener_specs {
   return {
     name      => 'no_threads_please',
@@ -39,12 +56,16 @@ sub handle_thread ($self, $event) {
   $self->recent_threads->@* = grep {; $_->{at} >= $time_ago }
                               $self->recent_threads->@*;
 
-  return if grep {; $_->{thread} eq $event->transport_data->{thread_ts} }
+  my $transport_data = $event->transport_data;
+
+  return if $self->is_allowed_channel($transport_data->{channel});
+
+  return if grep {; $_->{thread} eq $transport_data->{thread_ts} }
             $self->recent_threads->@*;
 
   push $self->recent_threads->@*, {
     at     => time,
-    thread => $event->transport_data->{thread_ts},
+    thread => $transport_data->{thread_ts},
   };
 
   $event->reply(
@@ -52,7 +73,7 @@ sub handle_thread ($self, $event) {
     {
       slack => {
         text      => $self->message_text,
-        thread_ts => $event->transport_data->{thread_ts},
+        thread_ts => $transport_data->{thread_ts},
       },
     },
   );
