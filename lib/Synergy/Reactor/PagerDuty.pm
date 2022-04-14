@@ -20,6 +20,7 @@ use JSON::MaybeXS qw(decode_json encode_json);
 use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(first);
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(reformat_help);
 use Time::Duration qw(ago duration);
 use Time::Duration::Parse qw(parse_duration);
 
@@ -216,10 +217,35 @@ EOH
       name      => 'oncall',
       method    => 'handle_oncall',
       targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /^oncall\s*$/i },
+      predicate => sub ($self, $e) { $e->text =~ /^oncall\s*(override)?/in },
       help_entries => [
         { title => 'oncall', text => '*oncall*: show a list of who is on call in PagerDuty right now' },
       ],
+    },
+    {
+      name      => 'give-oncall',
+      method    => 'handle_give_oncall',
+      targeted  => 1,
+      predicate => sub ($self, $e) { $e->text =~ /^give\s+oncall/i },
+      help_entries => [{
+        title => 'give oncall',
+        text => reformat_help(<<'EOH'),
+Give the oncall conch to someone for a while.
+
+• `give oncall to WHO for DURATION`
+• `oncall override WHO DURATION`
+
+`WHO` is the person you want to take the conch, and `DURATION` is how long
+they should keep it. The duration is parsed, so you can say something like
+"30m" or "2h".
+
+This command is (for now?) very limited, and intended for the case where
+you're oncall and need to step away to for a while. It won't let you give
+oncall to someone for more than 8 hours, and won't work if there is already
+more than one person oncall. To set up extended overrides, you should use the
+PagerDuty website.
+EOH
+      }],
     },
     {
       name      => 'ack-all',
@@ -486,6 +512,10 @@ sub _user_is_oncall ($self, $who) {
 sub handle_oncall ($self, $event) {
   $event->mark_handled;
 
+  if ($event->text =~ /^oncall\s+override/i) {
+    return $self->handle_give_oncall($event);
+  }
+
   $self->_current_oncall_ids
     ->then(sub (@ids) {
         my @users = map {; $self->username_from_pd($_) // $_ } @ids;
@@ -493,6 +523,129 @@ sub handle_oncall ($self, $event) {
     })
     ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
     ->retain;
+}
+
+# For now, this will work in *extremely* limited situations, so we do a bunch
+# of error checking up front here.
+sub handle_give_oncall ($self, $event) {
+  $event->mark_handled;
+
+  my ($who, $dur);
+  if ($event->text =~ /^oncall\s+override/in) {
+    # oncall override syntax
+    ($who, $dur) = $event->text =~ /^oncall\s+override\s+(\S+)\s+(.*)/i;
+  } else {
+    # give oncall syntax
+    ($who, $dur) = $event->text =~ /^give\s+oncall\s+to\s+(\S+)\s+for\s+(.*)\s*$/i;
+  }
+
+  warn "who: $who, dur: $dur";
+
+  unless ($who && $dur) {
+    return $event->error_reply(
+      "Hmm, I didn't catch that, sorry: it's *give oncall to WHO for DURATION*"
+    );
+  }
+
+  my $target = $self->resolve_name($who, $event->from_user);
+  unless ($target) {
+    return $event->error_reply("Sorry, I can't figure out who '$who' is.");
+  }
+
+  my $target_id = $self->get_user_preference($target, 'user-id');
+  unless ($target_id) {
+    my $they = $target->username;
+    return $event->error_reply("Hmm, $they doesn't seem to be a PagerDuty user.");
+  }
+
+  my $seconds = eval { parse_duration($dur) };
+  unless ($seconds) {
+    return $event->error_reply("Hmm, I can't figure out how long you mean by '$dur'.");
+  }
+
+  if ($seconds > 60 * 60 * 8) {
+    return $event->error_reply("Sorry, I can only give oncall for 8 hours max.");
+  }
+
+  if ($seconds < 60 ) {
+    return $event->error_reply("That's less than a minute; did you forget a unit?");
+  }
+
+  return;
+
+  $self->_relevant_oncalls->then(sub ($oncalls) {
+    # More early bail-outs
+    if (@$oncalls > 1) {
+      $event->error_reply(
+        "Sorry; there's more than one person oncall right now, so I can't help you!"
+      );
+
+      return Future->fail('bail-out');
+    }
+
+    my $schedule = $oncalls->[0]{schedule};
+    unless ($schedule) {
+      $event->error_reply(
+        "Sorry; I couldn't figure out the oncall schedule from PagerDuty."
+      );
+
+      return Future->fail('bail-out');
+    }
+
+    my $sched_id = $schedule->{id};
+    my $start    = DateTime->now->add(seconds => 15);
+    my $end      = $start->clone->add(seconds => $seconds);
+
+    return $self->_pd_request_for_user(
+      $event->from_user,
+      POST => "/schedules/$sched_id/overrides",
+      {
+        overrides => [{
+          start => $ISO8601->format_datetime($start),
+          end   => $ISO8601->format_datetime($end),
+          user  => {
+            type => 'user_reference',
+            id   => $target_id,
+          },
+        }],
+      }
+    );
+  })->then(sub ($overrides) {
+    unless (@$overrides == 1 && $overrides->[0]{status} == 201) {
+      $Logger->log([ "got weird data back from override call: %s", $overrides ]);
+      return $event->reply(
+        "Sorry, something went wrong talking to PagerDuty. \N{DISAPPOINTED FACE}"
+      );
+    }
+
+    my $duration = duration($seconds);
+    $event->reply(sprintf("Okay! %s is now oncall for %s.",
+      $target->username,
+      duration($seconds),
+    ));
+  })->else(sub ($type, @rest) {
+    return if $type eq 'bail-out';
+
+    if ($type eq 'http') {
+      my $res = shift @rest;
+      my $data = eval { decode_json($res->decoded_content) };
+      $Logger->log([
+        "got http error, status %s, when setting overrides: %s",
+        $res->code,
+        $data // '<no json>',
+      ]);
+    } else {
+      $Logger->log([
+        "unknown error setting overrides: type=%s, err=%s",
+        $type,
+        \@rest,
+      ]);
+    }
+
+    return $event->reply(
+      "Sorry, something went wrong talking to PagerDuty. \N{DISAPPOINTED FACE}"
+    );
+  })->retain;
 }
 
 sub handle_maint_start ($self, $event) {
