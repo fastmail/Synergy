@@ -454,19 +454,23 @@ sub _check_long_maint ($self) {
     })->retain;
 }
 
-sub _current_oncall_ids ($self) {
-  $self->_pd_request(GET => '/oncalls')
+sub _relevant_oncalls ($self) {
+  return $self->_pd_request(GET => '/oncalls')
     ->then(sub ($data) {
       my $policy_id = $self->escalation_policy_id;
-      my @oncall = map  {; $_->{user} }
-                   grep {; $_->{escalation_policy}{id} eq $policy_id }
-                   grep {; $_->{escalation_level} == 1}
-                   $data->{oncalls}->@*;
+      my @oncalls = grep {; $_->{escalation_policy}{id} eq $policy_id }
+                    grep {; $_->{escalation_level} == 1}
+                    $data->{oncalls}->@*;
 
-      # XXX probably not generic enough
-      my @ids = map {; $_->{id} } @oncall;
-      return Future->done(@ids);
+      return Future->done(\@oncalls);
     });
+}
+
+sub _current_oncall_ids ($self) {
+  $self->_relevant_oncalls->then(sub ($oncalls) {
+    my @ids = map  {; $_->{user}{id} } @$oncalls;
+    return Future->done(@ids);
+  });
 }
 
 # This returns a Future that, when done, gives a boolean as to whether or not
