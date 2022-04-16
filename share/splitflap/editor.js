@@ -68,6 +68,11 @@ const splitflapValues = {
   69: "⬜", // "White"
 };
 
+const splitFlapKeys = {};
+Object.keys(splitflapValues).forEach(
+  (key) => (splitFlapKeys[splitflapValues[key]] = key)
+);
+
 let representation = [];
 let workingRow;
 let firstElement;
@@ -340,6 +345,7 @@ window.onkeydown = (event) => {
       event.stopPropagation();
     }
   } else {
+    target.writeRaw(splitFlapKeys[event.key && event.key.toUpperCase()]);
     return;
   }
   if (event.key === " ") {
