@@ -357,7 +357,7 @@ command triage => {
           assignee => undef,
           %extra_search,
         },
-        "No unassigned tasks in triage!  Great!",
+        "No unassigned issues in triage!  Great!",
         "Current unassigned triage work",
         $linear,
       );
@@ -446,9 +446,9 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
         my $url = $query_result->{data}{issueCreate}{issue}{url};
         if ($id) {
           return $event->reply(
-            sprintf("I made that task, %s: %s", $id, $url),
+            sprintf("I made that issue, %s: %s", $id, $url),
             {
-              slack => sprintf("I made that task, <%s|%s>.", $url, $id),
+              slack => sprintf("I made that issue, <%s|%s>.", $url, $id),
             },
           );
         } else {
@@ -457,7 +457,7 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
           );
         }
       })
-      ->else(sub ($error) { $event->error_reply("Couldn't make task: $error") });
+      ->else(sub ($error) { $event->error_reply("Couldn't make issue: $error") });
   };
 
   if ($linear) {
@@ -483,10 +483,10 @@ responder new_issue => {
     *\N{ZERO WIDTH SPACE}>> `TARGET` `NAME`*: create a new issue in Linear
     *++ `NAME`*: create a new issue in Linear, with you as the target
 
-    In the simplest form, this creates a new task with the given name, assigned
+    In the simplest form, this creates a new issue with the given name, assigned
     to the given target.  (More on "targets" below.)  Any text after a line
     break or after triple dashes (`---`) becomes part of the long form
-    description of the task, using Markdown.
+    description of the issue, using Markdown.
 
     The `TARGET` can be either:
     • a username
@@ -571,7 +571,7 @@ __PACKAGE__->add_preference(
 __PACKAGE__->add_preference(
   name        => 'default-team',
   help        => "Default team in Linear. Make sure to enter the three letter team key.",
-  description => "Default team for your Linear tasks",
+  description => "Default team for your Linear issues",
   describer   => sub ($value) {
     return $value;
   },
