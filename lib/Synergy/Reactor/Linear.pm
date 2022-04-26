@@ -135,6 +135,19 @@ listener issue_mention => sub ($self, $event) {
 
   return unless @matches;
 
+  # Do not warn about missing tokens in public about in-passing mentions
+  my $user = $event->from_user;
+  if ( $event->is_public
+    && $user
+    && ! $self->get_user_preference($user, 'api-token')
+  ) {
+    my $rname = $self->name;
+    return $event->ephemeral_reply(
+      "I saw a Linear issue to expand, but you don't have a Linear API token set."
+      . " You should make one, then set your $rname.api-token preference."
+    );
+  }
+
   # If there's anything in the message other than identifiers and whitespace,
   # this message had some content other than the identifier.  We remove all the
   # identifiers, then look for anything other than whitespace.  If we were
