@@ -4,7 +4,7 @@ use warnings;
 
 use 5.028000;
 
-use ExtUtils::MakeMaker;
+use ExtUtils::MakeMaker 6.78;
 
 use File::ShareDir::Install;
 $File::ShareDir::Install::INCLUDE_DOTFILES = 1;
@@ -16,7 +16,7 @@ my %WriteMakefileArgs = (
   "ABSTRACT" => "synergy's brain",
   "AUTHOR" => "Michael McClimon <michael\@mcclimon.org>",
   "CONFIGURE_REQUIRES" => {
-    "ExtUtils::MakeMaker" => 0,
+    "ExtUtils::MakeMaker" => "6.78",
     "File::ShareDir::Install" => "0.06"
   },
   "DISTNAME" => "Synergy",
