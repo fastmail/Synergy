@@ -169,7 +169,9 @@ END
 
   chomp $reply;
 
-  $event->reply($reply);
+  my $slack = $reply =~ s/AELT /:flag-brisbane: /r;
+
+  $event->reply($reply, { slack => $slack });
 };
 
 command when => {
