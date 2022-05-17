@@ -3,13 +3,16 @@ use warnings;
 package Synergy::Reactor::Clox;
 
 use Moose;
-use DateTime;
+
 with 'Synergy::Role::Reactor',
      'Synergy::Role::Reactor::CommandPost';
 
 use Synergy::CommandPost;
 
 use experimental qw(signatures lexical_subs);
+
+use DateTime;
+use DateTime::Event::Sunrise;
 use List::Util qw(first uniq);
 use Synergy::Util qw(parse_date_for_user);
 use Time::Duration::Parse;
@@ -25,6 +28,27 @@ has always_include => (
   traits  => [ 'Array' ],
   handles => { always_include => 'elements' },
 );
+
+has include_aelt => (
+  isa => 'Bool',
+  is  => 'ro',
+  default => 0,
+);
+
+sub _aelt_delta_for_time ($self, $dt) {
+  my $sun_brisbane = DateTime::Event::Sunrise->new(
+    latitude  => -27.467778, # south
+    longitude => 153.028056, # east
+  );
+
+  my $local = $dt->clone->set_time_zone('Australia/Brisbane');
+  my $date  = $local->clone->truncate(to => 'day');
+
+  my $ohseven = $date->clone->set_hour(7);
+
+  my $sunrise_epoch = $sun_brisbane->sunrise_datetime($date)->epoch;
+  my $epoch_diff    = $ohseven->epoch - $sunrise_epoch;
+}
 
 command clox => {
   help => <<'END'
@@ -107,6 +131,27 @@ END
       if $tz_name eq $user_tz;
 
     push @strs, $str;
+  }
+
+  if ($self->include_aelt) {
+    my $brisbane_tz = DateTime::TimeZone->new(name => 'Australia/Brisbane');
+
+    my $aelt = $self->_aelt_delta_for_time($time);
+    my $tz_time = DateTime->from_epoch(
+      time_zone => $user_tz,
+      epoch     => $time->epoch
+                -  $home_offset
+                +  $brisbane_tz->offset_for_datetime($time)
+                -  $aelt,
+    );
+
+    push @strs, "AELT " . $self->hub->format_friendly_date(
+      $tz_time,
+      {
+        include_time_zone => 0,
+        target_time_zone  => $user_tz,
+      }
+    );
   }
 
   my $sit = $time->clone;
