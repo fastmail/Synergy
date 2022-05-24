@@ -83,6 +83,7 @@ requires "strict" => "0";
 requires "utf8" => "0";
 requires "warnings" => "0";
 suggests "Acme::Zalgo" => "0";
+suggests "DateTime::Event::Sunrise" => "0";
 suggests "Games::Dice" => "0";
 suggests "WebService::RTM::CamelMilk" => "0";
 suggests "Zendesk::Client" => "0";
