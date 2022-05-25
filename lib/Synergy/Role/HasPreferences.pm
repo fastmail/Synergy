@@ -4,6 +4,7 @@ package Synergy::Role::HasPreferences;
 
 use MooseX::Role::Parameterized;
 
+use Future;
 use Scalar::Util qw(blessed);
 use Synergy::Logger '$Logger';
 use Try::Tiny;
@@ -46,6 +47,7 @@ role {
   method preference_names    => sub             { sort keys %pref_specs     };
   method is_known_preference => sub ($, $name)  { exists $pref_specs{$name} };
 
+  # async: returns a future that resolves to a string
   method describe_user_preference => sub ($self, $user, $pref_name) {
     my $val;
 
@@ -55,7 +57,13 @@ role {
       $Logger->log("couldn't get value for preference $pref_name: $@");
     }
 
-    return $pref_specs{$pref_name}->{describer}->( $val );
+    # Really, this should "never fail", but.
+    return Future->wrap($pref_specs{$pref_name}->{describer}->($val))
+      ->else(sub (@err) {
+        my $full_name = $self->preference_namespace . q{.} . $pref_name;
+        $Logger->log([ "error describing $full_name: %s", \@err ]);
+        return Future->done('<mysterious error describing preference>');
+      });
   };
 
   method preference_help => sub ($self) {
@@ -73,7 +81,7 @@ role {
   #   description => "a pref with a name",
   #   default     => value,
   #   validator   => sub ($self, $val, $event) {},
-  #   describer   => sub ($val) {},
+  #   describer   => sub ($val) {},                 <-- ASYNC
   #   after_set   => sub ($self, $username, $value) {},
   # }
   #
@@ -88,7 +96,7 @@ role {
 
     die "preference $name already exists in $class" if $pref_specs{$name};
 
-    $spec{describer} //= sub ($value) { return $value // '<undef>' };
+    $spec{describer} //= sub ($val) { return Future->done($val // '<undef>') };
     $spec{after_set} //= sub ($self, $username, $value) {};
 
     $pref_specs{$name} = \%spec;
@@ -115,7 +123,7 @@ role {
     }
 
     my $got = $self->set_user_preference($user, $pref_name, $actual_value);
-    my $desc = $self->describe_user_preference($user, $pref_name);
+    my $desc = $self->describe_user_preference($user, $pref_name)->get; # TODO
 
     my $possessive = $user == $event->from_user
                    ? 'Your'

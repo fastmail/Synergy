@@ -157,7 +157,7 @@ sub handle_dump ($self, $event) {
     return $event->error_reply(qq!I don't know who "$who" is!);
   }
 
-  my @pref_strings;
+  my (@pref_strings, @futures);
   my $hub = $self->hub;
 
   for my $component ($hub->user_directory, $hub->channels, $hub->reactors) {
@@ -166,12 +166,17 @@ sub handle_dump ($self, $event) {
     for my $pref_name ($component->preference_names) {
       my $full_name = $component->preference_namespace . q{.} . $pref_name;
 
-      push @pref_strings,
-        "$full_name: " .  $component->describe_user_preference($for_user, $pref_name)
+      push @futures, $component->describe_user_preference($for_user, $pref_name)
+        ->then(sub ($val) {
+          push @pref_strings, "$full_name: $val";
+          return Future->done;
+        });
     }
   }
 
-  my $prefs = join "\n", @pref_strings;
+  Future->wait_all(@futures);
+
+  my $prefs = join "\n", sort @pref_strings;
   my $name = $for_user->username;
 
   $event->mark_handled;
