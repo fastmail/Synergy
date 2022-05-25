@@ -18,7 +18,7 @@ use Linear::Client;
 
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
-use Synergy::Util qw(reformat_help);
+use Synergy::Util qw(redact_pref_val reformat_help);
 
 use utf8;
 
@@ -564,7 +564,7 @@ responder ptn_blocked => {
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
+  describer => sub ($value) { return redact_pref_val($value) },
   default   => undef,
   validator => sub ($self, $value, $event) {
     $value =~ s/^\s*|\s*$//g;

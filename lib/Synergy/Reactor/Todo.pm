@@ -17,6 +17,7 @@ use DateTime;
 use Encode qw( encode );
 use MIME::Base64;
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(redact_pref_val);
 
 command todo => {
   help => 'add something to your personal todo list'
@@ -157,7 +158,7 @@ __PACKAGE__->add_preference(
   name        => 'password',
   help        => "The password to use in accessing your todo list",
   description => "The password to use in accessing your todo list",
-  describer   => sub ($value) { defined $value ? '<redacted>' : '<unset>' },
+  describer   => sub ($value) { return redact_pref_val($value) },
   validator   => sub ($self, $value, $event) {
     return ($value, undef);
   },
@@ -168,7 +169,6 @@ __PACKAGE__->add_preference(
   name        => 'calendar-user',
   help        => "The calendar user where you store your todos",
   description => "The calendar user where you store your todos",
-  describer   => sub ($value) { $value // '<unset>' },
   validator   => sub ($self, $value, $event) {
     return ($value, undef);
   },
@@ -179,7 +179,6 @@ __PACKAGE__->add_preference(
   name        => 'calendar-id',
   help        => "The calendar id where you store your todos",
   description => "The calendar id where you store your todos",
-  describer   => sub ($value) { $value // '<unset>' },
   validator   => sub ($self, $value, $event) {
     return ($value, undef);
   },

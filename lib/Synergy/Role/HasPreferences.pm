@@ -96,7 +96,7 @@ role {
 
     die "preference $name already exists in $class" if $pref_specs{$name};
 
-    $spec{describer} //= sub ($val) { return Future->done($val // '<undef>') };
+    $spec{describer} //= sub ($val) { return Future->done($val // '<unset>') };
     $spec{after_set} //= sub ($self, $username, $value) {};
 
     $pref_specs{$name} = \%spec;

@@ -22,6 +22,7 @@ use Sub::Exporter -setup => [ qw(
   read_config_file
 
   bool_from_text
+  redact_pref_val
   parse_date_for_user
   parse_time_hunk
   pick_one
@@ -75,6 +76,11 @@ sub bool_from_text ($text) {
   return 0 if $text =~ /^(no|n|false|f|0|off|yeahnah)$/in;
 
   return (undef, "you can use yes/no, y/n, 1/0, true/false, t/f, on/off, or yeahnah/nahyeah");
+}
+
+# useful for api tokens and the like
+sub redact_pref_val ($val) {
+  return defined $val ? '<redacted>' : '<unset>';
 }
 
 sub parse_date_for_user ($str, $user, $allow_midnight = 0) {

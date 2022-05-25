@@ -20,7 +20,7 @@ use JSON::MaybeXS qw(decode_json encode_json);
 use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(first);
 use Synergy::Logger '$Logger';
-use Synergy::Util qw(reformat_help);
+use Synergy::Util qw(redact_pref_val reformat_help);
 use Time::Duration qw(ago duration);
 use Time::Duration::Parse qw(parse_duration);
 
@@ -1222,7 +1222,7 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
+  describer => sub ($value) { return redact_pref_val($value) },
   default   => undef,
   validator => sub ($self, $token, $event) {
     $token =~ s/^\s*|\s*$//g;
