@@ -403,7 +403,7 @@ command agenda => {
                     if ($assignee_id) {
                       return Future->done(assignee => $assignee_id);
                     } else {
-                      return Future->done(team => $team_id);
+                      return Future->done(team => $team_id, assignee => undef);
                     }
                   }
                 })
