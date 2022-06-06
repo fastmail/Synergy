@@ -19,6 +19,7 @@ use Linear::Client;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
+use Text::SlackEmoji;
 
 use utf8;
 
@@ -443,6 +444,10 @@ sub _handle_creation_event ($self, $event, $arg = {}) {
 
     # Slack now "helpfully" corrects '>>' in DM to '> >'.
     $text =~ s/\A> >/>>/;
+
+    # convert slack emoji shortcodes to unicode
+    my $emoji = Text::SlackEmoji->emoji_map;
+    $text =~ s!:([-+a-z0-9_]+):!$emoji->{$1} // ":$1:"!ge;
 
     my $plan_f = $linear->plan_from_input($ersatz_text // $text);
 
