@@ -143,7 +143,6 @@ sub load_users_from_database ($self) {
       defined_kv(is_master  => $row->{is_master}),
       defined_kv(is_virtual => $row->{is_virtual}),
       defined_kv(deleted    => $row->{is_deleted}),
-      defined_kv(lp_id      => $row->{lp_id}),
     });
   }
 
@@ -198,8 +197,8 @@ sub register_user ($self, $user) {
   my $dbh = $self->env->state_dbh;
   state $user_insert_sth = $dbh->prepare(join(q{ },
     q{INSERT INTO users},
-    q{   (username, lp_id, is_master, is_virtual, is_deleted)},
-    q{VALUES (?,?,?,?,?)}
+    q{   (username, is_master, is_virtual, is_deleted)},
+    q{VALUES (?,?,?,?)}
   ));
 
   state $identity_insert_sth = $dbh->prepare(join(q{ },
@@ -215,7 +214,6 @@ sub register_user ($self, $user) {
   try {
     $user_insert_sth->execute(
       $user->username,
-      $user->lp_id,
       $user->is_master,
       $user->is_virtual,
       $user->is_deleted,
@@ -237,17 +235,6 @@ sub register_user ($self, $user) {
   };
 
   return $ok;
-}
-
-sub set_lp_id_for_user ($self, $user, $lp_id) {
-  my $dbh = $self->env->state_dbh;
-  my $user_update_sth = $dbh->prepare(
-    q{UPDATE users SET lp_id = ? WHERE username = ?},
-  );
-
-  $Logger->log(['registering lp id %s for %s', $lp_id, $user->username]);
-  $user_update_sth->execute($lp_id, $user->username);
-  return;
 }
 
 sub reload_user ($self, $username, $data) {

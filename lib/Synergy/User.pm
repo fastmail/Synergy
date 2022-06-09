@@ -223,20 +223,6 @@ sub is_on_duty ($self, $hub, $duty_name) {
          $roto->current_officers_for_duty($duty_name);
 }
 
-has lp_id => (
-  is => 'ro',
-  isa => 'Int',
-  writer => '_set_lp_id',
-  predicate => 'has_lp_id',
-);
-
-sub set_lp_id ($self, $id) {
-  # set in memory here and let the directory handle the database
-  $self->_set_lp_id($id);
-  $self->directory->set_lp_id_for_user($self, $id);
-  return;
-}
-
 has deleted => ( is => 'ro', isa => 'Bool' );
 sub is_deleted { $_[0]->deleted }
 

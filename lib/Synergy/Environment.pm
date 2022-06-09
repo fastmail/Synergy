@@ -133,7 +133,6 @@ sub _maybe_create_state_tables ($self) {
   $self->state_dbh->do(q{
     CREATE TABLE IF NOT EXISTS users (
       username TEXT PRIMARY KEY,
-      lp_id TEXT,
       is_master INTEGER DEFAULT 0,
       is_virtual INTEGER DEFAULT 0,
       is_deleted INTEGER DEFAULT 0
