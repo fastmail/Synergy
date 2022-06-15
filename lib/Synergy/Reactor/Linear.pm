@@ -417,7 +417,6 @@ command agenda => {
         $event,
         {
           state    => 'To Discuss',
-          project  => { null => \1 },
           %extra_search,
         },
         "You have nothing on the agenda",
