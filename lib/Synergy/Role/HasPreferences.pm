@@ -6,6 +6,7 @@ use MooseX::Role::Parameterized;
 
 use Future;
 use Scalar::Util qw(blessed);
+use Synergy::Exception;
 use Synergy::Logger '$Logger';
 use Try::Tiny;
 use utf8;
@@ -42,6 +43,7 @@ role {
   # }
   my %all_user_prefs;
 
+  # all synchronous.
   method user_preferences    => sub             { +{ %all_user_prefs }      };
   method _load_preferences   => sub ($, $prefs) { %all_user_prefs = %$prefs };
   method preference_names    => sub             { sort keys %pref_specs     };
@@ -66,6 +68,7 @@ role {
       });
   };
 
+  # sync
   method preference_help => sub ($self) {
     my %return;
     for my $name (keys %pref_specs) {
@@ -80,7 +83,7 @@ role {
   #   help        => "This is a cool thing.\nIt's very great.",
   #   description => "a pref with a name",
   #   default     => value,
-  #   validator   => sub ($self, $val, $event) {},
+  #   validator   => sub ($self, $val, $event) {},  <-- ASYNC
   #   describer   => sub ($val) {},                 <-- ASYNC
   #   after_set   => sub ($self, $username, $value) {},
   # }
@@ -102,35 +105,51 @@ role {
     $pref_specs{$name} = \%spec;
   };
 
-
+  # Returns a future with no useful return value
   method set_preference => sub ($self, $user, $pref_name, $value, $event) {
+    my $full_name = $self->preference_namespace . q{.} . $pref_name;
+
     unless ($self->is_known_preference($pref_name)) {
-      my $full_name = $self->preference_namespace . q{.} . $pref_name;
       $event->error_reply("I don't know about the $full_name preference");
       $event->mark_handled;
       return;
     }
 
     my $spec = $pref_specs{ $pref_name };
+
     my ($actual_value, $err) = $spec->{validator}->($self, $value, $event);
 
-    my $full_name = $self->preference_namespace . q{.} . $pref_name;
+    return $spec->{validator}->($self, $value, $event)
+      ->then(sub ($actual_value) {
+        my $got = $self->set_user_preference($user, $pref_name, $actual_value);
+        return $self->describe_user_preference($user, $pref_name);
+      })->then(sub ($desc) {
+        my $possessive = $user == $event->from_user
+                       ? 'Your'
+                       : $user->username . q{'s};
 
-    if ($err) {
-      $event->error_reply("I don't understand the value you gave for $full_name: $err");
-      $event->mark_handled;
-      return;
-    }
+        $event->mark_handled;
+        $event->reply("$possessive $full_name setting is now $desc.");
+      })->else(sub ($err, @hrm) {
+        use Data::Dumper::Concise;
+        warn Dumper {
+          err => $err,
+          rest => \@hrm,
+        };
+        if ($err->isa('Synergy::Exception::PreferenceValidation')) {
+          my $msg = $err->message;
+          $event->mark_handled;
+          return $event->error_reply("I don't understand the value you gave for $full_name: $msg");
+        }
 
-    my $got = $self->set_user_preference($user, $pref_name, $actual_value);
-    my $desc = $self->describe_user_preference($user, $pref_name)->get; # TODO
-
-    my $possessive = $user == $event->from_user
-                   ? 'Your'
-                   : $user->username . q{'s};
-
-    $event->mark_handled;
-    $event->reply("$possessive $full_name setting is now $desc.");
+        if ($err->isa('Synergy::Exception::PreferenceDescription')) {
+          my $msg = $err->message;
+          $event->mark_handled;
+          return $event->reply(
+            "I set the $full_name pref, but something went wrong describing it back: $msg"
+          );
+        }
+      });
   };
 
   method user_has_preference => sub ($self, $user, $pref_name) {
@@ -209,5 +228,9 @@ role {
     return $state;
   };
 };
+
+sub pref_validation_error ($message) {
+  return Synergy::Exception->new('PreferenceValidation', $message);
+}
 
 1;

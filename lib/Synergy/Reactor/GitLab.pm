@@ -1084,8 +1084,9 @@ sub mr_report ($self, $who, $arg = {}) {
 __PACKAGE__->add_preference(
   name      => 'user-id',
   validator => sub ($self, $value, @) {
-    return $value if $value =~ /\A[0-9]+\z/;
-    return (undef, "Your user-id must be a positive integer.")
+    return Future->done($value) if $value =~ /\A[0-9]+\z/;
+    # return Synergy::Exception->new('PreferenceValidation', 'Your user-id must be a positive integer.');
+    return pref_validation_error('Your user-id must be a positive integer.');
   },
   default   => undef,
 );
