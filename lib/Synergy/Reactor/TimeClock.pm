@@ -193,7 +193,11 @@ sub handle_now_working ($self, $event) {
     return $event->reply("How about that!  Nobody's working right now.");
   }
 
-  return $event->reply("Currently on the clock:\n" . join qq{\n}, @lines);
+  if ($event->is_public) {
+    $event->reply("I don't want to ping everybody who's working, so I've replied in private.");
+  }
+
+  $event->private_reply("Currently on the clock:\n" . join qq{\n}, @lines);
 }
 
 sub handle_hours_for ($self, $event) {
