@@ -167,10 +167,25 @@ has _timeclock_dbh => (
 sub handle_now_working ($self, $event) {
   $event->mark_handled;
 
+  my $moment = DateTime->now;
+  my $roto   = $self->hub->reactor_named('rototron');
+
   my @lines;
   for my $user (sort { $a->username cmp $b->username } $self->hub->user_directory->users) {
     next if $user->is_virtual;
     next unless $user->is_working_now;
+
+    my $when  = DateTime->from_epoch(
+      time_zone => $user->time_zone,
+      epoch     => $moment->epoch,
+    );
+
+    # We can use this, later, to get "until X" but we want to make it friendly
+    # time for the asking user. -- rjbs, 2022-06-23
+    next unless my $hours = $user->hours_for_dow($when->day_of_week);
+
+    next if $roto && ! $roto->rototron->user_is_available_on($user->username, $when);
+
     push @lines, "• " . $user->username;
   }
 
