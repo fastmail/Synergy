@@ -162,7 +162,7 @@ sub _text_to_board ($self, $text) {
 
   # 1. for given lines, left and right pad
   my ($minpad) = 22 - (sort { $b <=> $a } map {; 0 + @$_ } @lines)[0];
-  my $leftpad  = int($minpad / 2) + ($minpad % 2);
+  my $leftpad  = int($minpad / 2);
   unshift @$_, (0) x $leftpad for @lines;
   push @$_, (0) x (22 - @$_) for @lines;
 
