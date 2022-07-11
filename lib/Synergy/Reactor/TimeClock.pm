@@ -186,7 +186,10 @@ sub handle_now_working ($self, $event) {
 
     next if $roto && ! $roto->rototron->user_is_available_on($user->username, $when);
 
-    push @lines, "• " . $user->username;
+    my $dow = [ qw(sun mon tue wed thu fri sat) ]->[ $when->day_of_week % 7 ];
+    my $wfh = $user->is_wfh_on($dow);
+
+    push @lines, "• " . $user->username . ($wfh ? " \N{HOUSE WITH GARDEN}" : q{});
   }
 
   unless (@lines) {
