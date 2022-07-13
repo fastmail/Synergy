@@ -25,7 +25,7 @@ sub listener_specs {
       method    => 'handle_now_working',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Anow\s+working\s*\z/; },
+      predicate => sub ($self, $e) { $e->text =~ /\Anow\s+working\s*\z/i; },
       help_entries => [
         {
           title => 'now working',
