@@ -96,7 +96,7 @@ sub handle_set ($self, $event) {
   my ($who, $pref_name, $pref_value) =
     $event->text =~ m{\A set \s+ (my|\w+[’']s) \s+      # set my
                       ([-_a-z0-9]+  \.   [-_a-z0-9]+)   # component.pref
-                      \s+ to \s+ (.*)                   # to value
+                      (?:\s+to|:)? \s+ (.*)             # (to or :) value
                      }ix;
 
   return $self->_set_pref($event, $who, $pref_name, $pref_value);
