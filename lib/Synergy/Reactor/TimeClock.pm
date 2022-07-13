@@ -170,7 +170,9 @@ sub handle_now_working ($self, $event) {
   my $moment = DateTime->now;
   my $roto   = $self->hub->reactor_named('rototron');
 
-  my @lines;
+  my @at_home;
+  my @in_office;
+
   for my $user (sort { $a->username cmp $b->username } $self->hub->user_directory->users) {
     next if $user->is_virtual;
     next unless $user->is_working_now;
@@ -189,10 +191,14 @@ sub handle_now_working ($self, $event) {
     my $dow = [ qw(sun mon tue wed thu fri sat) ]->[ $when->day_of_week % 7 ];
     my $wfh = $user->is_wfh_on($dow);
 
-    push @lines, "• " . $user->username . ($wfh ? " \N{HOUSE WITH GARDEN}" : q{});
+    if ($wfh) {
+      push @at_home, $user->username;
+    } else {
+      push @in_office, $user->username;
+    }
   }
 
-  unless (@lines) {
+  unless (@at_home || @in_office) {
     return $event->reply("How about that!  Nobody's working right now.");
   }
 
@@ -200,7 +206,17 @@ sub handle_now_working ($self, $event) {
     $event->reply("I don't want to ping everybody who's working, so I've replied in private.");
   }
 
-  $event->private_reply("Currently on the clock:\n" . join qq{\n}, @lines);
+  my $text = q{};
+
+  if (@in_office) {
+    $text .= "\N{OFFICE BUILDING} " . (join q{, }, @in_office) . "\n";
+  }
+
+  if (@at_home) {
+    $text .= "\N{HOUSE WITH GARDEN} " . (join q{, }, @at_home) . "\n";
+  }
+
+  $event->private_reply("Currently on the clock:\n$text");
 }
 
 sub handle_hours_for ($self, $event) {
