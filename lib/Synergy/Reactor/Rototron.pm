@@ -259,7 +259,6 @@ sub _replan_range ($self, $from_dt, $to_dt) {
   return unless $plan;
 
   my $res = $self->rototron->jmap_client->request({
-    using       => [ 'urn:ietf:params:jmap:mail', 'https://cyrusimap.org/ns/jmap/calendars', ],
     methodCalls => [
       [ 'CalendarEvent/set' => $plan, ],
     ],
