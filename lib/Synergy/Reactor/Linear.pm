@@ -509,6 +509,10 @@ responder new_issue => {
     default team.  If only a team name is given, the issue is created
     unassigned in that team.  If both are given, the issue is created in the
     given team and assigned to the given user.
+
+    If `NAME` ends with `(!)` it will be created urgent.  If it ends with ☎️
+    it will be created in the To Discuss state.  These two markers can be
+    present in any order.
     EOH
 } => sub ($self, $event, $which, $text) {
   if ($event->text =~ /\A>> triage /i) {
