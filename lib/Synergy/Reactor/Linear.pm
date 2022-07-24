@@ -233,8 +233,13 @@ command teams => {
   });
 };
 
-sub _handle_search ($self, $event, $search, $zero, $header, $linear = undef) {
+sub _handle_search ($self, $event, $arg) {
   $event->mark_handled;
+
+  my $search = $arg->{search};
+  my $zero   = $arg->{zero};
+  my $header = $arg->{header};
+  my $linear = $arg->{linear};
 
   my $code = sub ($linear) {
     my $user = $linear->get_authenticated_user;
@@ -288,13 +293,15 @@ command urgent => {
       $self->_handle_search(
         $event,
         {
-          assignee => $user->{id},
-          priority => 1,
-          closed   => 0,
-        },
-        "There's nothing urgent, so take it easy!",
-        "Urgent issues for you",
-        $linear,
+          search => {
+            assignee => $user->{id},
+            priority => 1,
+            closed   => 0,
+          },
+          zero   => "There's nothing urgent, so take it easy!",
+          header => "Urgent issues for you",
+          linear => $linear,
+        }
       );
     });
   });
@@ -332,13 +339,15 @@ command sb => {
       $self->_handle_search(
         $event,
         {
-          label     => 'support blocker',
-          closed    => 0,
-          %extra_search
+          search => {
+            label     => 'support blocker',
+            closed    => 0,
+            %extra_search
+          },
+          zero   => "No support blockers!  Great!",
+          header => "Current support blockers",
+          linear => $linear,
         },
-        "No support blockers!  Great!",
-        "Current support blockers",
-        $linear,
       );
     });
   });
@@ -366,13 +375,15 @@ command triage => {
       $self->_handle_search(
         $event,
         {
-          state    => 'Triage',
-          assignee => undef,
-          %extra_search,
-        },
-        "No unassigned issues in triage!  Great!",
-        "Current unassigned triage work",
-        $linear,
+          search => {
+            state    => 'Triage',
+            assignee => undef,
+            %extra_search,
+          },
+          zero   => "No unassigned issues in triage!  Great!",
+          header => "Current unassigned triage work",
+          linear => $linear,
+        }
       );
     })->else(sub {
       $event->error_reply("I couldn't find the team you asked about!");
@@ -416,12 +427,14 @@ command agenda => {
       $self->_handle_search(
         $event,
         {
-          state    => 'To Discuss',
-          %extra_search,
-        },
-        "You have nothing on the agenda",
-        "Current agenda",
-        $linear,
+          search => {
+            state    => 'To Discuss',
+            %extra_search,
+          },
+          zero   => "You have nothing on the agenda",
+          header => "Current agenda",
+          linear => $linear,
+        }
       );
     })->else(sub {
       $event->error_reply("I couldn't find the team you asked about!");
