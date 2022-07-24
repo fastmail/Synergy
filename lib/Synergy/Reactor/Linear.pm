@@ -240,6 +240,7 @@ sub _handle_search ($self, $event, $arg) {
   my $zero   = $arg->{zero};
   my $header = $arg->{header};
   my $linear = $arg->{linear};
+  my $want_plain = $arg->{plain};
 
   my $code = sub ($linear) {
     my $user = $linear->get_authenticated_user;
@@ -253,7 +254,7 @@ sub _handle_search ($self, $event, $arg) {
         my $slack = q{};
 
         for my $node ($page->payload->{nodes}->@*) {
-          my $icon = $self->_icon_for_issue($node);
+          my $icon = $want_plain ? '' : $self->_icon_for_issue($node);
           $text  .= "$node->{identifier} $icon $node->{title}\n";
           $slack .= sprintf "<%s|%s> $icon %s\n",
             $node->{url},
@@ -400,6 +401,8 @@ command agenda => {
     assignment are listed.
     EOH
 } => sub ($self, $event, $spec) {
+  my $want_plain = $spec =~ s!\s+/plain\b!!;
+
   $self->_with_linear_client($event, sub ($linear) {
     my $when  = length $spec
               ? $linear->who_or_what($spec)->then(sub ($assignee_id, $team_id) {
@@ -434,6 +437,7 @@ command agenda => {
           zero   => "You have nothing on the agenda",
           header => "Current agenda",
           linear => $linear,
+          plain  => $want_plain,
         }
       );
     })->else(sub {
