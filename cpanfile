@@ -29,7 +29,6 @@ requires "IO::Async::Timer::Periodic" => "0";
 requires "JMAP::Tester" => "0";
 requires "JSON" => "0";
 requires "JSON::MaybeXS" => "0";
-requires "Linear::Client" => "0";
 requires "Lingua::EN::Inflect" => "0";
 requires "List::AllUtils" => "0";
 requires "List::Util" => "0";
@@ -87,6 +86,7 @@ suggests "DateTime::Event::Sunrise" => "0";
 suggests "Games::Dice" => "0";
 suggests "WebService::RTM::CamelMilk" => "0";
 suggests "Zendesk::Client" => "0";
+suggests "Linear::Client" => "0";
 
 on 'test' => sub {
   requires "ExtUtils::MakeMaker" => "0";
