@@ -8,6 +8,7 @@ requires "Data::Dumper::Concise" => "0";
 requires "Data::GUID" => "0";
 requires "Date::Parse" => "0";
 requires "DateTime" => "0";
+requires "DateTime::Event::Sunrise" => "0";
 requires "DateTime::Format::ISO8601" => "0";
 requires "DateTime::Format::Natural" => "0";
 requires "Defined::KV" => "0";
