@@ -16,7 +16,7 @@ use JSON::MaybeXS ();
 use Synergy::Logger '$Logger';
 
 sub _slink {
-  sprintf '<%s%u|RFC %u>', 'https://tools.ietf.org/html/rfc', (0 + $_[0]) x 2
+  sprintf '<https://www.rfc-editor.org/rfc/rfc%u.html|RFC %u>', (0 + $_[0]) x 2
 }
 
 sub listener_specs {
@@ -193,7 +193,7 @@ sub extract_rfc ($self, $text) {
 
   $section =~ s/-/./ if $section;
 
-  my $link = 'https://tools.ietf.org/html/rfc' . $num;
+  my $link = "https://www.rfc-editor.org/rfc/rfc$num.html";
 
   if ($section) {
     $link .= "#section-$section";
