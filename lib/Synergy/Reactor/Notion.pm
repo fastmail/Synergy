@@ -110,6 +110,7 @@ sub handle_my_projects ($self, $event) {
 
       my $stage = $page->{properties}{Stage}{select}{name};
       next if $stage eq 'Done';
+      next if $stage eq q{Won't do};
 
       my @people = (
         $page->{properties}{'Team (Active)'}{people}->@*,
