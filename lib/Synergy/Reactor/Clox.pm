@@ -5,7 +5,8 @@ package Synergy::Reactor::Clox;
 use Moose;
 
 with 'Synergy::Role::Reactor',
-     'Synergy::Role::Reactor::CommandPost';
+     'Synergy::Role::Reactor::CommandPost',
+     'Synergy::Role::HasPreferences';
 
 use Synergy::CommandPost;
 
@@ -21,6 +22,17 @@ use utf8;
 
 # For testing. -- rjbs, 2018-07-14
 our $NOW_FACTORY = sub { DateTime->now };
+
+__PACKAGE__->add_preference(
+  name        => 'include-aelt',
+  help        => "Whether or not to include AELT in the output",
+  description => "Whether or not to include AELT in the output",
+  describer   => sub ($value) { $value ? 1 : 0 },
+  validator   => sub ($self, $value, $event) {
+    return(($value ? 1 : 0), undef); # Should write a generic bool/yes/no.
+  },
+  default     => 0,
+);
 
 has always_include => (
   isa     => 'ArrayRef',
@@ -133,7 +145,10 @@ END
     push @strs, $str;
   }
 
-  if ($self->include_aelt) {
+  my $want_aelt = $self->include_aelt
+    && $self->get_user_preference($user, 'include-aelt');
+
+  if ($want_aelt) {
     my $brisbane_tz = DateTime::TimeZone->new(name => 'Australia/Brisbane');
 
     my $aelt = $self->_aelt_delta_for_time($time);
