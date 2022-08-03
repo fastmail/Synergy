@@ -160,10 +160,14 @@ sub handle_dump ($self, $event) {
   my @pref_strings;
   my $hub = $self->hub;
 
-  for my $component ($hub->user_directory, $hub->channels, $hub->reactors) {
-    next unless $component->does('Synergy::Role::HasPreferences');
+  my @components = map  {; $_->[0]                                   }
+                   sort {; $a->[1] cmp $b->[1]                       }
+                   map  {; [ $_, fc $_->preference_namespace ]       }
+                   grep {; $_->does('Synergy::Role::HasPreferences') }
+                   ($hub->user_directory, $hub->channels, $hub->reactors);
 
-    for my $pref_name ($component->preference_names) {
+  for my $component (@components) {
+    for my $pref_name (sort $component->preference_names) {
       my $full_name = $component->preference_namespace . q{.} . $pref_name;
 
       push @pref_strings,
