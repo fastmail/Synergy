@@ -198,7 +198,11 @@ sub text_to_board ($self, $text) {
 sub _text_is_valid ($self, $text) {
   # This feels pretty thing. -- rjbs, 2021-05-31
   return if $text =~ m{[^ 0-9A-Z!@#\$\(\)\-\+&=;:'"%,./?°🟥🟧🟨🟩🟦🟪⬜️]};
-  return if length $text > 6 * 22;
+
+  # this is so stupid
+  my $replaced = s/[🟥🟧🟨🟩🟦🟪⬜️]/ /g;
+  return if length $replaced > 6 * 22;
+
   return 1;
 }
 
