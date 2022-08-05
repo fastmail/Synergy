@@ -889,24 +889,22 @@ sub handle_vesta_random_colors ($self, $event) {
     return;
   }
 
-  my @colors = (q{ }, qw( 🟥 🟧 🟨 🟩 🟦 🟪 ⬜️ ));
+  # color codes for black + 7 blocks
+  my @colors = (0, 63..69);
 
   my $len = 22 * 6;   # board size
-  my $s = join q{}, map {; $colors[int(rand(@colors))] } (1..$len);
 
-  my ($board, $error) = Synergy::VestaUtil->text_to_board($s);
-
-  unless ($board) {
-    $error //= "Something went wrong.";
-    $event->error_reply("Sorry, I can't post that to the board.  $error");
-    return;
+  my @board;
+  for my $line (1..6) {
+    my @s = map {; $colors[int(rand(@colors))] } (1..22);
+    push @board, \@s;
   }
 
   $self->_pay_to_post_payload(
     $event,
     $user,
     {
-      characters => $board,
+      characters => \@board,
     }
   );
 }
