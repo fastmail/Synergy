@@ -118,6 +118,19 @@ sub listener_specs {
       ],
     },
     {
+      name      => 'vesta_random_colors',
+      method    => 'handle_vesta_random_colors',
+      exclusive => 1,
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta random\s+colou?rs/i },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "*vesta random colors*: post random colo(u)rs to the board",
+        }
+      ],
+    },
+    {
       name      => 'vesta_post',
       method    => 'handle_vesta_post',
       exclusive => 1,
@@ -850,6 +863,38 @@ sub handle_vesta_post_text ($self, $event) {
   my ($text) = $event->text =~ /\Avesta post text:? (.+)\z/i;
 
   my ($board, $error) = Synergy::VestaUtil->text_to_board($text);
+
+  unless ($board) {
+    $error //= "Something went wrong.";
+    $event->error_reply("Sorry, I can't post that to the board.  $error");
+    return;
+  }
+
+  $self->_pay_to_post_payload(
+    $event,
+    $user,
+    {
+      characters => $board,
+    }
+  );
+}
+
+sub handle_vesta_random_colors ($self, $event) {
+  $event->mark_handled;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my @colors = (q{ }, qw( 🟥 🟧 🟨 🟩 🟦 🟪 ⬜️ ));
+
+  my $len = 22 * 6;   # board size
+  my $s = join q{}, map {; $colors[int(rand(@colors))] } (1..$len);
+
+  my ($board, $error) = Synergy::VestaUtil->text_to_board($s);
 
   unless ($board) {
     $error //= "Something went wrong.";
