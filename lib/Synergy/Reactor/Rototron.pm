@@ -281,19 +281,23 @@ sub _replan_range ($self, $from_dt, $to_dt) {
 # -- rjbs, 2019-03-26
 sub current_triage_officers ($self) {
   my @users = (
-    $self->current_officers_for_duty('triage_us'),
-    $self->current_officers_for_duty('triage_au'),
+    $self->current_officers_for_duty('triage_us', 'America/New_York'),
+    $self->current_officers_for_duty('triage_au', 'Australia/Sydney'),
   );
 
   return @users;
 }
 
-sub current_officers_for_duty ($self, $duty_name) {
+sub current_officers_for_duty ($self, $duty_name, $time_zone = 'UTC') {
   my $rototron = $self->rototron;
 
-  my $now  = DateTime->now(time_zone => 'UTC');
+  my $now  = DateTime->now(time_zone => $time_zone);
 
-  my $items = $self->rototron->_get_duty_items_between($now, $now);
+  # Convert this to UTC for the calendar search
+  $now->set_time_zone('UTC');
+  my $now_stamp = $now . 'Z';
+
+  my $items = $self->rototron->_get_duty_items_between($now_stamp, $now_stamp);
 
   my @users = grep {; defined && $_->is_working_now }
               map  {; $self->_user_from_duty($_) }
