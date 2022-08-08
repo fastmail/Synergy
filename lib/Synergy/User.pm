@@ -220,7 +220,7 @@ sub is_on_duty ($self, $hub, $duty_name) {
   }
 
   return grep { $_->username eq $username }
-         $roto->current_officers_for_duty($duty_name, $self->time_zone);
+         $roto->current_officers_for_duty($duty_name);
 }
 
 has deleted => ( is => 'ro', isa => 'Bool' );
