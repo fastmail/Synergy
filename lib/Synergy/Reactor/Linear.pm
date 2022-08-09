@@ -243,33 +243,30 @@ sub _handle_search ($self, $event, $arg) {
   my $want_plain = $arg->{plain};
 
   my $code = sub ($linear) {
-    my $user = $linear->get_authenticated_user;
-    $user->then(sub ($user) {
-      $linear->search_issues($search)->then(sub ($page) {
-        unless ($page->payload->{nodes}->@*) {
-          return $event->reply($zero);
-        }
+    $linear->search_issues($search)->then(sub ($page) {
+      unless ($page->payload->{nodes}->@*) {
+        return $event->reply($zero);
+      }
 
-        my $text  = q{};
-        my $slack = q{};
+      my $text  = q{};
+      my $slack = q{};
 
-        for my $node ($page->payload->{nodes}->@*) {
-          my $icon = $want_plain ? '' : $self->_icon_for_issue($node);
-          $text  .= "$node->{identifier} $icon $node->{title}\n";
-          $slack .= sprintf "<%s|%s> $icon %s\n",
-            $node->{url},
-            $node->{identifier},
-            $node->{title};
-        }
+      for my $node ($page->payload->{nodes}->@*) {
+        my $icon = $want_plain ? '' : $self->_icon_for_issue($node);
+        $text  .= "$node->{identifier} $icon $node->{title}\n";
+        $slack .= sprintf "<%s|%s> $icon %s\n",
+          $node->{url},
+          $node->{identifier},
+          $node->{title};
+      }
 
-        chomp $text;
-        chomp $slack;
+      chomp $text;
+      chomp $slack;
 
-        return $event->reply(
-          "$header:\n$text",
-          { slack => "*$header:*\n$slack" },
-        );
-      });
+      return $event->reply(
+        "$header:\n$text",
+        { slack => "*$header:*\n$slack" },
+      );
     });
   };
 
@@ -290,21 +287,19 @@ command urgent => {
   }
 
   $self->_with_linear_client($event, sub ($linear) {
-    $linear->get_authenticated_user->then(sub ($user) {
-      $self->_handle_search(
-        $event,
-        {
-          search => {
-            assignee => $user->{id},
-            priority => 1,
-            closed   => 0,
-          },
-          zero   => "There's nothing urgent, so take it easy!",
-          header => "Urgent issues for you",
-          linear => $linear,
-        }
-      );
-    });
+    $self->_handle_search(
+      $event,
+      {
+        search => {
+          assignee => { isMe => {eq => \1} },
+          priority => 1,
+          closed   => 0,
+        },
+        zero   => "There's nothing urgent, so take it easy!",
+        header => "Urgent issues for you",
+        linear => $linear,
+      }
+    );
   });
 };
 
@@ -421,9 +416,7 @@ command agenda => {
                     }
                   }
                 })
-              : $linear->get_authenticated_user->then(sub ($user) {
-                  return Future->done(assignee => $user->{id});
-                });
+              : Future->done(assignee => { isMe => {eq => \1} }); 
 
     $when->then(sub {
       my (%extra_search) = @_;
