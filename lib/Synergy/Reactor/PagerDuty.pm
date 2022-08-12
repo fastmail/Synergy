@@ -18,7 +18,7 @@ use Future;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use Lingua::EN::Inflect qw(PL_N PL_V);
-use List::Util qw(first);
+use List::Util qw(first uniq);
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
 use Time::Duration qw(ago duration);
@@ -518,7 +518,7 @@ sub handle_oncall ($self, $event) {
 
   $self->_current_oncall_ids
     ->then(sub (@ids) {
-        my @users = map {; $self->username_from_pd($_) // $_ } @ids;
+        my @users = uniq map {; $self->username_from_pd($_) // $_ } @ids;
         return $event->reply('current oncall: ' . join(', ', sort @users));
     })
     ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
