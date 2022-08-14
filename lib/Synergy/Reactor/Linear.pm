@@ -15,6 +15,7 @@ use experimental qw(signatures lexical_subs);
 use namespace::clean;
 
 use Linear::Client;
+use Lingua::EN::Inflect qw(PL_N);
 
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
@@ -89,6 +90,23 @@ has _linear_shared_cache => (
   default => sub {  {}  },
 );
 
+sub _linear_client_for_user ($self, $user) {
+  # This is a bit of duplication from below, but I'm now catering to the report
+  # code, which may want to get a Linear client without an invoking event to
+  # reply to. -- rjbs, 2022-08-13
+  my $token = $self->get_user_preference($user, 'api-token');
+
+  return undef unless $token;
+
+  return Linear::Client->new({
+    auth_token      => $token,
+    _cache_guts     => $self->_linear_shared_cache,
+    debug_flogger   => $Logger,
+
+    helper => Synergy::Reactor::Linear::LinearHelper->new_for_reactor($self),
+  });
+}
+
 sub _with_linear_client ($self, $event, $code) {
   my $user = $event->from_user;
 
@@ -103,13 +121,7 @@ sub _with_linear_client ($self, $event, $code) {
     return $event->error_reply("Hmm, you don't have a Linear API token set. Make one, then set your $rname.api-token preference");
   }
 
-  my $linear = Linear::Client->new({
-    auth_token      => $token,
-    _cache_guts     => $self->_linear_shared_cache,
-    debug_flogger   => $Logger,
-
-    helper => Synergy::Reactor::Linear::LinearHelper->new_for_reactor($self),
-  });
+  my $linear = $self->_linear_client_for_user($user);
 
   return $code->($linear);
 }
@@ -353,6 +365,36 @@ command sb => {
     });
   });
 };
+
+sub sb_report ($self, $who, $arg = {}) {
+  my $linear = $self->_linear_client_for_user($who);
+
+  return Future->done([]) unless $linear;
+
+  my $search = $linear->search_issues({
+    label     => 'support blocker',
+    closed    => 0,
+  });
+
+  $search->then(sub ($page) {
+    # XXX This is not perfect.  If we have more than one page of blockers
+    # (ugh!) it will only get the first page.  More later, maybe?
+    # -- rjbs, 2022-08-13
+    my $count = $page->payload->{nodes}->@*;
+
+    if ($count == 0) {
+      return Future->done([
+        "\N{HELMET WITH WHITE CROSS} There are no support blockers."
+      ]);
+    }
+
+    return Future->done([
+      sprintf "\N{HELMET WITH WHITE CROSS} There are %s support %s.",
+        $count,
+        PL_N('blocker', $count)
+    ]);
+  });
+}
 
 command triage => {
   help => reformat_help(<<~'EOH'),
