@@ -374,6 +374,7 @@ sub sb_report ($self, $who, $arg = {}) {
   my $search = $linear->search_issues({
     label     => 'support blocker',
     closed    => 0,
+    assignee  => undef,
   });
 
   $search->then(sub ($page) {
