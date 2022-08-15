@@ -383,16 +383,17 @@ sub sb_report ($self, $who, $arg = {}) {
     my $count = $page->payload->{nodes}->@*;
 
     if ($count == 0) {
+      my $msg = "\N{HELMET WITH WHITE CROSS} There are no support blockers.";
       return Future->done([
-        "\N{HELMET WITH WHITE CROSS} There are no support blockers."
+        $msg, { slack => $msg },
       ]);
     }
 
-    return Future->done([
-      sprintf "\N{HELMET WITH WHITE CROSS} There are %s support %s.",
-        $count,
-        PL_N('blocker', $count)
-    ]);
+    my $msg = sprintf "\N{HELMET WITH WHITE CROSS} There are %s support %s.",
+      $count,
+      PL_N('blocker', $count);
+
+    return Future->done([ $msg, { slack => $msg } ]);
   });
 }
 
