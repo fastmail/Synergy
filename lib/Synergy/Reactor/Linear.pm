@@ -447,6 +447,15 @@ command agenda => {
 } => sub ($self, $event, $spec) {
   my $want_plain = $spec =~ s!\s+/plain\b!!;
 
+  my %current;
+  if ($spec =~ s!\s+/current\b!!) {
+    %current = (
+      cycle => {
+        isActive => { eq => JSON::MaybeXS::true() }
+      },
+    );
+  }
+
   $self->_with_linear_client($event, sub ($linear) {
     my $when  = length $spec
               ? $linear->who_or_what($spec)->then(sub ($assignee_id, $team_id) {
@@ -476,6 +485,7 @@ command agenda => {
         {
           search => {
             state    => 'To Discuss',
+            %current,
             %extra_search,
           },
           zero   => "You have nothing on the agenda",
