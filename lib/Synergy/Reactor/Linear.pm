@@ -442,7 +442,9 @@ command agenda => {
 
     This command lists issues in the state To Discuss.  If a target is given
     (either a user name, a team name, or user@team), only issues with that
-    assignment are listed.
+    assignment are listed. With `/plain`, suppress issue icons (useful for
+    pasting into Notion). With `/current`, limit items to those scheduled for
+    the current cycle.
     EOH
 } => sub ($self, $event, $spec) {
   my $want_plain = $spec =~ s!\s+/plain\b!!;
