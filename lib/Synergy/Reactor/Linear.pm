@@ -458,8 +458,8 @@ command agenda => {
     );
   }
 
-  my $include_unassigned =
-    $self->get_user_preference($event->from_user, 'agenda-shows-unassigned');
+  my $include_assigned =
+    $self->get_user_preference($event->from_user, 'agenda-shows-assigned');
 
   $self->_with_linear_client($event, sub ($linear) {
     my $when  = length $spec
@@ -477,7 +477,7 @@ command agenda => {
                     } else {
                       return Future->done(
                         team => $team_id,
-                        ($include_unassigned ? () : (assignee => undef)),
+                        ($include_assigned ? () : (assignee => undef)),
                       );
                     }
                   }
@@ -694,8 +694,8 @@ __PACKAGE__->add_preference(
 );
 
 __PACKAGE__->add_preference(
-  name      => 'agenda-shows-unassigned',
-  help      => "Whether the agenda command shows unassigned items or not (yes/no)",
+  name      => 'agenda-shows-assigned',
+  help      => "Whether the agenda command shows assigned items or not (yes/no)",
   default   => 1,
   validator => sub ($self, $value, @) { return bool_from_text($value) },
 );
