@@ -19,7 +19,7 @@ use Lingua::EN::Inflect qw(PL_N);
 
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
-use Synergy::Util qw(reformat_help);
+use Synergy::Util qw(bool_from_text reformat_help);
 
 use utf8;
 
@@ -458,6 +458,9 @@ command agenda => {
     );
   }
 
+  my $include_unassigned =
+    $self->get_user_preference($event->from_user, 'agenda-shows-unassigned');
+
   $self->_with_linear_client($event, sub ($linear) {
     my $when  = length $spec
               ? $linear->who_or_what($spec)->then(sub ($assignee_id, $team_id) {
@@ -472,7 +475,10 @@ command agenda => {
                     if ($assignee_id) {
                       return Future->done(assignee => $assignee_id);
                     } else {
-                      return Future->done(team => $team_id);
+                      return Future->done(
+                        team => $team_id,
+                        ($include_unassigned ? () : (assignee => undef)),
+                      );
                     }
                   }
                 })
@@ -685,6 +691,13 @@ __PACKAGE__->add_preference(
     return ($ok, $error);
   },
   default     => undef,
+);
+
+__PACKAGE__->add_preference(
+  name      => 'agenda-shows-unassigned',
+  help      => "Whether the agenda command shows unassigned items or not (yes/no)",
+  default   => 1,
+  validator => sub ($self, $value, @) { return bool_from_text($value) },
 );
 
 1;
