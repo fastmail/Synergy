@@ -362,9 +362,11 @@ sub _register_slack_rtm ($self, $res) {
 sub _api_url ($self, $method) {
   return "https://slack.com/api/$method";
 }
+
 sub _api_auth_header ($self) {
   return (Authorization => 'Bearer ' . $self->api_key);
 }
+
 sub _privileged_api_auth_header ($self) {
   return (Authorization => 'Bearer ' . $self->privileged_api_key);
 }
