@@ -416,7 +416,7 @@ command agenda => {
                     }
                   }
                 })
-              : Future->done(assignee => { isMe => {eq => \1} }); 
+              : Future->done(assignee => { isMe => { eq => \1 } }); 
 
     $when->then(sub {
       my (%extra_search) = @_;
