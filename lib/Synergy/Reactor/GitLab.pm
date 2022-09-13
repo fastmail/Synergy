@@ -623,9 +623,12 @@ sub _queue_produce_page_list ($self, $queue_arg) {
       starting_list => $mrs,
       api_page      => $api_page + 1,
     });
-  })->else(sub {
-    $Logger->log("ERROR: @_");
-    Future->fail;
+  })->else(sub ($err, @rest) {
+    # handle known-fine cases
+    return Future->done if $err eq 'no result' || $err eq 'past last page';
+
+    $Logger->log([ "ERROR: %s", [$err, @rest] ]);
+    Future->fail($err, @rest);
   });
 }
 
