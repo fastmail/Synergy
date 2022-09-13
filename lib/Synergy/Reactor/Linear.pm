@@ -291,7 +291,7 @@ command urgent => {
       $event,
       {
         search => {
-          assignee => { isMe => {eq => \1} },
+          assignee => { isMe => { eq => \1 } },
           priority => 1,
           closed   => 0,
         },
