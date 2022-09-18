@@ -162,6 +162,7 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
       methodCalls => [
         [
           'CalendarEvent/query' => {
+            accountId => $self->config->{jmap}{account_id},
             filter => {
               inCalendars => [ keys %want_calendar_id ],
               after       => $from_ymd,
@@ -171,11 +172,14 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
           'a',
         ],
         [
-          'CalendarEvent/get' => { '#ids' => {
-            resultOf => 'a',
-            name => 'CalendarEvent/query',
-            path => '/ids',
-          } }
+          'CalendarEvent/get' => {
+            accountId => $self->config->{jmap}{account_id},
+            '#ids' => {
+              resultOf => 'a',
+              name => 'CalendarEvent/query',
+              path => '/ids',
+            }
+          }
         ],
       ]
     });
