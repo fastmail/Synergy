@@ -57,10 +57,9 @@ my @USING = qw(
   urn:ietf:params:jmap:mail
   urn:ietf:params:jmap:submission
   urn:ietf:params:jmap:calendars
-  urn:ietf:params:jmap:principals
-  https://cyrusimap.org/ns/jmap/mail
-  https://cyrusimap.org/ns/jmap/contacts
-  https://cyrusimap.org/ns/jmap/calendars
+  https://www.fastmail.com/dev/calendars
+  https://www.fastmail.com/dev/contacts
+  https://www.fastmail.com/dev/mail
 );
 
 has availability_checker => (
@@ -77,7 +76,7 @@ has availability_checker => (
       # XXX This is bonkers. -- rjbs, 2019-02-02
       jmap_client => Synergy::Rototron::JMAPClient->new({
         default_using => \@USING,
-        $self->config->{jmap}->%{ qw( api_uri username password ) },
+        $self->config->{jmap}->%{ qw( api_uri api_token ) },
       }),
     });
   }
@@ -96,7 +95,7 @@ has jmap_client => (
   default => sub ($self, @) {
     return Synergy::Rototron::JMAPClient->new({
       default_using => \@USING,
-      $self->config->{jmap}->%{ qw( api_uri username password ) },
+      $self->config->{jmap}->%{ qw( api_uri api_token ) },
     });
   },
 );
@@ -710,16 +709,13 @@ package Synergy::Rototron::JMAPClient {
   use experimental qw(lexical_subs signatures);
 
   extends 'JMAP::Tester';
-  has [ qw(username password) ] => (is => 'ro', required => 1);
+  has [ qw(api_token) ] => (is => 'ro', isa => 'Str', required => 1);
 
   use MIME::Base64 ();
 
   sub _maybe_auth_header ($self, @) {
-    my $auth = MIME::Base64::encode_base64(
-      join(q{:}, $self->username, $self->password),
-      ""
-    );
-    return("Authorization" => "Basic $auth");
+    my $token = $self->api_token;
+    return("Authorization" => "Bearer $token");
   }
 
   no Moose;
