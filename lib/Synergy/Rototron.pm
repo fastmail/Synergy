@@ -321,6 +321,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
   return unless %update or %create or %should_destroy;
 
   return {
+    accountId => $self->config->{jmap}{account_id},
     update  => \%update,
     create  => \%create,
     destroy => [ keys %should_destroy ],
