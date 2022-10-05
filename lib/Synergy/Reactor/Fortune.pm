@@ -74,7 +74,7 @@ END
       method => 'handle_add_fortune',
       exclusive => 1,
       targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Aadd\s+fortune:/i; },
+      predicate => sub ($self, $e) { $e->text =~ /\Aadd\s+fortune:?/i; },
       allow_empty_help => 1,  # handled above
     },
   );
@@ -118,7 +118,7 @@ sub handle_fortune ($self, $event) {
 sub handle_add_fortune ($self, $event) {
   $event->mark_handled;
 
-  my ($f) = $event->text =~ /\Aadd\s+fortune:\s+(.*)/ism;
+  my ($f) = $event->text =~ /\Aadd\s+fortune:?\s+(.*)/ism;
   return $event->error_reply("I didn't find a fortune there!") unless $f;
 
   # TODO: add attribution data, maybe
