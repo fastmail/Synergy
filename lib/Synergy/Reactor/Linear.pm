@@ -50,6 +50,25 @@ package Synergy::Reactor::Linear::LinearHelper {
                        ->get_user_preference($username, 'default-team');
     return $team_id;
   }
+
+  # Okay, sorry, this subroutine is Extremely Fastmail™. -- rjbs, 2022-10-06
+  sub project_ids_for_tag ($self, $tag) {
+    return unless my $notion = $self->{reactor}->hub->reactor_named('notion');
+
+    return $notion->_project_pages->then(sub (@pages) {
+      @pages = grep {;
+        ($_->{properties}{Hashtag}{rich_text}[0]{plain_text} // '') eq $tag
+      } @pages;
+
+      my @slug_ids =
+        map  {; m{-([a-z0-9]+)(?:/[A-Z]+)\z} ? $1 : () }
+        grep {; length }
+        map  {; $_->{properties}{'Linear Project'}{url} }
+        @pages;
+
+      Future->done(@slug_ids);
+    });
+  }
 }
 
 has team_aliases => (
