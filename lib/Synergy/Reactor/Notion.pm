@@ -71,9 +71,7 @@ has username_domain => (
   required => 1,
 );
 
-sub handle_my_projects ($self, $event) {
-  $event->mark_handled;
-
+sub _project_pages ($self) {
   my $db_id = $self->project_db_id;
   my $token = $self->api_token;
 
@@ -89,6 +87,14 @@ sub handle_my_projects ($self, $event) {
     my $data  = $JSON->decode($res->decoded_content(charset => undef));
     my @pages = $data->{results}->@*;
 
+    return Future->done(@pages);
+  });
+}
+
+sub handle_my_projects ($self, $event) {
+  $event->mark_handled;
+
+  $self->_project_pages->then(sub (@pages) {
     my $reply = q{};
     my $slack = q{};
 
