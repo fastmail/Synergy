@@ -135,10 +135,16 @@ sub handle_my_projects ($self, $event) {
 
       my $id = $page->{id} =~ s/-//gr;
 
-      my $href = "https://www.notion.so/$safe_title-$id";
+      my $href = $page->{url};
 
-      $reply .= "$emoji $title ($stage)\n";
-      $slack .= sprintf "<%s|%s %s> (%s)\n", $href, $emoji, $title, $stage;
+      my $tag = $page->{properties}{Hashtag}{rich_text}[0]{plain_text} // '';
+      $tag = "##$tag" if $tag;
+
+      $reply .= sprintf "%s %s%s (%s)\n",
+        $emoji, $title, ($tag ? " $tag" : q{}), $stage;
+
+      $slack .= sprintf "<%s|%s %s>%s (%s)\n",
+       $href, $emoji, $title, ($tag ? " *$tag*" : q{}), $stage;
     }
 
     unless (length $reply) {
