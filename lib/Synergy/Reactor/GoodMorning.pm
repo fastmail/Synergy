@@ -12,6 +12,7 @@ use namespace::clean;
 use Synergy::Logger '$Logger';
 
 use Synergy::CommandPost;
+use Synergy::Util qw(pick_one);
 
 use utf8;
 
