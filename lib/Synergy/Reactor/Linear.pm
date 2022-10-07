@@ -525,6 +525,64 @@ command agenda => {
   });
 };
 
+command update => {
+  help => reformat_help(<<~'EOH'),
+    *update `##PROJECT`: `TEXT` [/`ontrack|atrisk|offtrack`]*: post a project update
+  EOH
+} => sub ($self, $event, $rest) {
+  state %canonical = (
+    ontrack   => 'onTrack',
+    atrisk    => 'atRisk',
+    offtrack  => 'offTrack',
+  );
+
+  $self->_with_linear_client($event, sub ($linear) {
+    my ($tag, $rest) = split /\s+/, $rest, 2;
+
+    unless ($tag =~ /^##[-a-zA-Z]+\z/) {
+      return $event->error_reply(q{The first thing after "update" has to be a `##project` tag.});
+    }
+
+    my $health;
+    if ($rest =~ s{\s+/(ontrack|atrisk|offtrack)\s*\z}{}i) {
+      $health = $canonical{ lc $1 };
+    }
+
+    $tag =~ s/\A##//;
+
+    $linear->helper->project_ids_for_tag($tag)->then(sub (@slug_ids) {
+      unless (@slug_ids) {
+        return $event->error_reply(q{I couldn't find that project in Notion.});
+      }
+
+      if (@slug_ids > 1) {
+        return $event->error_reply(qq{Sorry, ##$tag is on more than one project!});
+      }
+
+      $linear->projects->then(sub ($projects) {
+        my ($project) = grep {; $_->{slugId} eq $slug_ids[0] } values %$projects;
+
+        unless ($project) {
+          return $event->error_reply(qq{Sorry, I couldn't find that project in Linear!});
+        }
+
+        $linear->post_project_update($project->{id}, {
+          body   => $rest,
+          health => $health,
+        })->then(sub ($query_result) {
+          my $ok = $query_result->{data}{projectUpdateCreate}{success};
+          if ($ok) {
+            return $event->reply("Update posted!");
+          }
+
+          $Logger->log([ "problem posting project update: %s", $query_result ]);
+          $event->error_reply("Something went wrong, but I have no idea what.");
+        });
+      });
+    });
+  });
+};
+
 sub _handle_creation_event ($self, $event, $arg = {}) {
   $event->mark_handled;
 
