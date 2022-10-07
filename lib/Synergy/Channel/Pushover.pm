@@ -44,7 +44,7 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
   $self->send_message($where, $text, $alts);
 }
 
-sub send_message ($self, $target, $text, $alts) {
+sub send_message ($self, $target, $text, $alts = {}) {
   my $from;
 
   my $res = $self->http_post(

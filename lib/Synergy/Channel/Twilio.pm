@@ -127,7 +127,7 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
   $self->send_message($phone, $text, $alts);
 }
 
-sub send_message ($self, $target, $text, $alts) {
+sub send_message ($self, $target, $text, $alts = {}) {
   my $from = $self->from;
 
   for my $code (sort { length $b <=> length $a } keys $self->numbers->%*) {
