@@ -53,7 +53,11 @@ package Synergy::Reactor::Linear::LinearHelper {
 
   # Okay, sorry, this subroutine is Extremely Fastmail™. -- rjbs, 2022-10-06
   sub project_ids_for_tag ($self, $tag) {
-    return unless my $notion = $self->{reactor}->hub->reactor_named('notion');
+    my $notion = $self->{reactor}->hub->reactor_named('notion');
+
+    unless ($notion) {
+      return Future->done;
+    }
 
     return $notion->_project_pages->then(sub (@pages) {
       @pages = grep {;
