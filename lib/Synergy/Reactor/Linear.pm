@@ -255,7 +255,6 @@ command teams => {
 
   $self->_with_linear_client($event, sub ($linear) {
     $linear->teams->then(sub ($teams) {
-      $Logger->log([ "teams response: %s", $teams ]);
       my $text  = qq{Teams in Linear\n};
       my $slack = qq{*Teams in Linear*\n};
       for my $team_key (sort keys %$teams) {
