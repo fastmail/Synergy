@@ -12,6 +12,7 @@ use namespace::clean;
 use utf8;
 
 use JSON::MaybeXS;
+use Synergy::Logger '$Logger';
 
 my $JSON = JSON::MaybeXS->new->utf8;
 
