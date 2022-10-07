@@ -101,7 +101,8 @@ sub handle_my_projects ($self, $event) {
 
     my $email = $event->from_user->username . '@' . $self->username_domain;
 
-    my @pairs =
+    @pages =
+      map  {; $_->[0] }
       sort {; $a->[1] cmp $b->[1] }
       map  {;
         [
@@ -110,9 +111,7 @@ sub handle_my_projects ($self, $event) {
         ]
       } @pages;
 
-    for my $pair (@pairs) {
-      my $page = $pair->[0];
-
+    for my $page (@pages) {
       next if $page->{properties}{'On Hold'}{checkbox};
 
       my $stage = $page->{properties}{Stage}{select}{name};
