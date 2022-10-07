@@ -65,7 +65,7 @@ package Synergy::Reactor::Linear::LinearHelper {
       } @pages;
 
       my @slug_ids =
-        map  {; m{-([a-z0-9]+)(?:/[A-Z]+)\z} ? $1 : () }
+        map  {; m{-([a-z0-9]+)(?:/[A-Z]+)?\z} ? $1 : () }
         grep {; length }
         map  {; $_->{properties}{'Linear Project'}{url} }
         @pages;
