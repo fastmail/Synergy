@@ -11,9 +11,10 @@ with 'Synergy::Role::Reactor',
        expandos => [ 'issue' ],
      };
 
-use experimental qw(signatures lexical_subs);
+use experimental qw(signatures lexical_subs try);
 use namespace::clean;
 
+use Future::AsyncAwait;
 use Linear::Client;
 use Lingua::EN::Inflect qw(PL_N);
 
@@ -162,7 +163,7 @@ sub _icon_for_issue ($self, $issue) {
   return "•";
 }
 
-listener issue_mention => sub ($self, $event) {
+listener issue_mention => async sub ($self, $event) {
   my $text = $event->text;
 
   my $team_name_re = join q{|}, map {; quotemeta } $self->known_team_keys;
@@ -177,7 +178,7 @@ listener issue_mention => sub ($self, $event) {
     && ! $self->get_user_preference($user, 'api-token')
   ) {
     my $rname = $self->name;
-    return $event->ephemeral_reply(
+    return await $event->ephemeral_reply(
       "I saw a Linear issue to expand, but you don't have a Linear API token set."
       . " You should make one, then set your $rname.api-token preference."
     );
@@ -213,62 +214,60 @@ listener issue_mention => sub ($self, $event) {
     }
   }
 
-  return $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
+  return await $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
     if $declined_to_reply;
 
-  $self->_with_linear_client($event, sub ($linear) {
+  await $self->_with_linear_client($event, async sub ($linear) {
     # We're being a bit gross here.  I'm going to wait_all a collection of
     # futures, then not worry about them being passed into the ->then, because
     # what I really want to do is operate on a key-by-key basis, and hey,
     # they're shared references.  -- rjbs, 2022-01-26
     my %future_for = map {; $_ => $linear->fetch_issue($_) } @matches;
 
-    Future->wait_all(values %future_for)->then(sub {
-      my @missing = grep {; ! defined $future_for{$_}->get } @matches;
-      my @found   = grep {;   defined $future_for{$_}->get } @matches;
+    await Future->wait_all(values %future_for);
 
-      if (@missing && $matched_like_command) {
-        $event->error_reply("I couldn't find some issues you mentioned: @missing");
-      }
+    my @missing = grep {; ! defined $future_for{$_}->get } @matches;
+    my @found   = grep {;   defined $future_for{$_}->get } @matches;
 
-      for my $found (@found) {
-        my $issue = $future_for{$found}->get;
+    if (@missing && $matched_like_command) {
+      $event->error_reply("I couldn't find some issues you mentioned: @missing");
+    }
 
-        my $icon = $self->_icon_for_issue($issue);
+    for my $found (@found) {
+      my $issue = $future_for{$found}->get;
 
-        my $text = "$found $icon $issue->{title} • $issue->{url}";
-        my $slack_link = $self->_slack_item_link($issue);
-        $event->reply($text, { slack => "$slack_link $icon $issue->{title}" });
-      }
+      my $icon = $self->_icon_for_issue($issue);
 
-      Future->done;
-    });
+      my $text = "$found $icon $issue->{title} • $issue->{url}";
+      my $slack_link = $self->_slack_item_link($issue);
+      $event->reply($text, { slack => "$slack_link $icon $issue->{title}" });
+    }
   });
 };
 
 command teams => {
   help => "*teams*: list all the teams in Linear",
-} => sub ($self, $event, $rest) {
+} => async sub ($self, $event, $rest) {
   if (length $rest) {
-    return $event->error_reply(q{"teams" doesn't take any argument.});
+    return await $event->error_reply(q{"teams" doesn't take any argument.});
   }
 
-  $self->_with_linear_client($event, sub ($linear) {
-    $linear->teams->then(sub ($teams) {
-      my $text  = qq{Teams in Linear\n};
-      my $slack = qq{*Teams in Linear*\n};
-      for my $team_key (sort keys %$teams) {
-        my $this = sprintf "%s — %s\n", uc $team_key, $teams->{$team_key}{name};
-        $text  .= $this;
-        $slack .= $this;
-      }
+  await $self->_with_linear_client($event, async sub ($linear) {
+    my $teams = await $linear->teams;
 
-      return $event->reply($text, { slack => $slack });
-    });
+    my $text  = qq{Teams in Linear\n};
+    my $slack = qq{*Teams in Linear*\n};
+    for my $team_key (sort keys %$teams) {
+      my $this = sprintf "%s — %s\n", uc $team_key, $teams->{$team_key}{name};
+      $text  .= $this;
+      $slack .= $this;
+    }
+
+    return await $event->reply($text, { slack => $slack });
   });
 };
 
-sub _handle_search ($self, $event, $arg) {
+async sub _handle_search ($self, $event, $arg) {
   $event->mark_handled;
 
   my $search = $arg->{search};
@@ -277,52 +276,52 @@ sub _handle_search ($self, $event, $arg) {
   my $linear = $arg->{linear};
   my $want_plain = $arg->{plain};
 
-  my $code = sub ($linear) {
-    $linear->search_issues($search)->then(sub ($page) {
-      unless ($page->payload->{nodes}->@*) {
-        return $event->reply($zero);
-      }
+  my $code = async sub ($linear) {
+    my $page = await $linear->search_issues($search);
 
-      my $text  = q{};
-      my $slack = q{};
+    unless ($page->payload->{nodes}->@*) {
+      return await $event->reply($zero);
+    }
 
-      for my $node ($page->payload->{nodes}->@*) {
-        my $icon = $want_plain ? '' : $self->_icon_for_issue($node);
-        $text  .= "$node->{identifier} $icon $node->{title}\n";
-        $slack .= sprintf "<%s|%s> $icon %s\n",
-          $node->{url},
-          $node->{identifier},
-          $node->{title};
-      }
+    my $text  = q{};
+    my $slack = q{};
 
-      chomp $text;
-      chomp $slack;
+    for my $node ($page->payload->{nodes}->@*) {
+      my $icon = $want_plain ? '' : $self->_icon_for_issue($node);
+      $text  .= "$node->{identifier} $icon $node->{title}\n";
+      $slack .= sprintf "<%s|%s> $icon %s\n",
+        $node->{url},
+        $node->{identifier},
+        $node->{title};
+    }
 
-      return $event->reply(
-        "$header:\n$text",
-        { slack => "*$header:*\n$slack" },
-      );
-    });
+    chomp $text;
+    chomp $slack;
+
+    return await $event->reply(
+      "$header:\n$text",
+      { slack => "*$header:*\n$slack" },
+    );
   };
 
   if ($linear) {
-    return $code->($linear);
+    return await $code->($linear);
   }
 
-  return $self->_with_linear_client($event, $code);
+  return await $self->_with_linear_client($event, $code);
 }
 
 command urgent => {
   help => reformat_help(<<~'EOH'),
     *urgent*: list urgent issues assigned to you
     EOH
-} => sub ($self, $event, $rest) {
+} => async sub ($self, $event, $rest) {
   if (length $rest) {
-    return $event->error_reply(q{"urgent" doesn't take any arguments.});
+    return await $event->error_reply(q{"urgent" doesn't take any arguments.});
   }
 
-  $self->_with_linear_client($event, sub ($linear) {
-    $self->_handle_search(
+  await $self->_with_linear_client($event, async sub ($linear) {
+    await $self->_handle_search(
       $event,
       {
         search => {
@@ -346,74 +345,70 @@ command sb => {
     someone, it will list issues assigned to that person.  Otherwise, it lists
     unassigned support blockers.
     EOH
-} => sub ($self, $event, $who) {
+} => async sub ($self, $event, $who) {
   if (length $who) {
     my $user = $self->resolve_name($who, $event->from_user);
     unless ($user) {
-      return $event->error_reply(qq{I can't figure out who "$who" is.});
+      return await $event->error_reply(qq{I can't figure out who "$who" is.});
     }
 
     $who = $user->username;
   }
 
-  $self->_with_linear_client($event, sub ($linear) {
-    my $when  = length $who
-              ? $linear->lookup_user($who)->then(sub ($user) {
-                  return Future->fail("no such user") unless $user;
-                  return Future->done(assignee => $user->{id});
-                })
-              : Future->done(assignee => undef);
+  await $self->_with_linear_client($event, async sub ($linear) {
+    my %extra_search;
 
-    $when->then(sub {
-      my (%extra_search) = @_;
+    if (length $who) {
+      my $user = await $linear->lookup_user($who);
+      die "no such user" unless $user;
 
-      $self->_handle_search(
-        $event,
-        {
-          search => {
-            label     => 'support blocker',
-            closed    => 0,
-            %extra_search
-          },
-          zero   => "No support blockers!  Great!",
-          header => "Current support blockers",
-          linear => $linear,
+      %extra_search = (assignee => $user->{id});
+    } else {
+      %extra_search = (assignee => undef);
+    }
+
+    return await $self->_handle_search(
+      $event,
+      {
+        search => {
+          label     => 'support blocker',
+          closed    => 0,
+          %extra_search
         },
-      );
-    });
+        zero   => "No support blockers!  Great!",
+        header => "Current support blockers",
+        linear => $linear,
+      },
+    );
   });
 };
 
-sub sb_report ($self, $who, $arg = {}) {
+async sub sb_report ($self, $who, $arg = {}) {
   my $linear = $self->_linear_client_for_user($who);
 
-  return Future->done([]) unless $linear;
+  return [] unless $linear;
 
-  my $search = $linear->search_issues({
+  my $page = await $linear->search_issues({
     label     => 'support blocker',
     closed    => 0,
     assignee  => undef,
   });
 
-  $search->then(sub ($page) {
-    # XXX This is not perfect.  If we have more than one page of blockers
-    # (ugh!) it will only get the first page.  More later, maybe?
-    # -- rjbs, 2022-08-13
-    my $count = $page->payload->{nodes}->@*;
+  # XXX This is not perfect.  If we have more than one page of blockers
+  # (ugh!) it will only get the first page.  More later, maybe?
+  # -- rjbs, 2022-08-13
+  my $count = $page->payload->{nodes}->@*;
 
-    if ($count == 0) {
-      my $msg = "\N{HELMET WITH WHITE CROSS} There are no support blockers.";
-      return Future->done([
-        $msg, { slack => $msg },
-      ]);
-    }
+  if ($count == 0) {
+    my $msg = "\N{HELMET WITH WHITE CROSS} There are no support blockers.";
+    return [ $msg, { slack => $msg } ];
+  }
 
-    my $msg = sprintf "\N{HELMET WITH WHITE CROSS} There are %s support %s.",
-      $count,
-      PL_N('blocker', $count);
+  my $msg = sprintf "\N{HELMET WITH WHITE CROSS} There are %s support %s.",
+    $count,
+    PL_N('blocker', $count);
 
-    return Future->done([ $msg, { slack => $msg } ]);
-  });
+  return [ $msg, { slack => $msg } ];
 }
 
 command triage => {
@@ -424,33 +419,33 @@ command triage => {
     Linear.  You can supply an argument, the name of a team, to see only issues
     for that team.
     EOH
-} => sub ($self, $event, $team_name) {
-  $self->_with_linear_client($event, sub ($linear) {
-    my $when  = length $team_name
-              ? $linear->lookup_team($team_name)->then(sub ($team) {
-                  return Future->fail("no such team") unless $team;
-                  return Future->done(team => $team->{id});
-                })
-              : Future->done;
+} => async sub ($self, $event, $team_name) {
+  await $self->_with_linear_client($event, async sub ($linear) {
+    my %extra_search;
 
-    $when->then(sub {
-      my (%extra_search) = @_;
-      $self->_handle_search(
-        $event,
-        {
-          search => {
-            state    => 'Triage',
-            assignee => undef,
-            %extra_search,
-          },
-          zero   => "No unassigned issues in triage!  Great!",
-          header => "Current unassigned triage work",
-          linear => $linear,
-        }
-      );
-    })->else(sub {
-      $event->error_reply("I couldn't find the team you asked about!");
-    });
+    if (length $team_name) {
+      my $team = await $linear->lookup_team($team_name);
+
+      unless ($team) {
+        return await $event->error_reply("I couldn't find the team you asked about!");
+      }
+
+      %extra_search = (team => $team->{id});
+    }
+
+    return await $self->_handle_search(
+      $event,
+      {
+        search => {
+          state    => 'Triage',
+          assignee => undef,
+          %extra_search,
+        },
+        zero   => "No unassigned issues in triage!  Great!",
+        header => "Current unassigned triage work",
+        linear => $linear,
+      }
+    );
   });
 };
 
@@ -464,7 +459,7 @@ command agenda => {
     pasting into Notion). With `/current`, limit items to those scheduled for
     the current cycle.
     EOH
-} => sub ($self, $event, $spec) {
+} => async sub ($self, $event, $spec) {
   my $want_plain = $spec =~ s!\s+/plain\b!!;
 
   my %current;
@@ -479,48 +474,47 @@ command agenda => {
   my $include_assigned =
     $self->get_user_preference($event->from_user, 'agenda-shows-assigned');
 
-  $self->_with_linear_client($event, sub ($linear) {
-    my $when  = length $spec
-              ? $linear->who_or_what($spec)->then(sub ($assignee_id, $team_id) {
-                  return Future->fail("no such team") unless $team_id;
+  await $self->_with_linear_client($event, async sub ($linear) {
+    my %extra_search;
 
-                  if ($spec =~ /@/) {
-                    return Future->done(assignee => $assignee_id, team => $team_id);
-                  } else {
-                    # Okay they said 'agenda foo'. Foo could be a team or a user.
-                    # If it's a user, they want all agenda items for that user, so
-                    # we need to ignore the team.
-                    if ($assignee_id) {
-                      return Future->done(assignee => $assignee_id);
-                    } else {
-                      return Future->done(
-                        team => $team_id,
-                        ($include_assigned ? () : (assignee => undef)),
-                      );
-                    }
-                  }
-                })
-              : Future->done(assignee => { isMe => { eq => \1 } });
+    if (length $spec) {
+      my ($assignee_id, $team_id);
 
-    $when->then(sub {
-      my (%extra_search) = @_;
-      $self->_handle_search(
-        $event,
-        {
-          search => {
-            state    => 'To Discuss',
-            %current,
-            %extra_search,
-          },
-          zero   => "You have nothing on the agenda",
-          header => "Current agenda",
-          linear => $linear,
-          plain  => $want_plain,
-        }
-      );
-    })->else(sub {
-      $event->error_reply("I couldn't find the team you asked about!");
-    });
+      try {
+        ($assignee_id, $team_id) = await $linear->who_or_what($spec);
+      } catch ($error) {
+        # Is it really worth logging?
+        return await $event->error_reply(q{I couldn't figure out which team's agenda you wanted.});
+      }
+
+      if ($spec =~ /@/) {
+        %extra_search = (assignee => $assignee_id, team => $team_id);
+      } else {
+        # Okay they said 'agenda foo'. Foo could be a team or a user.  If it's
+        # a user, they want all agenda items for that user, so we need to
+        # ignore the team.
+        %extra_search = $assignee_id
+          ? (assignee => $assignee_id)
+          : (team => $team_id, ($include_assigned ? () : (assignee => undef)));
+      }
+    } else {
+      %extra_search = (assignee => { isMe => { eq => \1 } });
+    }
+
+    return await $self->_handle_search(
+      $event,
+      {
+        search => {
+          state    => 'To Discuss',
+          %current,
+          %extra_search,
+        },
+        zero   => "You have nothing on the agenda",
+        header => "Current agenda",
+        linear => $linear,
+        plain  => $want_plain,
+      }
+    );
   });
 };
 
@@ -528,18 +522,18 @@ command update => {
   help => reformat_help(<<~'EOH'),
     *update `##PROJECT`: `TEXT` [/`ontrack|atrisk|offtrack`]*: post a project update
   EOH
-} => sub ($self, $event, $rest) {
+} => async sub ($self, $event, $rest) {
   state %canonical = (
     ontrack   => 'onTrack',
     atrisk    => 'atRisk',
     offtrack  => 'offTrack',
   );
 
-  $self->_with_linear_client($event, sub ($linear) {
+  await $self->_with_linear_client($event, async sub ($linear) {
     my ($tag, $rest) = split /\s+/, $rest, 2;
 
     unless ($tag =~ /^##[-a-zA-Z]+\z/) {
-      return $event->error_reply(q{The first thing after "update" has to be a `##project` tag.});
+      return await $event->error_reply(q{The first thing after "update" has to be a `##project` tag.});
     }
 
     my $health;
@@ -549,87 +543,83 @@ command update => {
 
     $tag =~ s/\A##//;
 
-    $linear->helper->project_ids_for_tag($tag)->then(sub (@slug_ids) {
-      unless (@slug_ids) {
-        return $event->error_reply(q{I couldn't find that project in Notion.});
-      }
+    my @slug_ids = await $linear->helper->project_ids_for_tag($tag);
 
-      if (@slug_ids > 1) {
-        return $event->error_reply(qq{Sorry, ##$tag is on more than one project!});
-      }
+    unless (@slug_ids) {
+      return await $event->error_reply(q{I couldn't find that project in Notion.});
+    }
 
-      $linear->projects->then(sub ($projects) {
-        my ($project) = grep {; $_->{slugId} eq $slug_ids[0] } values %$projects;
+    if (@slug_ids > 1) {
+      return await $event->error_reply(qq{Sorry, ##$tag is on more than one project!});
+    }
 
-        unless ($project) {
-          return $event->error_reply(qq{Sorry, I couldn't find that project in Linear!});
-        }
+    my $projects = await $linear->projects;
 
-        $linear->post_project_update($project->{id}, {
-          body   => $rest,
-          health => $health,
-        })->then(sub ($query_result) {
-          my $ok = $query_result->{data}{projectUpdateCreate}{success};
-          if ($ok) {
-            return $event->reply("Update posted!");
-          }
+    my ($project) = grep {; $_->{slugId} eq $slug_ids[0] } values %$projects;
 
-          $Logger->log([ "problem posting project update: %s", $query_result ]);
-          $event->error_reply("Something went wrong, but I have no idea what.");
-        });
-      });
+    unless ($project) {
+      return await $event->error_reply(qq{Sorry, I couldn't find that project in Linear!});
+    }
+
+    my $query_result = await $linear->post_project_update($project->{id}, {
+      body   => $rest,
+      health => $health,
     });
+
+    my $ok = $query_result->{data}{projectUpdateCreate}{success};
+
+    if ($ok) {
+      return await $event->reply("Update posted!");
+    }
+
+    $Logger->log([ "problem posting project update: %s", $query_result ]);
+    return await $event->error_reply("Something went wrong, but I have no idea what.");
   });
 };
 
-sub _handle_creation_event ($self, $event, $arg = {}) {
+async sub _handle_creation_event ($self, $event, $arg = {}) {
   $event->mark_handled;
 
   my $plan_munger = $arg->{plan_munger};
   my $linear      = $arg->{linear};
   my $ersatz_text = $arg->{ersatz_text};
 
-  my $code = sub ($linear) {
+  my $code = async sub ($linear) {
     my $slack_link = $event->event_uri;
     my $text = $event->text . "\n\ncreated at: $slack_link";
 
     # Slack now "helpfully" corrects '>>' in DM to '> >'.
     $text =~ s/\A> >/>>/;
 
-    my $plan_f = $linear->plan_from_input($ersatz_text // $text);
-
     # XXX: I do not like our current error-returning scheme. -- rjbs, 2021-12-10
-    $plan_f
-      ->then(sub ($plan) {
-        $plan_munger->($plan) if $plan_munger;
-        $linear->create_issue($plan);
-      })
-      ->then(sub ($query_result) {
-        # XXX The query result is stupid and very low-level.  This will
-        # change.
-        my $id  = $query_result->{data}{issueCreate}{issue}{identifier};
-        my $url = $query_result->{data}{issueCreate}{issue}{url};
-        if ($id) {
-          return $event->reply(
-            sprintf("I made that issue, %s: %s", $id, $url),
-            {
-              slack => sprintf("I made that issue, <%s|%s>.", $url, $id),
-            },
-          );
-        } else {
-          return $event->error_reply(
-            "Sorry, something went wrong and I can't say what!"
-          );
-        }
-      })
-      ->else(sub ($error) { $event->error_reply("Couldn't make issue: $error") });
+    my $plan = await $linear->plan_from_input($ersatz_text // $text);
+
+    $plan_munger->($plan) if $plan_munger;
+
+    my $query_result = await $linear->create_issue($plan);
+
+    # XXX The query result is stupid and very low-level.  This will change.
+    my $id  = $query_result->{data}{issueCreate}{issue}{identifier};
+    my $url = $query_result->{data}{issueCreate}{issue}{url};
+
+    if ($id) {
+      return await $event->reply(
+        sprintf("I made that issue, %s: %s", $id, $url),
+        {
+          slack => sprintf("I made that issue, <%s|%s>.", $url, $id),
+        },
+      );
+    }
+
+    $Logger->log([ "problem creating issue: %s", $query_result ]);
+    return await $event->error_reply("Sorry, something went wrong and I can't say what!");
   };
 
   if ($linear) {
-    return $code->($linear);
+    return await $code->($linear);
   }
 
-  $self->_with_linear_client($event, $code);
+  return await $self->_with_linear_client($event, $code);
 }
 
 responder new_issue => {
@@ -694,27 +684,26 @@ responder ptn_blocked => {
 
     *In general, don't use this!*  Instead, use the Zendesk integration.
     EOH
-} => sub ($self, $event, $ptn, $rest) {
+} => async sub ($self, $event, $ptn, $rest) {
   my $new_text = ">> plumb $rest";
 
-  $self->_with_linear_client($event, sub ($linear) {
-    my $label_f = $linear->lookup_team_label("plumb", "support blocker");
-    $label_f->then(sub ($label_id) {
-      return $self->_handle_creation_event(
-        $event,
-        {
-          plan_munger => sub ($plan) {
-            $plan->{labelIds} = [ $label_id ];
+  return await $self->_with_linear_client($event, async sub ($linear) {
+    my $label_id = await $linear->lookup_team_label("plu", "support blocker");
 
-            my $orig = $plan->{description} // q{};
-            my $stub = "This issue created from support ticket PTN $ptn.";
-            $plan->{description} = length $orig ? "$stub\n\n$orig" : $stub;
-            return;
-          },
-          ersatz_text => $new_text,
+    return await $self->_handle_creation_event(
+      $event,
+      {
+        plan_munger => sub ($plan) {
+          $plan->{labelIds} = [ $label_id ];
+
+          my $orig = $plan->{description} // q{};
+          my $stub = "This issue created from support ticket PTN $ptn.";
+          $plan->{description} = length $orig ? "$stub\n\n$orig" : $stub;
+          return;
         },
-      );
-    });
+        ersatz_text => $new_text,
+      },
+    );
   });
 };
 
