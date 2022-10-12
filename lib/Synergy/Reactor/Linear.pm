@@ -627,8 +627,11 @@ async sub _handle_creation_event ($self, $event, $arg = {}) {
 
 command comment => {
   help => "*comment on `ISSUE`: `comment`*: add a comment to a linear issue",
-} => sub ($self, $event, $rest) {
-  $event->error_reply("I don't know what you want me to comment on.") unless $rest;
+} => async sub ($self, $event, $rest) {
+  unless ($rest) {
+    return await $event->error_reply("I don't know what you want me to comment on.")
+  }
+
   my ($issue_ident, $comment) = $rest =~ /
     ^
     (?:on\s+)?
@@ -638,23 +641,29 @@ command comment => {
     (.*)
     \z
   /ix;
-  $event->error_reply("I don't know what you want me to comment on.") unless $issue_ident && $comment;
-  $self->_with_linear_client($event, sub ($linear) {
-    my $issue_f = $linear->fetch_issue($issue_ident);
-    $issue_f->then(sub ($issue) {
-      my $comment_f = $linear->create_comment({issueId => $issue->{id}, body => $comment});
-      $comment_f->then(sub ($res) {
-        my $comment_id = $res->{data}{commentCreate}{comment}{id};
-        my $url = $res->{data}{commentCreate}{comment}{url};
-        if ($comment_id) {
-          my $text = sprintf("I added that comment to %s: %s.", $url, $issue_ident);
-          my $slack = sprintf("I added that comment to <%s|%s>.", $url, $issue_ident);
-          return $event->reply($text, { slack => $slack });
-        }
-        $Logger->log("error trying to create a comment on $issue_ident: $res");
-        return $event->error_reply("Sorry, something went wrong and I can't say what!");
-      })
-    })
+
+  unless ($issue_ident && $comment) {
+    return await $event->error_reply("I don't know what you want me to comment on.");
+  }
+
+  await $self->_with_linear_client($event, async sub ($linear) {
+    my $issue   = await $linear->fetch_issue($issue_ident);
+    my $comment_res = await $linear->create_comment({
+      issueId => $issue->{id},
+      body    => $comment
+    });
+
+    my $comment_id = $comment_res->{data}{commentCreate}{comment}{id};
+    my $url = $comment_res->{data}{commentCreate}{comment}{url};
+
+    if ($comment_id) {
+      my $text = sprintf("I added that comment to %s: %s.", $url, $issue_ident);
+      my $slack = sprintf("I added that comment to <%s|%s>.", $url, $issue_ident);
+      return await $event->reply($text, { slack => $slack });
+    }
+
+    $Logger->log([ "error trying to create a comment on %s: %s", $issue_ident, $comment_res ]);
+    return await $event->error_reply("Sorry, something went wrong and I can't say what!");
   });
 };
 
