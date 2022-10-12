@@ -578,7 +578,7 @@ command comment => {
           my $slack = sprintf("I added that comment to <%s|%s>.", $url, $issue_ident);
           return $event->reply($text, { slack => $slack });
         }
-        $Logger->log("Err: $res");
+        $Logger->log("error trying to create a comment on $issue_ident: $res");
         return $event->error_reply("Sorry, something went wrong and I can't say what!");
       })
     })
