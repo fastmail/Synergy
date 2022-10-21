@@ -518,6 +518,28 @@ command agenda => {
   });
 };
 
+async sub project_for_tag ($self, $linear, $tag) {
+  my @slug_ids = await $linear->helper->project_ids_for_tag($tag);
+
+  unless (@slug_ids) {
+    return (undef, q{I couldn't find that project in Notion.});
+  }
+
+  if (@slug_ids > 1) {
+    return (undef, qq{Sorry, ##$tag is on more than one project!});
+  }
+
+  my $projects = await $linear->projects;
+
+  my ($project) = grep {; $_->{slugId} eq $slug_ids[0] } values %$projects;
+
+  unless ($project) {
+    return (undef, qq{Sorry, I couldn't find that project in Linear!});
+  }
+
+  return ($project, undef);
+}
+
 command update => {
   help => reformat_help(<<~'EOH'),
     *update `##PROJECT`: `TEXT` [/`ontrack|atrisk|offtrack`]*: post a project update
@@ -543,22 +565,10 @@ command update => {
 
     $tag =~ s/\A##//;
 
-    my @slug_ids = await $linear->helper->project_ids_for_tag($tag);
+    my ($project, $error) = await $self->project_for_tag($linear, $tag);
 
-    unless (@slug_ids) {
-      return await $event->error_reply(q{I couldn't find that project in Notion.});
-    }
-
-    if (@slug_ids > 1) {
-      return await $event->error_reply(qq{Sorry, ##$tag is on more than one project!});
-    }
-
-    my $projects = await $linear->projects;
-
-    my ($project) = grep {; $_->{slugId} eq $slug_ids[0] } values %$projects;
-
-    unless ($project) {
-      return await $event->error_reply(qq{Sorry, I couldn't find that project in Linear!});
+    if ($error) {
+      return await $event->error_reply($error);
     }
 
     my $query_result = await $linear->post_project_update($project->{id}, {
