@@ -454,9 +454,9 @@ command agenda => {
     *agenda `[TARGET]`*: list issues in the To Discuss state
 
     This command lists issues in the state To Discuss.  If a target is given
-    (either a user name, a team name, or user@team), only issues with that
-    assignment are listed. With `/plain`, suppress issue icons (useful for
-    pasting into Notion). With `/current`, limit items to those scheduled for
+    (either a user name, a team name, user@team, or ##project), only matching
+    issues are listed. With `/plain`, suppress issue icons (useful for pasting
+    into Notion). With `/current`, limit items to those scheduled for
     the current cycle.
     EOH
 } => async sub ($self, $event, $spec) {
@@ -478,24 +478,34 @@ command agenda => {
     my %extra_search;
 
     if (length $spec) {
-      my ($assignee_id, $team_id);
+      if ($spec =~ s/^##//) {
+        my ($project, $error) = await $self->project_for_tag($linear, $spec);
 
-      try {
-        ($assignee_id, $team_id) = await $linear->who_or_what($spec);
-      } catch ($error) {
-        # Is it really worth logging?
-        return await $event->error_reply(q{I couldn't figure out which team's agenda you wanted.});
-      }
+        if ($error) {
+          return await $event->reply($error);
+        }
 
-      if ($spec =~ /@/) {
-        %extra_search = (assignee => $assignee_id, team => $team_id);
+        %extra_search = (project => $project->{id});
       } else {
-        # Okay they said 'agenda foo'. Foo could be a team or a user.  If it's
-        # a user, they want all agenda items for that user, so we need to
-        # ignore the team.
-        %extra_search = $assignee_id
-          ? (assignee => $assignee_id)
-          : (team => $team_id, ($include_assigned ? () : (assignee => undef)));
+        my ($assignee_id, $team_id);
+
+        try {
+          ($assignee_id, $team_id) = await $linear->who_or_what($spec);
+        } catch ($error) {
+          # Is it really worth logging?
+          return await $event->error_reply(q{I couldn't figure out which team's agenda you wanted.});
+        }
+
+        if ($spec =~ /@/) {
+          %extra_search = (assignee => $assignee_id, team => $team_id);
+        } else {
+          # Okay they said 'agenda foo'. Foo could be a team or a user.  If it's
+          # a user, they want all agenda items for that user, so we need to
+          # ignore the team.
+          %extra_search = $assignee_id
+            ? (assignee => $assignee_id)
+            : (team => $team_id, ($include_assigned ? () : (assignee => undef)));
+        }
       }
     } else {
       %extra_search = (assignee => { isMe => { eq => \1 } });
