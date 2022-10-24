@@ -583,7 +583,8 @@ command update => {
 
     my $query_result = await $linear->post_project_update($project->{id}, {
       body   => $rest,
-      health => $health,
+
+      ($health ? (health => $health) : ()),
     });
 
     my $ok = $query_result->{data}{projectUpdateCreate}{success};
