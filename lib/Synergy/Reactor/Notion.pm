@@ -83,7 +83,20 @@ sub _project_pages ($self) {
     Authorization     => "Bearer $token",
     'Notion-Version'  => '2021-08-16',
     Content_Type      => 'application/json',
-    Content => "{}", # TODO: filter here for real
+    Content => $JSON->encode({
+      filter => {
+        and => [
+          {
+            property => 'Stage',
+            select   => { does_not_equal => "Won't do" },
+          },
+          {
+            property => 'Stage',
+            select   => { does_not_equal => "Done" },
+          },
+        ]
+      }
+    }),
   )->then(sub ($res) {
     my $data  = $JSON->decode($res->decoded_content(charset => undef));
     my @pages = $data->{results}->@*;
