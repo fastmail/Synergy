@@ -3,67 +3,59 @@ use warnings;
 package Synergy::Reactor::SlackID;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
+
+use Future::AsyncAwait;
 use List::Util qw(first);
+use Synergy::CommandPost;
 
-sub listener_specs {
-  return (
-    {
-      name      => 'slackid',
-      method    => 'handle_event',
-      targeted  => 1,
-      predicate => sub ($self, $event) {
-        return unless $event->from_channel->can('slack');
-        return $event->text =~ /\A\s*slackid [@#]?(\w+)\s*\z/i;
-      },
-      allow_empty_help => 1,
-    },
-    {
-      name      => 'reload-slack-users',
-      method    => 'handle_reload_slack',
-      targeted  => 1,
-      predicate => sub ($self, $event) {
-        return unless $event->from_channel->can('slack');
-        return $event->text =~ /\Areload slack (users|channels)\z/in;
-      },
-      allow_empty_help => 1,
-    },
-  );
-}
-
-sub handle_event ($self, $event) {
-  $event->mark_handled;
-
-  if ($event->text =~ /slackid \@?(\w+)/) {
-    my $who = $1;
-    my $user = first { $_->{name} eq $who }
-               values $event->from_channel->slack->users->%*;
-
-    return $event->error_reply("Sorry, I don't know who $who is")
-      unless $user;
-
-    return $event->reply("The Slack id for $who is $user->{id}");
+command slackid => {
+} => async sub ($self, $event, $rest) {
+  unless ($event->from_channel->can('slack')) {
+    return await $self->error_reply("Sorry, you can't use *slackid* outside Slack");
   }
 
-  if ($event->text =~ /slackid #(\w+)/) {
-    my $ch_name = $1;
-    my $channel = $event->from_channel->slack->channel_named($ch_name);
-
-    return $event->error_reply("Sorry, I can't find #$ch_name.")
-      unless $channel;
-
-    return $event->reply("The Slack id for #$ch_name is $channel->{id}");
+  unless ($rest =~ /\A[@#]?(\S+)\s*\z/i) {
+    return await $self->error_reply("Sorry, that doesn't look like a Slack identifier.");
   }
 
-  return $event->error_reply(qq{Sorry, I don't know how to resolve that.});
-}
+  my $what = $1;
 
-sub handle_reload_slack ($self, $event) {
-  my ($what) = $event->text =~ /^reload slack (users|channels)/i;
+  if ($what =~ s/^#//) {
+    my $channel = $event->from_channel->slack->channel_named($what);
 
+    unless ($channel) {
+      return await $event->error_reply("Sorry, I can't find #$what.");
+    }
+
+    return await $event->reply("The Slack id for #$what is $channel->{id}");
+  }
+
+  my $user = first { $_->{name} eq $what }
+             values $event->from_channel->slack->users->%*;
+
+  unless ($user) {
+    return await $event->error_reply("Sorry, I don't know who $what is.");
+  }
+
+  return await $event->reply("The Slack id for $what is $user->{id}");
+};
+
+responder reload_slack => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher   => sub ($text, @) {
+    if ($text =~ /^reload slack (users|channels)\z/i) {
+      return [ $1 ];
+    }
+
+    return;
+  },
+} => async sub ($self, $event, $what) {
   $event->mark_handled;
 
   if ($what eq 'users') {
@@ -78,6 +70,6 @@ sub handle_reload_slack ($self, $event) {
   }
 
   return $event->reply_error("Sorry, I didn't understand your reload command.");
-}
+};
 
 1;
