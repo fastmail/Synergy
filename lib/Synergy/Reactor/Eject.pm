@@ -4,29 +4,23 @@ package Synergy::Reactor::Eject;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
-sub listener_specs {
-  return {
-    name      => 'warp-core',
-    method    => 'handle_eject',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $e) { lc $e->text eq 'eject warp core' },
-    allow_empty_help => 1,
-  };
-}
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 
-sub handle_eject ($self, $event) {
-  $event->mark_handled;
+responder my_projects => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher   => sub ($text, @) { fc $text eq 'eject warp core' ? [] : () },
+} => async sub ($self, $event) {
 
-  my $f = $event->reply('Good bye.');
-  $f->on_done(sub {
-    kill 'INT', $$;
-  });
-}
+  await $event->reply('Good bye.');
+  kill 'INT', $$;
+};
 
 1;
