@@ -3,11 +3,15 @@ use warnings;
 package Synergy::Reactor::Yelling;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
+use Future::AsyncAwait;
+
+use Synergy::CommandPost;
 use URI;
 
 has slack_synergy_channel_name => (
@@ -45,35 +49,30 @@ sub start ($self) {
   });
 }
 
-sub listener_specs {
-  return {
-    name      => 'yell_more',
-    method    => 'handle_mumbling',
-    exclusive => 0,
-    predicate => sub ($self, $e) {
-      return unless $e->from_channel->isa('Synergy::Channel::Slack');
+responder mumbling => {
+  matcher => sub ($text, $event) {
+    return unless $event->from_channel->isa('Synergy::Channel::Slack');
 
-      my $channel = $self->_slack_channel_name_from_event($e);
-      return unless $channel eq $self->yelling_channel_name;
+    my @words = split /\s+/, $event->text;
+    for (@words) {
+      next if m/^[#@]/;                             # don't complain about @rjbs
+      next if m/^:[-_a-z0-9]+:$/;                   # or :smile:
+      next if URI->new($_)->has_recognized_scheme;  # or URLS
 
-      my @words = split /\s+/, $e->text;
-      for (@words) {
-        next if m/^[#@]/;                             # don't complain about @rjbs
-        next if m/^:[-_a-z0-9]+:$/;                   # or :smile:
-        next if URI->new($_)->has_recognized_scheme;  # or URLS
+      # do complain about lowercase
+      return [] if m/\p{Ll}/;
+    }
 
-        # do complain about lowercase
-        return 1 if m/\p{Ll}/;
-      }
+    return;
+  },
+} => async sub ($self, $event) {
+  # This used to be in the matcher (well, the predicate when this was
+  # EasyListening, but it isn't now because the matcher doesn't have access to
+  # the reactor.  That's probably a mistake. -- rjbs, 2022-10-28
+  my $channel = $self->_slack_channel_name_from_event($event);
+  return unless $channel eq $self->yelling_channel_name;
 
-      return;
-    },
-    allow_empty_help => 1,
-  };
-}
-
-sub handle_mumbling ($self, $event) {
-  $event->reply("YOU'RE MUMBLING.");
-}
+  return await $event->reply("YOU'RE MUMBLING.");
+};
 
 1;
