@@ -2,22 +2,25 @@ use v5.28;
 package Synergy::Reactor::Zendesk;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening',
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences',
      'Synergy::Role::DeduplicatesExpandos' => {
        expandos => [ 'ticket' ],
      };
 
+use experimental qw(postderef signatures try);
+use namespace::clean;
+use utf8;
+
 use Date::Parse qw(str2time);
 use Future;
+use Future::AsyncAwait;
 use Lingua::EN::Inflect qw(WORDLIST);
+use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Time::Duration qw(ago);
 use Zendesk::Client;
-
-use experimental qw(postderef signatures);
-use namespace::clean;
-use utf8;
 
 __PACKAGE__->add_preference(
   name      => 'staff-email-address',
@@ -111,32 +114,16 @@ has _ticket_mapping_dbh => (
   },
 );
 
-sub listener_specs ($self) {
-  my $ticket_re = $self->shorthand_ticket_regex;
-  my $url_re = $self->url_ticket_regex;
-
-  return (
-    {
-      name      => 'mention-ptn',
-      method    => 'handle_ptn_mention',
-      predicate => sub ($self, $e) {
-        return 1 if $e->text =~ /$ticket_re/;
-        return 1 if $e->text =~ /$url_re/;
-        return;
-      },
-      allow_empty_help => 1,
-    },
-  );
-}
-
-sub handle_ptn_mention ($self, $event) {
-  $event->mark_handled if $event->was_targeted;
-
+listener ptn_mention => async sub ($self, $event) {
   my $ticket_re = $self->shorthand_ticket_regex;
   my @ids = $event->text =~ m/$ticket_re/g;
 
   my $url_re = $self->url_ticket_regex;
   push @ids, $event->text =~ m/$url_re/g;
+
+  return unless @ids;
+
+  $event->mark_handled if $event->was_targeted;
 
   my %ids = map {; $_ => 1 }
             map {; $self->_translate_ticket_id($_) }
@@ -158,138 +145,141 @@ sub handle_ptn_mention ($self, $event) {
     push @futures, $f;
   }
 
-  my $f = Future->wait_all(@futures);
-  $f->retain;
+  await Future->wait_all(@futures);
 
-  $f->on_ready(sub ($waiter) {
-    $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
-      if $declined_to_reply;
+  $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
+    if $declined_to_reply;
 
-    return unless $event->was_targeted;
+  return unless $event->was_targeted;
 
-    my @failed = $waiter->failed_futures;
-    my @ids = map {; ($_->failure)[0] } @failed;
+  if (my @failed = grep {; $_->is_failed } @futures) {
+    my @ids = map  {; ($_->failure)[0] } @failed;
     return unless @ids;
 
     my $which = WORDLIST(@ids, { conj => "or" });
-    $event->reply("Sorry, I couldn't find any tickets for $which.");
+    return await $event->reply("Sorry, I couldn't find any tickets for $which.");
+  }
+
+  return;
+};
+
+async sub _output_ticket ($self, $event, $id) {
+  my $ticket;
+
+  try {
+    $ticket = await $self->zendesk_client->ticket_api->get_f($id);
+  } catch ($error) {
+    $Logger->log([ "error fetching ticket %s from Zendesk", $id ]);
+    return Future->fail("PTN $id", 'http');
+  }
+
+  my $status = $ticket->status;
+  my $subject = $ticket->subject;
+  my $created = str2time($ticket->created_at);
+  my $updated = str2time($ticket->updated_at);
+
+  my $text = "#$id: $subject (status: $status)";
+
+  my $link = sprintf("<https://%s/agent/tickets/%s|#%s>",
+    $self->domain,
+    $id,
+    $id,
+  );
+
+  my $assignee = $ticket->assignee;
+  my @assignee = $assignee ?  [ "Assigned to" => $assignee->name ] : ();
+
+  my @brand;
+  if ($self->has_brand_mapping && $ticket->brand_id) {
+    my $brand_text = $self->brand_mapping->{$ticket->brand_id};
+    @brand = [ Product => $brand_text ] if $brand_text;
+  }
+
+  my @old_ptn;
+  if ($ticket->external_id) {
+    @old_ptn = [ "Old PTN" => $ticket->external_id ];
+  }
+
+  # slack block syntax is silly.
+  my @fields = map {;
+    +{
+       type => 'mrkdwn',
+       text => "*$_->[0]:* $_->[1]",
+     }
+  } (
+    @brand,
+    @old_ptn,
+    [ "Status"  => ucfirst($status) ],
+    [ "Opened"  => ago(time - $created) ],
+    [ "Updated" => ago(time - $updated) ],
+    @assignee,
+  );
+
+  my $blocks = [
+    {
+      type => "section",
+      text => {
+        type => "mrkdwn",
+        text => "\N{MEMO} $link - $subject",
+      }
+    },
+    {
+      type => "section",
+      fields => \@fields,
+    },
+  ];
+
+  $self->note_ticket_expansion($event, $ticket->id);
+
+  return await $event->reply($text, {
+    slack => {
+      blocks => $blocks,
+      text => $text,
+    },
   });
 }
 
-sub _output_ticket ($self, $event, $id) {
-  return $self->zendesk_client->ticket_api->get_f($id)
-    ->then(sub ($ticket) {
-      my $status = $ticket->status;
-      my $subject = $ticket->subject;
-      my $created = str2time($ticket->created_at);
-      my $updated = str2time($ticket->updated_at);
-
-      my $text = "#$id: $subject (status: $status)";
-
-      my $link = sprintf("<https://%s/agent/tickets/%s|#%s>",
-        $self->domain,
-        $id,
-        $id,
-      );
-
-      my $assignee = $ticket->assignee;
-      my @assignee = $assignee ?  [ "Assigned to" => $assignee->name ] : ();
-
-      my @brand;
-      if ( $self->has_brand_mapping && $ticket->brand_id) {
-        my $brand_text = $self->brand_mapping->{$ticket->brand_id};
-        @brand = [ Product => $brand_text ] if $brand_text;
-      }
-
-      my @old_ptn;
-      if ($ticket->external_id) {
-        @old_ptn = [ "Old PTN" => $ticket->external_id ];
-      }
-
-      # slack block syntax is silly.
-      my @fields = map {;
-        +{
-           type => 'mrkdwn',
-           text => "*$_->[0]:* $_->[1]",
-         }
-      } (
-        @brand,
-        @old_ptn,
-        [ "Status"  => ucfirst($status) ],
-        [ "Opened"  => ago(time - $created) ],
-        [ "Updated" => ago(time - $updated) ],
-        @assignee,
-      );
-
-      my $blocks = [
-        {
-          type => "section",
-          text => {
-            type => "mrkdwn",
-            text => "\N{MEMO} $link - $subject",
-          }
-        },
-        {
-          type => "section",
-          fields => \@fields,
-        },
-      ];
-
-      $event->reply($text, {
-        slack => {
-          blocks => $blocks,
-          text => $text,
-        },
-      });
-
-      $self->note_ticket_expansion($event, $ticket->id);
-
-      return Future->done(1);
-    })
-    ->else(sub (@err) {
-      $Logger->log([ "error fetching ticket %s from Zendesk", $id ]);
-      return Future->fail("PTN $id", 'http');
-    });
-}
-
-sub ticket_report ($self, $who, $arg = {}) {
+async sub ticket_report ($self, $who, $arg = {}) {
   my $email = $self->get_user_preference(
     $who, 'staff-email-address'
   );
 
   unless ($email) {
     my $text = "ticket_report: (warning) No staff-email-address user pref configured for " . $who->username;
-    return Future->done([ $text, { slack => $text } ]);
+    return [ $text, { slack => $text } ];
   }
 
-  $self->zendesk_client
-       ->user_api
-       ->get_by_email_no_fetch($email)
-       ->scoped_client
-       ->make_request_f(
-         GET => "/api/v2/users/me.json?include=open_ticket_count"
-       )->then(sub ($res) {
-         unless ($res->{open_ticket_count}) {
-           $Logger->log([ "Did not get an open_ticket_count in res: %s", $res ]);
-           return Future->fail("ticket_report", 'http');
-         }
+  my $res;
+  try {
+    $res = await $self->zendesk_client
+                      ->user_api
+                      ->get_by_email_no_fetch($email)
+                      ->scoped_client
+                      ->make_request_f(
+                          GET => "/api/v2/users/me.json?include=open_ticket_count"
+                        );
+  } catch ($error) {
+   $Logger->log([ "error fetching our user from Zendesk: %s", $error ]);
+   die "failed to get tickets for ticket report";
+  }
 
-         # It's a single key/value pair where the key is the id of our user.
-         # We just want the value, which is the count
-         my ($count) = values $res->{open_ticket_count}->%*;
-         return Future->done unless $count;
+  unless ($res->{open_ticket_count}) {
+    $Logger->log([ "Did not get an open_ticket_count in res: %s", $res ]);
+    die "couldn't get open ticket count";
+  }
 
-         my $desc = $arg->{description} // "Zendesk Tickets";
-         my $text = sprintf "\N{ADMISSION TICKETS} %s: %s", $desc, $count;
+  # It's a single key/value pair where the key is the id of our user.
+  # We just want the value, which is the count
+  my ($count) = values $res->{open_ticket_count}->%*;
+  return unless $count;
 
-         return Future->done([ $text, { slack => $text } ]);
-       })->else(sub (@err) {
-         $Logger->log([ "error fetching our user from Zendesk: %s", \@err ]);
-         return Future->fail("ticket_report", 'http');
-       });
+  my $desc = $arg->{description} // "Zendesk Tickets";
+  my $text = sprintf "\N{ADMISSION TICKETS} %s: %s", $desc, $count;
+
+  return [ $text, { slack => $text } ];
 }
 
-sub _filter_count_report ($self, $who, $arg = {}) {
+async sub _filter_count_report ($self, $who, $arg = {}) {
   my $emoji = $arg->{emoji};
   my $desc = $arg->{description} // "Zendesk Tickets";
 
@@ -301,23 +291,23 @@ sub _filter_count_report ($self, $who, $arg = {}) {
     @req = (GET => "/api/v2/search.json?query=" . $arg->{query});
   } else {
     my $text = "Sorry, only view based url reports are supported right now";
-    return Future->done([ $text, { slack => $text } ]);
+    return [ $text, { slack => $text } ];
   }
 
-  $self->zendesk_client
-       ->make_request_f(
-         @req,
-       )->then(sub ($res) {
-         my $count = $res->{count};
-         return Future->done unless $count;
+  my $res;
+  try {
+    $res = $self->zendesk_client->make_request_f(@req);
+  } catch ($error) {
+    $Logger->log([ "error making request %s to Zendesk: %s", \@req, $error ]);
+    die "failed to get filter count report content";
+  }
 
-         my $text = "$emoji $desc: $count";
+  my $count = $res->{count};
+  return unless $count;
 
-         return Future->done([ $text, { slack => $text } ]);
-       })->else(sub (@err) {
-         $Logger->log([ "error making request @req to Zendesk: %s", \@err ]);
-         return Future->fail("$emoji $desc", 'http');
-       });
+  my $text = "$emoji $desc: $count";
+
+  return [ $text, { slack => $text } ];
 }
 
 sub unassigned_bug_report ($self, $who, $arg = {}) {
