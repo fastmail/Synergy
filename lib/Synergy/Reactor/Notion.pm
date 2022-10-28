@@ -12,6 +12,8 @@ use namespace::clean;
 
 use utf8;
 
+use Future::AsyncAwait;
+
 use JSON::MaybeXS;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
@@ -81,67 +83,67 @@ responder my_projects => {
   matcher   => sub ($text, @) { fc $text eq 'my projects' ? [] : () },
   help_titles => [ 'my projects', 'projects' ],
   help        => "*my projects*: show all the projects you're working on in Notion",
-} => sub ($self, $event) {
+} => async sub ($self, $event) {
   $event->mark_handled;
 
-  $self->_project_pages->then(sub (@pages) {
-    my $reply = q{};
-    my $slack = q{};
+  my @pages = await $self->_project_pages;
 
-    my $email = $event->from_user->username . '@' . $self->username_domain;
+  my $reply = q{};
+  my $slack = q{};
 
-    @pages =
-      map  {; $_->[0] }
-      sort {; $a->[1] cmp $b->[1] }
-      map  {;
-        [
-          $_,
-          join(q{ - }, map {; $_->{plain_text} } $_->{properties}{Name}{title}->@*)
-        ]
-      } @pages;
+  my $email = $event->from_user->username . '@' . $self->username_domain;
 
-    for my $page (@pages) {
-      next if $page->{properties}{'On Hold'}{checkbox};
+  @pages =
+    map  {; $_->[0] }
+    sort {; $a->[1] cmp $b->[1] }
+    map  {;
+      [
+        $_,
+        join(q{ - }, map {; $_->{plain_text} } $_->{properties}{Name}{title}->@*)
+      ]
+    } @pages;
 
-      my $stage = $page->{properties}{Stage}{select}{name};
-      next if $stage eq 'Done';
-      next if $stage eq q{Won't do};
+  for my $page (@pages) {
+    next if $page->{properties}{'On Hold'}{checkbox};
 
-      my @people = (
-        $page->{properties}{'Team (Active)'}{people}->@*,
-        $page->{properties}{'Coordinator'}{people}->@*,
-      );
+    my $stage = $page->{properties}{Stage}{select}{name};
+    next if $stage eq 'Done';
+    next if $stage eq q{Won't do};
 
-      next unless grep {; $_->{person}{email} eq $email } @people;
+    my @people = (
+      $page->{properties}{'Team (Active)'}{people}->@*,
+      $page->{properties}{'Coordinator'}{people}->@*,
+    );
 
-      my $title = join q{ - },
-        map {; $_->{plain_text} } $page->{properties}{Name}{title}->@*;
+    next unless grep {; $_->{person}{email} eq $email } @people;
 
-      my $emoji = $page->{icon}{emoji} // "\N{FILE FOLDER}";
+    my $title = join q{ - },
+      map {; $_->{plain_text} } $page->{properties}{Name}{title}->@*;
 
-      my $safe_title = $title;
-      $safe_title =~ s{[^A-Za-z0-9]}{-}g;
+    my $emoji = $page->{icon}{emoji} // "\N{FILE FOLDER}";
 
-      my $id = $page->{id} =~ s/-//gr;
+    my $safe_title = $title;
+    $safe_title =~ s{[^A-Za-z0-9]}{-}g;
 
-      my $href = $page->{url};
+    my $id = $page->{id} =~ s/-//gr;
 
-      my $tag = $page->{properties}{Hashtag}{rich_text}[0]{plain_text} // '';
-      $tag = "##$tag" if $tag;
+    my $href = $page->{url};
 
-      $reply .= sprintf "%s %s%s (%s)\n",
-        $emoji, $title, ($tag ? " $tag" : q{}), $stage;
+    my $tag = $page->{properties}{Hashtag}{rich_text}[0]{plain_text} // '';
+    $tag = "##$tag" if $tag;
 
-      $slack .= sprintf "<%s|%s %s>%s (%s)\n",
-       $href, $emoji, $title, ($tag ? " *$tag*" : q{}), $stage;
-    }
+    $reply .= sprintf "%s %s%s (%s)\n",
+      $emoji, $title, ($tag ? " $tag" : q{}), $stage;
 
-    unless (length $reply) {
-      return $event->reply("Looks like you've got no projects right now!");
-    }
+    $slack .= sprintf "<%s|%s %s>%s (%s)\n",
+     $href, $emoji, $title, ($tag ? " *$tag*" : q{}), $stage;
+  }
 
-    $event->reply($reply, { slack => $slack });
-  })->retain;
+  unless (length $reply) {
+    return await $event->reply("Looks like you've got no projects right now!");
+  }
+
+  return await $event->reply($reply, { slack => $slack });
 };
 
 responder support_trends => {
@@ -151,7 +153,7 @@ responder support_trends => {
   help_titles => [ 'support trends' ],
   help        => 'Show all the Issues & Trends support is tracking in Notion; '
                . 'you can add /future to show things resolved in the future.',
-} => sub ($self, $event) {
+} => async sub ($self, $event) {
   $event->mark_handled;
 
   my $want_future = $event->text =~ m{/future}i;
@@ -160,7 +162,7 @@ responder support_trends => {
   my $token = $self->api_token;
   my $now = DateTime->now(time_zone => 'Etc/UTC')->iso8601;
 
-  $self->hub->http_post(
+  my $res = await $self->hub->http_post(
     "https://api.notion.com/v1/databases/$db_id/query",
 
     'User-Agent'      => 'Synergy/2021.05',
@@ -181,55 +183,55 @@ responder support_trends => {
         ]
       }
     }),
-  )->then(sub ($res) {
-    my $data  = $JSON->decode($res->decoded_content(charset => undef));
+  );
 
-    my @pages =
-      map  {; $_->[0] }
-      sort {; $a->[1] cmp $b->[1] || $a->[2] cmp $b->[2] }
-      map  {;
-        [
-          $_,
-          $_->{properties}{Began}{date}{start} // '',
-          $_->{properties}{created_time},   # just for sort stability
-        ]
-      } $data->{results}->@*;
+  my $data  = $JSON->decode($res->decoded_content(charset => undef));
 
-    my $reply = q{};
-    my $slack = q{};
+  my @pages =
+    map  {; $_->[0] }
+    sort {; $a->[1] cmp $b->[1] || $a->[2] cmp $b->[2] }
+    map  {;
+      [
+        $_,
+        $_->{properties}{Began}{date}{start} // '',
+        $_->{properties}{created_time},   # just for sort stability
+      ]
+    } $data->{results}->@*;
 
-    for my $page (@pages) {
-      my $title = join q{ - },
-        map {; $_->{plain_text} } $page->{properties}{Name}{title}->@*;
+  my $reply = q{};
+  my $slack = q{};
 
-      my $emoji = $page->{icon}{emoji} // "\N{WARNING SIGN}";
+  for my $page (@pages) {
+    my $title = join q{ - },
+      map {; $_->{plain_text} } $page->{properties}{Name}{title}->@*;
 
-      my $start = $page->{properties}{Began}{date}{start};
-      my $end = $page->{properties}{Resolved}{date}{start};
+    my $emoji = $page->{icon}{emoji} // "\N{WARNING SIGN}";
 
-      next if $end && ! $want_future;
+    my $start = $page->{properties}{Began}{date}{start};
+    my $end = $page->{properties}{Resolved}{date}{start};
 
-      my $since = $end
-                ? sprintf("%s – %s", $start, $end)
-                : sprintf("since %s", $start);
+    next if $end && ! $want_future;
 
-      my $safe_title = $title;
-      $safe_title =~ s{[^A-Za-z0-9]}{-}g;
+    my $since = $end
+              ? sprintf("%s – %s", $start, $end)
+              : sprintf("since %s", $start);
 
-      my $id = $page->{id} =~ s/-//gr;
+    my $safe_title = $title;
+    $safe_title =~ s{[^A-Za-z0-9]}{-}g;
 
-      my $href = "https://www.notion.so/$safe_title-$id";
+    my $id = $page->{id} =~ s/-//gr;
 
-      $reply .= "$emoji $title ($since)\n";
-      $slack .= sprintf "<%s|%s %s> (%s)\n", $href, $emoji, $title, $since;
-    }
+    my $href = "https://www.notion.so/$safe_title-$id";
 
-    unless (length $reply) {
-      return $event->reply("Looks like everything has been under control!");
-    }
+    $reply .= "$emoji $title ($since)\n";
+    $slack .= sprintf "<%s|%s %s> (%s)\n", $href, $emoji, $title, $since;
+  }
 
-    $event->reply($reply, { slack => $slack });
-  })->retain;
+  unless (length $reply) {
+    return await $event->reply("Looks like everything has been under control!");
+  }
+
+  return await $event->reply($reply, { slack => $slack });
 };
 
 1;
