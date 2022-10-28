@@ -4,31 +4,25 @@ package Synergy::Reactor::Uptime;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
+
+use Future::AsyncAwait;
+
+use Synergy::CommandPost;
 use List::Util qw(first);
 use Time::Duration::Parse;
 use Time::Duration;
 
-sub listener_specs {
-  return {
-    name      => 'uptime',
-    method    => 'handle_uptime',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $e) { $e->text =~ /^(?:uptime)\s*$/i },
-    help_entries => [
-      { title => 'uptime', text => 'uptime: Say how long synergy was up for.', },
-    ],
-  };
-}
-
-sub handle_uptime ($self, $event) {
+command uptime => {
+  help => 'uptime: Say how long synergy was up for.',
+} => async sub ($self, $event, $text) {
   my $uptime = duration(time - $^T);
   $event->mark_handled;
-  $event->reply("Online for $uptime.");
-}
+  await $event->reply("Online for $uptime.");
+};
 
 1;
