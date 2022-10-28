@@ -4,27 +4,19 @@ package Synergy::Reactor::Emit;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
-sub listener_specs {
-  return {
-    name      => 'emit',
-    method    => 'handle_emit',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $e) { $e->text =~ /\Aemit(?:\s+.+)?/i },
-    allow_empty_help => 1,  # command only for testing
-  };
-}
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 
-sub handle_emit ($self, $event) {
-  my (undef, $text) = split /\s+/, $event->text, 2;
-
-  $event->reply("$text", { slack => "$text" });
+command emit => {
+} => async sub ($self, $event, $rest) {
   $event->mark_handled;
-}
+  await $event->reply("$rest", { slack => "$rest" });
+};
 
 1;
