@@ -52,7 +52,7 @@ my $port = $synergy->server_port;
 
 my ($res) = $http->do_request(uri => "http://localhost:$port/metrics")->get;
 my $expect = <<'END';
-# HELP synergy_events_received_total Number of events received by reactors
+# HELP synergy_events_received_total Number of events received by Synergy
 # TYPE synergy_events_received_total counter
 synergy_events_received_total{channel="test-channel",in="test",targeted="0",user="tester"} 3
 END
