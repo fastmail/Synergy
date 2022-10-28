@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Reactor::OfficePoll;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
@@ -13,8 +13,8 @@ use DateTime;
 use IO::Async::Timer::Periodic;
 use Synergy::Logger '$Logger';
 
-# no listeners, just a timer
-sub listener_specs {}
+# we never actually react, we're just a plugin
+sub potential_reactions_to {}
 
 has primary_channel_name => (
   is  => 'ro',
