@@ -616,7 +616,12 @@ async sub _handle_creation_event ($self, $event, $arg = {}) {
     $text =~ s/\A> >/>>/;
 
     # XXX: I do not like our current error-returning scheme. -- rjbs, 2021-12-10
-    my $plan = await $linear->plan_from_input($ersatz_text // $text);
+    my $plan;
+    try {
+      $plan = await $linear->plan_from_input($ersatz_text // $text);
+    } catch ($err) {
+      return await $event->error_reply("Sorry, that didn't work: $err");
+    }
 
     $plan_munger->($plan) if $plan_munger;
 
