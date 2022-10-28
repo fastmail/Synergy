@@ -3,10 +3,14 @@ use warnings;
 package Synergy::Reactor::NoThreadsPlease;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
+
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 
 has allow_channels => (
   is => 'ro',
@@ -25,21 +29,6 @@ has _channels_allowed => (
   }
 );
 
-sub listener_specs {
-  return {
-    name      => 'no_threads_please',
-    method    => 'handle_thread',
-    exclusive => 0,
-    predicate => sub ($self, $e) {
-      return unless $e->from_channel->isa('Synergy::Channel::Slack');
-      my $td = $e->transport_data;
-      return unless $td->{thread_ts} && $td->{thread_ts} ne $td->{ts};
-      return 1;
-    },
-    allow_empty_help => 1,
-  };
-}
-
 has message_text => (
   is      => 'ro',
   default => "On this Slack, the use of threads is discouraged.",
@@ -51,12 +40,17 @@ has recent_threads => (
   init_arg => undef,
 );
 
-sub handle_thread ($self, $event) {
+listener no_threads_please => async sub ($self, $event) {
+  return unless $event->from_channel->isa('Synergy::Channel::Slack');
+
+  my $transport_data = $event->transport_data;
+
+  return unless $transport_data->{thread_ts}
+             && $transport_data->{thread_ts} ne $transport_data->{ts};
+
   my $time_ago = time - 1800;
   $self->recent_threads->@* = grep {; $_->{at} >= $time_ago }
                               $self->recent_threads->@*;
-
-  my $transport_data = $event->transport_data;
 
   return if $self->is_allowed_channel($transport_data->{channel});
 
@@ -68,7 +62,7 @@ sub handle_thread ($self, $event) {
     thread => $transport_data->{thread_ts},
   };
 
-  $event->reply(
+  await $event->reply(
     "This string is unreachable.",
     {
       slack => {
@@ -77,8 +71,6 @@ sub handle_thread ($self, $event) {
       },
     },
   );
-
-  return;
-}
+};
 
 1;
