@@ -4,7 +4,8 @@ package Synergy::Reactor::Notion;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures lexical_subs);
 use namespace::clean;
@@ -12,41 +13,10 @@ use namespace::clean;
 use utf8;
 
 use JSON::MaybeXS;
+use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 
 my $JSON = JSON::MaybeXS->new->utf8;
-
-sub listener_specs {
-  return (
-    {
-      name      => 'my_projects',
-      method    => 'handle_my_projects',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { fc $e->text eq 'my projects'; },
-      help_entries => [
-        {
-          title => 'my projects',
-          text  => "*my projects*: show all the projects you're working on in Notion",
-        }
-      ],
-    },
-    {
-      name      => 'trends',
-      method    => 'handle_trends',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { fc $e->text =~ /^support trends/i },
-      help_entries => [
-        {
-          title => 'support trends',
-          text  => 'Show all the Issues & Trends support is tracking in Notion; '
-                 . 'you can add /future to show things resolved in the future.',
-        }
-      ]
-    },
-  );
-}
 
 has api_token => (
   is  => 'ro',
@@ -105,7 +75,13 @@ sub _project_pages ($self) {
   });
 }
 
-sub handle_my_projects ($self, $event) {
+responder my_projects => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher   => sub ($text, @) { fc $text eq 'my projects' ? [] : () },
+  help_titles => [ 'my projects', 'projects' ],
+  help        => "*my projects*: show all the projects you're working on in Notion",
+} => sub ($self, $event) {
   $event->mark_handled;
 
   $self->_project_pages->then(sub (@pages) {
@@ -166,9 +142,16 @@ sub handle_my_projects ($self, $event) {
 
     $event->reply($reply, { slack => $slack });
   })->retain;
-}
+};
 
-sub handle_trends ($self, $event) {
+responder support_trends => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher   => sub ($text, @) { $text =~ /\Asupport trends/i ? [] : () },
+  help_titles => [ 'support trends' ],
+  help        => 'Show all the Issues & Trends support is tracking in Notion; '
+               . 'you can add /future to show things resolved in the future.',
+} => sub ($self, $event) {
   $event->mark_handled;
 
   my $want_future = $event->text =~ m{/future}i;
@@ -247,6 +230,6 @@ sub handle_trends ($self, $event) {
 
     $event->reply($reply, { slack => $slack });
   })->retain;
-}
+};
 
 1;
