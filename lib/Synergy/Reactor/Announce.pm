@@ -3,11 +3,15 @@ use warnings;
 package Synergy::Reactor::Announce;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
-use Carp;
 use namespace::clean;
+
+use Carp;
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 
 has to_channel_name => (
   is => 'ro',
@@ -21,19 +25,6 @@ has to_address => (
   required => 1,
 );
 
-sub listener_specs {
-  return {
-    name      => 'announce',
-    method    => 'handle_announce',
-    targeted  => 1,
-    predicate => sub ($self, $e) { $e->text =~ /^announce/i },
-    help_entries => [{
-      title => 'announce',
-      text  => '*announce MESSAGE*: send a message to the general announcement place'
-    }],
-  };
-}
-
 sub start ($self) {
   my $name = $self->to_channel_name;
   my $channel = $self->hub->channel_named($name);
@@ -41,22 +32,22 @@ sub start ($self) {
     unless $channel;
 }
 
-sub handle_announce ($self, $event) {
+command announce => {
+  help => '*announce MESSAGE*: send a message to the general announcement place',
+} => async sub ($self, $event, $rest) {
   $event->mark_handled;
 
   if ($event->from_channel->name eq $self->to_channel_name) {
-    return $event->error_reply("You're already using the target system!");
+    return await $event->error_reply("You're already using the target system!");
   }
-
-  my $to_send = $event->text =~ s/^announce:?\s*//r;
 
   my $from = $event->from_user ? $event->from_user->username
                                : $event->from_address;
 
   $self->hub->channel_named($self->to_channel_name)
-            ->send_message($self->to_address, "$from says: $to_send");
+            ->send_message($self->to_address, "$from says: $rest");
 
-  return $event->reply("Sent!");
-}
+  return await $event->reply("Sent!");
+};
 
 1;
