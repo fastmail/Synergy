@@ -3,21 +3,16 @@ use warnings;
 package Synergy::Reactor::Echo;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
-sub listener_specs {
-  return {
-    name      => 'echo',
-    method    => 'echo',
-    targeted  => 1,
-    predicate => sub { 1 },
-  };
-}
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 
-sub echo ($self, $event) {
+listener echo => async sub ($self, $event) {
   my $from_str = $event->from_user ? $event->from_user->username
                                    : $event->from_address;
 
@@ -25,8 +20,8 @@ sub echo ($self, $event) {
     $from_str,
     $event->text;
 
-  $event->reply($response);
   $event->mark_handled;
-}
+  await $event->reply($response);
+};
 
 1;

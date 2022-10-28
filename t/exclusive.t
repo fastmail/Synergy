@@ -53,7 +53,7 @@ is(
   $replies[0]{text},
   join(qq{\n},
     "Sorry, I find that message ambiguous.",
-    "The following reactors matched: echo/echo, help1/help (exclusive), help2/help (exclusive)"),
+    "The following reactors matched: echo/listener-echo, help1/help (exclusive), help2/help (exclusive)"),
   "ambiguous commands are rejected",
 );
 
