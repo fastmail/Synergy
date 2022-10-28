@@ -3,56 +3,49 @@ use warnings;
 package Synergy::Reactor::Who;
 
 use Moose;
-use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
+
+use DateTime;
+use Future::AsyncAwait;
 use List::Util qw(first);
+use Synergy::CommandPost;
 
-sub listener_specs {
-  return {
-    name      => 'who',
-    method    => 'handle_who',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $e) { $e->text =~ /^who/i },
-    help_entries => [{
-      title => 'who',
-      text  => '*who is NAME*: get details on another Synergy user named NAME',
-    }]
-  };
-}
+command who => {
+  help => '*who is NAME*: get details on another Synergy user named NAME',
+} => async sub ($self, $event, $rest) {
+  $rest =~ s/\s*\?*\z//;
 
-sub handle_who ($self, $event) {
-  my ($what) = $event->text =~ /^who\s*(.*)/i;
-  $what =~ s/\s*\?*\z//;
-
-  if ($what =~ /\A\s*(is|are)\s+(you|synergy)\s*\z/) {
-    $event->mark_handled;
-
-    return $event->reply(
-      qq!I am Synergy, a holographic computer designed to be the ultimate audio-visual entertainment synthesizer.  I also help out with the timekeeping.!);
+  if ($rest =~ /\A\s*(is|are)\s+(you|synergy)\s*\z/n) {
+    return await $event->reply(
+      qq!I am Synergy, a holographic computer designed to be the ultimate audio-visual entertainment synthesizer.  I also help out with the timekeeping.!
+    );
   }
 
-  return unless $what =~ s/\A(is|am)\s+//n;
+  unless ($rest =~ s/\A(is|am)\s+//n) {
+    return await $event->reply_error("Sorry, I don't understand what you want to know.");
+  }
 
-  $event->mark_handled;
+  my $who = $self->resolve_name($rest, $event->from_user);
 
-  my $who = $self->resolve_name($what, $event->from_user);
-  return $event->error_reply(qq!I don't know who "$what" is!) if ! $who;
+  unless ($who) {
+    return await $event->error_reply(qq!I don't know who "$rest" is!);
+  }
 
   my $whois = sprintf "%s (%s)", $who->username, $who->realname;
 
-  my $text = $what eq $who->username
-           ? qq{"$what" is $whois.}
-           : qq["$what" is an alias for $whois.];
+  my $text = $rest eq $who->username
+           ? qq{"$rest" is $whois.}
+           : qq["$rest" is an alias for $whois.];
 
   if ($who->preference('pronoun')) {
     $text .= sprintf ' (%s/%s)', $who->they, $who->them;
   }
 
-  $event->reply($text);
-}
+  await $event->reply($text);
+};
 
 1;
