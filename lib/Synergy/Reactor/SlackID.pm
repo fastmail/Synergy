@@ -16,11 +16,11 @@ use Synergy::CommandPost;
 command slackid => {
 } => async sub ($self, $event, $rest) {
   unless ($event->from_channel->can('slack')) {
-    return await $self->error_reply("Sorry, you can't use *slackid* outside Slack");
+    return await $event->error_reply("Sorry, you can't use *slackid* outside Slack");
   }
 
   unless ($rest =~ /\A[@#]?(\S+)\s*\z/i) {
-    return await $self->error_reply("Sorry, that doesn't look like a Slack identifier.");
+    return await $event->error_reply("Sorry, that doesn't look like a Slack identifier.");
   }
 
   my $what = $1;
