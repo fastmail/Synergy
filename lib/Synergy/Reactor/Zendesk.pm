@@ -1,4 +1,4 @@
-use v5.28;
+use v5.34.0;
 package Synergy::Reactor::Zendesk;
 
 use Moose;

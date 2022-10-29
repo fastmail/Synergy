@@ -1,4 +1,4 @@
-use v5.28.0;
+use v5.34.0;
 package Synergy::Reactor::Register;
 
 use Moose;

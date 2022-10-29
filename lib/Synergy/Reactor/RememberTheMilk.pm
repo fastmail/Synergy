@@ -1,4 +1,4 @@
-use v5.28.0;
+use v5.34.0;
 use warnings;
 use utf8;
 package Synergy::Reactor::RememberTheMilk;

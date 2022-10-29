@@ -1,4 +1,4 @@
-use v5.28.0;
+use v5.34.0;
 use warnings;
 package Synergy::DiagnosticHandler;
 
@@ -6,7 +6,7 @@ use utf8;
 
 package Synergy::DiagnosticHandler::Compartment {
 
-  use v5.28.0;
+  use v5.34.0;
   use warnings;
   use experimental qw(signatures);
 
