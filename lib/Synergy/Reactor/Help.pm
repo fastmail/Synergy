@@ -4,32 +4,22 @@ package Synergy::Reactor::Help;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 use List::Util qw(first uniq);
 use Try::Tiny;
 
-sub listener_specs {
-  return {
-    name      => 'help',
-    method    => 'handle_help',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($, $e) { $e->text =~ /\A h[ae]lp (?: \s+ (.+) )? \z/ix },
-    help_entries => [
-      { title => "help", text => "help: list all the topics with help" },
-      { title => "help", text => "help TOPIC: provide help on " },
-    ],
-  };
-}
-
-sub handle_help ($self, $event) {
-  $event->mark_handled;
-
-  my ($help, $rest) = split /\s+/, $event->text, 2;
-
+command help => {
+  aliases => [ 'halp' ],
+  help    => <<'END'
+*help*: list all the topics with help
+*help* `TOPIC`: provide help on a topic
+END
+} => async sub ($self, $event, $rest) {
   # Another option here would be to add "requires 'help_entries'" to the
   # Reactor role, but this gets to be a bit of a pain with CommandPost, because
   # it's not a role and so its imported function isn't respected as a method.
@@ -43,9 +33,10 @@ sub handle_help ($self, $event) {
     my $help_str = join q{, }, uniq sort map  {; $_->{title} }
                                          grep {; ! $_->{unlisted} } @help;
 
-    $event->error_reply(qq{You can say "help TOPIC" for help on a topic.  }
-                . qq{Here are topics I know about: $help_str});
-    return;
+    return await $event->error_reply(join q{  },
+      qq{You can say "help TOPIC" for help on a topic.},
+      qq{Here are topics I know about: $help_str}
+    );
   }
 
   $rest = lc $rest;
@@ -67,24 +58,20 @@ sub handle_help ($self, $event) {
             && $component->preference_help->{ $pref_name };
 
     unless ($help) {
-      $event->error_reply("Sorry, I don't know that preference.");
-      return;
+      return await $event->error_reply("Sorry, I don't know that preference.");
     }
 
     my $text = $help->{help} // $help->{description} // "(no help)";
-    $event->reply("*$pref_str* - $text");
-    return;
+    return await $event->reply("*$pref_str* - $text");
   }
 
   @help = grep {; fc $_->{title} eq fc $rest } @help;
 
   unless (@help) {
-    $event->error_reply("Sorry, I don't have any help on that topic.");
-    return;
+    return await $event->error_reply("Sorry, I don't have any help on that topic.");
   }
 
-  $event->reply(join qq{\n}, sort map {; $_->{text} } @help);
-  return;
-}
+  return await $event->reply(join qq{\n}, sort map {; $_->{text} } @help);
+};
 
 1;
