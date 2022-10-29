@@ -3,68 +3,28 @@ use warnings;
 package Synergy::Reactor::Factoid;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
-sub listener_specs {
-  return (
-    {
-      name      => 'learn',
-      method    => 'handle_learn',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Alearn\s+([^,:]+): (.+)\z/ },
-      help_entries => [
-        { title => 'learn',
-          text  => '*learn `WHAT`: `TEXT`*: learn a new factoid; see also lookup, forget',
-        }
-      ],
-    },
-    {
-      name      => 'lookup',
-      method    => 'handle_lookup',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Alookup\s+\S/ },
-      help_entries => [
-        { title => 'lookup',
-          text  => '*lookup `WHAT`*: look up a factoid in the knowledge base; see also learn, forget',
-        }
-      ],
-    },
-    {
-      name      => 'forget',
-      method    => 'handle_forget',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Aforget\s+\S/ },
-      help_entries => [
-        { title => 'forget',
-          text  => '*forget `WHAT`*: delete a factoid from the knowledge base; see also learn, lookup',
-        }
-      ],
-    },
-  );
-}
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 
 sub get_facts ($self) {
   return {} unless my $state = $self->fetch_state;
   $state->{facts} //= {};
 }
 
-sub handle_learn ($self, $event) {
-  $event->text =~ /\Alearn ([^,:]+): (.+)\z/;
-
-  $event->mark_handled;
-
-  my ($name, $text) = ($1, $2);
+command learn => {
+  help => '*learn `WHAT`: `TEXT`*: learn a new factoid; see also lookup, forget',
+} => async sub ($self, $event, $rest) {
+  my ($name, $text) = $event->text =~ /\Alearn ([^,:]+): (.+)\z/;
 
   my $facts = $self->get_facts;
 
   if ($facts->{ fc $name }) {
-    return $event->reply(qq{I already have a fact for "$name", sorry.});
+    return await $event->reply(qq{I already have a fact for "$name", sorry.});
   }
 
   $facts->{fc $name} = {
@@ -76,42 +36,35 @@ sub handle_learn ($self, $event) {
 
   $self->save_state({ facts => $facts });
 
-  return $event->reply(qq{Okay, I've stored that.});
-}
+  return await $event->reply(qq{Okay, I've stored that.});
+};
 
-sub handle_lookup ($self, $event) {
-  $event->text =~ /\Alookup\s+(.+)/;
-  my $name = $1;
-
-  $event->mark_handled;
-
+command lookup => {
+  help => '*lookup `WHAT`*: look up a factoid in the knowledge base; see also learn, forget',
+} => async sub ($self, $event, $what) {
   my $facts = $self->get_facts;
 
-  if (my $entry = $facts->{ fc $name }) {
-    return $event->reply(qq{Here's what I have under "$entry->{name}": $entry->{text}});
+  if (my $entry = $facts->{ fc $what }) {
+    return await $event->reply(qq{Here's what I have under "$entry->{name}": $entry->{text}});
   }
 
-  return $event->reply("Sorry, I didn't find anything under that name.");
-}
+  return await $event->reply("Sorry, I didn't find anything under that name.");
+};
 
-sub handle_forget ($self, $event) {
-  $event->text =~ /\Aforget\s+(.+)/;
-
-  $event->mark_handled;
-
-  my $name = $1;
-
+command forget => {
+  help => '*forget `WHAT`*: delete a factoid from the knowledge base; see also learn, lookup',
+} => async sub ($self, $event, $what) {
   my $facts = $self->get_facts;
 
-  unless ($facts->{ fc $name }) {
-    return $event->reply(qq{I don't have any factoids stored under "$name"!});
+  unless ($facts->{ fc $what }) {
+    return await $event->reply(qq{I don't have any factoids stored under "$what"!});
   }
 
-  delete $facts->{ fc $name };
+  delete $facts->{ fc $what };
 
   $self->save_state({ facts => $facts });
 
-  return $event->reply(qq{Okay, I've forgotten that.});
-}
+  return await $event->reply(qq{Okay, I've forgotten that.});
+};
 
 1;
