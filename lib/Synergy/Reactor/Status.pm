@@ -4,58 +4,19 @@ package Synergy::Reactor::Status;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::ProvidesUserStatus';
 
 use utf8;
 use experimental qw(signatures);
 use namespace::clean;
+
+use Future::AsyncAwait;
 use List::Util qw(first);
+use Synergy::CommandPost;
 use Synergy::Util qw(parse_time_hunk day_name_from_abbr);
 use Time::Duration::Parse;
 use Time::Duration;
-
-sub listener_specs ($reactor) {
-  return (
-    {
-      name      => 'doing',
-      method    => 'handle_doing',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /^doing\s+/i },
-      help_entries => [
-        { title => 'doing',
-          text  => "doing SOMETHING: set what you're doing; something can end with some options, like…
-• /for DURATION - only keep this status for a while
-• /until TIME - like /for, but takes a time, not a duration
-• /dnd - while this status is in effect, suppress nagging",
-        },
-        { title => 'doing',
-          text  => "doing nothing: clear any doings you had in place",
-        }
-      ],
-    },
-    {
-      name      => 'status',
-      method    => 'handle_status',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) {
-        $e->text =~ /^status\s+(for\s+)?@?(\w+)\s*$/i
-      },
-      help_entries => [
-        { title => 'status',
-          text  => "status for USER: see what the user has been up to", }
-      ],
-    },
-    {
-      name      => "listen-for-chatter",
-      method    => "handle_chatter",
-      predicate => sub ($self, $e) { $e->is_public; },
-      allow_empty_help => 1,
-    },
-  );
-}
 
 has monitored_channel_name => (
   is  => 'ro',
@@ -74,7 +35,8 @@ has _last_chatter => (
   },
 );
 
-sub handle_chatter ($self, $event) {
+listener chatter => async sub ($self, $event) {
+  return unless $event->is_public;
   return unless $self->has_monitored_channel;
   return unless $self->monitored_channel_name eq $event->from_channel->name;
   return unless $event->from_user;
@@ -88,7 +50,7 @@ sub handle_chatter ($self, $event) {
   $self->save_state;
 
   return;
-}
+};
 
 sub state ($self) {
   return {
@@ -232,8 +194,13 @@ sub _chatter_status ($self, $event, $user) {
   return sprintf "I've never seen any chatter from %s.", $user->username;
 }
 
-sub handle_status ($self, $event) {
-  $event->text =~ /^status\s+(?:for\s+)?@?(\w+)\s*$/i;
+command status => {
+  help => "*status for* `USER`: see what the user has been up to",
+} => async sub ($self, $event, $rest) {
+  unless ($rest =~ /^(?:for\s+)?@?(\w+)\s*$/i) {
+    return await $event->error_reply("It's:  *status for* `USER`");
+  }
+
   my $who_name = $1;
 
   my $who = $self->resolve_name($who_name, $event->from_user);
@@ -241,7 +208,7 @@ sub handle_status ($self, $event) {
   $event->mark_handled;
 
   unless ($who) {
-    return $event->error_reply(qq{Sorry, I don't know who "$who_name" is.});
+    return await $event->error_reply(qq{Sorry, I don't know who "$who_name" is.});
   }
 
   my $plain = q{};
@@ -271,7 +238,7 @@ sub handle_status ($self, $event) {
       $who->username;
   }
 
-  $event->reply(
+  return await $event->reply(
     $plain,
     {
       slack => {
@@ -281,7 +248,7 @@ sub handle_status ($self, $event) {
       }
     }
   );
-}
+};
 
 has _user_doings => (
   is  => 'ro',
@@ -301,18 +268,25 @@ sub doings_for_user ($self, $user) {
   return @$doings;
 }
 
-# doing STATUS /opts
-sub handle_doing ($self, $event) {
-  $event->mark_handled;
+command doing => {
+  help  => <<'END'
+*doing* `SOMETHING`: set what you're doing; something can end with some options, like…
+• /for DURATION - only keep this status for a while
+• /until TIME - like /for, but takes a time, not a duration
+• /dnd - while this status is in effect, suppress nagging
 
-  my $text = $event->text;
-  $text =~ s/\Adoing\s+//i;
+*doing nothing*: clear any doings you had in place
+END
+} => async sub ($self, $event, $text) {
+  unless (length $text) {
+    return await $event->reply_error("Yeah, but doing what?");
+  }
 
   my ($desc, $switches) = split m{/}, $text, 2;
 
   if ($desc eq 'nothing' && ! $switches) {
     delete $self->_user_doings->{ $event->from_user->username };
-    return $event->reply("Okay, back to business as usual.");
+    return await $event->reply("Okay, back to business as usual.");
   }
 
   my %doing = (since => time, desc => $desc);
@@ -322,7 +296,7 @@ sub handle_doing ($self, $event) {
       my ($name, $value) = split /\s+/, $switch, 2;
 
       if ($name eq 'dnd' or $name eq 'chill') {
-        return $event->error_reply("/$name doesn't take an argument")
+        return await $event->error_reply("/$name doesn't take an argument")
           if length $value;
 
         $doing{dnd} = 1;
@@ -332,10 +306,10 @@ sub handle_doing ($self, $event) {
       if ($name eq 'u' or $name eq 'until') {
         my $until = parse_time_hunk("until $value", $event->from_user);
 
-        return $event->error_reply("I didn't understand your /until switch.")
+        return await $event->error_reply("I didn't understand your /until switch.")
           unless $until;
 
-        return $event->error_reply("Your /until switch seems to be in the past.")
+        return await $event->error_reply("Your /until switch seems to be in the past.")
           unless $until > time;
 
         $doing{until} = $until;
@@ -345,17 +319,17 @@ sub handle_doing ($self, $event) {
       if ($name eq 'f' or $name eq 'for') {
         my $until = parse_time_hunk("for $value", $event->from_user);
 
-        return $event->error_reply("I didn't understand your /for switch.")
+        return await $event->error_reply("I didn't understand your /for switch.")
           unless $until;
 
-        return $event->error_reply("Your /for switch seems to go into the past.")
+        return await $event->error_reply("Your /for switch seems to go into the past.")
           unless $until > time;
 
         $doing{until} = $until;
         next SWITCH;
       }
 
-      return $event->error_reply(qq{I don't understand the "/$name" switch.});
+      return await $event->error_reply(qq{I don't understand the "/$name" switch.});
     }
   }
 
@@ -367,7 +341,7 @@ sub handle_doing ($self, $event) {
     @$doings = \%doing;
   }
 
-  return $event->reply("Thanks for letting me know what you're doing!");
-}
+  return await $event->reply("Thanks for letting me know what you're doing!");
+};
 
 1;
