@@ -3,29 +3,13 @@ use warnings;
 package Synergy::Reactor::Report;
 
 use Moose;
-use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
-sub listener_specs {
-  return {
-    name      => "report",
-    method    => "report",
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($, $e) {
-      $e->text =~ /^\s*report(\s+[a-z]+)?(\s+for\s+([a-z]+))?\s*$/i;
-    },
-    help_entries => [
-      {
-        title => "report",
-        text => q{report [which] [for USER]: show reports for a user; "report list" for a list of reports},
-      }
-    ],
-  };
-}
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 
 has default_report => (
   is  => 'ro',
@@ -56,14 +40,11 @@ after register_with_hub => sub ($self, @) {
   });
 };
 
-sub fixed_text_report ($self, $who, $arg = {}) {
-  return Future->done([
-    $arg->{text},
-    $arg->{alts},
-  ]);
+async sub fixed_text_report ($self, $who, $arg = {}) {
+  return [ $arg->{text}, $arg->{alts} ];
 }
 
-sub begin_report ($self, $report, $target) {
+async sub begin_report ($self, $report, $target) {
   my $hub = $self->hub;
 
   my @results;
@@ -83,33 +64,35 @@ sub begin_report ($self, $report, $target) {
     );
   }
 
-  Future->needs_all(@results)->then(sub (@hunks) {
-    return Future->done unless @hunks;
+  await Future->needs_all(@results);
 
-    # This \u is bogus, we should allow canonical name to be in the report
-    # definition. -- rjbs, 2019-03-22
-    my $title = $report->{title};
-    my $text  = qq{$title for } . $target->username . q{:};
-    my $slack = qq{*$text*};
+  my @hunks = map {; $_->get } @results;
 
-    while (my $hunk = shift @hunks) {
-      $text   .= "\n" . $hunk->[0];
-      $slack  .= "\n" . ($hunk->[1]{slack} // qq{`$hunk->[0]`});
-    }
+  return unless @hunks;
 
-    return Future->done($text, { slack => $slack });
-  });
+  my $title = $report->{title};
+  my $text  = qq{$title for } . $target->username . q{:};
+  my $slack = qq{*$text*};
+
+  while (my $hunk = shift @hunks) {
+    $text   .= "\n" . $hunk->[0];
+    $slack  .= "\n" . ($hunk->[1]{slack} // qq{`$hunk->[0]`});
+  }
+
+  return ($text, { slack => $slack });
 }
 
-sub report ($self, $event) {
+command report => {
+  help => q{report [which] [for USER]: show reports for a user; "report list" for a list of reports},
+} => async sub ($self, $event, $rest) {
   my $report_name;
   my $who_name;
 
   if (
-    $event->text =~ /\A
-      \s*
-      report
-      ( \s+ (?<which>[a-z]+) )?
+    length $rest
+    &&
+    $rest =~ /\A
+      (     (?<which>[a-z]+) )?
       ( \s+ for \s+ (?<who> [a-z]+ ) )?
       \s*
     \z/nix
@@ -133,16 +116,14 @@ sub report ($self, $event) {
 
   my $target = $self->resolve_name($who_name, $event->from_user);
 
-  $event->mark_handled;
-
   my $report = $self->report_named($report_name);
   unless ($report) {
     my $names = join q{, }, $self->report_names;
-    return $event->error_reply("Sorry, I don't know that report!  I know these reports: $names.");
+    return await $event->error_reply("Sorry, I don't know that report!  I know these reports: $names.");
   }
 
   unless ($target) {
-    return $event->error_reply("Sorry, I don't know who $who_name is!");
+    return await $event->error_reply("Sorry, I don't know who $who_name is!");
   }
 
   $event->reply(
@@ -157,9 +138,12 @@ sub report ($self, $event) {
 
   # This \u is bogus, we should allow canonical name to be in the report
   # definition. -- rjbs, 2019-03-22
-  local $report->{title} = $report->{title} // "\u$report_name report";
+  my %local_report = (
+    %$report,
+    title => $report->{title} // "\u$report_name report",
+  );
 
-  my ($text, $alt) = $self->begin_report($report, $target)->get;
+  my ($text, $alt) = await $self->begin_report(\%local_report, $target);
 
   unless (defined $text) {
     $event->private_reply(
@@ -172,7 +156,7 @@ sub report ($self, $event) {
       },
     );
 
-    return $event->reply("I have nothing at all to report!");
+    return await $event->reply("I have nothing at all to report!");
   }
 
   $event->private_reply(
@@ -185,10 +169,10 @@ sub report ($self, $event) {
     },
   );
 
-  return $event->reply($text, $alt);
-}
+  return await $event->reply($text, $alt);
+};
 
-sub report_report ($self, $who, $arg = {}) {
+async sub report_report ($self, $who, $arg = {}) {
   my $text  = q{};
   my $slack = q{};
 
@@ -198,7 +182,7 @@ sub report_report ($self, $who, $arg = {}) {
     $slack  .= "*$name*: " . ($report->{description} // "the $name report") . "\n";
   }
 
-  return Future->done([ $text, { slack => $slack } ]);
+  return [ $text, { slack => $slack } ];
 }
 
 1;
