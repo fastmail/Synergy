@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 
-use 5.028000;
+use 5.034000;
 
 use ExtUtils::MakeMaker 6.78;
 
@@ -25,7 +25,7 @@ my %WriteMakefileArgs = (
     "bin/synergy"
   ],
   "LICENSE" => "perl",
-  "MIN_PERL_VERSION" => "5.028000",
+  "MIN_PERL_VERSION" => "5.034000",
   "NAME" => "Synergy",
   "PREREQ_PM" => {
     "Carp" => 0,
