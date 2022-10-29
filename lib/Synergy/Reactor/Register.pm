@@ -2,23 +2,21 @@ use v5.34.0;
 package Synergy::Reactor::Register;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
+use Synergy::CommandPost;
 use Synergy::Util qw(reformat_help);
 
-sub listener_specs {
-  return {
-    name      => 'initial registration',
-    method    => 'handle_register_me',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $e) { $e->text =~ /^register me/i },
-    help_entries => [{
-      title => 'register',
-      text => reformat_help(<<'EOH'),
+responder register_me => {
+  is_exclusive  => 1,
+  is_targeted   => 1,
+  matcher       => sub ($text, @) {
+    $text =~ /\Aregister me as\s+(.+)\z/ ? [$1] : ()
+  },
+  help          => reformat_help(<<'EOH'),
 Welcome aboard and nice to meet you! To introduce yourself, say
 
 *register me as USERNAME*
@@ -26,30 +24,22 @@ Welcome aboard and nice to meet you! To introduce yourself, say
 USERNAME will become the name I'll know you by. This is the beginning of a
 long and prosperous friendship, I can tell.
 EOH
-    }],
-  };
-}
-
-sub handle_register_me ($self, $event) {
+} => async sub ($self, $event, $username) {
   $event->mark_handled;
+
   my $directory = $self->hub->user_directory;
 
   if ($event->from_user) {
     my $name = $event->from_user->username;
-    return $event->error_reply("I already know who you are, $name!");
+    return await $event->error_reply("I already know who you are, $name!");
   }
-
-  # Do we want to allow numbers in usernames? I think no.
-  my ($username) = $event->text =~ /^register me as\s+(.*)$/i;
-
-  return $event->error_reply("usage: register me as [USERNAME]")
-    unless $username;
 
   $username =~ s/\s*$//g;
   $username = lc $username;
 
-  return $event->error_reply("Sorry, usernames must be all letters")
-    if $username =~ /[^a-z]/;
+  if ($username =~ /[^a-z]/) {
+    return await $event->error_reply("Sorry, usernames must be all letters")
+  }
 
   die "crazy case: event has no from address??" unless $event->from_address;
 
@@ -59,7 +49,7 @@ sub handle_register_me ($self, $event) {
       "If that's you, maybe you want <register identity> instead."
     );
 
-    return $event->error_reply($err);
+    return await $event->error_reply($err);
   }
 
   my $user = Synergy::User->new(
@@ -74,13 +64,13 @@ sub handle_register_me ($self, $event) {
   my $ok = $directory->register_user($user);
 
   unless ($ok) {
-    my $master = $directory->master_user_string;
-    return $event->error_reply(
-      "Something went wrong while trying to register you. Try talking to $master."
+    my $admin = $directory->master_user_string;
+    return await $event->error_reply(
+      "Something went wrong while trying to register you. Try talking to $admin."
     );
   }
 
-  return $event->reply("Hello, $username. Nice to meet you!");
-}
+  return await $event->reply("Hello, $username. Nice to meet you!");
+};
 
 1;
