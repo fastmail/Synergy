@@ -3,47 +3,34 @@ use warnings;
 package Synergy::Reactor::Roll;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
+use Future::AsyncAwait;
 use Games::Dice qw(roll_array);
 use List::Util qw(sum);
+use Synergy::CommandPost;
 
-sub listener_specs {
-  return {
-    name      => 'roll',
-    method    => 'handle_roll',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $e) { $e->text =~ /\Aroll\b/i },
-    help_entries => [{
-      title => 'roll',
-      text  => '*roll SPEC*: roll some dice, D&D style (roll 2d6, roll 1d20)'
-    }],
-  };
-}
-
-sub handle_roll ($self, $event) {
-  $event->mark_handled;
-
-  my (undef, $spec) = split /\s+/, $event->text, 2;
+command roll => {
+  help => '*roll SPEC*: roll some dice, D&D style (roll 2d6, roll 1d20)',
+} => async sub ($self, $event, $spec) {
   unless ($spec) {
-    return $event->error_reply("usage: roll DICE-SPEC");
+    return await $event->error_reply("usage: roll DICE-SPEC");
   }
 
   my ($total, $rolls) = $self->_roll($spec);
   unless ($total) {
-    return $event->error_reply(qq{Sorry, I can't roll those sorts of dice.});
+    return await $event->error_reply(qq{Sorry, I can't roll those sorts of dice.});
   }
 
   my $result = @$rolls == 1
              ? "$total"
              : "$total [". join(', ', @$rolls) . "]";
 
-  $event->reply("rolled $spec = $result");
-}
+  await $event->reply("rolled $spec = $result");
+};
 
 # This is lifted from Games::Dice, but returns the actual dice rolls too.
 sub _roll ($self, $line) {
