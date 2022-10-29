@@ -4,31 +4,17 @@ package Synergy::Reactor::Reminder;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
+use Future::AsyncAwait;
 use IO::Async::Timer::Absolute;
 use List::Util qw(first);
 use Time::Duration::Parse;
+use Synergy::CommandPost;
 use Synergy::Util qw(parse_date_for_user);
-
-sub listener_specs {
-  return {
-    name      => 'remind',
-    method    => 'handle_remind',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($, $e) { $e->text =~ /^remind /i },
-    help_entries => [
-      {
-        title => 'remind',
-        text  => "remind `{USER}` `{in, at, on}` `{TIME or DURATION}`: `{REMINDER TEXT}`",
-      }
-    ],
-  };
-}
 
 has page_channel_name => (
   is  => 'ro',
@@ -58,18 +44,13 @@ sub start ($self) {
   return;
 }
 
-sub handle_remind ($self, $event) {
-  my $text = $event->text;
-
-  # XXX: I think $event->reply should do this. -- rjbs, 2018-03-16
-  $event->mark_handled;
-
+command remind => {
+  help => "remind `{USER}` `{in, at, on}` `{TIME or DURATION}`: `{REMINDER TEXT}`",
+} => async sub ($self, $event, $text) {
   unless ($event->from_user) {
-    $event->error_reply("I don't know who you are, so I'm not going to do that.");
-    return;
+    return await $event->error_reply("I don't know who you are, so I'm not going to do that.");
   }
 
-  $text =~ s/\Aremind\s+//i;
   my ($who, $prep, $dur_str, $want_page, $rest) = $text =~ qr/\A
     \s*
     (\S+)    # "me" or a nick
@@ -85,25 +66,22 @@ sub handle_remind ($self, $event) {
 
   $_ = fc $_ for grep {; defined } ($who, $prep, $dur_str, $want_page);
 
-  my $fail = sub {
-    $event->error_reply('usage: remind WHO (in|at|on) (time) [with page]: (reminder)');
-    return;
+  my $fail = async sub {
+    return await $event->error_reply('usage: remind WHO (in|at|on) (time) [with page]: (reminder)');
   };
 
   unless (length $who and $prep) {
-    return $fail->();
+    return await $fail->();
   }
 
   if ($want_page && ! $self->page_channel_name) {
-    $event->reply("Sorry, I can't send pages.");
-    return;
+    return await $event->reply("Sorry, I can't send pages.");
   }
 
   my $to_user = $self->resolve_name($who, $event->from_user);
 
   unless ($to_user) {
-    $event->error_reply(qq{Sorry, I don't know who "$who" is.});
-    return;
+    return await $event->error_reply(qq{Sorry, I don't know who "$who" is.});
   }
 
   my $time;
@@ -113,19 +91,18 @@ sub handle_remind ($self, $event) {
     my $dur;
     $dur_str =~ s/^an?\s+/1 /;
     my $ok = eval { $dur = parse_duration($dur_str); 1 };
-    return $fail->() unless $ok;
+    return await $fail->() unless $ok;
     $time = time + $dur;
   } elsif ($prep eq 'at') {
     my $dt = eval { parse_date_for_user($dur_str, $to_user) };
-    return $fail->() unless $dt;
+    return await $fail->() unless $dt;
     $time = $dt->epoch;
   } else {
-    return $fail->();
+    return await $fail->();
   }
 
   if ($time <= time) {
-    $event->error_reply("That sounded like you want a reminder sent in the past.");
-    return;
+    return await $event->error_reply("That sounded like you want a reminder sent in the past.");
   }
 
   my $target = $to_user->username eq $event->from_user->username
@@ -141,14 +118,12 @@ sub handle_remind ($self, $event) {
     to_username     => $to_user->username,
   });
 
-  $event->reply(
+  return await $event->reply(
     sprintf "Okay, I'll remind %s at %s.",
       $target,
       $to_user->format_datetime( DateTime->from_epoch(epoch => $time) ),
   );
-
-  return;
-}
+};
 
 has reminders => (
   default   => sub {  []  },
