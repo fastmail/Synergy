@@ -3,8 +3,7 @@ use warnings;
 package Synergy::Reactor::Todo;
 
 use Moose;
-with 'Synergy::Role::Reactor',
-     'Synergy::Role::Reactor::CommandPost',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
 use Synergy::CommandPost;

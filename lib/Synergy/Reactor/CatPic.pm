@@ -6,8 +6,7 @@ use utf8;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor',
-     'Synergy::Role::Reactor::CommandPost';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use Synergy::CommandPost;
 

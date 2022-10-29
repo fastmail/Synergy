@@ -3,8 +3,7 @@ use warnings;
 package Synergy::Reactor::Transliterate;
 
 use Moose;
-with 'Synergy::Role::Reactor',
-     'Synergy::Role::Reactor::CommandPost';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;

@@ -4,8 +4,7 @@ package Synergy::Reactor::Linear;
 
 use Moose;
 use DateTime;
-with 'Synergy::Role::Reactor',
-     'Synergy::Role::Reactor::CommandPost',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences',
      'Synergy::Role::DeduplicatesExpandos' => {
        expandos => [ 'issue' ],

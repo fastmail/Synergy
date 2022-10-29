@@ -2,8 +2,7 @@ use v5.34.0;
 package Synergy::Reactor::Zendesk;
 
 use Moose;
-with 'Synergy::Role::Reactor',
-     'Synergy::Role::Reactor::CommandPost',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences',
      'Synergy::Role::DeduplicatesExpandos' => {
        expandos => [ 'ticket' ],
