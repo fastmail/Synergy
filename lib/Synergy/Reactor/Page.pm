@@ -3,14 +3,16 @@ use warnings;
 package Synergy::Reactor::Page;
 
 use Moose;
-use DateTime;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use utf8;
 
 use experimental qw(signatures);
 use namespace::clean;
+
+use Future::AsyncAwait;
 use List::Util qw(first);
+use Synergy::CommandPost;
 
 has page_channel_name => (
   is => 'ro',
@@ -24,25 +26,6 @@ has pushover_channel_name => (
   predicate => 'has_pushover_channel',
 );
 
-sub listener_specs {
-  return {
-    name      => 'page',
-    method    => 'handle_page',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($, $e) { $e->text =~ /^page/i },
-    help_entries => [
-      { title => 'page', text => <<'END'
-*page* tries to page somebody via their phone or pager.  This is generally
-reserved for emergencies or at least "nobody is replying in chat!"
-
-• *page `WHO`: `MESSAGE`*: send this message to that person's phone or pager
-END
-      },
-    ],
-  };
-}
-
 sub start ($self) {
   my $name = $self->page_channel_name;
   my $channel = $self->hub->channel_named($name);
@@ -50,21 +33,24 @@ sub start ($self) {
     unless $channel;
 }
 
-sub handle_page ($self, $event) {
-  $event->mark_handled;
+command page => {
+  help => <<'END'
+*page* tries to page somebody via their phone or pager.  This is generally
+reserved for emergencies or at least "nobody is replying in chat!"
 
+• *page `WHO`: `MESSAGE`*: send this message to that person's phone or pager
+END
+} => async sub ($self, $event, $rest) {
   my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):?\s+(.*)/is;
 
   unless (length $who and length $what) {
-    $event->error_reply("usage: page USER: MESSAGE");
-    return;
+    return await $event->error_reply("usage: page USER: MESSAGE");
   }
 
   my $user = $self->resolve_name($who, $event->from_user);
 
   unless ($user) {
-    $event->error_reply("I don't know who '$who' is. Sorry :confused:");
-    return;
+    return await $event->error_reply("I don't know who '$who' is. Sorry! 😕");
   }
 
   my $paged = 0;
@@ -94,10 +80,10 @@ sub handle_page ($self, $event) {
   }
 
   if ($paged) {
-    $event->reply("Page sent!");
+    return await $event->reply("Page sent!");
   } else {
-    $event->reply("I don't know how to page $who, sorry.");
+    return await $event->reply("I don't know how to page $who, sorry.");
   }
-}
+};
 
 1;
