@@ -3,13 +3,16 @@ use warnings;
 package Synergy::Reactor::DC;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(lexical_subs signatures);
 use namespace::clean;
+
+use Future::AsyncAwait;
 use File::pushd;
 use File::Find;
 use Path::Tiny;
+use Synergy::CommandPost;
 
 has has_dc => (
   is => 'ro',
@@ -20,32 +23,20 @@ has has_dc => (
   },
 );
 
-sub listener_specs {
-  return {
-    name      => 'DC',
-    method    => 'handle_dc',
-    targeted  => 1,
-    predicate => sub ($self, $e) { $e->text =~ /^dc\s+/i },
-    help_entries => [
-      { title => 'dc', text => "dc [commands] - Execute [commands] with the dc calculator" },
-    ],
-  },
-}
-
-sub handle_dc($self, $event) {
-  $event->mark_handled;
-
+command dc => {
+  help => "*dc* `DC-COMMANDS...`: execute commands with the dc calculator",
+} => async sub ($self, $event, $commands) {
   unless ($self->has_dc) {
-    return $event->reply("Sorry, `dc` does not appear to be installed on this system");
+    return await $event->reply("Sorry, `dc` does not appear to be installed on this system");
   }
 
   my ($cmd) = $event->text =~ /^dc\s+(?:-e\s+)?'?(.*?)'?\s*$/i;
   unless (length ($cmd // '')) {
-    return $event->reply("Sory, I didn't understand that. Try: dc -e '1 2 +p', for example");
+    return await $event->reply("Sory, I didn't understand that. Try: dc -e '1 2 +p', for example");
   }
 
   if ($cmd =~ /!(?![<=>])/) {
-    return $event->reply("Sorry, but !<system command> is *not* allowed");
+    return await $event->reply("Sorry, but !<system command> is *not* allowed");
   }
 
   my $resp;
@@ -118,6 +109,6 @@ sub handle_dc($self, $event) {
   $self->hub->loop->add($timer);
 
   return;
-}
+};
 
 1;
