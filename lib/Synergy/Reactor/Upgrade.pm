@@ -3,13 +3,16 @@ use warnings;
 package Synergy::Reactor::Upgrade;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(lexical_subs signatures);
 use namespace::clean;
+
 use File::pushd;
 use File::Find;
+use Future::AsyncAwait;
 use Path::Tiny;
+use Synergy::CommandPost;
 
 has git_dir => (
   is => 'ro',
@@ -45,33 +48,12 @@ sub start ($self) {
     $self->save_state({});
   }
 }
-sub listener_specs {
-  return {
-    name      => 'upgrade',
-    method    => 'handle_upgrade',
-    targeted  => 1,
-    predicate => sub ($self, $e) {
-      my $text = lc $e->text;
-      return $text eq 'upgrade'
-          || $text eq 'upgrade your grey matter'
-          || $text eq 'upgrade your gray matter'
-    },
-    allow_empty_help => 1,  # people who want to do this can read source
-  },
-  {
-    name      => 'version',
-    method    => 'handle_version',
-    targeted  => 1,
-    predicate => sub ($self, $e) { lc $e->text eq 'version' },
-    help_entries => [{
-      title => 'version',
-      text  => "show the version of my current brain",
-    }],
-  };
-}
 
-sub handle_upgrade ($self, $event) {
-  $event->mark_handled;
+command upgrade => {
+} => async sub ($self, $event, $rest) {
+  if (length $rest && $rest !~ /\Ayour gr[ae]y matter\z/) {
+    return await $event->error_reply("That's now how upgrading works.");
+  }
 
   my $old_version = $self->get_version;
 
@@ -88,33 +70,26 @@ sub handle_upgrade ($self, $event) {
     "status --porcelain --untracked-files=no",
     \$status,
   )) {
-    $event->reply("Failed to git status: " . block($status_err));
+    return await $event->reply("Failed to git status: " . block($status_err));
 
-    return;
-  } elsif ($status) {
-    $event->reply("git directory dirty, can't upgrade: " . block($status));
+  }
 
-    return;
+  if ($status) {
+    return await $event->reply("git directory dirty, can't upgrade: " . block($status));
   }
 
   if (my $fetch_err = $self->git_do("fetch $spec")) {
-    $event->reply("git fetch $spec failed: " . block($fetch_err));
-
-    return;
+    return await $event->reply("git fetch $spec failed: " . block($fetch_err));
   }
 
   if (my $reset_err = $self->git_do("reset --hard FETCH_HEAD")) {
-    $event->reply("git reset --hard FETCH_HEAD failed: " . block($reset_err));
-
-    return;
+    return await $event->reply("git reset --hard FETCH_HEAD failed: " . block($reset_err));
   }
 
   my $new_version = $self->get_version;
 
   if ($new_version eq $old_version) {
-    $event->reply("Looks like we're already at the latest! ($new_version)");
-
-    return;
+    return await $event->reply("Looks like we're already at the latest! ($new_version)");
   }
 
   if (my $err = $self->check_next) {
@@ -133,20 +108,23 @@ sub handle_upgrade ($self, $event) {
     restart_version_desc => $self->get_version_desc,
   });
 
-  my $f = $event->reply("Upgraded from $old_version to $new_version; Restarting...");
-  $f->on_done(sub {
-    # Why is this a SIGINT and not just an exit?
-    kill 'INT', $$;
-  });
-}
+  my $f = await $event->reply("Upgraded from $old_version to $new_version; Restarting...");
 
-sub handle_version ($self, $event) {
-  $event->reply("My version is: " . $self->get_version_desc);
-
-  $event->mark_handled;
+  # Why is this a SIGINT and not just an exit?
+  kill 'INT', $$;
 
   return;
-}
+};
+
+command version => {
+  help => "show the version of my current brain",
+} => async sub ($self, $event, $rest) {
+  if (length $rest) {
+    return await $event->error_reply("It's just `version`, no arguments!");
+  }
+
+  return await $event->reply("My version is: " . $self->get_version_desc);
+};
 
 sub git_do ($self, $cmd, $output = undef) {
   my $guard = pushd($self->git_dir);
