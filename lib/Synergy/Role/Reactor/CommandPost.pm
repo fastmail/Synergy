@@ -9,7 +9,9 @@ use Synergy::Logger '$Logger';
 use Synergy::PotentialReaction;
 
 role {
-  requires 'start';
+  with 'Synergy::Role::Reactor';
+
+  sub potential_reactions_to;
 
   my $object = Synergy::CommandPost::Object->new;
   method _commandpost => sub { $object };
