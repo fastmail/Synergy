@@ -23,9 +23,10 @@ has api_token => (
 );
 
 has locations => (
-  is       => 'ro',
   isa      => 'ArrayRef',
   required => 1,
+  traits   => [ 'Array' ],
+  handles  => { locations => 'elements' },
 );
 
 # https://openweathermap.org/weather-conditions
@@ -65,18 +66,20 @@ command weather => {
     return await $event->error_reply("It's just *weather*, with no arguments.");
   }
 
+  my @reports = map {; $self->lookup_weather($_) } $self->locations;
+
+  await Future->needs_all(@reports);
+
   return await $event->reply(join "\n",
     "Current weather:",
-    map {
-      $self->format_weather($_)
-    } $self->locations->@*,
+    map { $_->get } @reports
   );
 };
 
-sub format_weather ($self, $location) {
-  my $res = $self->hub->http_get(
+async sub lookup_weather ($self, $location) {
+  my $res = await $self->hub->http_get(
     "https://api.openweathermap.org/data/2.5/weather?q=".uri_escape($location)."&APPID=".$self->api_token
-  )->get;
+  );
 
   unless ($res->is_success) {
     $Logger->log([ "error fetching weather for $location: %s", $res->as_string ]);
