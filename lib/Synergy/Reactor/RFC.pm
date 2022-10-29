@@ -4,7 +4,7 @@ use warnings;
 package Synergy::Reactor::RFC;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
@@ -12,34 +12,13 @@ use namespace::clean;
 use utf8;
 
 use DBI;
+use Future::AsyncAwait;
 use JSON::MaybeXS ();
 use Synergy::Logger '$Logger';
+use Synergy::CommandPost;
 
 sub _slink {
   sprintf '<https://www.rfc-editor.org/rfc/rfc%u.html|RFC %u>', (0 + $_[0]) x 2
-}
-
-sub listener_specs {
-  return (
-    {
-      name      => 'rfc-search',
-      method    => 'handle_rfc_search',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) {
-        return $e->text =~ /\Arfcs\s+author:[“”"][^"]+[“”"]\z/;
-      },
-      allow_empty_help => 1,  # this command is too weird for public consumption
-    },
-    {
-      name      => 'rfc-mention',
-      method    => 'handle_rfc',
-      predicate => sub ($self, $e) {
-        return unless $e->text =~ /(^|\s|\/)RFC\s*[0-9]+/in;
-      },
-      allow_empty_help => 1,
-    },
-  );
 }
 
 has rfc_index_file => (
@@ -69,8 +48,13 @@ sub rfc_entry_for ($self, $number) {
   return JSON::MaybeXS->new->decode($json);
 }
 
-sub handle_rfc_search ($self, $event) {
-  my ($author) = $event->text =~ /\Arfcs\s+author:[“”"]([^"]+)[“”"]\z/;
+command rfcs => {
+} => async sub ($self, $event, $rest) {
+  my ($author) = $rest =~ /\Aauthor:[“”"]([^"]+)[“”"]\z/;
+
+  unless ($author) {
+    return await $event->error_reply("I don't know how to search for that!");
+  }
 
   my $rows = $self->_dbh->selectall_arrayref(
     "SELECT * FROM rfcs WHERE instr(metadata, ?) > 0 ORDER BY rfc_number",
@@ -86,8 +70,7 @@ sub handle_rfc_search ($self, $event) {
   }
 
   unless (@results) {
-    $event->mark_handled;
-    return $event->reply("No RFCs found!");
+    return await $event->error_reply("No RFCs found!");
   }
 
   my $text = join qq{\n}, map {;
@@ -104,20 +87,18 @@ sub handle_rfc_search ($self, $event) {
       (join q{, }, $_->{authors}->@*);
   } @results;
 
-  $event->mark_handled;
-  $event->reply($text, { slack => $slack });
-}
+  return await $event->reply($text, { slack => $slack });
+};
 
-sub handle_rfc ($self, $event) {
+listener rfc_mention => async sub ($self, $event) {
   my $text = $event->text;
 
   my ($num, $link) = $self->extract_rfc($text);
 
   unless (defined $num && defined $link) {
     if ($event->was_targeted && $event->text =~ /\A\s* RFC \s* [0-9]+/ix) {
-      $event->error_reply("Oddly, I could not figure out what RFC you meant");
-
       $event->mark_handled;
+      return await $event->error_reply("Oddly, I could not figure out what RFC you meant");
     }
 
     return;
@@ -130,8 +111,7 @@ sub handle_rfc ($self, $event) {
 
   my $entry = $self->rfc_entry_for($num);
   unless ($entry) {
-    $event->error_reply("I'm unable to find an RFC by that number, sorry.");
-    return;
+    return await $event->error_reply("I'm unable to find an RFC by that number, sorry.");
   }
 
   my $title = $entry->{title};
@@ -165,13 +145,13 @@ sub handle_rfc ($self, $event) {
 
   chomp $slack;
 
-  $event->reply(
+  return await $event->reply(
     ($title ? "RFC $num: $title\n$link" : "RFC $num - $link"),
     {
       slack => $slack,
     }
   );
-}
+};
 
 my $sec_dig = qr/(?:[0-9]+[-.]?)+/;
 
