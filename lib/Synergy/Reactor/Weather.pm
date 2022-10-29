@@ -4,14 +4,17 @@ package Synergy::Reactor::Weather;
 use utf8;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor',
+     'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
 
+use Future::AsyncAwait;
+use JSON::MaybeXS;
+use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use URI::Escape;
-use JSON::MaybeXS;
 
 has api_token => (
   is       => 'ro',
@@ -24,20 +27,6 @@ has locations => (
   isa      => 'ArrayRef',
   required => 1,
 );
-
-sub listener_specs {
-  return {
-    name      => 'weather',
-    method    => 'handle_weather',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $e) { $e->text =~ /\Aweather\b/i; },
-    help_entries => [{
-      title => 'weather',
-      text  => "*weather*: what's the weather like in all the places?"
-    }],
-  };
-}
 
 # https://openweathermap.org/weather-conditions
 my %icons = (
@@ -69,16 +58,20 @@ my @bearing = qw(
   W WNW NW NNW
 );
 
-sub handle_weather ($self, $event) {
-  $event->mark_handled;
+command weather => {
+  help => "*weather*: what's the weather like in all the places?",
+} => async sub ($self, $event, $rest) {
+  if (length $rest) {
+    return await $event->error_reply("It's just *weather*, with no arguments.");
+  }
 
-  return $event->reply(join "\n",
+  return await $event->reply(join "\n",
     "Current weather:",
     map {
       $self->format_weather($_)
     } $self->locations->@*,
   );
-}
+};
 
 sub format_weather ($self, $location) {
   my $res = $self->hub->http_get(
