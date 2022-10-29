@@ -3,10 +3,12 @@ use warnings;
 package Synergy::Reactor::Fortune;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
+with 'Synergy::Role::Reactor::CommandPost';
 
 use experimental qw(signatures);
 use namespace::clean;
+use Future::AsyncAwait;
+use Synergy::CommandPost;
 use JSON::MaybeXS ();
 use Path::Tiny qw(path);
 use utf8;
@@ -54,37 +56,14 @@ sub _update_scolding_count_for ($self, $key) {
   return ++$counts->{$key}[0];
 }
 
-sub listener_specs {
-  return (
-    {
-      name      => 'provide fortune',
-      method    => 'handle_fortune',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Afortune\s*\z/i; },
-      help_entries => [
-        { title => 'fortune', text => <<'END', },
+command fortune => {
+  help => <<'END',
 • *fortune*: get a random statement of wisdom, wit, or whatever
 • *add fortune: `TEXT`*: add a new fortune to the database
 END
-      ],
-    },
-    {
-      name => 'add fortune',
-      method => 'handle_add_fortune',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Aadd\s+fortune:?/i; },
-      allow_empty_help => 1,  # handled above
-    },
-  );
-}
-
-sub handle_fortune ($self, $event) {
-  $event->mark_handled;
-
+} => async sub ($self, $event, $rest) {
   if ($self->fortune_count == 0) {
-    return $event->reply("I don't have any fortunes yet!");
+    return await $event->reply("I don't have any fortunes yet!");
   }
 
   # no spamming public channels with fortunes, yo.
@@ -96,7 +75,7 @@ sub handle_fortune ($self, $event) {
     if ($count >= 3) {
       $event->ephemeral_reply("No fishing for your favorite fortunes in public!");
 
-      $event->reply(
+      return await $event->reply(
         "No fishing for your favorite fortunes in public!",
         {
           slack_reaction => {
@@ -105,28 +84,28 @@ sub handle_fortune ($self, $event) {
           }
         },
       );
-
-      return;
     }
   }
 
   my $i = int(rand($self->fortune_count));
   my $fortune = $self->get_fortune($i);
-  return $event->reply($fortune);
-}
+  return await $event->reply($fortune);
+};
 
-sub handle_add_fortune ($self, $event) {
-  $event->mark_handled;
-
+command add => {
+} => async sub ($self, $event, $rest) {
   my ($f) = $event->text =~ /\Aadd\s+fortune:?\s+(.*)/ism;
-  return $event->error_reply("I didn't find a fortune there!") unless $f;
+
+  unless (length $f) {
+    return await $event->error_reply("The only thing you can add is a fortune, see *help fortune*.");
+  }
 
   # TODO: add attribution data, maybe
   $self->add_fortune($f);
   $self->_save_fortunes;
 
-  return $event->reply("Fortune added!");
-}
+  return await $event->reply("Fortune added!");
+};
 
 sub _save_fortunes ($self) {
   my $p = path($self->fortune_path);
