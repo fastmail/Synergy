@@ -7,6 +7,7 @@ with 'Synergy::Role::Reactor::CommandPost';
 use experimental qw(signatures);
 use namespace::clean;
 
+use Future::AsyncAwait;
 use Synergy::CommandPost;
 use Synergy::Util qw(reformat_help);
 
