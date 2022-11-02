@@ -1,5 +1,10 @@
 use strict;
+use warnings;
+
 use Test::More;
+
+use Capture::Tiny ();
+use Process::Status ();
 
 my @files = `find lib -type f -name '*.pm'`;
 chomp @files;
@@ -13,6 +18,7 @@ my %allow_fail = map {; $_ => 1 } qw(
   Synergy::Reactor::Linear
 );
 
+my @failures;
 
 for my $file (sort @files) {
   my $mod = $file;
@@ -23,11 +29,26 @@ for my $file (sort @files) {
 
   next if $to_skip{ $mod };
 
-  next if require_ok $mod;
+  my $stderr = Capture::Tiny::capture_stderr(
+    sub { system("$^X -I lib -c $file > /dev/null") }
+  );
 
-  unless ($allow_fail{$mod}) {
-    BAIL_OUT("compilation failure: $mod");
+  my $ps = Process::Status->new;
+
+  warn $stderr unless $stderr eq "$file syntax OK\n";
+
+  unless (ok($ps->is_success, "compile test: $file")) {
+    push @failures, $file;
+
+    # If the user ^C-ed the test, just quit rather than making them do it for
+    # every remaining test too.
+    if ($ps->signal == POSIX::SIGINT()) {
+      diag "caught SIGINT, stopping test";
+      last PROGRAM;
+    }
   }
 }
+
+BAIL_OUT("compilation failures in: @failures") if @failures;
 
 done_testing;
