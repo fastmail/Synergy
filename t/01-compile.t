@@ -16,6 +16,7 @@ my %to_skip = map {; $_ => 1 } qw(
 
 my %allow_fail = map {; $_ => 1 } qw(
   Synergy::Reactor::Linear
+  Synergy::Reactor::LinearNotification
 );
 
 my @failures;
