@@ -11,6 +11,7 @@ use experimental qw(signatures);
 use namespace::clean;
 use Synergy::Logger '$Logger';
 
+use DBI;
 use JSON::MaybeXS qw(encode_json);
 
 has '+http_path' => (
