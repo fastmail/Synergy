@@ -12,7 +12,6 @@ use Synergy::CommandPost;
 use experimental qw(signatures lexical_subs);
 
 use DateTime;
-use DateTime::Event::Sunrise;
 use List::Util qw(first uniq);
 use Synergy::Util qw(parse_date_for_user);
 use Time::Duration::Parse;
@@ -147,7 +146,7 @@ END
   my $want_aelt = $self->include_aelt
     && $self->get_user_preference($user, 'include-aelt');
 
-  if ($want_aelt) {
+  if ($want_aelt && eval { require DateTime::Event::Sunrise }) {
     my $brisbane_tz = DateTime::TimeZone->new(name => 'Australia/Brisbane');
 
     my $aelt = $self->_aelt_delta_for_time($time);
