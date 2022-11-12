@@ -91,7 +91,6 @@ suggests "WebService::RTM::CamelMilk" => "0";
 suggests "Zendesk::Client" => "0";
 
 on 'test' => sub {
-  requires "Capture::Tiny" => "0";
   requires "ExtUtils::MakeMaker" => "0";
   requires "File::Spec" => "0";
   requires "IO::Async::Test" => "0";

@@ -111,7 +111,6 @@ my %WriteMakefileArgs = (
     "warnings" => 0
   },
   "TEST_REQUIRES" => {
-    "Capture::Tiny" => 0,
     "ExtUtils::MakeMaker" => 0,
     "File::Spec" => 0,
     "IO::Async::Test" => 0,
@@ -129,7 +128,6 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
-  "Capture::Tiny" => 0,
   "Carp" => 0,
   "DBD::SQLite" => 0,
   "DBI" => 0,
