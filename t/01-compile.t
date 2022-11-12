@@ -38,6 +38,8 @@ for my $file (sort @files) {
   warn $stderr unless $stderr eq "$file syntax OK\n";
 
   unless (ok($ps->is_success, "compile test: $file")) {
+    next if $allow_fail{$mod};
+
     push @failures, $file;
 
     # If the user ^C-ed the test, just quit rather than making them do it for
