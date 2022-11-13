@@ -4,13 +4,14 @@ use utf8;
 package Synergy::Reactor::RememberTheMilk;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
 use experimental qw(signatures);
 use namespace::clean;
 
 use JSON::MaybeXS;
+use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use WebService::RTM::CamelMilk;
 
@@ -106,37 +107,8 @@ sub frob_for ($self, $user) {
   });
 }
 
-sub listener_specs {
-  return (
-    {
-      name      => 'milk',
-      method    => 'handle_milk',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Amilk(?:\s|\z)/ },
-    },
-    {
-      name      => 'todo',
-      method    => 'handle_todo',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Atodo(?:\s|\z)/ },
-    },
-    {
-      name      => 'auth',
-      method    => 'handle_auth',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /\Amilkauth(?:\s|\z)/i },
-    },
-  );
-}
-
-sub handle_todo ($self, $event) {
-  $event->mark_handled;
-
-  my (undef, $todo) = split /\s+/, $event->text, 2;
-
+command todo => {
+} => sub ($self, $event, $todo) {
   return $event->error_reply("I don't have an RTM auth token for you.")
     unless my $token = $self->get_user_preference($event->from_user, 'api-token');
 
@@ -170,11 +142,8 @@ sub handle_todo ($self, $event) {
   })->retain;
 }
 
-sub handle_milk ($self, $event) {
-  $event->mark_handled;
-
-  my (undef, $filter) = split /\s+/, $event->text, 2;
-
+command milk => {
+} => sub ($self, $event, $filter) {
   return $event->error_reply("I don't have an RTM auth token for you.")
     unless my $token = $self->get_user_preference($event->from_user, 'api-token');
 
@@ -225,10 +194,8 @@ sub handle_milk ($self, $event) {
   })->retain;
 }
 
-sub handle_auth ($self, $event) {
-  $event->mark_handled;
-  my (undef, $arg) = split /\s+/, lc $event->text, 2;
-
+command milkauth => {
+} => sub ($self, $event, $arg) {
   my $user = $event->from_user;
 
   if ($self->user_has_preference($user, 'api-token')) {
