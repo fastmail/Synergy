@@ -15,9 +15,7 @@ use Synergy::Logger '$Logger';
 use Synergy::Util qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
-use Safe::Isa '$_isa';
 use Text::Template;
-use Try::Tiny;
 
 sub listener_specs ($self) {
   my $ns = $self->preference_namespace;
