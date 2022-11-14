@@ -7,9 +7,10 @@ use Moose;
 with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
-use experimental qw(signatures);
+use experimental qw(signatures try);
 use namespace::clean;
 
+use Future::AsyncAwait;
 use JSON::MaybeXS;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
@@ -108,117 +109,119 @@ sub frob_for ($self, $user) {
 }
 
 command todo => {
-} => sub ($self, $event, $todo) {
-  return $event->error_reply("I don't have an RTM auth token for you.")
+} => async sub ($self, $event, $todo) {
+  return await $event->error_reply("I don't have an RTM auth token for you.")
     unless my $token = $self->get_user_preference($event->from_user, 'api-token');
 
-  return $event->error_reply("You didn't tell me what you want to do!")
+  return await $event->error_reply("You didn't tell me what you want to do!")
     unless length $todo;
 
-  my $tl_f = $self->timeline_for($event->from_user);
+  try {
+    my $tl = await $self->timeline_for($event->from_user);
 
-  $tl_f->then(sub ($tl) {
-    my $rsp_f = $self->rtm_client->api_call('rtm.tasks.add' => {
+    my $rsp = await $self->rtm_client->api_call('rtm.tasks.add' => {
       auth_token => $token,
       timeline   => $tl,
       name  => $todo,
       parse => 1,
     });
 
-    $rsp_f->then(sub ($rsp) {
-      unless ($rsp->is_success) {
-        $Logger->log([
-          "failed to cope with a request to make a task: %s", $rsp->_response,
-        ]);
-        return $event->reply("Something went wrong creating that task, sorry.");
-      }
+    unless ($rsp->is_success) {
+      $Logger->log([
+        "failed to cope with a request to make a task: %s", $rsp->_response,
+      ]);
+      return await $event->reply("Something went wrong creating that task, sorry.");
+    }
 
-      $Logger->log([ "made task: %s", $rsp->_response ]);
-      return $event->reply("Task created!");
-    });
-  })->else(sub (@fail) {
-    $Logger->log([ "failed to make task: %s", \@fail ]);
-    $event->reply("Sorry, something went wrong making that task.");
-  })->retain;
-}
+    $Logger->log([ "made task: %s", $rsp->_response ]);
+    return await $event->reply("Task created!");
+  } catch ($fail) {
+    $Logger->log([ "failed to make task: %s", $fail ]);
+    return await $event->reply("Sorry, something went wrong making that task.");
+  }
+};
 
 command milk => {
-} => sub ($self, $event, $filter) {
-  return $event->error_reply("I don't have an RTM auth token for you.")
+} => async sub ($self, $event, $filter) {
+  return await $event->error_reply("I don't have an RTM auth token for you.")
     unless my $token = $self->get_user_preference($event->from_user, 'api-token');
 
-  my $rsp_f = $self->rtm_client->api_call('rtm.tasks.getList' => {
+  my $rsp = await $self->rtm_client->api_call('rtm.tasks.getList' => {
     auth_token => $token,
     filter     => $filter || 'status:incomplete',
   });
 
-  $rsp_f->then(sub ($rsp) {
-    unless ($rsp->is_success) {
-      $Logger->log([
-        "failed to cope with a request for milk: %s", $rsp->_response,
-      ]);
-      return $event->reply("Something went wrong getting that milk, sorry.");
+  unless ($rsp->is_success) {
+    $Logger->log([
+      "failed to cope with a request for milk: %s", $rsp->_response,
+    ]);
+    return await $event->reply("Something went wrong getting that milk, sorry.");
+  }
+
+  # The structure is:
+  # { tasks => {
+  #   list  => [ { id => ..., taskseries => [ { name => ..., task => [ {}
+  my @lines;
+  for my $list ($rsp->get('tasks')->{list}->@*) {
+    for my $tseries ($list->{taskseries}->@*) {
+      my @tasks = $tseries->{task}->@*;
+      push @lines, map {; +{
+        string => sprintf('%s %s — %s',
+          ($_->{completed} ? '✓' : '•'),
+          $tseries->{name},
+          ($_->{due} ? "due $_->{due}" : "no due date")),
+        due    => $_->{due},
+        added  => $_->{added},
+      } } @tasks;
+
+      last if @lines >= 10;
     }
+  }
 
-    # The structure is:
-    # { tasks => {
-    #   list  => [ { id => ..., taskseries => [ { name => ..., task => [ {}
-    my @lines;
-    for my $list ($rsp->get('tasks')->{list}->@*) {
-      for my $tseries ($list->{taskseries}->@*) {
-        my @tasks = $tseries->{task}->@*;
-        push @lines, map {; +{
-          string => sprintf('%s %s — %s',
-            ($_->{completed} ? '✓' : '•'),
-            $tseries->{name},
-            ($_->{due} ? "due $_->{due}" : "no due date")),
-          due    => $_->{due},
-          added  => $_->{added},
-        } } @tasks;
+  return await $event->reply("No tasks found!") unless @lines;
 
-        last if @lines >= 10;
-      }
-    }
+  @lines = sort { ($a->{due}||9) cmp ($b->{due}||9)
+              ||  $a->{added} cmp $b->{added} } @lines;
 
-    $event->reply("No tasks found!") unless @lines;
+  $#lines = 9 if @lines > 10;
 
-    @lines = sort { ($a->{due}||9) cmp ($b->{due}||9)
-                ||  $a->{added} cmp $b->{added} } @lines;
-
-    $#lines = 9 if @lines > 10;
-
-    $event->reply(join qq{\n},
-      "*Tasks found:*",
-      map {; $_->{string} } @lines
-    );
-  })->retain;
-}
+  return await $event->reply(join qq{\n},
+    "*Tasks found:*",
+    map {; $_->{string} } @lines
+  );
+};
 
 command milkauth => {
-} => sub ($self, $event, $arg) {
+} => async sub ($self, $event, $arg) {
   my $user = $event->from_user;
 
   if ($self->user_has_preference($user, 'api-token')) {
-    return $event->error_reply("It looks like you've already authenticated!");
+    return await $event->error_reply("It looks like you've already authenticated!");
   }
 
   $arg //= 'start';
   unless ($arg eq 'start' or $arg eq 'complete') {
-    return $event->error_reply("You need to say either `milkauth start` or `milkauth complete`.");
+    return await $event->error_reply("You need to say either `milkauth start` or `milkauth complete`.");
   }
 
   if ($arg eq 'start') {
-    return $self->frob_for($event->from_user)
-      ->on_fail(sub { $event->error_reply("Something went wrong!"); })
-      ->then(sub ($frob) {
-          my $auth_uri = join q{?},
-            "https://www.rememberthemilk.com/services/auth/",
-            $self->rtm_client->_signed_content({ frob => $frob, perms => 'write' });
+    try {
+      my $frob = await $self->frob_for($event->from_user);
+      my $auth_uri = join q{?},
+        "https://www.rememberthemilk.com/services/auth/",
+        $self->rtm_client->_signed_content({ frob => $frob, perms => 'write' });
 
-          my $text = "To authorize me to talk to RTM for you, follow this link: $auth_uri\n\n…and then tell me `milkauth complete`";
-          $event->private_reply($text, { slack => $text });
-        })
-      ->retain;
+      my $text = <<~"END";
+      To authorize me to talk to RTM for you, follow this link: $auth_uri
+
+      …and then tell me `milkauth complete`
+      END
+
+      return await $event->private_reply($text, { slack => $text });
+    } catch ($fail) {
+      $Logger->log([ "failed to make start auth: %s", $fail ]);
+      return await $event->reply("Sorry, something went wrong!");
+    }
   }
 
   # So we must have 'auth complete'
@@ -227,28 +230,23 @@ command milkauth => {
   return $event->reply("You're not ready to complete auth yet!")
     unless $frob_f->is_ready;
 
-  my $token_f = $frob_f
-    ->then(sub ($frob) {
-      $self->rtm_client->api_call('rtm.auth.getToken' => { frob => $frob })
-    })
-    ->then(sub ($rsp) {
-      unless ($rsp->is_success) {
-        return Future->fail(
-          "Remember The Milk rejected our request to get a token!",
-          cmilk_rsp => $rsp->_response,
-        );
-      }
+  my $frob = await $frob_f;
 
-      my $token = $rsp->get('auth')->{token};
+  my $rsp  = await $self->rtm_client->api_call(
+    'rtm.auth.getToken' => { frob => $frob }
+  );
 
-      my $got = $self->set_user_preference($user, 'api-token', $token);
+  unless ($rsp->is_success) {
+    $Logger->log([ "error getting token: %s", $rsp->_response ]);
+    return await $event->reply("Remember The Milk rejected our request to get a token!");
+  }
 
-      $event->reply("You're authenticated!");
-    })
-    ->else(sub (@fail) {
-      $Logger->log([ "get token: %s", \@fail ]);
-    })->retain;
-}
+  my $token = $rsp->get('auth')->{token};
+
+  my $got = $self->set_user_preference($user, 'api-token', $token);
+
+  return await $event->reply("You're authenticated!");
+};
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
