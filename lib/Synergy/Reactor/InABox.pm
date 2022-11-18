@@ -622,7 +622,7 @@ sub _region_for_user ($self, $user) {
   my $tz = $user->time_zone;
   my ($area) = split '/', $tz;
   return
-    $area eq 'Australia' ? 'sfo3' :
+    $area eq 'Australia' ? 'syd1' :
     $area eq 'Europe'    ? 'ams3' :
                            'nyc3';
 }
