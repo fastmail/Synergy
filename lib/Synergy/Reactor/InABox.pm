@@ -720,6 +720,9 @@ __PACKAGE__->add_preference(
 __PACKAGE__->add_preference(
   name      => 'datacentre',
   validator => sub ($self, $value, @) {
+    # Clearing is fine; we'll pick up the default elsewhere
+    return undef unless defined $value;
+
     my %known = map {; $_ => 1 } $self->box_datacentres->@*;
 
     $value = lc $value;
