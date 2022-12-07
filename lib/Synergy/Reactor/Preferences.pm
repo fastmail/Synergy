@@ -117,7 +117,7 @@ sub handle_clear ($self, $event) {
 
 sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
   return unless $who;
-  $who =~ s/'s$//;
+  $who =~ s/[’']s$//;
 
   my $user = $self->hub->user_directory->resolve_name($who, $event->from_user);
   return $event->error_reply("Sorry, I couldn't find a user for <$who>")
