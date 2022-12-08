@@ -726,6 +726,10 @@ responder new_issue => {
     If `NAME` ends with `(!)` or 🔥 it will be marked urgent.  If it ends with
     `(?)` or ☎️ it will be created in the To Discuss state.  These two markers
     can be present in any order.
+
+    If `NAME` ends with `##project`, it will be put into that project.  (The
+    thing that goes after the `##` is the project hashtag, which you can find
+    in Linear or in `my projects` output, or other places.
     EOH
 } => sub ($self, $event, $which, $text) {
   if ($event->text =~ /\A>> triage /i) {
