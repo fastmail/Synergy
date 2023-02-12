@@ -12,7 +12,7 @@ use experimental qw(signatures);
 use namespace::clean;
 
 use Synergy::Logger '$Logger';
-use Synergy::Util qw(parse_switches);
+use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;

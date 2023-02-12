@@ -21,6 +21,7 @@ use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(all uniq);
 use MIME::Base64;
 use POSIX qw(ceil);
+use String::Switches;
 use Synergy::Logger '$Logger';
 use Time::Duration qw(ago);
 use URI::Escape;
@@ -252,9 +253,9 @@ sub _parse_search ($self, $text) {
     return [ search => $token ];
   };
 
-  my $hunks = Synergy::Util::parse_colonstrings($text, { fallback => $fallback });
+  my $hunks = String::Switches::parse_colonstrings($text, { fallback => $fallback });
 
-  Synergy::Util::canonicalize_names($hunks, \%aliases);
+  String::Switches::canonicalize_names($hunks, \%aliases);
 
   my $error = grep {; @$_ > 2 } @$hunks;
 
