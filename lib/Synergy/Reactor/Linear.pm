@@ -708,10 +708,7 @@ responder new_issue => {
     *\N{ZERO WIDTH SPACE}>> `TARGET` `NAME`*: create a new issue in Linear
     *++ `NAME`*: create a new issue in Linear, with you as the target
 
-    In the simplest form, this creates a new issue with the given name, assigned
-    to the given target.  (More on "targets" below.)  Any text after a line
-    break or after triple dashes (`---`) becomes part of the long form
-    description of the issue, using Markdown.
+    This creates a new issue with the given name, assigned to the given target.
 
     The `TARGET` can be either:
     • a username
@@ -723,13 +720,32 @@ responder new_issue => {
     unassigned in that team.  If both are given, the issue is created in the
     given team and assigned to the given user.
 
-    If `NAME` ends with `(!)` or 🔥 it will be marked urgent.  If it ends with
-    `(?)` or ☎️ it will be created in the To Discuss state.  These two markers
-    can be present in any order.
+    The `NAME` value can be multiple lines.  Its first line is the issue's
+    title, and the rest is switches and the issue description.  It works like
+    this:  after the first line, we take aside every line that starts with a
+    `/` and those lines are treated as switches (see below).  Once we find a
+    line that isn't switches, the rest of the input is the Linear issue's
+    description.  Instead of splitting with line breaks, you can use `---`.
 
-    If `NAME` ends with `##project`, it will be put into that project.  (The
-    thing that goes after the `##` is the project hashtag, which you can find
-    in Linear or in `my projects` output, or other places.
+    Switches are in the form `/name value`, and the value is sometimes
+    optional.  You can provide switches to change properties of newly-created
+    issues.  Here are valid switches:
+
+    • /label L   - add the label _L_ to the issue
+    • /urgent    - set the issue's priority to Urgent
+    • /state S   - set the issue's starting state to _S_
+    • /project P - put the issue into project _P_ (by hashtag)
+
+    There are more shorthand switches:
+
+    • /done - short for: /state Done
+    • /discuss - short for: /state "To Discuss"
+    • /bug, /chore, /debt, /standards - short for /label-ing the issue
+
+    Some switches have _even shorter_ shorthand.  If the issue title would end
+    with `(!)` or 🔥, it's treated like `/urgent`.  If it ends with `(?)` or ☎️ ,
+    it's treated like `/discuss`.  Finally, if it ends with `##hashtag`, this
+    is treated as short for `/project hashtag`.
     EOH
 } => sub ($self, $event, $which, $text) {
   if ($event->text =~ /\A>> triage /i) {
