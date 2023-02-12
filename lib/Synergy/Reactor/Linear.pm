@@ -742,8 +742,9 @@ responder new_issue => {
 
     There are more shorthand switches:
 
-    • /done - short for: /state Done
+    • /start - short for: /state "In Progress"
     • /discuss - short for: /state "To Discuss"
+    • /done - short for: /state Done; will put the issue into current cycle
     • /bug, /chore, /debt, /standards - short for /label-ing the issue
 
     Some switches have _even shorter_ shorthand.  If the issue title would end
