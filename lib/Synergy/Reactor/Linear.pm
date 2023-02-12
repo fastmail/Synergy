@@ -157,8 +157,12 @@ sub _slack_item_link ($self, $issue) {
 
 sub _icon_for_issue ($self, $issue) {
   return "\N{SPEAKING HEAD IN SILHOUETTE}" if $issue->{state}{name} eq 'To Discuss';
-  return '✓' if $issue->{state}{type} =~ /\A(canceled|completed)\z/n;
+
+  return '✗' if $issue->{state}{type} eq 'canceled';
+  return '✓' if $issue->{state}{type} eq 'completed';
+
   return "\N{FIRE}" if $issue->{priority} == 1;
+
   return "•";
 }
 
