@@ -700,10 +700,8 @@ responder new_issue => {
   exclusive => 1,
   targeted  => 1,
   matcher   => sub ($text, @) {
-    return unless $text =~ s/\A ( \+\+ | >\s?> ) \s+//x;
-    my $which = $1 eq '++' ? '++' : '>>';
-
-    return [ $which, $text ];
+    return unless $text =~ /\A ( \+\+ (\@\w+)? | >\s?> ) \s+/nx;
+    return [];
   },
   # The stupid zero width space below is to prevent Slack from turning >> into
   # a block quoted >. -- rjbs, 2022-02-08
@@ -711,6 +709,7 @@ responder new_issue => {
   help      => reformat_help(<<~"EOH"),
     *\N{ZERO WIDTH SPACE}>> `TARGET` `NAME`*: create a new issue in Linear
     *++ `NAME`*: create a new issue in Linear, with you as the target
+    *++\@`TEAM` `NAME`*: create a new issue, targeting you in a specific team
 
     This creates a new issue with the given name, assigned to the given target.
 
@@ -752,7 +751,7 @@ responder new_issue => {
     it's treated like `/discuss`.  Finally, if it ends with `##hashtag`, this
     is treated as short for `/project hashtag`.
     EOH
-} => sub ($self, $event, $which, $text) {
+} => sub ($self, $event) {
   if ($event->text =~ /\A>> triage /i) {
     $event->mark_handled;
     return $event->error_reply(q{You can't assign directly to triage anymore.  Instead, use the Zendesk integration!  You can also look at help for "ptn blocked".});
