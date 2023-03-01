@@ -734,6 +734,7 @@ responder new_issue => {
     optional.  You can provide switches to change properties of newly-created
     issues.  Here are valid switches:
 
+    • /est E     - add the estimate _E_ to the issue (/estimate works too)
     • /label L   - add the label _L_ to the issue
     • /urgent    - set the issue's priority to Urgent
     • /state S   - set the issue's starting state to _S_
