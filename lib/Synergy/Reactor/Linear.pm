@@ -734,14 +734,15 @@ responder new_issue => {
     optional.  You can provide switches to change properties of newly-created
     issues.  Here are valid switches:
 
-    • /est E     - add the estimate _E_ to the issue (/estimate works too)
-    • /label L   - add the label _L_ to the issue
-    • /urgent    - set the issue's priority to Urgent
-    • /state S   - set the issue's starting state to _S_
-    • /project P - put the issue into project _P_ (by hashtag)
+    • /est E      - add the estimate _E_ to the issue (/estimate works too)
+    • /label L    - add the label _L_ to the issue
+    • /state S    - set the issue's starting state to _S_
+    • /project P  - put the issue into project _P_ (by hashtag)
+    • /priority P - set the issue's priority (low, medium, high, urgent)
 
     There are more shorthand switches:
 
+    • /urgent - short for: /priority urgent
     • /start - short for: /state "In Progress"
     • /discuss - short for: /state "To Discuss"
     • /done - short for: /state Done; will put the issue into current cycle
