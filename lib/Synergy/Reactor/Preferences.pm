@@ -193,7 +193,7 @@ sub handle_list ($self, $event) {
     grep {; $_->does('Synergy::Role::HasPreferences') } $self->hub->reactors;
 
   my $text = qq{*Known preferences are:*\n};
-  for my $source (sort { $_->[0] cmp $_->[1] } @sources) {
+  for my $source (sort { $a->[0] cmp $b->[0] } @sources) {
     my ($ns, $has_pref) = @$source;
 
     my $help = $has_pref->preference_help;
