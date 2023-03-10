@@ -14,6 +14,7 @@ use namespace::clean;
 use Future::AsyncAwait;
 use List::Util qw(first);
 use Synergy::CommandPost;
+use Synergy::Util qw(bool_from_text);
 
 has page_channel_name => (
   is => 'ro',
