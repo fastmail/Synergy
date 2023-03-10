@@ -4,7 +4,6 @@ package Synergy::Channel::Twilio;
 
 use Moose;
 use experimental qw(signatures);
-use HTML::Entities ();
 use JSON::MaybeXS qw(encode_json decode_json);
 
 use Synergy::Logger '$Logger';
@@ -149,11 +148,10 @@ sub send_message ($self, $target, $text, $alts = {}) {
   my $res_f;
 
   if ($alts->{voice}) {
-    my $encoded = HTML::Entities::encode_entities($alts->{voice});
+    my $language = $LANGUAGE_FOR{ $picked_code // 1 } // 'en-US';
 
-    my $language = HTML::Entities::encode_entities(
-      $LANGUAGE_FOR{ $picked_code // 1 } // 'en-US'
-    );
+    my $encoded = join q{},
+      map {; "<![CDATA[$_]]>" } split /(\]\])/, $alts->{voice};
 
     $res_f = $self->http_post(
       "https://api.twilio.com/2010-04-01/Accounts/$sid/Calls.json",
