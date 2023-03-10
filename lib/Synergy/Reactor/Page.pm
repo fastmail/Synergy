@@ -3,7 +3,8 @@ use warnings;
 package Synergy::Reactor::Page;
 
 use Moose;
-with 'Synergy::Role::Reactor::CommandPost';
+with 'Synergy::Role::Reactor::CommandPost',
+     'Synergy::Role::HasPreferences';
 
 use utf8;
 
@@ -61,7 +62,15 @@ END
     my $from = $event->from_user ? $event->from_user->username
                                  : $event->from_address;
 
-    $to_channel->send_message_to_user($user, "$from says: $what");
+    my $want_voice = $self->get_user_preference($user, 'voice-page');
+
+    $to_channel->send_message_to_user(
+      $user,
+      "$from says: $what",
+      ($want_voice
+        ? { voice => "Hi, this is Synergy.  You are being paged by $from, who says: $what" }
+        : ()),
+    );
 
     $paged = 1;
   }
@@ -85,5 +94,13 @@ END
     return await $event->reply("I don't know how to page $who, sorry.");
   }
 };
+
+__PACKAGE__->add_preference(
+  name      => 'voice-page',
+  validator => sub ($self, $value, @) { return bool_from_text($value) },
+  default   => 1,
+  help      => "Should paging try make a voice call instead of a text message?",
+  description => "Should paging try make a voice call instead of a text message?",
+);
 
 1;

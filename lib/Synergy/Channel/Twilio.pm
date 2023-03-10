@@ -4,6 +4,7 @@ package Synergy::Channel::Twilio;
 
 use Moose;
 use experimental qw(signatures);
+use HTML::Entities ();
 use JSON::MaybeXS qw(encode_json decode_json);
 
 use Synergy::Logger '$Logger';
@@ -127,26 +128,57 @@ sub send_message_to_user ($self, $user, $text, $alts = {}) {
   $self->send_message($phone, $text, $alts);
 }
 
+my %LANGUAGE_FOR = (
+  61 => 'en-AU',
+);
+
 sub send_message ($self, $target, $text, $alts = {}) {
   my $from = $self->from;
+
+  my $picked_code;
 
   for my $code (sort { length $b <=> length $a } keys $self->numbers->%*) {
     if ($target =~ /\A\+?\Q$code/) {
       $from = $self->numbers->{$code};
+      $picked_code = $code;
       last;
     }
   }
 
   my $sid = $self->sid;
-  my $res_f = $self->http_post(
-    "https://api.twilio.com/2010-04-01/Accounts/$sid/Messages.json",
-    Content => [
-      From => $from,
-      To   => $target,
-      Body => $text,
-    ],
-    Authorization => "Basic " . $self->auth,
-  );
+  my $res_f;
+
+  if ($alts->{voice}) {
+    my $encoded = HTML::Entities::encode_entities($alts->{voice});
+
+    my $language = HTML::Entities::encode_entities(
+      $LANGUAGE_FOR{ $picked_code // 1 } // 'en-US'
+    );
+
+    $res_f = $self->http_post(
+      "https://api.twilio.com/2010-04-01/Accounts/$sid/Calls.json",
+      Content => [
+        From => $from,
+        To   => $target,
+        Twiml => <<~"END"
+          <Response>
+            <Say language="$language" loop="3" voice="woman">$encoded</Say>
+          </Response>
+        END
+      ],
+      Authorization => "Basic " . $self->auth,
+    );
+  } else {
+    $res_f = $self->http_post(
+      "https://api.twilio.com/2010-04-01/Accounts/$sid/Messages.json",
+      Content => [
+        From => $from,
+        To   => $target,
+        Body => $text,
+      ],
+      Authorization => "Basic " . $self->auth,
+    );
+  }
 
   return $res_f->then(sub ($res) {
     unless ($res->is_success) {
