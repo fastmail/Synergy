@@ -746,7 +746,7 @@ responder new_issue => {
     • /start - short for: /state "In Progress"
     • /discuss - short for: /state "To Discuss"
     • /done - short for: /state Done; will put the issue into current cycle
-    • /bug, /chore, /debt, /dev, /standards - short for /label-ing the issue
+    • /bug, /chore, /debt, /dev, /gear, /standards - short for /label-ing the issue
 
     Some switches have _even shorter_ shorthand.  If the issue title would end
     with `(!)` or 🔥, it's treated like `/urgent`.  If it ends with `(?)` or ☎️ ,
