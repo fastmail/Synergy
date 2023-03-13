@@ -103,6 +103,12 @@ has default_box_version => (
   default => 'bullseye',
 );
 
+has default_box_size => (
+  is => 'ro',
+  isa => 'Str',
+  default => 'g-4vcpu-16gb',
+);
+
 has known_box_versions => (
   is => 'ro',
   isa => 'ArrayRef',
@@ -232,7 +238,7 @@ sub handle_create ($self, $event, $switches) {
 
   # XXX call /v2/sizes API to validate
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
-  my $size = $switches->{size} // 'g-4vcpu-16gb';
+  my $size = $switches->{size} // $self->default_box_size;
 
   return $self->_get_droplet_for($event->from_user, $tag)
     ->then(sub ($maybe_droplet) {
