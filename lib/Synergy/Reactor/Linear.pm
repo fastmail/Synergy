@@ -611,10 +611,6 @@ async sub _handle_creation_event ($self, $event, $arg = {}) {
   my $code = async sub ($linear) {
     my $text = $event->text;
 
-    if (my $slack_link = $event->event_uri) {
-      $text .= "\n\ncreated at: $slack_link";
-    }
-
     # Slack now "helpfully" corrects '>>' in DM to '> >'.
     $text =~ s/\A> >/>>/;
 
@@ -633,6 +629,15 @@ async sub _handle_creation_event ($self, $event, $arg = {}) {
     # XXX The query result is stupid and very low-level.  This will change.
     my $id  = $query_result->{data}{issueCreate}{issue}{identifier};
     my $url = $query_result->{data}{issueCreate}{issue}{url};
+
+    if ($id && $event->event_uri) {
+      my $type = $event->is_public ? "Synergy" : "private Synergy";
+
+      $linear->add_attachment_to_issue($id, {
+        url   => $event->event_uri,
+        title => "Created via $type message",
+      });
+    }
 
     if ($id) {
       return await $event->reply(
