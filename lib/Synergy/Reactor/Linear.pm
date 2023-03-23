@@ -75,6 +75,10 @@ package Synergy::Reactor::Linear::LinearHelper {
   }
 }
 
+has attachment_icon_url => (
+  is => 'ro',
+);
+
 has team_aliases => (
   reader  => '_team_aliases',
   default => sub {  {}  },
@@ -632,10 +636,12 @@ async sub _handle_creation_event ($self, $event, $arg = {}) {
 
     if ($id && $event->event_uri) {
       my $type = $event->is_public ? "Synergy" : "private Synergy";
+      my $icon = $self->attachment_icon_url;
 
       $linear->add_attachment_to_issue($id, {
         url   => $event->event_uri,
         title => "Created via $type message",
+        ($icon ? (iconUrl => $icon) : ()),
       });
     }
 
