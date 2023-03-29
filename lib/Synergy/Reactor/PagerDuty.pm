@@ -571,8 +571,6 @@ sub handle_give_oncall ($self, $event) {
     return $event->error_reply("That's less than a minute; did you forget a unit?");
   }
 
-  return;
-
   $self->_relevant_oncalls->then(sub ($oncalls) {
     # More early bail-outs
     if (@$oncalls > 1) {
