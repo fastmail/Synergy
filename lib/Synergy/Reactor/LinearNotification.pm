@@ -85,7 +85,11 @@ sub http_app ($self, $env) {
 
   if ($self->confirm_remote_ips) {
     unless ($allowed{$req->address}) {
-      warn "ADDRESS " . $req->address . " not allowed\n";
+      $Logger->log([
+        "rejecting LinearNotification request from unknown IP %s",
+        $req->address,
+      ]);
+
       return [ "200", [], [ '{"go":"away"}' ] ];
     }
   }
@@ -99,7 +103,7 @@ sub http_app ($self, $env) {
   };
 
   if ($err) {
-    warn "Failed to parse json: $err\n";
+    $Logger->log("LinearNotification failed to parse json: $err");
 
     return [ "200", [], [ '{"bad":"json"}' ] ];
   }
@@ -163,7 +167,7 @@ sub http_app ($self, $env) {
 
           return $channel->send_message($self->escalation_address, $text);
         })->catch(sub {
-          warn "Uh, failed to tell escalation about a ticket create in linear: @_\n";
+          $Logger->log("failed to tell escalation about a ticket create in linear: @_");
 
           return $channel->send_message($self->escalation_address, "Uh, failed to tell you about a ticket create (@_)");
         })->retain;
