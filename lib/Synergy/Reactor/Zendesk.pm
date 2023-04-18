@@ -258,13 +258,13 @@ async sub ticket_report ($self, $who, $arg = {}) {
                           GET => "/api/v2/users/me.json?include=open_ticket_count"
                         );
   } catch ($error) {
-   $Logger->log([ "error fetching our user from Zendesk: %s", $error ]);
-   die "failed to get tickets for ticket report";
+    $Logger->log([ "error fetching our user from Zendesk: %s", $error ]);
+    return [ "failed to get tickets for ticket report" ];
   }
 
   unless ($res->{open_ticket_count}) {
     $Logger->log([ "Did not get an open_ticket_count in res: %s", $res ]);
-    die "couldn't get open ticket count";
+    return [ "couldn't get open ticket count for ticket report" ];
   }
 
   # It's a single key/value pair where the key is the id of our user.
