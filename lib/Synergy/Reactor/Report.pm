@@ -64,9 +64,12 @@ async sub begin_report ($self, $report, $target) {
     );
   }
 
-  await Future->needs_all(@results);
+  await Future->wait_all(@results);
 
-  my @hunks = map {; $_->get } @results;
+  my @hunks = map {;
+    $_->is_done ? $_->get
+                : [ "[ internal error during report ]" ]
+  } @results;
 
   return unless @hunks;
 
