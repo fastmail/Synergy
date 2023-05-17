@@ -207,13 +207,18 @@ responder llama_pic => {
 }, sub ($self, $event) {
   $event->mark_handled;
 
-  my $http_request = $self->hub->http_client->GET(
+  my $http_future = $self->hub->http_client->GET(
     "https://llama-as-a-service.vercel.app/llama_url"
   );
 
-  return $http_request->on_done(sub($res)
+  return $http_future->on_done(sub($res)
   {
-    $event->reply($res->content)
+    if ($res->code == 200)
+    {
+      $event->reply($res->content);
+      return;
+    }
+    $event->reply("Error while retrieving llama pictures!")
   });
 };
 
@@ -229,13 +234,19 @@ responder llama_fax => {
 }, sub ($self, $event) {
   $event->mark_handled;
 
-  my $http_request = $self->hub->http_client->GET(
+  my $http_future = $self->hub->http_client->GET(
     "https://llama-as-a-service.vercel.app/llama_fax"
   );
 
-  return $http_request->on_done(sub($res)
+  return $http_future->on_done(sub($res)
   {
-    $event->reply($res->content)
+    if ($res->code == 200)
+    {
+      $event->reply($res->content);
+      return;
+    }
+
+    $event->reply("Error while retrieving llama fax!")
   });
 };
 
