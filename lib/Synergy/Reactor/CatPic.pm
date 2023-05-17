@@ -207,8 +207,14 @@ responder llama_pic => {
 }, sub ($self, $event) {
   $event->mark_handled;
 
-  my $epoch = time();
-  $event->reply("https://llama-as-a-service.vercel.app/llama?t=$epoch"); # Might need the webservice to return a url to the image not just redirect, slack needs t so it doesn't cache
+  my $http_request = $self->hub->http_client->GET(
+    "https://llama-as-a-service.vercel.app/llama_url"
+  );
+
+  return $http_request->on_done(sub($res)
+  {
+    $event->reply($res->content)
+  });
 };
 
 responder cat_pic => {
