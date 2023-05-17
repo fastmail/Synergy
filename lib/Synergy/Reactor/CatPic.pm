@@ -201,7 +201,7 @@ responder llama_pic => {
   help_titles => [ 'llama pic' ],
   help      => '*llama pic*: get a picture of a llama',
   matcher   => sub ($text, @) {
-    return unless $text =~ /\Allama\spic?\z/i;
+    return unless $text =~ /\Allama\spic\z/i;
     return [];
   },
 }, sub ($self, $event) {
@@ -209,6 +209,28 @@ responder llama_pic => {
 
   my $http_request = $self->hub->http_client->GET(
     "https://llama-as-a-service.vercel.app/llama_url"
+  );
+
+  return $http_request->on_done(sub($res)
+  {
+    $event->reply($res->content)
+  });
+};
+
+responder llama_fax => {
+  exclusive => 1, # No idea what this is.
+  targeted  => 1, # Or this
+  help_titles => [ 'llama fax' ],
+  help      => '*llama fax*: get a fact about a llama',
+  matcher   => sub ($text, @) {
+    return unless $text =~ /\Allama\s(facts?|fax)\z/i;
+    return [];
+  },
+}, sub ($self, $event) {
+  $event->mark_handled;
+
+  my $http_request = $self->hub->http_client->GET(
+    "https://llama-as-a-service.vercel.app/llama_fax"
   );
 
   return $http_request->on_done(sub($res)
