@@ -191,6 +191,25 @@ sub _build_reactions ($self, @) {
   return $reactions;
 }
 
+# Copied cat_pic code
+# Because there was no documentation
+# Works on terminal, dunno if slack wil be able to display it as an image
+# Tried to test it on local slack, but the documentation was pretty bad with the config files
+responder llama_pic => {
+  exclusive => 1, # No idea what this is.
+  targeted  => 1, # Or this
+  help_titles => [ 'llama pic' ],
+  help      => '*llama pic*: get a picture of a llama',
+  matcher   => sub ($text, @) {
+    return unless $text =~ /\Allama\spic?\z/i;
+    return [];
+  },
+}, sub ($self, $event) {
+  $event->mark_handled;
+
+  $event->reply("https://llama-as-a-service.vercel.app"); # Might need the webservice to return a url to the image not just redirect 
+};
+
 responder cat_pic => {
   exclusive => 1,
   targeted  => 1,
