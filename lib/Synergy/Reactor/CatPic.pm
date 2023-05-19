@@ -207,14 +207,15 @@ responder llama_pic => {
     "https://llama-as-a-service.vercel.app/llama_url"
   );
 
-  return $http_future->on_done(sub($res)
-  {
-    if ($res->code == 200)
-    {
+  return $http_future->on_done(sub($res)  {
+    
+    if ($res->code == 200)  {
       $event->reply($res->content);
       return;
     }
+    
     $event->reply("Error while retrieving llama pictures!")
+  
   });
 };
 
@@ -234,15 +235,15 @@ responder llama_fax => {
     "https://llama-as-a-service.vercel.app/llama_fax"
   );
 
-  return $http_future->on_done(sub($res)
-  {
-    if ($res->code == 200)
-    {
+  return $http_future->on_done(sub($res)  {
+    
+    if ($res->code == 200)  {
       $event->reply($res->content);
       return;
     }
 
     $event->reply("Error while retrieving llama fax!")
+  
   });
 };
 
