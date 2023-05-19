@@ -191,13 +191,9 @@ sub _build_reactions ($self, @) {
   return $reactions;
 }
 
-# Copied cat_pic code
-# Because there was no documentation
-# Works on terminal, dunno if slack wil be able to display it as an image
-# Tried to test it on local slack, but the documentation was pretty bad with the config files
 responder llama_pic => {
-  exclusive => 1, # No idea what this is.
-  targeted  => 1, # Or this
+  exclusive => 1,
+  targeted  => 1,
   help_titles => [ 'llama pic' ],
   help      => '*llama pic*: get a picture of a llama',
   matcher   => sub ($text, @) {
@@ -223,8 +219,8 @@ responder llama_pic => {
 };
 
 responder llama_fax => {
-  exclusive => 1, # No idea what this is.
-  targeted  => 1, # Or this
+  exclusive => 1,
+  targeted  => 1,
   help_titles => [ 'llama fax' ],
   help      => '*llama fax*: get a fact about a llama',
   matcher   => sub ($text, @) {
