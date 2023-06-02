@@ -346,7 +346,7 @@ package Synergy::Rototron::Rotor {
     'flag-us'   => flag('us'),
     'crown'     => "\N{CROWN}",
     'gear'      => "\N{GEAR}\N{VARIATION SELECTOR-16}", # emoji whiz
-    'helmet'    => "\N{HELMET WITH WHITE CROSS}",
+    'helmet'    => "\N{HELMET WITH WHITE CROSS}\N{VARIATION SELECTOR-16}",
     'sparkles'  => "\N{SPARKLES}",
     'wrench'    => "\N{WRENCH}",
     'frame_with_picture' => "\N{FRAME WITH PICTURE}",
