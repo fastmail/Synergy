@@ -12,6 +12,7 @@ with 'Synergy::Role::Reactor::CommandPost',
 
 use experimental qw(signatures lexical_subs try);
 use namespace::clean;
+use Feature::Compat::Defer;
 
 use Future::AsyncAwait;
 use Linear::Client;
@@ -20,6 +21,9 @@ use Lingua::EN::Inflect qw(PL_N);
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
+use String::Switches;
+
+use POSIX qw(ceil);
 
 use utf8;
 
@@ -317,6 +321,242 @@ async sub _handle_search ($self, $event, $arg) {
 
   return await $self->_with_linear_client($event, $code);
 }
+
+command search => {
+  help => reformat_help(<<~'EOH'),
+    *search* TEXT [page:N] [count:N] [all:1]
+
+    Searches linear the same way advanced search does (but only for
+    tickets/comments).
+
+    Arguments:
+
+    • TEXT     - The string(s) to search
+    • page:N   - Which page of results to retrieve, if there's more than 1
+    • count:N  - Return N results. Default is 10. Any more will be a private response
+    • all:1    - Include tasks in the canceled/completed states also
+    EOH
+} => async sub ($self, $event, $rest) {
+  await $self->_with_linear_client($event, async sub ($linear) {
+    my $fallback = sub ($text_ref) {
+      ((my $token), $$text_ref) = split /\s+/, $$text_ref, 2;
+
+      return [ search => $token ];
+    };
+
+    my $hunks = String::Switches::parse_colonstrings($rest, { fallback => $fallback });
+
+    my $wpage = 1;
+    my $count = 10;
+    my $include_all = 0; # by default, ignore closed
+    my $terms = "";
+    my $debug;
+
+    for my $cond (@$hunks) {
+      my ($name, $val) = @$cond;
+
+      if ($name eq 'page') {
+        $wpage = $val;
+      } elsif ($name eq 'count') {
+        $count = $val;
+      } elsif ($name eq 'all' && $val) {
+        $include_all = 1;
+      } elsif ($name eq 'debug') {
+        $debug = 1;
+      } elsif ($name eq 'search') {
+        $terms .= "$val ";
+      } else {
+        return $event->error_reply("Unknown option $name:$val...");
+      }
+    }
+
+    $terms =~ s/\s+$//;
+
+    unless (length $terms) {
+      return $event->error_reply("You didn't ask me to search for anything...");
+    }
+
+    $event->mark_handled;
+
+    my $linear = $self->_linear_client_for_user($event->from_user);
+    unless ($linear) {
+      return await $event->reply("You don't have a linear token...");
+    }
+
+    my $orig_lc;
+
+    if ($debug) {
+      $orig_lc = $linear->log_complexity;
+
+      $linear->log_complexity(1);
+    }
+
+    defer { $linear->log_complexity($orig_lc); };
+
+    my $filter = {};
+
+    if (! $include_all) {
+      $filter->{state} = {
+        type => {
+          nin => [ qw( canceled completed ) ]
+        }
+      }
+    };
+
+    my $query_result = await $linear->do_paginated_query({
+      query_name => 'searchIssues',
+      query_args => {
+        filter => $filter,
+        includeArchived => \0,
+        term => $terms,
+        first => 0+$count,
+      },
+      nodes_select => [
+        qw(id metadata identifier url priority title),
+        assignee => [ qw(name id) ],
+        state => [ qw(name type) ],
+      ],
+      extra_select => [ qw(totalCount) ],
+    });
+
+    unless ($query_result->payload) {
+      $Logger->log([
+        "Hmm, didn't get expected response. Instead got %s",
+        $query_result->raw_payload
+      ]);
+
+      return $event->error_reply("Sorry, that query returned something unexpected...");
+    }
+
+    my $cpage = 1;
+
+    while ($wpage > $cpage) {
+      unless ($query_result->has_next_page) {
+        return await $event->reply("You requested page $wpage, out of range (max: $cpage)");
+      }
+
+      $cpage++;
+
+      $query_result = await $query_result->next_page;
+
+      unless ($query_result->payload) {
+        $Logger->log([
+          "Hmm, didn't get expected response. Instead got %s",
+          $query_result->raw_payload
+        ]);
+
+        return $event->error_reply("Sorry, that query returned something unexpected after $cpage pages...");
+      }
+    }
+
+    my $text = my $slack = "*Your results for «$terms»*\n";
+
+    for my $node ($query_result->payload->{nodes}->@*) {
+      my $id = $node->{identifier};
+      my $url = $node->{url};
+      my $assignee = $node->{assignee}{name} // '<nobody>';
+      my $state = $node->{state}{name};
+      my $title = $node->{title};
+
+      my $icon = $self->_icon_for_issue($node);
+
+      my $snippet;
+      my $highlights;
+      my $is_title;
+
+      PATH: for my $path ([qw(title)], [qw(comment body)], [qw(description)]) {
+        my $t = $node->{metadata}->{context};
+
+        my $last_path;
+
+        for my $k (@$path) {
+          $t = $t->{$k};
+
+          next PATH unless $t;
+
+          $last_path = $k;
+        }
+
+        next PATH unless $t->{highlights};
+
+        $is_title = 1 if $last_path eq 'title';
+
+        $snippet = $t->{snippet};
+        $highlights = $t->{highlights};
+
+        last;
+      }
+
+      unless ($highlights) {
+        $Logger->log(["No highlights in response to search?: %s", $node]);
+
+        $highlights = [];
+      }
+
+      unless ($snippet) {
+        $Logger->log(["No snippet in response to search?: %s", $node]);
+
+        # Force title only output
+        $is_title = 1;
+      }
+
+      $text  .= "$id $icon $title (_assignee_: $assignee)";
+
+      if (@$highlights && $snippet) {
+        $text .= "found [ @$highlights ] in $snippet\n";
+      }
+
+      if ($is_title) {
+        $title =~ s/$_/*$_*/g for @$highlights;
+        $title =~ s/\*@|@\*/*/g;
+        $title =~ s/`//g;
+
+        $slack .= sprintf "<%s|%s> $icon %s (_assignee_: %s)\n",
+          $url,
+          $id,
+          $title,
+          $assignee,
+      } else {
+        $snippet =~ s/$_/*$_*/g for @$highlights;
+        $snippet =~ s/\n/ /g;
+        $snippet =~ s/\*@|@\*/*/g;
+        $snippet =~ s/`//g;
+
+        $slack .= sprintf "<%s|%s> $icon %s (_assignee_: %s)\n>%s\n",
+          $url,
+          $id,
+          $title,
+          $assignee,
+          $snippet;
+      }
+    }
+
+    my $total = $query_result->payload->{totalCount};
+    my $pages = ceil($total / $count);
+
+    # Apparently 500 means "We gave up counting". UI adds the "+" too
+    $total .= "+" if $total == 500;
+
+    $text  .= "*[Page $cpage/$pages ($total issues)]*\n";
+    $slack .= "*[Page $cpage of $pages ($total issues)]*\n";
+
+    chomp $text;
+    chomp $slack;
+
+    my $method = 'reply';
+
+    if ($count > 10 && $event->is_public) {
+      await $event->reply("I'll respond privately since you want more than 10 results\n");
+
+      $method = 'private_reply';
+    }
+
+    return await $event->$method(
+      "$text",
+      { slack => "$slack" },
+    );
+  });
+};
 
 command urgent => {
   help => reformat_help(<<~'EOH'),

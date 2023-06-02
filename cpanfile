@@ -13,6 +13,7 @@ requires "DateTime::Format::Natural" => "0";
 requires "Defined::KV" => "0";
 requires "Digest::MD5" => "0";
 requires "Encode" => "0";
+requires "Feature::Compat::Defer" => "0";
 requires "File::Find" => "0";
 requires "File::pushd" => "0";
 requires "File::stat" => "0";
