@@ -48,6 +48,13 @@ package Synergy::Reactor::Linear::LinearHelper {
     return $self->{reactor}->canonical_team_name_for(lc $team_name);
   }
 
+  sub expand_team_as_macro ($self, $team_name) {
+    my $macros = $self->{reactor}->team_macros;
+    return unless $macros;
+    return unless my $macro = $macros->{lc $team_name};
+    return $macro;
+  }
+
   sub team_id_for_username ($self, $username) {
     $Logger->log("doing team lookup for $username");
     my $team_id = $self->{reactor}
@@ -90,6 +97,11 @@ has team_aliases => (
   handles => {
     known_team_keys  => 'keys',
   }
+);
+
+has team_macros => (
+  is => 'ro',
+  traits  => [ 'Hash' ],
 );
 
 has _name_mappings => (
