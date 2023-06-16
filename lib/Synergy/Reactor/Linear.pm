@@ -419,7 +419,7 @@ command search => {
       query_name => 'searchIssues',
       query_args => {
         filter => $filter,
-        includeArchived => \0,
+        includeArchived => \1,
         term => $terms,
         first => 0+$count,
       },
