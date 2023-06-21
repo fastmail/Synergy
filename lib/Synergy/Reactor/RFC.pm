@@ -27,15 +27,10 @@ has rfc_index_file => (
   predicate => 'has_rfc_index_file',
 );
 
-has _dbh => (
-  is      => 'ro',
-  lazy    => 1,
-  default => sub {
-    my $self = shift;
-    my $fn   = $self->rfc_index_file;
-    DBI->connect("dbi:SQLite:$fn", undef, undef);
-  },
-);
+sub _dbh ($self) {
+  my $fn = $self->rfc_index_file;
+  DBI->connect("dbi:SQLite:$fn", undef, undef);
+}
 
 sub rfc_entry_for ($self, $number) {
   my ($json) = $self->_dbh->selectrow_array(
