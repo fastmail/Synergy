@@ -153,6 +153,29 @@ listener rfc_mention => async sub ($self, $event) {
   );
 };
 
+command maxrfc => {
+  help => "**maxrfc**: get the highest indexed RFC in our RFC index",
+} => async sub ($self, $event, $rest) {
+  if (length $rest) {
+    return await $event->error_reply("Sorry, maxrfc doesn't take any arguments.");
+  }
+
+  my ($row) = $self->_dbh->selectrow_hashref(q{
+    SELECT *
+    FROM rfcs
+    ORDER BY rfc_number DESC
+    LIMIT 1
+  });
+
+  my $data = JSON::MaybeXS->new->decode($row->{metadata});
+
+  my $reply = sprintf "The highest-numbered RFC in our index is RFC%s, %s.",
+    $row->{rfc_number},
+    $data->{title};
+
+  return await $event->reply($reply);
+};
+
 my $sec_dig = qr/(?:[0-9]+[-.]?)+/;
 
 sub extract_rfc ($self, $text) {
