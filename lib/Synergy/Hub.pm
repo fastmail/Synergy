@@ -47,6 +47,26 @@ has env => (
   )],
 );
 
+has _requests_in_flight => (
+  is => 'rw',
+  isa => 'Int',
+  reader => 'requests_in_flight',
+  default => 0,
+);
+
+sub inc_requests_in_flight ($self) {
+  $self->_requests_in_flight($self->requests_in_flight + 1);
+}
+
+sub dec_requests_in_flight ($self) {
+  $self->_requests_in_flight($self->requests_in_flight - 1);
+
+  if ($self->requests_in_flight == -1) {
+    require Carp;
+    Carp::cluck("requests_in_flight dipped below 0? This does not make sense!");
+  }
+}
+
 has server => (
   is => 'ro',
   isa => 'Synergy::HTTPServer',
@@ -421,13 +441,19 @@ sub http_request ($self, $method, $url, %args) {
   # The returned future will run the loop for us until we return. This makes
   # it asynchronous as far as the rest of the code is concerned, but
   # sychronous as far as the caller is concerned.
+  $self->inc_requests_in_flight;
+
   my $future = $self->http_client->do_request(
     @args
-  )->on_fail(sub {
+  )->on_done(sub ($res) {
+    $self->dec_requests_in_flight;
+
+    return Future->done($res);
+  })->on_fail(sub {
     my $failure = shift;
     $Logger->log("Failed to $method $url: $failure");
+    $self->dec_requests_in_flight;
   });
-
   return $future;
 }
 
