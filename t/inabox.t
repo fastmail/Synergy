@@ -286,7 +286,7 @@ subtest 'create' => sub {
   };
 
   subtest 'good create' => sub {
-    my @texts = $do_create->(wait => 5.25);
+    my @texts = $do_create->(wait => 6);
     is(@texts, 2, 'sent two messages: please hold, then completion');
     cmp_deeply(
       \@texts,
@@ -348,7 +348,7 @@ subtest 'create' => sub {
       action_fetch => gen_response(200 => {
         action => { status => 'errored' },
       }),
-      wait => 5.25,
+      wait => 6,
     );
     cmp_deeply(
       \@texts,
@@ -375,7 +375,7 @@ subtest 'create' => sub {
       last_droplet_fetch => gen_response(200, {
         droplets => [ $foo_droplet ],
       }),
-      wait => 5.25,
+      wait => 6,
     );
 
     cmp_deeply(
