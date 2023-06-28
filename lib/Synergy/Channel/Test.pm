@@ -90,8 +90,8 @@ sub _inject_event ($self, $arg) {
 }
 
 # when we queue an event, and the queue was empty, we should start it
-#                                                  and become ! exhausted
-# when we try to dequeue and the queue is empty, we should become exhausted
+#                                                  and become ! queue_exhausted
+# when we try to dequeue and the queue is empty, we should become queue_exhausted
 # new event type wait-for-reply
 
 has todo => (
@@ -107,8 +107,8 @@ has todo => (
 
 after queue_todo => sub {
   my ($self) = @_;
-  if ($self->is_exhausted) {
-    $self->_set_is_exhausted(0);
+  if ($self->is_queue_exhausted) {
+    $self->_set_is_queue_exhausted(0);
     $self->do_next;
   }
 };
@@ -116,17 +116,25 @@ after queue_todo => sub {
 before do_next => sub {
   my ($self) = @_;
   if ($self->queue_empty) {
-    $self->_set_is_exhausted(1);
+    $self->_set_is_queue_exhausted(1);
   }
 };
 
-has is_exhausted => (
+has is_queue_exhausted => (
   is => 'ro',
-  writer    => '_set_is_exhausted',
+  writer    => '_set_is_queue_exhausted',
   lazy      => 1,
   init_arg  => undef,
   default   => sub ($self, @) { $self->queue_empty },
 );
+
+sub is_exhausted ($self) {
+  return 0 unless $self->is_queue_exhausted;
+
+  # If any http requests are in flight, our reactors are waitig and haven't
+  # responded yet, so give them some more time
+  return $self->hub->requests_in_flight ? 0 : 1;
+};
 
 sub _todo_to_notifier ($self, $todo) {
   my ($method, @rest) = @$todo;
