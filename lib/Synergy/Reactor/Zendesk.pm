@@ -166,15 +166,16 @@ listener ptn_mention => async sub ($self, $event) {
 async sub _output_ticket ($self, $event, $id) {
   my $ticket;
 
-  my $to_return;
-  try {
+  my $ok = eval {
     $ticket = await $self->zendesk_client->ticket_api->get_f($id);
-  } catch ($error) {
-    $Logger->log([ "error fetching ticket %s from Zendesk", $id ]);
-    $to_return = Future->fail("PTN $id", 'http');
+    1;
   };
 
-  return $to_return if $to_return;
+  unless ($ok) {
+    $error = $@;
+    $Logger->log([ "error fetching ticket %s from Zendesk", $id ]);
+    return Future->fail("PTN $id", 'http');
+  };
 
   my $status = $ticket->status;
   my $subject = $ticket->subject;
@@ -253,8 +254,7 @@ async sub ticket_report ($self, $who, $arg = {}) {
   }
 
   my $res;
-  my $to_return;
-  try {
+  my $ok = eval {
     $res = await $self->zendesk_client
                       ->user_api
                       ->get_by_email_no_fetch($email)
@@ -262,12 +262,14 @@ async sub ticket_report ($self, $who, $arg = {}) {
                       ->make_request_f(
                           GET => "/api/v2/users/me.json?include=open_ticket_count"
                         );
-  } catch ($error) {
-    $Logger->log([ "error fetching our user from Zendesk: %s", $error ]);
-    $to_return = [ "failed to get tickets for ticket report" ];
+    1;
   };
 
-  return $to_return if $to_return;
+  unless ($ok) {
+    my $error = $@;
+    $Logger->log([ "error fetching our user from Zendesk: %s", $error ]);
+    return [ "failed to get tickets for ticket report" ];
+  };
 
   unless ($res->{open_ticket_count}) {
     $Logger->log([ "Did not get an open_ticket_count in res: %s", $res ]);
