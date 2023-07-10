@@ -8,7 +8,7 @@ with 'Synergy::Role::Reactor::CommandPost',
        expandos => [ 'ticket' ],
      };
 
-use experimental qw(postderef signatures try);
+use experimental qw(postderef signatures);
 use namespace::clean;
 use utf8;
 
@@ -19,6 +19,7 @@ use Lingua::EN::Inflect qw(WORDLIST);
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Time::Duration qw(ago);
+use Try::Tiny;
 use Zendesk::Client;
 
 __PACKAGE__->add_preference(
@@ -165,12 +166,15 @@ listener ptn_mention => async sub ($self, $event) {
 async sub _output_ticket ($self, $event, $id) {
   my $ticket;
 
+  my $to_return;
   try {
     $ticket = await $self->zendesk_client->ticket_api->get_f($id);
   } catch ($error) {
     $Logger->log([ "error fetching ticket %s from Zendesk", $id ]);
-    return Future->fail("PTN $id", 'http');
-  }
+    $to_return = Future->fail("PTN $id", 'http');
+  };
+
+  return $to_return if $to_return;
 
   my $status = $ticket->status;
   my $subject = $ticket->subject;
@@ -249,6 +253,7 @@ async sub ticket_report ($self, $who, $arg = {}) {
   }
 
   my $res;
+  my $to_return;
   try {
     $res = await $self->zendesk_client
                       ->user_api
@@ -259,8 +264,10 @@ async sub ticket_report ($self, $who, $arg = {}) {
                         );
   } catch ($error) {
     $Logger->log([ "error fetching our user from Zendesk: %s", $error ]);
-    return [ "failed to get tickets for ticket report" ];
-  }
+    $to_return = [ "failed to get tickets for ticket report" ];
+  };
+
+  return $to_return if $to_return;
 
   unless ($res->{open_ticket_count}) {
     $Logger->log([ "Did not get an open_ticket_count in res: %s", $res ]);
@@ -299,7 +306,7 @@ async sub _filter_count_report ($self, $who, $arg = {}) {
   } catch ($error) {
     $Logger->log([ "error making request %s to Zendesk: %s", \@req, $error ]);
     die "failed to get filter count report content";
-  }
+  };
 
   my $count = $res->{count};
   return unless $count;

@@ -10,20 +10,19 @@ with 'Synergy::Role::Reactor::CommandPost',
        expandos => [ 'issue' ],
      };
 
-use experimental qw(signatures lexical_subs try);
+use experimental qw(signatures lexical_subs);
 use namespace::clean;
 use Feature::Compat::Defer;
 
 use Future::AsyncAwait;
 use Linear::Client;
 use Lingua::EN::Inflect qw(PL_N);
-
+use POSIX qw(ceil);
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
 use String::Switches;
-
-use POSIX qw(ceil);
+use Try::Tiny;
 
 use utf8;
 
@@ -748,12 +747,17 @@ command agenda => {
       } else {
         my ($assignee_id, $team_id);
 
-        try {
+        my $ok = eval {
           ($assignee_id, $team_id) = await $linear->who_or_what($spec);
-        } catch ($error) {
+          1;
+        };
+
+        unless ($ok) {
           # Is it really worth logging?
+          my $error = $@;
+
           return await $event->error_reply(q{I couldn't figure out which team's agenda you wanted.});
-        }
+        };
 
         if ($spec =~ /@/) {
           %extra_search = (assignee => $assignee_id, team => $team_id);
@@ -872,11 +876,15 @@ async sub _handle_creation_event ($self, $event, $arg = {}) {
 
     # XXX: I do not like our current error-returning scheme. -- rjbs, 2021-12-10
     my $plan;
-    try {
+    my $ok = eval {
       $plan = await $linear->plan_from_input($ersatz_text // $text);
-    } catch ($err) {
+      1;
+    };
+
+    unless($ok) {
+      my $err = $@;
       return await $event->error_reply("Sorry, that didn't work: $err");
-    }
+    };
 
     $plan_munger->($plan) if $plan_munger;
 
