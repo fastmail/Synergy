@@ -1,4 +1,4 @@
-use v5.34.0;
+use v5.32.0;
 use warnings;
 package Synergy::Reactor::VicEPA;
 
@@ -7,13 +7,14 @@ use DateTime;
 with 'Synergy::Role::Reactor::CommandPost';
 
 use utf8;
-use experimental qw(lexical_subs signatures try);
+use experimental qw(lexical_subs signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;
 use List::Util qw(uniq);
 use Synergy::CommandPost;
 use Synergy::Util qw(parse_date_for_user);
+use Try::Tiny;
 
 use Synergy::Logger '$Logger';
 
@@ -76,9 +77,9 @@ command airwatch => {
     ],
   );
 
-  try {
-    await Future->needs_all($seen, $forecast);
-  } catch ($error) {
+  my $ok = eval { await Future->needs_all($seen, $forecast); 1; };
+  unless ($ok) {
+    my $error = $@;
     $Logger->log([ "Air quality check failed: %s", $error ]);
     return await $event->error_reply("Air quality check failed.");
   }

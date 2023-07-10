@@ -5,7 +5,7 @@ package Synergy::TextThemer;
 ### cluttering up the Console channel and diagnostic interface code.
 ###                                                       -- rjbs, 2022-01-08
 
-use v5.34.0;
+use v5.32.0;
 use Moose;
 
 use experimental qw(signatures);

@@ -1,4 +1,4 @@
-use v5.34.0;
+use v5.32.0;
 use warnings;
 use utf8;
 package Synergy::Reactor::RememberTheMilk;
@@ -7,13 +7,14 @@ use Moose;
 with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
-use experimental qw(signatures try);
+use experimental qw(signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;
 use JSON::MaybeXS;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
+use Try::Tiny;
 use WebService::RTM::CamelMilk;
 
 my $JSON = JSON::MaybeXS->new->utf8->canonical;
@@ -116,7 +117,8 @@ command todo => {
   return await $event->error_reply("You didn't tell me what you want to do!")
     unless length $todo;
 
-  try {
+  my $error_reply;
+  my $ok = eval {
     my $tl = await $self->timeline_for($event->from_user);
 
     my $rsp = await $self->rtm_client->api_call('rtm.tasks.add' => {
@@ -130,15 +132,22 @@ command todo => {
       $Logger->log([
         "failed to cope with a request to make a task: %s", $rsp->_response,
       ]);
-      return await $event->reply("Something went wrong creating that task, sorry.");
+      $error_reply = $event->error_reply("Something went wrong creating that task, sorry.");
+      die $rsp->_response;
     }
 
     $Logger->log([ "made task: %s", $rsp->_response ]);
+    1;
+  };
+
+  if ($ok) {
     return await $event->reply("Task created!");
-  } catch ($fail) {
-    $Logger->log([ "failed to make task: %s", $fail ]);
-    return await $event->reply("Sorry, something went wrong making that task.");
   }
+
+  my $error = $@;
+  $Logger->log([ "failed to make task: %s", $error ]);
+  $error_reply //= $event->error_reply("Something went wrong creating that task, sorry.");
+  return await $event->reply("Sorry, something went wrong making that task.");
 };
 
 command milk => {
@@ -205,7 +214,7 @@ command milkauth => {
   }
 
   if ($arg eq 'start') {
-    try {
+    my $reply = eval {
       my $frob = await $self->frob_for($event->from_user);
       my $auth_uri = join q{?},
         "https://www.rememberthemilk.com/services/auth/",
@@ -217,11 +226,16 @@ command milkauth => {
       …and then tell me `milkauth complete`
       END
 
-      return await $event->private_reply($text, { slack => $text });
-    } catch ($fail) {
-      $Logger->log([ "failed to make start auth: %s", $fail ]);
-      return await $event->reply("Sorry, something went wrong!");
+      return $event->private_reply($text, { slack => $text });
+    };
+
+    if ($reply) {
+      return await $reply;
     }
+
+    my $error = $@;
+    $Logger->log([ "failed to make start auth: %s", $error ]);
+    return await $event->reply("Sorry, something went wrong!");
   }
 
   # So we must have 'auth complete'

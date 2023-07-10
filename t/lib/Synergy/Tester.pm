@@ -1,5 +1,5 @@
 #!perl
-use v5.34.0;
+use v5.32.0;
 use warnings;
 
 package Synergy::Tester;
