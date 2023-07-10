@@ -172,7 +172,7 @@ async sub _output_ticket ($self, $event, $id) {
   };
 
   unless ($ok) {
-    $error = $@;
+    my $error = $@;
     $Logger->log([ "error fetching ticket %s from Zendesk", $id ]);
     return Future->fail("PTN $id", 'http');
   };
@@ -303,9 +303,13 @@ async sub _filter_count_report ($self, $who, $arg = {}) {
   }
 
   my $res;
-  try {
+  my $ok = eval {
     $res = $self->zendesk_client->make_request_f(@req);
-  } catch ($error) {
+    1;
+  };
+
+  unless ($ok) {
+    my $error = $@;
     $Logger->log([ "error making request %s to Zendesk: %s", \@req, $error ]);
     die "failed to get filter count report content";
   };
