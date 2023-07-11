@@ -21,6 +21,7 @@ use Synergy::Logger '$Logger';
 use Time::Duration qw(ago);
 use Try::Tiny;
 use Zendesk::Client;
+use Synergy::Logger '$Logger';
 
 __PACKAGE__->add_preference(
   name      => 'staff-email-address',
@@ -253,15 +254,32 @@ async sub ticket_report ($self, $who, $arg = {}) {
     return [ $text, { slack => $text } ];
   }
 
+  # Return if $email has no associated Zendesk account
+  my $user = eval {
+    await $self->zendesk_client->user_api->get_by_email_f($email);
+  };
+
+  if ($@) {
+    my $error = $@;
+    $error =~ /Expected 1 user, got 0/
+              ? $Logger->log([
+                  "No Zendesk user found for %s",
+                  $email,
+                ])
+              : $Logger->log([
+                  "Unknown error trying to get Zendesk user for %s: %s",
+                  $email,
+                  $error,
+                ]);
+    return;
+  };
+
   my $res;
   my $ok = eval {
-    $res = await $self->zendesk_client
-                      ->user_api
-                      ->get_by_email_no_fetch($email)
-                      ->scoped_client
+    $res = await $user->scoped_client
                       ->make_request_f(
-                          GET => "/api/v2/users/me.json?include=open_ticket_count"
-                        );
+                        GET => "/api/v2/users/me.json?include=open_ticket_count"
+                      );
     1;
   };
 
