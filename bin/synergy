@@ -1,5 +1,5 @@
 #!perl
-use v5.34.0;
+use v5.32.0;
 use warnings;
 # PODNAME: synergy
 # ABSTRACT: the only slack bot you'll ever need
