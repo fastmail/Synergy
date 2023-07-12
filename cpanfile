@@ -20,7 +20,6 @@ requires "File::stat" => "0";
 requires "Future" => "0.36";
 requires "Future::AsyncAwait" => "0";
 requires "Future::Utils" => "0";
-requires "Games::Dice" => "0";
 requires "Getopt::Long::Descriptive" => "0";
 requires "IO::Async::Loop" => "0";
 requires "IO::Async::Process" => "0";
