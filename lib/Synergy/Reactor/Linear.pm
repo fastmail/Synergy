@@ -344,7 +344,8 @@ command search => {
 
     • TEXT     - The string(s) to search
     • page:N   - Which page of results to retrieve, if there's more than 1
-    • count:N  - Return N results. Default is 10. Any more will be a private response
+    • count:N  - Return N results. Default is 10. Any more will be a private response.
+                 Max is 250.
     • all:1    - Include tasks in the canceled/completed states also
     EOH
 } => async sub ($self, $event, $rest) {
@@ -370,6 +371,12 @@ command search => {
         $wpage = $val;
       } elsif ($name eq 'count') {
         $count = $val;
+
+        if ($count > 250) {
+          await $event->reply("You asked for $count. Giving you 250 instead, (or linear gets grumpy))");
+
+          $count = 250;
+        }
       } elsif ($name eq 'all' && $val) {
         $include_all = 1;
       } elsif ($name eq 'debug') {
