@@ -43,7 +43,7 @@ sub run_pre_message_hooks ($self, $event, $text_ref, $alts) {
 }
 
 sub text_without_target_prefix ($self, $text, $me) {
-  my $matched = $text =~ s/\A \s* \@? (\Q$me\E) (?=\W) :? \s* //ix;
+  my $matched = $text =~ s/\A \s* \@? (\Q$me\E) (?=\W) [:,]? \s* //ix;
   return undef unless $matched;
   return $text;
 }
