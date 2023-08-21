@@ -220,7 +220,9 @@ sub synergy_event_from_slack_event ($self, $slack_event, $type = 'message') {
 
   my $was_targeted;
 
-  if ($text =~ s/\A \s* \@? ($me) (?=\W) :? \s* //ix) {
+  my $new = $self->text_without_target_prefix($text, $me);
+  if (defined $new) {
+    $text = $new;
     $was_targeted = !! $1;
   }
 
