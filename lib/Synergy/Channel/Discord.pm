@@ -77,7 +77,7 @@ sub synergy_event_from_discord_event ($self, $discord_event) {
   my $new = $self->text_without_target_prefix($text, $me);
   if (defined $new) {
     $text = $new;
-    $was_targeted = !! $1;
+    $was_targeted = 1;
   }
   $was_targeted = 1 if $self->discord->is_dm_channel($discord_event->{channel_id});
 
