@@ -15,12 +15,6 @@ use namespace::autoclean;
 
 with 'Synergy::Role::Channel';
 
-has prefix => (
-  is  => 'ro',
-  isa => 'Str',
-  default => q{synergy: },
-);
-
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
   my $to_address = $user->identity_for($self->name);
 
@@ -70,8 +64,14 @@ sub _inject_event ($self, $arg) {
   my $text = $arg->{text} // "This is a test, sent at " . localtime . ".";
   my $from_address = $arg->{from} // $self->default_from;
 
-  my $prefix = $self->prefix;
-  my $had_prefix = $text =~ s/\A\Q$prefix\E\s*//;
+  my $had_prefix = 0;
+
+  my $new = $self->text_without_target_prefix($text, $self->hub->name);
+
+  if (defined $new) {
+    $text = $new;
+    $had_prefix = 1;
+  }
 
   my $from_user = $self->hub->user_directory->user_by_channel_and_address($self->name, $from_address);
 
