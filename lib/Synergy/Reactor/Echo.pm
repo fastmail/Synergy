@@ -11,7 +11,15 @@ use namespace::clean;
 use Future::AsyncAwait;
 use Synergy::CommandPost;
 
+has only_targeted => (
+  is      => 'ro',
+  isa     => 'Bool',
+  default => 0,
+);
+
 listener echo => async sub ($self, $event) {
+  return if $self->only_targeted && ! $event->was_targeted;
+
   my $from_str = $event->from_user ? $event->from_user->username
                                    : $event->from_address;
 
