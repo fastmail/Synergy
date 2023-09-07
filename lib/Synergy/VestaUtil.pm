@@ -6,6 +6,7 @@ package Synergy::VestaUtil;
 use experimental qw(signatures);
 use utf8;
 
+use List::Util qw(uniq);
 use MIME::Base64 ();
 
 my %CHAR_FOR = (
@@ -182,8 +183,8 @@ sub _text_to_board ($self, $text) {
 sub text_to_board ($self, $text) {
   $text = uc $text;
 
-  unless ($self->_text_is_valid($text)) {
-    return (undef, "Sorry, I can't post that to the board.");
+  if (my $text_problem = $self->_problem_with_text($text)) {
+    return (undef, $text_problem);
   }
 
   my $post = $self->_text_to_board($text);
@@ -195,11 +196,19 @@ sub text_to_board ($self, $text) {
   return $post;
 }
 
-sub _text_is_valid ($self, $text) {
+sub _problem_with_text ($self, $text) {
+  if (length $text > 6 * 22) {
+    return "That text is too long.  The limit is 132 characters (six rows of 22)."
+  }
+
   # This feels pretty thing. -- rjbs, 2021-05-31
-  return if $text =~ m{[^ 0-9A-Z!@#\$\(\)\-\+&=;:'"%,./?°🟥🟧🟨🟩🟦🟪⬜️]};
-  return if length $text > 6 * 22;
-  return 1;
+  my $unwanted = $text =~ s{[ 0-9A-Z!@#\$\(\)\-\+&=;:'"%,./?°🟥🟧🟨🟩🟦🟪⬜️]}{}gr;
+
+  return unless $unwanted;
+
+  $unwanted = join q{}, sort(uniq(split //, $unwanted));
+
+  return "That text contains characters you can't use.  Here they are: $unwanted";
 }
 
 1;
