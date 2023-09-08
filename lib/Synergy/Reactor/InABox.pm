@@ -268,8 +268,12 @@ sub handle_create ($self, $event, $switches) {
       });
     })
     ->then(sub ($snapshot, $ssh_key) {
-      my $name = $self->_box_name_for($event->from_user, $tag);
-      my $region = $self->_region_for_user($event->from_user);
+      my $user = $event->from_user;
+      my $username = $user->username;
+
+      my $name = $self->_box_name_for($user, $tag);
+      my $region = $self->_region_for_user($user);
+
 
       my %droplet_create_args = (
         name     => $name,
@@ -277,7 +281,7 @@ sub handle_create ($self, $event, $switches) {
         size     => $size,
         image    => $snapshot->{id},
         ssh_keys => [ $ssh_key->{id} ],
-        tags     => [ 'fminabox' ],
+        tags     => [ 'fminabox', "owner:$username" ],
       );
 
       $Logger->log([ "Creating droplet: %s", \%droplet_create_args ]);
