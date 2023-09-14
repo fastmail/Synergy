@@ -69,20 +69,6 @@ after register_with_hub => sub ($self, @) {
       my $doings = $self->_user_doings;
 
       %$doings = $state->{doings}->%*;
-
-      {
-        # XXX Temporary upgrade code, should only need to run once.
-        # -- rjbs, 2018-07-13
-        my $upgraded;
-        for my $username (keys %$doings) {
-          if ($doings->{$username} && ref $doings->{$username} eq 'HASH') {
-            $doings->{$username} = [ $doings->{$username} ];
-            $upgraded = 1;
-          }
-        }
-
-        $self->save_state if $upgraded;
-      }
     }
   }
 };
