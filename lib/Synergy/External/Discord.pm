@@ -80,6 +80,7 @@ has channels => (
     _set_channel => 'set',
   },
 );
+
 sub set_channel ($self, $channel) {
   $Logger->log_fatal("ERROR: set_channel takes a type 0 channel object")
     unless $channel->{type} == 0;
