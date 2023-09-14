@@ -7,6 +7,8 @@ use experimental qw(lexical_subs signatures);
 use namespace::autoclean;
 use utf8;
 
+use Future::AsyncAwait;
+
 use JSON::MaybeXS;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
@@ -379,7 +381,7 @@ sub send_heartbeat {
   return;
 }
 
-sub send_message ($self, $channel_id, $text, $alts = {}) {
+async sub send_message ($self, $channel_id, $text, $alts = {}) {
   if (my $r = $alts->{discord_reaction}) {
     # This code is mostly stolen from the Slack external.
     # -- rjbs, 2020-05-17
@@ -406,74 +408,63 @@ sub send_message ($self, $channel_id, $text, $alts = {}) {
         );
       }
 
-      my $f = $self->loop->new_future;
-      $http_future->on_done(sub ($http_res) {
-        my $res = {};
-        $f->done({
-          type => 'discord',
-          transport_data => $res
-        });
-      });
+      my $http_res = await $http_future;
 
-      return $f;
+      return {
+        type => 'discord',
+        transport_data => {},
+      };
     }
   }
 
-  my $http_future = $self->api_post("/channels/$channel_id/messages", {
+  await $self->api_post("/channels/$channel_id/messages", {
     content => $alts->{discord} // $text,
     # XXX attachments and stuff
   });
 }
 
-sub api_post ($self, $endpoint, $arg = {}) {
+async sub api_post ($self, $endpoint, $arg = {}) {
   my $url = "https://discordapp.com/api$endpoint";
-  return Future->wrap(
-    $self->hub->http_client->POST(
-      URI->new($url),
-      $arg,
-      headers => {
-        'Authorization' => 'Bot '.$self->bot_token,
-      },
-    )
+  return await $self->hub->http_client->POST(
+    URI->new($url),
+    $arg,
+    headers => {
+      'Authorization' => 'Bot '.$self->bot_token,
+    },
   );
 }
 
-sub api_get ($self, $endpoint, $arg = {}) {
+async sub api_get ($self, $endpoint, $arg = {}) {
   my $u = URI->new("https://discordapp.com/api$endpoint");
   $u->query_param($_ => $arg->{$_}) for sort keys %$arg;
-  return Future->wrap(
-    $self->hub->http_client->GET(
-      $u,
-      headers => {
-        'Authorization' => 'Bot '.$self->bot_token,
-      },
-    )
+
+  return await $self->hub->http_client->GET(
+    $u,
+    headers => {
+      'Authorization' => 'Bot '.$self->bot_token,
+    },
   );
 }
 
-sub api_delete ($self, $endpoint, $arg = {}) {
+async sub api_delete ($self, $endpoint, $arg = {}) {
   my $u = URI->new("https://discordapp.com/api$endpoint");
-  return Future->wrap(
-    $self->hub->http_client->DELETE(
-      $u,
-      headers => {
-        'Authorization' => 'Bot '.$self->bot_token,
-      },
-    )
+  return await $self->hub->http_client->DELETE(
+    $u,
+    headers => {
+      'Authorization' => 'Bot '.$self->bot_token,
+    },
   );
 }
 
-sub api_put ($self, $endpoint, $arg = {}) {
+async sub api_put ($self, $endpoint, $arg = {}) {
   my $u = URI->new("https://discordapp.com/api$endpoint");
-  return Future->wrap(
-    $self->hub->http_client->PUT(
-      $u,
-      q{},
-      content_type => 'text/plain',
-      headers => {
-        'Authorization' => 'Bot '.$self->bot_token,
-      },
-    )
+  return await $self->hub->http_client->PUT(
+    $u,
+    q{},
+    content_type => 'text/plain',
+    headers => {
+      'Authorization' => 'Bot '.$self->bot_token,
+    },
   );
 }
 
@@ -516,7 +507,7 @@ sub load_users ($self) {
     });
 
     $self->loaded_users(1);
-  });
+  })->retain;
 }
 
 sub load_channels ($self) {
@@ -533,7 +524,7 @@ sub load_channels ($self) {
     $Logger->log("Discord: channels loaded");
 
     $self->loaded_channels(1);
-  });
+  })->retain;
 }
 
 1;
