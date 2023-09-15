@@ -13,6 +13,7 @@ use List::Util qw(first);
 use Synergy::CommandPost;
 
 command slackid => {
+  help => '*slackid @person* or *slackid #channel*: provide the Slack ID for a thing'
 } => async sub ($self, $event, $rest) {
   unless ($event->from_channel->can('slack')) {
     return await $event->error_reply("Sorry, you can't use *slackid* outside Slack");
@@ -45,6 +46,7 @@ command slackid => {
 };
 
 responder reload_slack => {
+  help => "*reload slack `{users, channels}`*: reload Slack data; you shouldn't need this!",
   exclusive => 1,
   targeted  => 1,
   matcher   => sub ($text, @) {
