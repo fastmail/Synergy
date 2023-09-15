@@ -651,25 +651,10 @@ async sub _update_dns ($self, $name, $ip) {
   );
 }
 
-sub _add_box_to_project ($self, $droplet) {
-  return Future->done unless $self->has_project_id;
+async sub _add_box_to_project ($self, $droplet) {
+  return unless $self->has_project_id;
 
-  my $id = $droplet->{id};
-  my $name = $droplet->{name};
-
-  my $base = '/projects/' . $self->box_project_id . '/resources';
-
-  return $self->_do_request(POST => $base, {
-    resources => [ "do:droplet:$id" ],
-  })->then(sub {
-    $Logger->log("added $name to project " . $self->box_project_id);
-    return Future->done;
-  })->else(sub {
-      # We don't actually care if this fails (what can we do?), so we
-      # transform a failure into a success.
-      $Logger->log("ignoring error when adding $name to project");
-      return Future->done;
-    });
+  await $self->dobby->add_droplet_to_project($droplet->{id}, $self->project_id);
 }
 
 __PACKAGE__->add_preference(
