@@ -9,6 +9,7 @@ use utf8;
 
 use Future::AsyncAwait;
 
+use Defined::KV;
 use JSON::MaybeXS;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
@@ -417,10 +418,27 @@ async sub send_message ($self, $channel_id, $text, $alts = {}) {
     }
   }
 
-  await $self->api_post("/channels/$channel_id/messages", {
+  my $to_send = {
     content => $alts->{discord} // $text,
-    # XXX attachments and stuff
-  });
+  };
+
+  if (ref $alts->{discord}) {
+    $to_send = {
+      content => $alts->{discord}{content},
+      defined_kv(components => $alts->{discord}{components}),
+    };
+  }
+
+  my $res = await $self->api_post(
+    "/channels/$channel_id/messages",
+    $to_send,
+  );
+
+  unless ($res->is_success) {
+    $Logger->log([ "error creating message: %s", $res->content ]);
+  }
+
+  return $res;
 }
 
 async sub api_post ($self, $endpoint, $arg = {}) {

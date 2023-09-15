@@ -80,4 +80,29 @@ command 'dd-channel' => {
   return await $event->reply($text);
 };
 
+command 'dd-comps' => {
+} => async sub ($self, $event, $rest) {
+  return await $event->reply(
+    "This text will never be seen.",
+    {
+      discord => {
+        content => "This message is a test of components.",
+        components => [
+          {
+            type => 1,
+            components => [
+              {
+                type => 2,
+                label => "Click me!",
+                style => 1,
+                custom_id => "click_one"
+              }
+            ]
+          }
+        ],
+      }
+    }
+  );
+};
+
 1;
