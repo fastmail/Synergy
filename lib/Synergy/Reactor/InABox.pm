@@ -639,52 +639,16 @@ sub _region_for_user ($self, $user) {
                            'nyc3';
 }
 
-sub remove_dns_entries ($self, $ip) {
-  my $base = '/domains/' . $self->box_domain . '/records';
-
-  return $self->_do_request(GET => "$base?per_page=200")
-  ->then(sub ($data) {
-    my @records = grep {$_->{data} eq $ip } $data->{domain_records}->@*;
-    Future->done(@records);
-  })
-  ->then(sub (@records) {
-    return Future->wait_all(
-      map {
-        $self->_do_request(DELETE => "$base/$_->{id}", {})
-      } @records
-    );
-  });
+async sub remove_dns_entries ($self, $ip) {
+  await $self->dobby->remove_domain_records_for_ip($self->box_domain, $ip);
 }
 
-sub _update_dns ($self, $name, $ip) {
-  my $base = '/domains/' . $self->box_domain . '/records';
-
-  $self->_do_request(GET => "$base?per_page=200")
-    ->then(sub ($data) {
-      my ($record) = grep { $_->{name} eq $name } $data->{domain_records}->@*;
-      Future->done($record);
-    })
-    ->then(sub ($record) {
-      if ($record) {
-        return $self->_do_request(PUT => "$base/$record->{id}", {
-          data => $ip
-        });
-      }
-
-      return $self->_do_request(POST => "$base", {
-        type => 'A',
-        name => $name,
-        data => $ip,
-        ttl  => 30,
-      });
-    })
-    ->then(sub { return Future->done })
-    ->else(sub {
-      # We don't actually care if this fails (what can we do?), so we
-      # transform a failure into a success.
-      $Logger->log("ignoring error when updating DNS with DO ($name)");
-      return Future->done;
-    });
+async sub _update_dns ($self, $name, $ip) {
+  await $self->dobby->point_domain_records_at_ip(
+    $self->box_domain,
+    $name,
+    $ip,
+  );
 }
 
 sub _add_box_to_project ($self, $droplet) {
