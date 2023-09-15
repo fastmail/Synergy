@@ -13,6 +13,7 @@ use namespace::clean;
 
 use Future::AsyncAwait;
 
+use Dobby::Client;
 use Synergy::Logger '$Logger';
 use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
@@ -66,9 +67,24 @@ has digitalocean_api_token => (
   required => 1,
 );
 
+has dobby => (
+  is    => 'ro',
+  lazy  => 1,
+  default => sub ($self) {
+    my $dobby = Dobby::Client->new(
+      bearer_token => $self->digitalocean_api_token,
+    );
+
+    $self->loop->add($dobby);
+
+    return $dobby;
+  }
+);
+
 sub _do_endpoint ($self, $endpoint) {
   return $self->digitalocean_api_base . $endpoint;
 }
+
 sub _do_headers ($self) {
   return (
     'Authorization' => 'Bearer ' . $self->digitalocean_api_token,
