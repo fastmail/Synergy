@@ -183,7 +183,7 @@ sub _chatter_status ($self, $event, $user) {
 command status => {
   help => "*status for* `USER`: see what the user has been up to",
 } => async sub ($self, $event, $rest) {
-  unless ($rest =~ /^(?:for\s+)?@?(\w+)\s*$/i) {
+  unless (length $rest && $rest =~ /^(?:for\s+)?@?(\w+)\s*$/i) {
     return await $event->error_reply("It's:  *status for* `USER`");
   }
 
