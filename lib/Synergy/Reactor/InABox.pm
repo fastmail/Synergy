@@ -11,6 +11,8 @@ with 'Synergy::Role::Reactor::EasyListening',
 use experimental qw(signatures);
 use namespace::clean;
 
+use Future::AsyncAwait;
+
 use Synergy::Logger '$Logger';
 use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
@@ -219,18 +221,17 @@ sub _determine_version_and_tag ($self, $event, $switches) {
   return ($version, $tag, $is_default_box);
 }
 
-sub handle_status ($self, $event, $switches) {
-  $self->_get_droplets_for($event->from_user)
-    ->then(sub ($droplets = undef) {
-      if (@$droplets) {
-        return $event->reply(join "\n",
-          "Your boxes: ",
-          map { $self->_format_droplet($_) } @$droplets,
-        );
-      }
+async sub handle_status ($self, $event, $switches) {
+  my $droplets = await $self->_get_droplets_for($event->from_user);
 
-      return $event->reply("You don't seem to have any boxes.");
-    });
+  if (@$droplets) {
+    return await $event->reply(join "\n",
+      "Your boxes: ",
+      map { $self->_format_droplet($_) } @$droplets,
+    );
+  }
+
+  return await $event->reply("You don't seem to have any boxes.");
 }
 
 sub handle_create ($self, $event, $switches) {
