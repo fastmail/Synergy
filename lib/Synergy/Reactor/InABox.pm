@@ -601,23 +601,19 @@ async sub _get_snapshot ($self, $version) {
   die "no snapshot found for fminabox-$version\n";
 }
 
-sub _get_ssh_key ($self) {
-  return $self->_do_request(GET => '/account/keys?per_page=200')
-    ->then(sub ($data) {
-      my ($ssh_key) = grep {; $_->{name} eq 'fminabox' } $data->{ssh_keys}->@*;
+async sub _get_ssh_key ($self) {
+  my $dobby = $self->dobby;
+  my $keys_res = await $dobby->json_get("/account/keys");
 
-      if ($ssh_key) {
-        $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->{id}, $ssh_key->{name} ]);
-        return Future->done($ssh_key);
-      }
+  my ($ssh_key) = grep {; $_->{name} eq 'fminabox' } $keys_res->{ssh_keys}->@*;
 
-      $Logger->log([ "fminabox SSH key not found?!" ]);
-      return Future->fail(
-        "Hmm, I couldn't find a DO ssh key to use for fminabox",
-        'stop-processing',
-      );
-    }
-  );
+  if ($ssh_key) {
+    $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->@{ qw(id name) } ]);
+    return $ssh_key;
+  }
+
+  $Logger->log([ "fminabox SSH key not found?!" ]);
+  die "Hmm, I couldn't find a DO ssh key to use for fminabox\n";
 }
 
 sub _dns_name_for ($self, $user, $tag = undef) {
