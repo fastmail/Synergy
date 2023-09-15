@@ -586,24 +586,19 @@ sub _format_droplet ($self, $droplet) {
     $droplet->{status};
 }
 
-sub _get_snapshot ($self, $version) {
-  return $self->_do_request(GET => '/snapshots?per_page=200')
-    ->then(sub ($data) {
-      my ($snapshot) = sort { $b->{name} cmp $a->{name} }
-                       grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
-                       $data->{snapshots}->@*;
+async sub _get_snapshot ($self, $version) {
+  my $dobby = $self->dobby;
+  my $data  = await $dobby->json_get('/snapshots?per_page=200');
 
-      if ($snapshot) {
-        $Logger->log([ "Found snapshot: %s (%s)", $snapshot->{id}, $snapshot->{name} ]);
-        return Future->done($snapshot);
-      }
+  my ($snapshot) = sort { $b->{name} cmp $a->{name} }
+                   grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
+                   $data->{snapshots}->@*;
 
-      $Logger->log([ "fminabox snapshot not found?!" ]);
-      return Future->fail(
-        "Hmm, I couldn't find a DO snapshot for fminabox-$version",
-        'stop-processing'
-      );
-    });
+  if ($snapshot) {
+    return $snapshot;
+  }
+
+  die "no snapshot found for fminabox-$version\n";
 }
 
 sub _get_ssh_key ($self) {
