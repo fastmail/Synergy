@@ -427,7 +427,8 @@ async sub api_post ($self, $endpoint, $arg = {}) {
   my $url = "https://discordapp.com/api$endpoint";
   return await $self->hub->http_client->POST(
     URI->new($url),
-    $arg,
+    JSON::MaybeXS->new->encode($arg),
+    content_type => 'application/json',
     headers => {
       'Authorization' => 'Bot '.$self->bot_token,
     },
