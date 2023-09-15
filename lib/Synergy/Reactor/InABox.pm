@@ -250,122 +250,104 @@ async sub handle_status ($self, $event, $switches) {
   return await $event->reply("You don't seem to have any boxes.");
 }
 
-sub handle_create ($self, $event, $switches) {
+async sub handle_create ($self, $event, $switches) {
   my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
 
   # XXX call /v2/sizes API to validate
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
   my $size = $switches->{size} // $self->default_box_size;
 
-  return $self->_get_droplet_for($event->from_user, $tag)
-    ->then(sub ($maybe_droplet) {
-      if ($maybe_droplet) {
-        return Future->fail(
-          "This box already exists: " . $self->_format_droplet($maybe_droplet),
-          'stop-processing'
-        );
-      }
+  my $maybe_droplet = await $self->_get_droplet_for($event->from_user, $tag);
 
-      my $name = $self->_box_name_for($event->from_user, $tag);
-      my $region = $self->_region_for_user($event->from_user);
-      $event->reply("Creating $name in $region, this will take a minute or two.");
+  if ($maybe_droplet) {
+    die "This box already exists: " . $self->_format_droplet($maybe_droplet) . "\n";
+  }
 
-      return Future->done;
-    })
-    ->then(sub {
-      # It would be nice to do this and the SSH key in parallel, but in
-      # testing that causes *super* strange errors deep down in IO::Async if
-      # one of the calls fails and the other does not, so here we'll just
-      # admit defeat and do them in sequence. -- michael, 2020-04-02
-      return $self->_get_snapshot($version);
-    })
-    ->then(sub ($snapshot) {
-      return $self->_get_ssh_key->transform(done => sub ($ssh_key) {
-        return ($snapshot, $ssh_key);
-      });
-    })
-    ->then(sub ($snapshot, $ssh_key) {
-      my $user = $event->from_user;
-      my $username = $user->username;
+  my $user = $event->from_user;
+  my $name = $self->_box_name_for($user, $tag);
+  my $region = $self->_region_for_user($user);
+  $event->reply("Creating $name in $region, this will take a minute or two.");
 
-      my $name = $self->_box_name_for($user, $tag);
-      my $region = $self->_region_for_user($user);
+  # It would be nice to do these in parallel, but in testing that causes
+  # *super* strange errors deep down in IO::Async if one of the calls fails and
+  # the other does not, so here we'll just admit defeat and do them in
+  # sequence. -- michael, 2020-04-02
+  my $snapshot = await $self->_get_snapshot($version);
+  my $ssh_key  = await $self->_get_ssh_key;
 
+  my $username = $user->username;
 
-      my %droplet_create_args = (
-        name     => $name,
-        region   => $region,
-        size     => $size,
-        image    => $snapshot->{id},
-        ssh_keys => [ $ssh_key->{id} ],
-        tags     => [ 'fminabox', "owner:$username" ],
-      );
+  my %droplet_create_args = (
+    name     => $name,
+    region   => $region,
+    size     => $size,
+    image    => $snapshot->{id},
+    ssh_keys => [ $ssh_key->{id} ],
+    tags     => [ 'fminabox', "owner:$username" ],
+  );
 
-      $Logger->log([ "Creating droplet: %s", \%droplet_create_args ]);
+  $Logger->log([ "Creating droplet: %s", \%droplet_create_args ]);
 
-      return $self->_do_request(POST => '/droplets', \%droplet_create_args);
-    })
-    ->then(sub ($data) {
-      my $droplet = $data->{droplet};
-      my $action_id = $data->{links}{actions}[0]{id};
+  my $data = await $self->_do_request(POST => '/droplets', \%droplet_create_args);
 
-      unless ($droplet) {
-        return Future->fail(
-          'There was an error creating the box. Try again.',
-          'stop-processing'
-        );
-      }
+  my $droplet = $data->{droplet};
+  my $action_id = $data->{links}{actions}[0]{id};
 
-      return $self->_do_action_status_f("/actions/$action_id");
-    })
-    ->then(sub ($status = undef) {
-      # We delay this 5 seconds because a completed droplet sometimes does not
-      # show up in GET /droplets immediately, which causes annoying problems.
-      # Waiting 5s is a silly fix, but seems to work, and it's not like box
-      # creation is lightning-fast anyway. -- michael, 2021-04-16
-      $self->hub->loop->delay_future(after => 5)->then_done($status)
-    })
-    ->then(sub ($status = undef) {
-      # action status checks have been seen to time out or crash but the droplet
-      # still turns up fine, so only consider it if we got a real response
-      if ($status && $status ne 'completed') {
-        return Future->fail(
-          "Something went wrong while creating box, check the DigitalOcean console and maybe try again.",
-          'stop-processing',
-        );
-      }
+  unless ($droplet) {
+    die "There was an error creating the box. Try again.\n";
+  }
 
-      return Future->done;
-    })
-    ->then(sub { $self->_get_droplet_for($event->from_user, $tag) })
-    ->then(sub ($droplet) {
-      if ($droplet) {
-        $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-        $event->reply("Box created: " . $self->_format_droplet($droplet));
-      } else {
-        # We don't fail here, because we want to try to update DNS regardless.
-        $event->error_reply(
-          "Box was created, but now I can't find it! Check the DigitalOcean console and maybe try again."
-        );
-      }
+  my $status = await $self->_do_action_status_f("/actions/$action_id");
 
-      # Add it to the relevant project. If this fails, then...oh well.
-      $self->_add_box_to_project($droplet)->retain;
+  # We delay this 5 seconds because a completed droplet sometimes does not
+  # show up in GET /droplets immediately, which causes annoying problems.
+  # Waiting 5s is a silly fix, but seems to work, and it's not like box
+  # creation is lightning-fast anyway. -- michael, 2021-04-16
+  await $self->hub->loop->delay_future(after => 5);
 
-      # update the DNS name. we will assume this succeeds; if it fails the box
-      # is still good and there's not really much else we can do.
-      my $ip_address = $self->_ip_address_for_droplet($droplet);
-      my $update_f = $self->_update_dns($self->_dns_name_for($event->from_user, $tag), $ip_address);
-      return $update_f unless $is_default_box;
+  # action status checks have been seen to time out or crash but the droplet
+  # still turns up fine, so only consider it if we got a real response
+  if ($status && $status ne 'completed') {
+    die "Something went wrong while creating box, check the DigitalOcean console and maybe try again.\n";
+  }
 
-      # if this is the default box, also set the default name (ie
-      # username.box). we make a second DNS-updating future and combine them
-      # together
-      return Future->wait_all(
-        $update_f,
-        $self->_update_dns($self->_dns_name_for($event->from_user), $ip_address),
-      );
-    });
+  $droplet = await $self->_get_droplet_for($user, $tag);
+
+  if ($droplet) {
+    $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+    $event->reply("Box created: " . $self->_format_droplet($droplet));
+  } else {
+    # We don't fail here, because we want to try to update DNS regardless.
+    $event->error_reply(
+      "Box was created, but now I can't find it! Check the DigitalOcean console and maybe try again."
+    );
+  }
+
+  # Add it to the relevant project. If this fails, then...oh well.
+  # -- ?
+  #
+  # I'm putting the result in a variable, because not doing so led to some
+  # weird-o error from AsyncAwait.  I'll ask LeoNerd about it. -- rjbs,
+  # 2023-09-15
+  my $project_res = $self->_add_box_to_project($droplet);
+
+  # update the DNS name. we will assume this succeeds; if it fails the box
+  # is still good and there's not really much else we can do.
+  my $ip_address = $self->_ip_address_for_droplet($droplet);
+
+  my @updates = $self->_update_dns(
+    $self->_dns_name_for($event->from_user, $tag),
+    $ip_address
+  );
+
+  if ($is_default_box) {
+    push @updates, $self->_update_dns(
+      $self->_dns_name_for($event->from_user),
+      $ip_address
+    ),
+  }
+
+  return await Future->wait_all(@updates);
 }
 
 sub handle_destroy ($self, $event, $switches) {
