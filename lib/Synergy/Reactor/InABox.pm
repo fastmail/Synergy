@@ -288,28 +288,17 @@ async sub handle_create ($self, $event, $switches) {
 
   $Logger->log([ "Creating droplet: %s", \%droplet_create_args ]);
 
-  my $data = await $self->_do_request(POST => '/droplets', \%droplet_create_args);
-
-  my $droplet = $data->{droplet};
-  my $action_id = $data->{links}{actions}[0]{id};
+  my $droplet = await $self->dobby->create_droplet(\%droplet_create_args);
 
   unless ($droplet) {
     die "There was an error creating the box. Try again.\n";
   }
-
-  my $status = await $self->_do_action_status_f("/actions/$action_id");
 
   # We delay this 5 seconds because a completed droplet sometimes does not
   # show up in GET /droplets immediately, which causes annoying problems.
   # Waiting 5s is a silly fix, but seems to work, and it's not like box
   # creation is lightning-fast anyway. -- michael, 2021-04-16
   await $self->hub->loop->delay_future(after => 5);
-
-  # action status checks have been seen to time out or crash but the droplet
-  # still turns up fine, so only consider it if we got a real response
-  if ($status && $status ne 'completed') {
-    die "Something went wrong while creating box, check the DigitalOcean console and maybe try again.\n";
-  }
 
   $droplet = await $self->_get_droplet_for($user, $tag);
 
@@ -329,25 +318,33 @@ async sub handle_create ($self, $event, $switches) {
   # I'm putting the result in a variable, because not doing so led to some
   # weird-o error from AsyncAwait.  I'll ask LeoNerd about it. -- rjbs,
   # 2023-09-15
-  my $project_res = $self->_add_box_to_project($droplet);
+  if ($self->has_project_id) {
+    my $project_res = await $self->dobby->add_droplet_to_project(
+      $droplet->{id},
+      $self->box_project_id
+    );
+  }
 
   # update the DNS name. we will assume this succeeds; if it fails the box
   # is still good and there's not really much else we can do.
   my $ip_address = $self->_ip_address_for_droplet($droplet);
 
-  my @updates = $self->_update_dns(
+  my @names = (
     $self->_dns_name_for($event->from_user, $tag),
-    $ip_address
+    ($is_default_box ? $self->_dns_name_for($event->from_user) : ())
   );
 
-  if ($is_default_box) {
-    push @updates, $self->_update_dns(
-      $self->_dns_name_for($event->from_user),
-      $ip_address
-    ),
+  for my $name (@names) {
+    $Logger->log("updating DNS names for $name");
+
+    await $self->dobby->point_domain_record_at_ip(
+      $self->box_domain,
+      $name,
+      $ip_address,
+    );
   }
 
-  return await Future->wait_all(@updates);
+  return;
 }
 
 sub handle_destroy ($self, $event, $switches) {
@@ -623,20 +620,6 @@ sub _region_for_user ($self, $user) {
 
 async sub remove_dns_entries ($self, $ip) {
   await $self->dobby->remove_domain_records_for_ip($self->box_domain, $ip);
-}
-
-async sub _update_dns ($self, $name, $ip) {
-  await $self->dobby->point_domain_records_at_ip(
-    $self->box_domain,
-    $name,
-    $ip,
-  );
-}
-
-async sub _add_box_to_project ($self, $droplet) {
-  return unless $self->has_project_id;
-
-  await $self->dobby->add_droplet_to_project($droplet->{id}, $self->project_id);
 }
 
 __PACKAGE__->add_preference(
