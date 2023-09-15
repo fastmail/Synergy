@@ -547,28 +547,24 @@ sub _do_action_status_f ($self, $actionurl) {
   };
 }
 
-sub _get_droplet_for ($self, $user, $tag = undef) {
+async sub _get_droplet_for ($self, $user, $tag = undef) {
   my $name = $self->_box_name_for($user, $tag);
 
-  return $self->_do_request(GET => '/droplets?per_page=200')
-    ->then(sub ($data) {
-      my ($droplet) = grep {; $_->{name} eq $name }
-                      $data->{droplets}->@*;
+  my $droplets = await $self->_get_droplets_for($user);
 
-      Future->done($droplet);
-    });
+  my ($droplet) = grep {; $_->{name} eq $name } @$droplets;
+
+  return $droplet;
 }
 
-sub _get_droplets_for ($self, $user) {
+async sub _get_droplets_for ($self, $user) {
+  my $dobby = $self->dobby;
   my $username = $user->username;
+  my $tag   = "owner:$username";
 
-  return $self->_do_request(GET => '/droplets?per_page=200')
-    ->then(sub ($data) {
-      my @droplets = grep {; $_->{name} =~ m/^$username[\.\-]/ }
-                     $data->{droplets}->@*;
+  my @droplets = await $dobby->get_droplets_with_tag($tag);
 
-      Future->done(\@droplets);
-    });
+  return \@droplets;
 }
 
 sub _ip_address_for_droplet ($self, $droplet) {
