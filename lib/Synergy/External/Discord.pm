@@ -213,7 +213,7 @@ sub handle_event ($self, $event) {
   # https://discordapp.com/developers/docs/topics/opcodes-and-status-codes
   state $opcode_handlers = {
     0  => \&handle_dispatch,
-    1  => \&handle_hearbeat,
+    1  => \&handle_heartbeat,
     7  => \&handle_reconnect,
     9  => \&handle_invalid_session,
     10 => \&handle_hello,
