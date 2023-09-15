@@ -12,7 +12,7 @@ use namespace::clean;
 use Future::AsyncAwait;
 use Synergy::CommandPost;
 
-responder my_projects => {
+responder eject_warp_core => {
   exclusive => 1,
   targeted  => 1,
   matcher   => sub ($text, @) { fc $text eq 'eject warp core' ? [] : () },
