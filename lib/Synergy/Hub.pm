@@ -26,6 +26,7 @@ use Prometheus::Tiny 0.002;
 use Synergy::Environment;
 use Synergy::HTTPServer;
 use Synergy::Util qw(read_config_file);
+use Synergy::X;
 use Try::Tiny;
 use URI;
 use Scalar::Util qw(blessed);
