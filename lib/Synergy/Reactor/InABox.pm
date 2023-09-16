@@ -351,42 +351,32 @@ async sub handle_create ($self, $event, $switches) {
   return;
 }
 
-sub handle_destroy ($self, $event, $switches) {
+async sub handle_destroy ($self, $event, $switches) {
   my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
-  my $droplet;
+  my $droplet = await $self->_get_droplet_for($event->from_user, $tag);
 
-  return $self->_get_droplet_for($event->from_user, $tag)
-    ->then(sub ($maybe_droplet) {
-      unless ($maybe_droplet) {
-        return Future->fail(
-          "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag),
-          'stop-processing'
-        );
-      }
+  unless ($droplet) {
+    die "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag) . "\n";
+  }
 
-      if ($maybe_droplet->{status} eq 'active' && !$switches->{force}) {
-        return Future->fail(
-         "That box is powered on. Shut it down first, or use /force to destroy it anyway.",
-         'stop-processing'
-       );
-      }
+  if ($droplet->{status} eq 'active' && !$switches->{force}) {
+    die "That box is powered on. Shut it down first, or use /force to destroy it anyway.\n";
+  }
 
-      $droplet = $maybe_droplet;
-      return Future->done;
-    })
-    ->then(sub {
-      $Logger->log([ "Destroying dns entries of: %s", $droplet->{name} ]);
-      $self->remove_dns_entries($self->_ip_address_for_droplet($droplet));
-    })
-    ->then(sub {
-      $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-      $self->_do_request(DELETE => "/droplets/$droplet->{id}");
-    })
-    ->then(sub {
-      $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
-      $event->reply("Box destroyed: " . $self->_box_name_for($event->from_user, $tag));
-    });
+  $Logger->log([ "Destroying dns entries of: %s", $droplet->{name} ]);
+
+  await $self->dobby->remove_domain_records_for_ip(
+    $self->box_domain,
+    $self->_ip_address_for_droplet($droplet),
+  );
+
+  $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+
+  await $self->dobby->destroy_droplet($droplet->{id});
+
+  $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
+  return await $event->reply("Box destroyed: " . $self->_box_name_for($event->from_user, $tag));
 }
 
 async sub _handle_power ($self, $event, $action, $tag = undef) {
@@ -597,10 +587,6 @@ sub _region_for_user ($self, $user) {
     $area eq 'Australia' ? 'syd1' :
     $area eq 'Europe'    ? 'ams3' :
                            'nyc3';
-}
-
-async sub remove_dns_entries ($self, $ip) {
-  await $self->dobby->remove_domain_records_for_ip($self->box_domain, $ip);
 }
 
 __PACKAGE__->add_preference(
