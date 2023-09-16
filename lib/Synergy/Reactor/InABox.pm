@@ -5,7 +5,7 @@ package Synergy::Reactor::InABox;
 use utf8;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
 use experimental qw( isa signatures );
@@ -14,46 +14,13 @@ use namespace::clean;
 use Future::AsyncAwait;
 
 use Dobby::Client;
+use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(reformat_help);
 use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
-
-sub listener_specs ($self) {
-  my $ns = $self->preference_namespace;
-  my $default_version = $self->default_box_version;
-
-  return {
-    name      => 'box',
-    method    => 'handle_box',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $event) { $event->text =~ /\Abox\b/i },
-    help_entries => [
-      # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2019-06-03
-      { title => 'box', text => <<"END"
-box is a tool for managing cloud-based fminabox instances
-
-All subcommands can take /version and /tag can be used to target a specific box. If not provided, defaults will be used.
-
-• status: show some info about your boxes, including IP address, fminabox build it was built from, and its current power status
-• create: create a new box
-• destroy: destroy a box. if its powered on, you have to shut it down first
-• shutdown: gracefully shut down and power off your box
-• poweroff: forcibly shut down and power off your box (like pulling the power)
-• poweron: start up your box
-• vpn: get an OpenVPN config file to connect to your box
-
-The following preferences exist:
-
-* $ns.version: which version to create by default (default: $default_version)
-* $ns.datacentre: which datacentre to create boxes in (if unset, chooses one near you)
-END
-      },
-    ],
-  };
-}
 
 has digitalocean_api_base => (
   is => 'ro',
@@ -151,14 +118,31 @@ after register_with_hub => sub ($self, @) {
   $self->fetch_state;   # load prefs
 };
 
-async sub handle_box ($self, $event) {
-  $event->mark_handled;
+command box => {
+  help => reformat_help(<<~"EOH"),
+    box is a tool for managing cloud-based fminabox instances
 
+    All subcommands can take /version and /tag can be used to target a specific box. If not provided, defaults will be used.
+
+    • status: show some info about your boxes, including IP address, fminabox build it was built from, and its current power status
+    • create: create a new box
+    • destroy: destroy a box. if its powered on, you have to shut it down first
+    • shutdown: gracefully shut down and power off your box
+    • poweroff: forcibly shut down and power off your box (like pulling the power)
+    • poweron: start up your box
+    • vpn: get an OpenVPN config file to connect to your box
+
+    The following preferences exist:
+
+    • version: which version to create by default
+    • datacentre: which datacentre to create boxes in (if unset, chooses one near you)
+    EOH
+} => async sub ($self, $event, $rest) {
   unless ($event->from_user) {
     return await $event->error_reply("Sorry, I don't know you.");
   }
 
-  my ($box, $cmd, $args) = split /\s+/, $event->text, 3;
+  my ($cmd, $args) = split /\s+/, $rest, 2;
 
   my $handler = $cmd ? $command_handler{$cmd} : undef;
   unless ($handler) {
@@ -184,7 +168,7 @@ async sub handle_box ($self, $event) {
   }
 
   return;
-}
+};
 
 sub _determine_version_and_tag ($self, $event, $switches) {
   # this convoluted mess is about figuring out:
