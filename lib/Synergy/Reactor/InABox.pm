@@ -8,7 +8,7 @@ use Moose;
 with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::HasPreferences';
 
-use experimental qw(signatures);
+use experimental qw( isa signatures );
 use namespace::clean;
 
 use Future::AsyncAwait;
@@ -175,8 +175,12 @@ async sub handle_box ($self, $event) {
   };
 
   if (my $error = $@) {
-    $Logger->log([ "error from %s handler: %s", $cmd, $error ]);
-    await $event->error_reply("Something went wrong, sorry!");
+    if ($error isa Synergy::X && $error->is_public) {
+      await $event->error_reply($error->message);
+    } else {
+      $Logger->log([ "error from %s handler: %s", $cmd, $error ]);
+      await $event->error_reply("Something weird happened and I've logged it. Sorry!");
+    }
   }
 
   return;
@@ -223,7 +227,9 @@ async sub handle_create ($self, $event, $switches) {
   my $maybe_droplet = await $self->_get_droplet_for($event->from_user, $tag);
 
   if ($maybe_droplet) {
-    die "This box already exists: " . $self->_format_droplet($maybe_droplet) . "\n";
+    Synergy::X->throw_public(
+      "This box already exists: " . $self->_format_droplet($maybe_droplet)
+    );
   }
 
   my $user = $event->from_user;
@@ -254,7 +260,7 @@ async sub handle_create ($self, $event, $switches) {
   my $droplet = await $self->dobby->create_droplet(\%droplet_create_args);
 
   unless ($droplet) {
-    die "There was an error creating the box. Try again.\n";
+    Synergy::X->throw_public("There was an error creating the box. Try again.");
   }
 
   # We delay this 5 seconds because a completed droplet sometimes does not
@@ -316,11 +322,15 @@ async sub handle_destroy ($self, $event, $switches) {
   my $droplet = await $self->_get_droplet_for($event->from_user, $tag);
 
   unless ($droplet) {
-    die "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag) . "\n";
+    Synergy::X->throw_public(
+      "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag)
+    );
   }
 
   if ($droplet->{status} eq 'active' && !$switches->{force}) {
-    die "That box is powered on. Shut it down first, or use /force to destroy it anyway.\n";
+    Synergy::X->throw_public(
+      "That box is powered on. Shut it down first, or use /force to destroy it anyway."
+    );
   }
 
   $Logger->log([ "Destroying dns entries of: %s", $droplet->{name} ]);
@@ -362,7 +372,7 @@ async sub _handle_power ($self, $event, $action, $tag = undef) {
   if ( (  $expect_off && $droplet->{status} eq 'active')
     || (! $expect_off && $droplet->{status} ne 'active')
   ) {
-    die "That box is already $past_tense!\n";
+    Synergy::X->throw_public("That box is already $past_tense!");
   }
 
   $Logger->log([ "$gerund droplet: %s", $droplet->{id} ]);
@@ -391,7 +401,9 @@ async sub _handle_power ($self, $event, $action, $tag = undef) {
     ]);
 
     $remove_reactji->('Error!');
-    die "Something went wrong while $gerund box, check the DigitalOcean console and maybe try again.\n";
+    Synergy::X->throw_public(
+      "Something went wrong while $gerund box, check the DigitalOcean console and maybe try again.",
+    );
   }
 
   $remove_reactji->("$past_tense!");
@@ -487,7 +499,7 @@ async sub _get_snapshot ($self, $version) {
     return $snapshot;
   }
 
-  die "no snapshot found for fminabox-$version\n";
+  Synergy::X->throw_public("no snapshot found for fminabox-$version");
 }
 
 async sub _get_ssh_key ($self) {
@@ -502,7 +514,7 @@ async sub _get_ssh_key ($self) {
   }
 
   $Logger->log([ "fminabox SSH key not found?!" ]);
-  die "Hmm, I couldn't find a DO ssh key to use for fminabox\n";
+  Synergy::X->throw_public("Hmm, I couldn't find a DO ssh key to use for fminabox!");
 }
 
 sub _dns_name_for ($self, $user, $tag = undef) {
