@@ -182,47 +182,6 @@ async sub handle_box ($self, $event) {
   return;
 }
 
-sub _do_request ($self, $method, $endpoint, $data = undef) {
-  my %content;
-
-  if ($data) {
-    %content = (
-      Content_Type => 'application/json',
-      Content      => encode_json($data),
-    );
-  }
-
-  return $self->hub->http_request(
-    $method,
-    $self->_do_endpoint($endpoint),
-    $self->_do_headers,
-    %content,
-  )->then(sub ($res) {
-    unless ($res->is_success) {
-      my $code = $res->code;
-      my $desc = "got $code trying to $method $endpoint";
-
-      $Logger->log([
-        "error talking to DO (%s): %s, %s",
-        $desc,
-        $res->as_string,
-        $data,
-      ]);
-
-      return Future->fail(
-        "Error talking to DO ($desc)",
-        'http',
-        { http_res => $res }
-      );
-    }
-
-    return Future->done(1) if $method eq 'DELETE';
-
-    my $data = decode_json($res->content);
-    return Future->done($data);
-  });
-}
-
 sub _determine_version_and_tag ($self, $event, $switches) {
   # this convoluted mess is about figuring out:
   # - the version, by request or from prefs or implied
@@ -475,26 +434,6 @@ sub handle_vpn ($self, $event, $switches) {
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
 
   $event->reply("I sent you a VPN config in a direct message. Download it and import it into your OpenVPN client.");
-}
-
-sub _do_action_status_f ($self, $actionurl) {
-  repeat {
-    $self->_do_request(GET => $actionurl)
-      ->then(sub ($data) {
-        my $status = $data->{action}{status};
-
-        # ugh, DO is now sometimes returning empty string in the status field
-        # -- michael, 2021-04-16
-        $status = 'completed' if ! $status && $data->{action}{completed_at};
-
-        return $status eq 'in-progress'
-          ? $self->hub->loop->delay_future(after => 5)->then_done($status)
-          : Future->done($status);
-      })
-  } until => sub ($f) {
-    my $status = $f->get;
-    return $status eq 'completed' || $status eq 'errored';
-  };
 }
 
 async sub _get_droplet_for ($self, $user, $tag = undef) {
