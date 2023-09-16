@@ -389,7 +389,7 @@ sub handle_destroy ($self, $event, $switches) {
     });
 }
 
-sub _handle_power ($self, $event, $action, $tag = undef) {
+async sub _handle_power ($self, $event, $action, $tag = undef) {
   my $remove_reactji = sub ($alt_text) {
     $event->private_reply($alt_text, {
       slack_reaction => {
@@ -399,7 +399,6 @@ sub _handle_power ($self, $event, $action, $tag = undef) {
     });
   };
 
-  my $droplet;  # we could thread this through, but that's kind of tedious
   my $gerund = $action eq 'on'       ? 'powering on'
              : $action eq 'off'      ? 'powering off'
              : $action eq 'shutdown' ? 'shutting down'
@@ -407,71 +406,49 @@ sub _handle_power ($self, $event, $action, $tag = undef) {
 
   my $past_tense = $action eq 'shutdown' ? 'shut down' : "powered $action";
 
-  $self->_get_droplet_for($event->from_user, $tag)
-    ->then(sub ($maybe_droplet) {
-      unless ($maybe_droplet) {
-        return Future->fail(
-          "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag),
-          'stop-processing',
-        );
+  my $droplet = await $self->_get_droplet_for($event->from_user, $tag);
+
+  my $expect_off = $action eq 'on';
+
+  if ( (  $expect_off && $droplet->{status} eq 'active')
+    || (! $expect_off && $droplet->{status} ne 'active')
+  ) {
+    die "That box is already $past_tense!\n";
+  }
+
+  $Logger->log([ "$gerund droplet: %s", $droplet->{id} ]);
+
+  $event->reply(
+    "I'm pulling the levers, it'll be just a moment",
+    {
+      slack_reaction => {
+        event => $event,
+        reaction => 'vertical_traffic_light',
       }
+    },
+  );
 
-      $droplet = $maybe_droplet;
+  my $method = $action eq 'shutdown' ? 'shutdown' : "power_$action";
 
-      my $expect_off = $action eq 'on';
+  eval {
+    await $self->dobby->take_droplet_action($droplet->{id}, $method);
+  };
 
-      if ( (  $expect_off && $droplet->{status} eq 'active')
-        || (! $expect_off && $droplet->{status} ne 'active')
-      ) {
-        return Future->fail("That box is already $past_tense!", 'stop-processing')
-      }
+  if (my $error = $@) {
+    $Logger->log([
+      "error when taking %s action on droplet: %s",
+      $method,
+      $@,
+    ]);
 
-      return Future->done($droplet);
-    })
-    ->then(sub ($droplet) {
-      $Logger->log([ "$gerund droplet: %s", $droplet->{id} ]);
-      $event->reply(
-        "I'm pulling the levers, it'll be just a moment",
-        {
-          slack_reaction => {
-            event => $event,
-            reaction => 'vertical_traffic_light',
-          }
-        },
-      );
+    $remove_reactji->('Error!');
+    die "Something went wrong while $gerund box, check the DigitalOcean console and maybe try again.\n";
+  }
 
-      my $method = $action eq 'shutdown' ? 'shutdown' : "power_$action";
+  $remove_reactji->("$past_tense!");
+  $event->reply("That box has been $past_tense.");
 
-      return $self->_do_request(
-        POST => "/droplets/$droplet->{id}/actions", { type => $method },
-      );
-    })
-    ->then(sub ($data) { return Future->done($data->{action}) })
-    ->then(sub ($do_action) {
-      unless ($do_action) {
-        $remove_reactji->('Error!');
-        return Future->fail(
-          "There was an error $gerund the box. Try again.",
-          'stop-processing'
-        );
-      }
-
-      return $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$do_action->{id}");
-    })
-    ->then(sub ($status = undef) {
-      # action status checks have been seen to time out or crash but the droplet
-      # still turns up fine, so only consider it if we got a real response
-      if ($status && $status ne 'completed') {
-        $remove_reactji->('Error!');
-        return Future->fail(
-          "Something went wrong while $gerund box, check the DigitalOcean console and maybe try again.",
-          'stop-processing',
-        );
-      }
-
-      $remove_reactji->("$past_tense!");
-      $event->reply("That box has been $past_tense.");
-    });
+  return;
 }
 
 sub handle_shutdown ($self, $event, $switches) {
