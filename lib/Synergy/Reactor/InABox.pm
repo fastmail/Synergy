@@ -151,31 +151,35 @@ after register_with_hub => sub ($self, @) {
   $self->fetch_state;   # load prefs
 };
 
-sub handle_box ($self, $event) {
+async sub handle_box ($self, $event) {
   $event->mark_handled;
 
   unless ($event->from_user) {
-    $event->error_reply("Sorry, I don't know you.");
-    return;
+    return await $event->error_reply("Sorry, I don't know you.");
   }
 
   my ($box, $cmd, $args) = split /\s+/, $event->text, 3;
 
   my $handler = $cmd ? $command_handler{$cmd} : undef;
   unless ($handler) {
-    return $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
+    return await $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
   }
 
   my ($switches, $error) = parse_switches($args);
-  return $event->error_reply("couldn't parse switches: $error") if $error;
+  return await $event->error_reply("couldn't parse switches: $error") if $error;
 
   my %switches = map { $_->[0] => ($_->[1] // []) } @$switches;
 
-  $handler->($self, $event, \%switches)
-    ->else(sub ($reply, $category, @rest) {
-      $event->error_reply($reply);
-    })
-    ->retain;
+  eval {
+    await $handler->($self, $event, \%switches);
+  };
+
+  if (my $error = $@) {
+    $Logger->log([ "error from %s handler: %s", $cmd, $error ]);
+    await $event->error_reply("Something went wrong, sorry!");
+  }
+
+  return;
 }
 
 sub _do_request ($self, $method, $endpoint, $data = undef) {
