@@ -186,7 +186,7 @@ sub connect ($self) {
             ->on_done(sub ($res) { $self->_register_discord_rtg($res) })
             ->on_fail(sub ($err) { die "couldn't start RTG API: $err" })
             ->get;
-};
+}
 
 sub _register_discord_rtg ($self, $res) {
   my $json = decode_json($res->content);
