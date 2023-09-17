@@ -142,18 +142,24 @@ has client => (
   is       => 'ro',
   required => 1,
   lazy     => 1,
-  default  => sub ($self) {
+  default  => sub ($discord) {
     my $client = Net::Async::WebSocket::Client->new(
-      on_text_frame => sub {
-        my $frame = $_[1];
-
+      on_raw_frame => sub ($self, $frame, $bytes) {
+        $Logger->log([
+          "Discord: saw an unhandled type of frame, opcode: %u", $frame->opcode
+        ]);
+      },
+      on_close_frame => sub ($self, $bytes) {
+        $Logger->log("Discord: saw a close frame");
+      },
+      on_text_frame => sub ($self, $text) {
         my $event;
-        unless (eval { $event = $JSON->decode($frame) }) {
-          $Logger->log("Discord: error decoding frame content: <$frame> <$@>");
+        unless (eval { $event = $JSON->decode($text) }) {
+          $Logger->log("Discord: error decoding frame content: <$text> <$@>");
           return;
         }
 
-        $self->handle_event($event);
+        $discord->handle_event($event);
       },
     );
   },
