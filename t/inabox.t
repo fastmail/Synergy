@@ -311,7 +311,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{find a DO (snapshot|ssh key)}),
+        re(qr{no snapshot found}),
       ],
       'no snapshot, messages ok'
     );
@@ -324,7 +324,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{find a DO (snapshot|ssh key)}),
+        re(qr{find a DO ssh key}),
       ],
       'no ssh key, messages ok'
     );
@@ -337,7 +337,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re}),
-        re(qr{There was an error creating the box}),
+        re(qr{Something weird happened and I've logged it}),
       ],
       'sent one will create, one error'
     );
@@ -354,7 +354,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re}),
-        re(qr{Something went wrong while creating box}),
+        re(qr{Something weird happened and I've logged it}),
       ],
       'sent one will create, one error'
     );
