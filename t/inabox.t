@@ -57,12 +57,11 @@ $s->server->register_path(
 
 my $url = sprintf("http://localhost:%s/digital-ocean", $s->server->server_port);
 
-# Muck with the guts of VO reactor to catch our fakes.
+# Muck with the guts of Dobby to catch our fakes.
 my $endpoint = Sub::Override->new(
-  'Synergy::Reactor::InABox::_do_endpoint',
+  'Dobby::Client::api_base',
   sub { return $url },
 );
-
 
 # dumb convenience methods
 sub gen_response ($code, $data) {
