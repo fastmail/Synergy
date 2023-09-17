@@ -13,12 +13,18 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
+use Net::EmptyPort qw(empty_port);
 use Plack::Response;
 use Synergy::Hub;
+
+my $port = empty_port();
+
+note "will use port $port for test HTTP server";
 
 # Initialize Synergy.
 my $synergy = Synergy::Hub->synergize(
   {
+    server_port => $port,
     user_directory => "t/data/users.yaml",
     channels => {
       'test-channel' => {
@@ -39,7 +45,6 @@ testing_loop($synergy->loop);
 
 my $http = Net::Async::HTTP->new(timeout => 2);
 $synergy->loop->add($http);
-my $port = $synergy->server_port;
 
 {
   my ($res) = $http->do_request(uri => "http://localhost:$port/ok")->get;
