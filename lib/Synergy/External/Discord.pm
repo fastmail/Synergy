@@ -288,7 +288,7 @@ sub handle_reconnect {
 
   $Logger->log("Discord: handle_reconnect: attempting to reconnect");
 
-  $self->loop->remove($self->client);
+  $self->client->close_now;
   $self->clear_client;
   $self->_clear_heartbeat_timer;
 
