@@ -22,12 +22,6 @@ use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
 
-has digitalocean_api_base => (
-  is => 'ro',
-  isa => 'Str',
-  default => 'https://api.digitalocean.com/v2',
-);
-
 has digitalocean_api_token => (
   is       => 'ro',
   isa      => 'Str',
@@ -47,16 +41,6 @@ has dobby => (
     return $dobby;
   }
 );
-
-sub _do_endpoint ($self, $endpoint) {
-  return $self->digitalocean_api_base . $endpoint;
-}
-
-sub _do_headers ($self) {
-  return (
-    'Authorization' => 'Bearer ' . $self->digitalocean_api_token,
-  );
-}
 
 has vpn_config_file => (
   is       => 'ro',
