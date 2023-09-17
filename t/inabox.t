@@ -105,7 +105,6 @@ my $alice_droplet = {
 };
 
 subtest 'status' => sub {
-  # alice has a box, bob has none
   $DO_RESPONSE = gen_response(200, { droplets => [ $alice_droplet ] });
 
   send_message('synergy: box status');
@@ -115,7 +114,9 @@ subtest 'status' => sub {
     'alice has a box and synergy says so'
   );
 
-  send_message('synergy: box status', 'bob');
+  $DO_RESPONSE = gen_response(200, { droplets => [ ] });
+
+  send_message('synergy: box status');
   is(
     single_message_text(),
     "You don't seem to have any boxes.",
