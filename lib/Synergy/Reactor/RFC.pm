@@ -59,7 +59,7 @@ responder update_index => {
   $event->mark_handled;
 
   my $index_res = await $self->hub->http_get(
-    "https://www.rfc-editor.org/in-notes/rfc-index.xml",
+    "https://www.ietf.org/rfc/rfc-index.xml",
   );
 
   unless ($index_res->is_success) {
