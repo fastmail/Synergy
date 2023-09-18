@@ -16,6 +16,7 @@ use Future::AsyncAwait;
 use JSON::MaybeXS ();
 use Synergy::Logger '$Logger';
 use Synergy::CommandPost;
+use XML::LibXML;
 
 sub _slink {
   sprintf '<https://www.rfc-editor.org/rfc/rfc%u.html|RFC %u>', (0 + $_[0]) x 2
@@ -42,6 +43,112 @@ sub rfc_entry_for ($self, $number) {
   return unless $json;
   return JSON::MaybeXS->new->decode($json);
 }
+
+responder update_index => {
+  help => "*update rfc index*: rebuild the RFC index from the IETF copy",
+  exclusive => 1,
+  targeted  => 1,
+  matcher   => sub ($text, @) {
+    if ($text =~ /\Aupdate rfc index\z/i) {
+      return [ ];
+    }
+
+    return;
+  },
+} => async sub ($self, $event) {
+  $event->mark_handled;
+
+  my $index_res = await $self->hub->http_get(
+    "https://www.rfc-editor.org/in-notes/rfc-index.xml",
+  );
+
+  unless ($index_res->is_success) {
+    return $event->error_reply(q{I couldn't get the RFC index to update!});
+  }
+
+  my $doc = eval {
+    XML::LibXML->load_xml(string => $index_res->decoded_content(charset => undef));
+  };
+
+  unless ($doc) {
+    $Logger->log([ "error parsing RFC index: %s", $@ ]);
+    return $event->error_reply(q{I couldn't parse the RFC index, sorry.});
+  }
+
+  my $new_dbh = DBI->connect("dbi:SQLite:dbname=:memory:", undef, undef);
+
+  $new_dbh->do(
+    "CREATE TABLE rfcs (
+      rfc_number integer not null primary key,
+      metadata   text not null
+    )"
+  ) or die "can't create table";
+
+  my $JSON = JSON::MaybeXS->new->canonical;
+
+  my sub element_text {
+    my ($start_elem, $name) = @_;
+
+    my ($want_elem)  = $start_elem->getElementsByTagName($name);
+    return unless $want_elem;
+    return $want_elem->textContent;
+  }
+
+  my $xc = XML::LibXML::XPathContext->new;
+  $xc->registerNs('rfc', 'http://www.rfc-editor.org/rfc-index');
+
+  $event->reply("Okay, I'm working on indexing the new RFC index.");
+
+  my $rfcs = $xc->findnodes('//rfc:rfc-entry', $doc);
+  for my $rfc ($rfcs->get_nodelist) {
+    my ($doc_id) = $xc->findvalue('rfc:doc-id/text()', $rfc);
+    my ($title)  = $xc->findvalue('rfc:title/text()', $rfc);
+    my @authors  = map {; "$_" }
+                   $xc->findnodes('rfc:author/rfc:name/text()', $rfc);
+    my ($abstract) = $xc->findvalue('rfc:abstract/*/text()', $rfc);
+
+    my $year  = $xc->findvalue('rfc:date/rfc:year/text()', $rfc);
+    my $month = $xc->findvalue('rfc:date/rfc:month/text()', $rfc);
+
+    my @obs = map  {; 0+$_ }
+              grep {; s/^RFC// }
+              map  {; "$_" }
+              $xc->findnodes('rfc:obsoletes/rfc:doc-id/text()', $rfc);
+
+    my @obs_by = map  {; 0+$_ }
+                 grep {; s/^RFC// }
+                 map  {; "$_" }
+                 $xc->findnodes('rfc:obsoleted-by/rfc:doc-id/text()', $rfc);
+
+    my $status = $xc->findvalue('rfc:current-status/text()', $rfc);
+
+    # updated-by/doc-id
+    # current-status
+
+    my $number   = 0 + ($doc_id =~ s/^RFC//r);
+    my %metadata = (
+      abstract => $abstract,
+      authors  => \@authors,
+      date     => "$month $year",
+      number   => 0+$number,
+      status   => $status,
+      title    => $title,
+      obsoletes     => [ sort {; $a <=> $b } @obs ],
+      obsoleted_by  => [ sort {; $a <=> $b } @obs_by ],
+    );
+
+    $new_dbh->do(
+      "INSERT INTO rfcs (rfc_number, metadata) VALUES (?, ?)",
+      undef,
+      0+$number,
+      $JSON->encode(\%metadata)
+    );
+  }
+
+  $self->_dbh->sqlite_backup_from_dbh($new_dbh);
+
+  return await $event->reply("Indexing complete!");
+};
 
 command rfcs => {
 } => async sub ($self, $event, $rest) {
