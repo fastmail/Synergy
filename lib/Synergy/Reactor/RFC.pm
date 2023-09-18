@@ -63,6 +63,7 @@ responder update_index => {
   );
 
   unless ($index_res->is_success) {
+    $Logger->log([ "failed to get RFC index: %s", $index_res->status_line ]);
     return $event->error_reply(q{I couldn't get the RFC index to update!});
   }
 
