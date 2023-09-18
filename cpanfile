@@ -72,6 +72,7 @@ requires "URI" => "0";
 requires "URI::Escape" => "0";
 requires "URI::QueryParam" => "0";
 requires "Unicode::Normalize" => "0";
+requires "XML::LibXML" => "0";
 requires "YAML::XS" => "0";
 requires "charnames" => "0";
 requires "experimental" => "0";
