@@ -820,11 +820,22 @@ async sub project_for_tag ($self, $linear, $tag) {
   return ($project, undef);
 }
 
-command update => {
+responder update_project => {
   help => reformat_help(<<~'EOH'),
     *update `##PROJECT`: `TEXT` [/`ontrack|atrisk|offtrack`]*: post a project update
   EOH
-} => async sub ($self, $event, $rest) {
+  exclusive => 1,
+  targeted  => 1,
+  matcher   => sub ($text, @) {
+    if ($text =~ /\Aupdate ##([-a-zA-Z]+):\s+(.+)\z/i) {
+      return [ $1, $2 ];
+    }
+
+    return;
+  },
+} => async sub ($self, $event, $tag, $rest) {
+  $event->mark_handled;
+
   state %canonical = (
     ontrack   => 'onTrack',
     atrisk    => 'atRisk',
@@ -832,12 +843,6 @@ command update => {
   );
 
   await $self->_with_linear_client($event, async sub ($linear) {
-    my ($tag, $rest) = split /\s+/, $rest, 2;
-
-    unless ($tag =~ /^##[-a-zA-Z]+\z/) {
-      return await $event->error_reply(q{The first thing after "update" has to be a `##project` tag.});
-    }
-
     my $health;
     if ($rest =~ s{\s+/(ontrack|atrisk|offtrack)\s*\z}{}i) {
       $health = $canonical{ lc $1 };
