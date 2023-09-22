@@ -56,7 +56,7 @@ role {
       $Logger->log("couldn't get value for preference $pref_name: $@");
     }
 
-    return $pref_specs{$pref_name}->{describer}->( $val );
+    return await $pref_specs{$pref_name}->{describer}->($val);
   };
 
   method preference_help => sub ($self) {
@@ -73,9 +73,9 @@ role {
   #   help        => "This is a cool thing.\nIt's very great.",
   #   description => "a pref with a name",
   #   default     => value,
-  #   validator   => sub ($self, $val, $event) {},
-  #   describer   => sub ($val) {},
-  #   after_set   => sub ($self, $username, $value) {},
+  #   validator   => async sub ($self, $val, $event) {},
+  #   describer   => async sub ($val) {},
+  #   after_set   => async sub ($self, $username, $value) {},
   # }
   #
   # The validator sub will receive the raw text value from the user, and is
@@ -89,8 +89,8 @@ role {
 
     die "preference $name already exists in $class" if $pref_specs{$name};
 
-    $spec{describer} //= sub ($value) { return $value // '<undef>' };
-    $spec{after_set} //= sub ($self, $username, $value) {};
+    $spec{describer} //= async sub ($value) { return $value // '<undef>' };
+    $spec{after_set} //= async sub ($self, $username, $value) {};
 
     $pref_specs{$name} = \%spec;
   };
@@ -104,7 +104,7 @@ role {
     }
 
     my $spec = $pref_specs{ $pref_name };
-    my ($actual_value, $err) = $spec->{validator}->($self, $value, $event);
+    my ($actual_value, $err) = await $spec->{validator}->($self, $value, $event);
 
     my $full_name = $self->preference_namespace . q{.} . $pref_name;
 
@@ -164,7 +164,7 @@ role {
     $uprefs->{$pref_name} = $value;
     delete $uprefs->{$pref_name} unless defined $uprefs->{$pref_name};
 
-    $spec->{after_set}->($self, $username, $uprefs->{$pref_name});
+    await $spec->{after_set}->($self, $username, $uprefs->{$pref_name});
 
     $self->save_state;
 
