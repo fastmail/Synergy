@@ -6,6 +6,7 @@ use Moose;
 use experimental qw(lexical_subs signatures);
 use utf8;
 
+use Future::AsyncAwait;
 use Synergy::Logger '$Logger';
 
 require JSON;
@@ -107,7 +108,7 @@ sub banner_message {
     "";
 }
 
-sub start ($self) {
+async sub start ($self) {
   my $hub = $self->hub;
 
   my $listener = IO::Async::Listener->new(
@@ -139,6 +140,8 @@ sub start ($self) {
       ip       => $self->host,
     }
   )->get;
+
+  $Logger->log([ 'diagnostic uplink available on %s:%s', $self->host, $self->port ]);
 
   return;
 }

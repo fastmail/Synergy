@@ -5,7 +5,7 @@ package Synergy::Channel::Test;
 use Moose;
 use experimental qw(signatures);
 
-
+use Future::AsyncAwait;
 use IO::Async::Timer::Countdown;
 use IO::Async::Timer::Periodic;
 
@@ -208,8 +208,9 @@ sub do_next ($self) {
   return;
 }
 
-sub start ($self) {
+async sub start ($self) {
   $self->do_next;
+  return;
 }
 
 1;

@@ -8,6 +8,7 @@ use Moose;
 use experimental qw(signatures);
 use JSON::MaybeXS;
 
+use Future::AsyncAwait;
 use Synergy::Event;
 use Synergy::Logger '$Logger';
 
@@ -437,7 +438,7 @@ sub _display_notice ($self, $text) {
   return;
 }
 
-sub start ($self) {
+async sub start ($self) {
   $self->hub->loop->add($self->_stream);
 
   my $boot_message = "Console channel online";

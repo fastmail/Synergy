@@ -82,7 +82,7 @@ after register_with_hub => sub ($self, @) {
   }
 };
 
-sub start ($self) {
+async sub start ($self) {
   $self->add_shortcuts($self->custom_project_shortcuts->%*);
 
   my $timer = IO::Async::Timer::Countdown->new(
@@ -96,6 +96,8 @@ sub start ($self) {
   );
 
   $self->hub->loop->add($timer->start);
+
+  return;
 }
 
 sub state ($self) {

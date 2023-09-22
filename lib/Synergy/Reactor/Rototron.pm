@@ -11,6 +11,7 @@ with 'Synergy::Role::Reactor::EasyListening';
 use experimental qw(signatures);
 use namespace::clean;
 
+use Future::AsyncAwait;
 use IO::Async::Timer::Periodic;
 use JMAP::Tester;
 use JSON::MaybeXS;
@@ -385,7 +386,7 @@ sub handle_duty ($self, $event) {
   $event->reply($reply);
 }
 
-sub start ($self) {
+async sub start ($self) {
   my $timer = IO::Async::Timer::Periodic->new(
     notifier_name => 'rototron-planner',
     interval => 15 * 60,
@@ -402,6 +403,8 @@ sub start ($self) {
   $self->hub->loop->add($timer);
 
   $timer->start;
+
+  return;
 }
 
 sub _plan_the_future ($self) {

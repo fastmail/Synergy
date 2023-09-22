@@ -28,11 +28,13 @@ has pushover_channel_name => (
   predicate => 'has_pushover_channel',
 );
 
-sub start ($self) {
+async sub start ($self) {
   my $name = $self->page_channel_name;
   my $channel = $self->hub->channel_named($name);
   confess("no page channel ($name) configured, cowardly giving up")
     unless $channel;
+
+  return;
 }
 
 command page => {

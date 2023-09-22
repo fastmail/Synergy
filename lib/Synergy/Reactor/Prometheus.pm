@@ -11,12 +11,12 @@ use namespace::clean;
 use Future::AsyncAwait;
 use Synergy::CommandPost;
 
-sub start ($self) {
+after register_with_hub => sub ($self, $hub) {
   $self->prom->declare('synergy_events_received_total',
     help => 'Number of events received by Synergy',
     type => 'counter',
   );
-}
+};
 
 listener count_events => async sub ($self, $event) {
   my $from = $event->from_user

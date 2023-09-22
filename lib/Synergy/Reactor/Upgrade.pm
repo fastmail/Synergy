@@ -33,20 +33,25 @@ has files_to_not_test => (
   default => sub {  []  },
 );
 
-sub start ($self) {
+async sub start ($self) {
   if (my $state = $self->fetch_state) {
     my $to_channel = $state->{restart_channel_name};
     my $to_address = $state->{restart_to_address};
     my $version_desc = $state->{restart_version_desc} // $self->get_version_desc;
 
     if ($to_channel && $to_address) {
-      $self->hub->channel_named($to_channel)
-           ->send_message($to_address, "Restarted! Now at version $version_desc");
-    }
+      my $channel = $self->hub->channel_named($to_channel);
 
-    # Notified. Maybe. Don't notify again
-    $self->save_state({});
+      $channel->readiness->on_done(sub {
+        $channel->send_message($to_address, "Restarted! Now at version $version_desc");
+
+        # Notified. Maybe. Don't notify again
+        $self->save_state({});
+      });
+    }
   }
+
+  return;
 }
 
 command upgrade => {

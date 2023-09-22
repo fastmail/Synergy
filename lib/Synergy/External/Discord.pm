@@ -500,20 +500,27 @@ sub username ($self, $id) {
 has loaded_users => (is => 'rw', isa => 'Bool');
 has loaded_channels => (is => 'rw', isa => 'Bool');
 
-has _is_ready => (is => 'rw', isa => 'Bool');
+has _ready_f => (
+  is => 'rw',
+  isa => 'Future',
+  default => sub {
+    Future->new
+  }
+);
 
-sub is_ready ($self) {
-  return 1 if $self->_is_ready;
+sub readiness ($self) {
+  my $ready_f = $self->_ready_f;
+  return $ready_f if $ready_f->is_ready;
 
   # Stupid micro-opt
   if (
        $self->loaded_users
     && $self->loaded_channels
   ) {
-    $self->_is_ready(1);
+    $ready_f->done;
   }
 
-  return $self->_is_ready;
+  return $ready_f;
 }
 
 sub load_users ($self) {

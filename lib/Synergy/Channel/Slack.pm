@@ -5,6 +5,7 @@ package Synergy::Channel::Slack;
 use Moose;
 use experimental qw(signatures);
 use utf8;
+use Future::AsyncAwait;
 use JSON::MaybeXS;
 use IO::Async::Timer::Periodic;
 
@@ -115,7 +116,7 @@ my %allowable_subtypes = map {; $_ => 1 } qw(
   me_message
 );
 
-sub start ($self) {
+async sub start ($self) {
   $self->slack->connect;
   $self->loop->add($self->reply_reaper->start);
 
@@ -148,7 +149,7 @@ sub start ($self) {
     # XXX dispatch these better
     return unless $slack_event->{type} eq 'message';
 
-    unless ($self->slack->is_ready) {
+    unless ($self->readiness->is_ready) {
       $Logger->log("ignoring message, we aren't ready yet");
       return;
     }
@@ -189,6 +190,8 @@ sub start ($self) {
 
     $self->hub->handle_event($event);
   };
+
+  return $self->slack->readiness;
 }
 
 sub synergy_event_from_slack_event ($self, $slack_event, $type = 'message') {
@@ -494,7 +497,7 @@ sub describe_conversation ($self, $event) {
 
   my $channel_id = $event->transport_data->{channel};
 
-  return 'an unknown channel' unless $self->slack->is_ready;
+  return 'an unknown channel' unless $self->readiness->is_ready;
 
   if ($channel_id =~ /^C/) {
     my $channel = $self->slack->channels->{$channel_id}{name};
