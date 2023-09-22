@@ -331,6 +331,10 @@ async sub _handle_power ($self, $event, $action, $tag = undef) {
 
   my $droplet = await $self->_get_droplet_for($event->from_user, $tag);
 
+  unless ($droplet) {
+    Synergy::X->throw_public("I can't find a box to do that to!");
+  }
+
   my $expect_off = $action eq 'on';
 
   if ( (  $expect_off && $droplet->{status} eq 'active')
