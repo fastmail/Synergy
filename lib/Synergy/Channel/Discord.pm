@@ -13,7 +13,6 @@ use Synergy::Event;
 use Synergy::Logger '$Logger';
 
 use namespace::autoclean;
-use Data::Dumper::Concise;
 
 my $JSON = JSON->new->canonical;
 
@@ -47,7 +46,6 @@ sub start ($self) {
 }
 
 sub handle_discord_event ($self, $name, $event) {
-  #warn Dumper ([$name, $event]);
   return unless $name eq 'MESSAGE_CREATE'; # XXX very stupid
 
   return if $event->{author}{bot};
