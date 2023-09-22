@@ -15,6 +15,7 @@ use namespace::clean;
 use DateTime::Format::ISO8601;
 use Digest::MD5 qw(md5_hex);
 use Future 0.36;  # for ->retain
+use Future::AsyncAwait;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS;
 use Lingua::EN::Inflect qw(PL_N PL_V);
@@ -81,7 +82,7 @@ after register_with_hub => sub ($self, @) {
   }
 };
 
-sub start ($self) {
+async sub start ($self) {
   $self->add_shortcuts($self->custom_project_shortcuts->%*);
 
   my $timer = IO::Async::Timer::Countdown->new(
@@ -95,6 +96,8 @@ sub start ($self) {
   );
 
   $self->hub->loop->add($timer->start);
+
+  return;
 }
 
 sub state ($self) {

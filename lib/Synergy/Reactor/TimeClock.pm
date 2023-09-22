@@ -14,6 +14,7 @@ use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text describe_business_hours);
 
 use DBI;
+use Future::AsyncAwait;
 use IO::Async::Timer::Periodic;
 use List::Util qw(max);
 
@@ -105,7 +106,7 @@ sub state ($self) {
   };
 }
 
-sub start ($self) {
+async sub start ($self) {
   my $timer = IO::Async::Timer::Periodic->new(
     notifier_name => 'timeclock-shift-change',
     interval => 15 * 60,
@@ -117,6 +118,8 @@ sub start ($self) {
   $timer->start;
 
   $self->check_for_shift_changes;
+
+  return;
 }
 
 after register_with_hub => sub ($self, @) {

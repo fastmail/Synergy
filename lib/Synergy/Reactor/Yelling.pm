@@ -32,7 +32,7 @@ sub _slack_channel_name_from_event ($self, $event) {
   return $channel // '';
 }
 
-sub start ($self) {
+async sub start ($self) {
   my $slack_channel = $self->hub->channel_named( $self->slack_synergy_channel_name );
 
   $slack_channel->register_pre_message_hook(sub ($event, $text_ref, $alts) {
@@ -46,6 +46,8 @@ sub start ($self) {
       $alts->{slack} = join '', map {; /^</ ? $_ : uc } @hunks;
     }
   });
+
+  return;
 }
 
 responder mumbling => {

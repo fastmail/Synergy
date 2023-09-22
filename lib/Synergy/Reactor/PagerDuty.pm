@@ -15,6 +15,7 @@ use Data::Dumper::Concise;
 use DateTime;
 use DateTime::Format::ISO8601;
 use Future;
+use Future::AsyncAwait;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use Lingua::EN::Inflect qw(PL_N PL_V);
@@ -143,7 +144,7 @@ around '_set_oncall_list' => sub ($orig, $self, @rest) {
   $self->save_state;
 };
 
-sub start ($self) {
+async sub start ($self) {
   if ($self->oncall_channel && $self->oncall_group_address) {
     my $check_oncall_timer = IO::Async::Timer::Periodic->new(
       notifier_name  => 'pagerduty-oncall',
@@ -167,6 +168,8 @@ sub start ($self) {
       $self->hub->loop->add($maint_warning_timer);
     }
   }
+
+  return;
 }
 
 sub listener_specs {

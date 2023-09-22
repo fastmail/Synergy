@@ -8,6 +8,8 @@ use namespace::clean;
 
 with 'Synergy::Role::HubComponent';
 
+use Future::AsyncAwait;
+
 requires qw(
   describe_event
   describe_conversation
@@ -16,7 +18,20 @@ requires qw(
   send_message_to_user
 );
 
-sub start ($self) { }
+has readiness => (
+  is    => 'ro',
+  lazy  => 1,
+  default => sub {
+    Future->new;
+  }
+);
+
+async sub become_ready ($self) {
+  await $self->start;
+  $self->readiness->done;
+}
+
+async sub start {}
 
 # The idea here is that a channel might be able to keep track of errors and
 # take some action in response to them. Synergy::Event::reply calls this

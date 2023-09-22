@@ -9,6 +9,7 @@ use namespace::clean;
 
 with 'Synergy::Role::Reactor';
 
+use Future::AsyncAwait;
 use Synergy::Logger '$Logger';
 
 has listeners => (
@@ -23,8 +24,8 @@ has listeners => (
   },
 );
 
-around start => sub ($orig, $self, @args) {
-  $self->$orig(@args);
+around start => async sub ($orig, $self, @args) {
+  await $self->$orig(@args);
 
   my $pkg = ref $self;
   my @helpless = grep {; ! ($_->{help_entries} // [])->@* } $self->listeners;
@@ -33,6 +34,8 @@ around start => sub ($orig, $self, @args) {
     next if $l->{allow_empty_help};
     $Logger->log("notice: missing help in $pkg for listener $l->{name}");
   }
+
+  return Future->done;
 };
 
 sub help_entries ($self) {

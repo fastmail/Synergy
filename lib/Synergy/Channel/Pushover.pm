@@ -4,6 +4,7 @@ package Synergy::Channel::Pushover;
 
 use Moose;
 use experimental qw(signatures);
+use Future::AsyncAwait;
 use JSON::MaybeXS qw(encode_json decode_json);
 
 use Synergy::Logger '$Logger';
@@ -20,7 +21,7 @@ has [ qw( token ) ] => (
   required => 1,
 );
 
-sub start ($self) {
+async sub start ($self) {
 }
 
 sub http_post {

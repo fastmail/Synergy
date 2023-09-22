@@ -24,11 +24,13 @@ has to_address => (
   required => 1,
 );
 
-sub start ($self) {
+async sub start ($self) {
   my $name = $self->to_channel_name;
   my $channel = $self->hub->channel_named($name);
   confess("no channel named $name, cowardly giving up")
     unless $channel;
+
+  return;
 }
 
 command announce => {

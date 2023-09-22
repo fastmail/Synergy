@@ -8,6 +8,7 @@ use MooseX::StrictConstructor;
 use experimental qw(signatures);
 use namespace::clean;
 
+use Future::AsyncAwait;
 use Net::Async::HTTP::Server::PSGI;
 use IO::Async::SSL;
 use Plack::App::URLMap;
@@ -108,7 +109,7 @@ sub register_path ($self, $path, $app, $by) {
   $Logger->log("HTTP path $path registered" . (length $by ? " by $by" : q{}));
 }
 
-sub start ($self) {
+async sub start ($self) {
   $self->loop->add($self->http_server);
 
   $Logger->log([ "listening on port %s", $self->server_port ]);
@@ -136,6 +137,8 @@ sub start ($self) {
   else {
     $self->http_server->listen(%opts);
   }
+
+  return;
 }
 
 1;
