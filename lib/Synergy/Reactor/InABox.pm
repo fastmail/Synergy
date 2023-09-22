@@ -5,58 +5,22 @@ package Synergy::Reactor::InABox;
 use utf8;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
-use experimental qw(signatures);
+use experimental qw( isa signatures );
 use namespace::clean;
 
+use Future::AsyncAwait;
+
+use Dobby::Client;
+use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(reformat_help);
 use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
-
-sub listener_specs ($self) {
-  my $ns = $self->preference_namespace;
-  my $default_version = $self->default_box_version;
-
-  return {
-    name      => 'box',
-    method    => 'handle_box',
-    exclusive => 1,
-    targeted  => 1,
-    predicate => sub ($self, $event) { $event->text =~ /\Abox\b/i },
-    help_entries => [
-      # I wanted to use <<~'END' but synhi gets confused. -- rjbs, 2019-06-03
-      { title => 'box', text => <<"END"
-box is a tool for managing cloud-based fminabox instances
-
-All subcommands can take /version and /tag can be used to target a specific box. If not provided, defaults will be used.
-
-• status: show some info about your boxes, including IP address, fminabox build it was built from, and its current power status
-• create: create a new box
-• destroy: destroy a box. if its powered on, you have to shut it down first
-• shutdown: gracefully shut down and power off your box
-• poweroff: forcibly shut down and power off your box (like pulling the power)
-• poweron: start up your box
-• vpn: get an OpenVPN config file to connect to your box
-
-The following preferences exist:
-
-* $ns.version: which version to create by default (default: $default_version)
-* $ns.datacentre: which datacentre to create boxes in (if unset, chooses one near you)
-END
-      },
-    ],
-  };
-}
-
-has digitalocean_api_base => (
-  is => 'ro',
-  isa => 'Str',
-  default => 'https://api.digitalocean.com/v2',
-);
 
 has digitalocean_api_token => (
   is       => 'ro',
@@ -64,14 +28,19 @@ has digitalocean_api_token => (
   required => 1,
 );
 
-sub _do_endpoint ($self, $endpoint) {
-  return $self->digitalocean_api_base . $endpoint;
-}
-sub _do_headers ($self) {
-  return (
-    'Authorization' => 'Bearer ' . $self->digitalocean_api_token,
-  );
-}
+has dobby => (
+  is    => 'ro',
+  lazy  => 1,
+  default => sub ($self) {
+    my $dobby = Dobby::Client->new(
+      bearer_token => $self->digitalocean_api_token,
+    );
+
+    $self->loop->add($dobby);
+
+    return $dobby;
+  }
+);
 
 has vpn_config_file => (
   is       => 'ro',
@@ -133,73 +102,57 @@ after register_with_hub => sub ($self, @) {
   $self->fetch_state;   # load prefs
 };
 
-sub handle_box ($self, $event) {
-  $event->mark_handled;
+command box => {
+  help => reformat_help(<<~"EOH"),
+    box is a tool for managing cloud-based fminabox instances
 
+    All subcommands can take /version and /tag can be used to target a specific box. If not provided, defaults will be used.
+
+    • status: show some info about your boxes, including IP address, fminabox build it was built from, and its current power status
+    • create: create a new box
+    • destroy: destroy a box. if its powered on, you have to shut it down first
+    • shutdown: gracefully shut down and power off your box
+    • poweroff: forcibly shut down and power off your box (like pulling the power)
+    • poweron: start up your box
+    • vpn: get an OpenVPN config file to connect to your box
+
+    The following preferences exist:
+
+    • version: which version to create by default
+    • datacentre: which datacentre to create boxes in (if unset, chooses one near you)
+    EOH
+} => async sub ($self, $event, $rest) {
   unless ($event->from_user) {
-    $event->error_reply("Sorry, I don't know you.");
-    return;
+    return await $event->error_reply("Sorry, I don't know you.");
   }
 
-  my ($box, $cmd, $args) = split /\s+/, $event->text, 3;
+  my ($cmd, $args) = split /\s+/, $rest, 2;
 
   my $handler = $cmd ? $command_handler{$cmd} : undef;
   unless ($handler) {
-    return $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
+    return await $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
   }
 
   my ($switches, $error) = parse_switches($args);
-  return $event->error_reply("couldn't parse switches: $error") if $error;
+  return await $event->error_reply("couldn't parse switches: $error") if $error;
 
   my %switches = map { $_->[0] => ($_->[1] // []) } @$switches;
 
-  $handler->($self, $event, \%switches)
-    ->else(sub ($reply, $category, @rest) {
-      $event->error_reply($reply);
-    })
-    ->retain;
-}
+  eval {
+    await $handler->($self, $event, \%switches);
+  };
 
-sub _do_request ($self, $method, $endpoint, $data = undef) {
-  my %content;
-
-  if ($data) {
-    %content = (
-      Content_Type => 'application/json',
-      Content      => encode_json($data),
-    );
+  if (my $error = $@) {
+    if ($error isa Synergy::X && $error->is_public) {
+      await $event->error_reply($error->message);
+    } else {
+      $Logger->log([ "error from %s handler: %s", $cmd, $error ]);
+      await $event->error_reply("Something weird happened and I've logged it. Sorry!");
+    }
   }
 
-  return $self->hub->http_request(
-    $method,
-    $self->_do_endpoint($endpoint),
-    $self->_do_headers,
-    %content,
-  )->then(sub ($res) {
-    unless ($res->is_success) {
-      my $code = $res->code;
-      my $desc = "got $code trying to $method $endpoint";
-
-      $Logger->log([
-        "error talking to DO (%s): %s, %s",
-        $desc,
-        $res->as_string,
-        $data,
-      ]);
-
-      return Future->fail(
-        "Error talking to DO ($desc)",
-        'http',
-        { http_res => $res }
-      );
-    }
-
-    return Future->done(1) if $method eq 'DELETE';
-
-    my $data = decode_json($res->content);
-    return Future->done($data);
-  });
-}
+  return;
+};
 
 sub _determine_version_and_tag ($self, $event, $switches) {
   # this convoluted mess is about figuring out:
@@ -219,177 +172,147 @@ sub _determine_version_and_tag ($self, $event, $switches) {
   return ($version, $tag, $is_default_box);
 }
 
-sub handle_status ($self, $event, $switches) {
-  $self->_get_droplets_for($event->from_user)
-    ->then(sub ($droplets = undef) {
-      if (@$droplets) {
-        return $event->reply(join "\n",
-          "Your boxes: ",
-          map { $self->_format_droplet($_) } @$droplets,
-        );
-      }
+async sub handle_status ($self, $event, $switches) {
+  my $droplets = await $self->_get_droplets_for($event->from_user);
 
-      return $event->reply("You don't seem to have any boxes.");
-    });
+  if (@$droplets) {
+    return await $event->reply(join "\n",
+      "Your boxes: ",
+      map { $self->_format_droplet($_) } @$droplets,
+    );
+  }
+
+  return await $event->reply("You don't seem to have any boxes.");
 }
 
-sub handle_create ($self, $event, $switches) {
+async sub handle_create ($self, $event, $switches) {
   my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
 
   # XXX call /v2/sizes API to validate
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
   my $size = $switches->{size} // $self->default_box_size;
 
-  return $self->_get_droplet_for($event->from_user, $tag)
-    ->then(sub ($maybe_droplet) {
-      if ($maybe_droplet) {
-        return Future->fail(
-          "This box already exists: " . $self->_format_droplet($maybe_droplet),
-          'stop-processing'
-        );
-      }
+  my $maybe_droplet = await $self->_get_droplet_for($event->from_user, $tag);
 
-      my $name = $self->_box_name_for($event->from_user, $tag);
-      my $region = $self->_region_for_user($event->from_user);
-      $event->reply("Creating $name in $region, this will take a minute or two.");
+  if ($maybe_droplet) {
+    Synergy::X->throw_public(
+      "This box already exists: " . $self->_format_droplet($maybe_droplet)
+    );
+  }
 
-      return Future->done;
-    })
-    ->then(sub {
-      # It would be nice to do this and the SSH key in parallel, but in
-      # testing that causes *super* strange errors deep down in IO::Async if
-      # one of the calls fails and the other does not, so here we'll just
-      # admit defeat and do them in sequence. -- michael, 2020-04-02
-      return $self->_get_snapshot($version);
-    })
-    ->then(sub ($snapshot) {
-      return $self->_get_ssh_key->transform(done => sub ($ssh_key) {
-        return ($snapshot, $ssh_key);
-      });
-    })
-    ->then(sub ($snapshot, $ssh_key) {
-      my $user = $event->from_user;
-      my $username = $user->username;
+  my $user = $event->from_user;
+  my $name = $self->_box_name_for($user, $tag);
+  my $region = $self->_region_for_user($user);
+  $event->reply("Creating $name in $region, this will take a minute or two.");
 
-      my $name = $self->_box_name_for($user, $tag);
-      my $region = $self->_region_for_user($user);
+  # It would be nice to do these in parallel, but in testing that causes
+  # *super* strange errors deep down in IO::Async if one of the calls fails and
+  # the other does not, so here we'll just admit defeat and do them in
+  # sequence. -- michael, 2020-04-02
+  my $snapshot = await $self->_get_snapshot($version);
+  my $ssh_key  = await $self->_get_ssh_key;
 
+  my $username = $user->username;
 
-      my %droplet_create_args = (
-        name     => $name,
-        region   => $region,
-        size     => $size,
-        image    => $snapshot->{id},
-        ssh_keys => [ $ssh_key->{id} ],
-        tags     => [ 'fminabox', "owner:$username" ],
-      );
+  my %droplet_create_args = (
+    name     => $name,
+    region   => $region,
+    size     => $size,
+    image    => $snapshot->{id},
+    ssh_keys => [ $ssh_key->{id} ],
+    tags     => [ 'fminabox', "owner:$username" ],
+  );
 
-      $Logger->log([ "Creating droplet: %s", \%droplet_create_args ]);
+  $Logger->log([ "Creating droplet: %s", \%droplet_create_args ]);
 
-      return $self->_do_request(POST => '/droplets', \%droplet_create_args);
-    })
-    ->then(sub ($data) {
-      my $droplet = $data->{droplet};
-      my $action_id = $data->{links}{actions}[0]{id};
+  my $droplet = await $self->dobby->create_droplet(\%droplet_create_args);
 
-      unless ($droplet) {
-        return Future->fail(
-          'There was an error creating the box. Try again.',
-          'stop-processing'
-        );
-      }
+  unless ($droplet) {
+    Synergy::X->throw_public("There was an error creating the box. Try again.");
+  }
 
-      return $self->_do_action_status_f("/actions/$action_id");
-    })
-    ->then(sub ($status = undef) {
-      # We delay this 5 seconds because a completed droplet sometimes does not
-      # show up in GET /droplets immediately, which causes annoying problems.
-      # Waiting 5s is a silly fix, but seems to work, and it's not like box
-      # creation is lightning-fast anyway. -- michael, 2021-04-16
-      $self->hub->loop->delay_future(after => 5)->then_done($status)
-    })
-    ->then(sub ($status = undef) {
-      # action status checks have been seen to time out or crash but the droplet
-      # still turns up fine, so only consider it if we got a real response
-      if ($status && $status ne 'completed') {
-        return Future->fail(
-          "Something went wrong while creating box, check the DigitalOcean console and maybe try again.",
-          'stop-processing',
-        );
-      }
+  # We delay this 5 seconds because a completed droplet sometimes does not
+  # show up in GET /droplets immediately, which causes annoying problems.
+  # Waiting 5s is a silly fix, but seems to work, and it's not like box
+  # creation is lightning-fast anyway. -- michael, 2021-04-16
+  await $self->hub->loop->delay_future(after => 5);
 
-      return Future->done;
-    })
-    ->then(sub { $self->_get_droplet_for($event->from_user, $tag) })
-    ->then(sub ($droplet) {
-      if ($droplet) {
-        $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-        $event->reply("Box created: " . $self->_format_droplet($droplet));
-      } else {
-        # We don't fail here, because we want to try to update DNS regardless.
-        $event->error_reply(
-          "Box was created, but now I can't find it! Check the DigitalOcean console and maybe try again."
-        );
-      }
+  $droplet = await $self->_get_droplet_for($user, $tag);
 
-      # Add it to the relevant project. If this fails, then...oh well.
-      $self->_add_box_to_project($droplet)->retain;
+  if ($droplet) {
+    $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+    $event->reply("Box created: " . $self->_format_droplet($droplet));
+  } else {
+    # We don't fail here, because we want to try to update DNS regardless.
+    $event->error_reply(
+      "Box was created, but now I can't find it! Check the DigitalOcean console and maybe try again."
+    );
+  }
 
-      # update the DNS name. we will assume this succeeds; if it fails the box
-      # is still good and there's not really much else we can do.
-      my $ip_address = $self->_ip_address_for_droplet($droplet);
-      my $update_f = $self->_update_dns($self->_dns_name_for($event->from_user, $tag), $ip_address);
-      return $update_f unless $is_default_box;
+  # Add it to the relevant project. If this fails, then...oh well.
+  # -- ?
+  if ($self->has_project_id) {
+    await $self->dobby->add_droplet_to_project(
+      $droplet->{id},
+      $self->box_project_id
+    );
+  }
 
-      # if this is the default box, also set the default name (ie
-      # username.box). we make a second DNS-updating future and combine them
-      # together
-      return Future->wait_all(
-        $update_f,
-        $self->_update_dns($self->_dns_name_for($event->from_user), $ip_address),
-      );
-    });
+  # update the DNS name. we will assume this succeeds; if it fails the box
+  # is still good and there's not really much else we can do.
+  my $ip_address = $self->_ip_address_for_droplet($droplet);
+
+  my @names = (
+    $self->_dns_name_for($event->from_user, $tag),
+    ($is_default_box ? $self->_dns_name_for($event->from_user) : ())
+  );
+
+  for my $name (@names) {
+    $Logger->log("updating DNS names for $name");
+
+    await $self->dobby->point_domain_record_at_ip(
+      $self->box_domain,
+      $name,
+      $ip_address,
+    );
+  }
+
+  return;
 }
 
-sub handle_destroy ($self, $event, $switches) {
+async sub handle_destroy ($self, $event, $switches) {
   my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
-  my $droplet;
+  my $droplet = await $self->_get_droplet_for($event->from_user, $tag);
 
-  return $self->_get_droplet_for($event->from_user, $tag)
-    ->then(sub ($maybe_droplet) {
-      unless ($maybe_droplet) {
-        return Future->fail(
-          "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag),
-          'stop-processing'
-        );
-      }
+  unless ($droplet) {
+    Synergy::X->throw_public(
+      "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag)
+    );
+  }
 
-      if ($maybe_droplet->{status} eq 'active' && !$switches->{force}) {
-        return Future->fail(
-         "That box is powered on. Shut it down first, or use /force to destroy it anyway.",
-         'stop-processing'
-       );
-      }
+  if ($droplet->{status} eq 'active' && !$switches->{force}) {
+    Synergy::X->throw_public(
+      "That box is powered on. Shut it down first, or use /force to destroy it anyway."
+    );
+  }
 
-      $droplet = $maybe_droplet;
-      return Future->done;
-    })
-    ->then(sub {
-      $Logger->log([ "Destroying dns entries of: %s", $droplet->{name} ]);
-      $self->remove_dns_entries($self->_ip_address_for_droplet($droplet));
-    })
-    ->then(sub {
-      $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-      $self->_do_request(DELETE => "/droplets/$droplet->{id}");
-    })
-    ->then(sub {
-      $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
-      $event->reply("Box destroyed: " . $self->_box_name_for($event->from_user, $tag));
-    });
+  $Logger->log([ "Destroying dns entries of: %s", $droplet->{name} ]);
+
+  await $self->dobby->remove_domain_records_for_ip(
+    $self->box_domain,
+    $self->_ip_address_for_droplet($droplet),
+  );
+
+  $Logger->log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+
+  await $self->dobby->destroy_droplet($droplet->{id});
+
+  $Logger->log([ "Destroyed droplet: %s", $droplet->{id} ]);
+  return await $event->reply("Box destroyed: " . $self->_box_name_for($event->from_user, $tag));
 }
 
-sub _handle_power ($self, $event, $action, $tag = undef) {
+async sub _handle_power ($self, $event, $action, $tag = undef) {
   my $remove_reactji = sub ($alt_text) {
     $event->private_reply($alt_text, {
       slack_reaction => {
@@ -399,7 +322,6 @@ sub _handle_power ($self, $event, $action, $tag = undef) {
     });
   };
 
-  my $droplet;  # we could thread this through, but that's kind of tedious
   my $gerund = $action eq 'on'       ? 'powering on'
              : $action eq 'off'      ? 'powering off'
              : $action eq 'shutdown' ? 'shutting down'
@@ -407,71 +329,55 @@ sub _handle_power ($self, $event, $action, $tag = undef) {
 
   my $past_tense = $action eq 'shutdown' ? 'shut down' : "powered $action";
 
-  $self->_get_droplet_for($event->from_user, $tag)
-    ->then(sub ($maybe_droplet) {
-      unless ($maybe_droplet) {
-        return Future->fail(
-          "That box doesn't exist: " . $self->_box_name_for($event->from_user, $tag),
-          'stop-processing',
-        );
+  my $droplet = await $self->_get_droplet_for($event->from_user, $tag);
+
+  unless ($droplet) {
+    Synergy::X->throw_public("I can't find a box to do that to!");
+  }
+
+  my $expect_off = $action eq 'on';
+
+  if ( (  $expect_off && $droplet->{status} eq 'active')
+    || (! $expect_off && $droplet->{status} ne 'active')
+  ) {
+    Synergy::X->throw_public("That box is already $past_tense!");
+  }
+
+  $Logger->log([ "$gerund droplet: %s", $droplet->{id} ]);
+
+  $event->reply(
+    "I'm pulling the levers, it'll be just a moment",
+    {
+      slack_reaction => {
+        event => $event,
+        reaction => 'vertical_traffic_light',
       }
+    },
+  );
 
-      $droplet = $maybe_droplet;
+  my $method = $action eq 'shutdown' ? 'shutdown' : "power_$action";
 
-      my $expect_off = $action eq 'on';
+  eval {
+    await $self->dobby->take_droplet_action($droplet->{id}, $method);
+  };
 
-      if ( (  $expect_off && $droplet->{status} eq 'active')
-        || (! $expect_off && $droplet->{status} ne 'active')
-      ) {
-        return Future->fail("That box is already $past_tense!", 'stop-processing')
-      }
+  if (my $error = $@) {
+    $Logger->log([
+      "error when taking %s action on droplet: %s",
+      $method,
+      $@,
+    ]);
 
-      return Future->done($droplet);
-    })
-    ->then(sub ($droplet) {
-      $Logger->log([ "$gerund droplet: %s", $droplet->{id} ]);
-      $event->reply(
-        "I'm pulling the levers, it'll be just a moment",
-        {
-          slack_reaction => {
-            event => $event,
-            reaction => 'vertical_traffic_light',
-          }
-        },
-      );
+    $remove_reactji->('Error!');
+    Synergy::X->throw_public(
+      "Something went wrong while $gerund box, check the DigitalOcean console and maybe try again.",
+    );
+  }
 
-      my $method = $action eq 'shutdown' ? 'shutdown' : "power_$action";
+  $remove_reactji->("$past_tense!");
+  $event->reply("That box has been $past_tense.");
 
-      return $self->_do_request(
-        POST => "/droplets/$droplet->{id}/actions", { type => $method },
-      );
-    })
-    ->then(sub ($data) { return Future->done($data->{action}) })
-    ->then(sub ($do_action) {
-      unless ($do_action) {
-        $remove_reactji->('Error!');
-        return Future->fail(
-          "There was an error $gerund the box. Try again.",
-          'stop-processing'
-        );
-      }
-
-      return $self->_do_action_status_f("/droplets/$droplet->{id}/actions/$do_action->{id}");
-    })
-    ->then(sub ($status = undef) {
-      # action status checks have been seen to time out or crash but the droplet
-      # still turns up fine, so only consider it if we got a real response
-      if ($status && $status ne 'completed') {
-        $remove_reactji->('Error!');
-        return Future->fail(
-          "Something went wrong while $gerund box, check the DigitalOcean console and maybe try again.",
-          'stop-processing',
-        );
-      }
-
-      $remove_reactji->("$past_tense!");
-      $event->reply("That box has been $past_tense.");
-    });
+  return;
 }
 
 sub handle_shutdown ($self, $event, $switches) {
@@ -510,48 +416,24 @@ sub handle_vpn ($self, $event, $switches) {
   $event->reply("I sent you a VPN config in a direct message. Download it and import it into your OpenVPN client.");
 }
 
-sub _do_action_status_f ($self, $actionurl) {
-  repeat {
-    $self->_do_request(GET => $actionurl)
-      ->then(sub ($data) {
-        my $status = $data->{action}{status};
-
-        # ugh, DO is now sometimes returning empty string in the status field
-        # -- michael, 2021-04-16
-        $status = 'completed' if ! $status && $data->{action}{completed_at};
-
-        return $status eq 'in-progress'
-          ? $self->hub->loop->delay_future(after => 5)->then_done($status)
-          : Future->done($status);
-      })
-  } until => sub ($f) {
-    my $status = $f->get;
-    return $status eq 'completed' || $status eq 'errored';
-  };
-}
-
-sub _get_droplet_for ($self, $user, $tag = undef) {
+async sub _get_droplet_for ($self, $user, $tag = undef) {
   my $name = $self->_box_name_for($user, $tag);
 
-  return $self->_do_request(GET => '/droplets?per_page=200')
-    ->then(sub ($data) {
-      my ($droplet) = grep {; $_->{name} eq $name }
-                      $data->{droplets}->@*;
+  my $droplets = await $self->_get_droplets_for($user);
 
-      Future->done($droplet);
-    });
+  my ($droplet) = grep {; $_->{name} eq $name } @$droplets;
+
+  return $droplet;
 }
 
-sub _get_droplets_for ($self, $user) {
+async sub _get_droplets_for ($self, $user) {
+  my $dobby = $self->dobby;
   my $username = $user->username;
+  my $tag   = "owner:$username";
 
-  return $self->_do_request(GET => '/droplets?per_page=200')
-    ->then(sub ($data) {
-      my @droplets = grep {; $_->{name} =~ m/^$username[\.\-]/ }
-                     $data->{droplets}->@*;
+  my @droplets = await $dobby->get_droplets_with_tag($tag);
 
-      Future->done(\@droplets);
-    });
+  return \@droplets;
 }
 
 sub _ip_address_for_droplet ($self, $droplet) {
@@ -573,43 +455,34 @@ sub _format_droplet ($self, $droplet) {
     $droplet->{status};
 }
 
-sub _get_snapshot ($self, $version) {
-  return $self->_do_request(GET => '/snapshots?per_page=200')
-    ->then(sub ($data) {
-      my ($snapshot) = sort { $b->{name} cmp $a->{name} }
-                       grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
-                       $data->{snapshots}->@*;
+async sub _get_snapshot ($self, $version) {
+  my $dobby = $self->dobby;
+  my $data  = await $dobby->json_get('/snapshots?per_page=200');
 
-      if ($snapshot) {
-        $Logger->log([ "Found snapshot: %s (%s)", $snapshot->{id}, $snapshot->{name} ]);
-        return Future->done($snapshot);
-      }
+  my ($snapshot) = sort { $b->{name} cmp $a->{name} }
+                   grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
+                   $data->{snapshots}->@*;
 
-      $Logger->log([ "fminabox snapshot not found?!" ]);
-      return Future->fail(
-        "Hmm, I couldn't find a DO snapshot for fminabox-$version",
-        'stop-processing'
-      );
-    });
+  if ($snapshot) {
+    return $snapshot;
+  }
+
+  Synergy::X->throw_public("no snapshot found for fminabox-$version");
 }
 
-sub _get_ssh_key ($self) {
-  return $self->_do_request(GET => '/account/keys?per_page=200')
-    ->then(sub ($data) {
-      my ($ssh_key) = grep {; $_->{name} eq 'fminabox' } $data->{ssh_keys}->@*;
+async sub _get_ssh_key ($self) {
+  my $dobby = $self->dobby;
+  my $keys_res = await $dobby->json_get("/account/keys");
 
-      if ($ssh_key) {
-        $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->{id}, $ssh_key->{name} ]);
-        return Future->done($ssh_key);
-      }
+  my ($ssh_key) = grep {; $_->{name} eq 'fminabox' } $keys_res->{ssh_keys}->@*;
 
-      $Logger->log([ "fminabox SSH key not found?!" ]);
-      return Future->fail(
-        "Hmm, I couldn't find a DO ssh key to use for fminabox",
-        'stop-processing',
-      );
-    }
-  );
+  if ($ssh_key) {
+    $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->@{ qw(id name) } ]);
+    return $ssh_key;
+  }
+
+  $Logger->log([ "fminabox SSH key not found?!" ]);
+  Synergy::X->throw_public("Hmm, I couldn't find a DO ssh key to use for fminabox!");
 }
 
 sub _dns_name_for ($self, $user, $tag = undef) {
@@ -633,75 +506,6 @@ sub _region_for_user ($self, $user) {
     $area eq 'Australia' ? 'syd1' :
     $area eq 'Europe'    ? 'ams3' :
                            'nyc3';
-}
-
-sub remove_dns_entries ($self, $ip) {
-  my $base = '/domains/' . $self->box_domain . '/records';
-
-  return $self->_do_request(GET => "$base?per_page=200")
-  ->then(sub ($data) {
-    my @records = grep {$_->{data} eq $ip } $data->{domain_records}->@*;
-    Future->done(@records);
-  })
-  ->then(sub (@records) {
-    return Future->wait_all(
-      map {
-        $self->_do_request(DELETE => "$base/$_->{id}", {})
-      } @records
-    );
-  });
-}
-
-sub _update_dns ($self, $name, $ip) {
-  my $base = '/domains/' . $self->box_domain . '/records';
-
-  $self->_do_request(GET => "$base?per_page=200")
-    ->then(sub ($data) {
-      my ($record) = grep { $_->{name} eq $name } $data->{domain_records}->@*;
-      Future->done($record);
-    })
-    ->then(sub ($record) {
-      if ($record) {
-        return $self->_do_request(PUT => "$base/$record->{id}", {
-          data => $ip
-        });
-      }
-
-      return $self->_do_request(POST => "$base", {
-        type => 'A',
-        name => $name,
-        data => $ip,
-        ttl  => 30,
-      });
-    })
-    ->then(sub { return Future->done })
-    ->else(sub {
-      # We don't actually care if this fails (what can we do?), so we
-      # transform a failure into a success.
-      $Logger->log("ignoring error when updating DNS with DO ($name)");
-      return Future->done;
-    });
-}
-
-sub _add_box_to_project ($self, $droplet) {
-  return Future->done unless $self->has_project_id;
-
-  my $id = $droplet->{id};
-  my $name = $droplet->{name};
-
-  my $base = '/projects/' . $self->box_project_id . '/resources';
-
-  return $self->_do_request(POST => $base, {
-    resources => [ "do:droplet:$id" ],
-  })->then(sub {
-    $Logger->log("added $name to project " . $self->box_project_id);
-    return Future->done;
-  })->else(sub {
-      # We don't actually care if this fails (what can we do?), so we
-      # transform a failure into a success.
-      $Logger->log("ignoring error when adding $name to project");
-      return Future->done;
-    });
 }
 
 __PACKAGE__->add_preference(

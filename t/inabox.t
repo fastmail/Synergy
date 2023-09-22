@@ -57,12 +57,11 @@ $s->server->register_path(
 
 my $url = sprintf("http://localhost:%s/digital-ocean", $s->server->server_port);
 
-# Muck with the guts of VO reactor to catch our fakes.
+# Muck with the guts of Dobby to catch our fakes.
 my $endpoint = Sub::Override->new(
-  'Synergy::Reactor::InABox::_do_endpoint',
+  'Dobby::Client::api_base',
   sub { return $url },
 );
-
 
 # dumb convenience methods
 sub gen_response ($code, $data) {
@@ -106,7 +105,6 @@ my $alice_droplet = {
 };
 
 subtest 'status' => sub {
-  # alice has a box, bob has none
   $DO_RESPONSE = gen_response(200, { droplets => [ $alice_droplet ] });
 
   send_message('synergy: box status');
@@ -116,7 +114,9 @@ subtest 'status' => sub {
     'alice has a box and synergy says so'
   );
 
-  send_message('synergy: box status', 'bob');
+  $DO_RESPONSE = gen_response(200, { droplets => [ ] });
+
+  send_message('synergy: box status');
   is(
     single_message_text(),
     "You don't seem to have any boxes.",
@@ -311,7 +311,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{find a DO (snapshot|ssh key)}),
+        re(qr{no snapshot found}),
       ],
       'no snapshot, messages ok'
     );
@@ -324,7 +324,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{find a DO (snapshot|ssh key)}),
+        re(qr{find a DO ssh key}),
       ],
       'no ssh key, messages ok'
     );
@@ -337,7 +337,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re}),
-        re(qr{There was an error creating the box}),
+        re(qr{Something weird happened and I've logged it}),
       ],
       'sent one will create, one error'
     );
@@ -354,7 +354,7 @@ subtest 'create' => sub {
       \@texts,
       [
         re(qr{Creating $box_name_re}),
-        re(qr{Something went wrong while creating box}),
+        re(qr{Something weird happened and I've logged it}),
       ],
       'sent one will create, one error'
     );
