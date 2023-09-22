@@ -257,7 +257,7 @@ command milkauth => {
 
   my $token = $rsp->get('auth')->{token};
 
-  my $got = $self->set_user_preference($user, 'api-token', $token);
+  my $got = await $self->set_user_preference($user, 'api-token', $token);
 
   return await $event->reply("You're authenticated!");
 };
