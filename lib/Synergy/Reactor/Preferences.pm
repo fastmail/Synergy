@@ -173,7 +173,7 @@ async sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
   return $self->_error_no_prefs($event, $comp_name)
     unless $component->can('set_preference');
 
-  $component->set_preference($user, $pref_name, $pref_value, $event);
+  await $component->set_preference($user, $pref_name, $pref_value, $event);
 
   return;
 }

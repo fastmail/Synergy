@@ -4,6 +4,7 @@ package Synergy::Role::HasPreferences;
 
 use MooseX::Role::Parameterized;
 
+use Future::AsyncAwait;
 use Scalar::Util qw(blessed);
 use Synergy::Logger '$Logger';
 use Try::Tiny;
@@ -95,12 +96,12 @@ role {
   };
 
 
-  method set_preference => sub ($self, $user, $pref_name, $value, $event) {
+  method set_preference => async sub ($self, $user, $pref_name, $value, $event) {
+    $event->mark_handled;
+
     unless ($self->is_known_preference($pref_name)) {
       my $full_name = $self->preference_namespace . q{.} . $pref_name;
-      $event->error_reply("I don't know about the $full_name preference");
-      $event->mark_handled;
-      return;
+      return await $event->error_reply("I don't know about the $full_name preference");
     }
 
     my $spec = $pref_specs{ $pref_name };
@@ -109,20 +110,17 @@ role {
     my $full_name = $self->preference_namespace . q{.} . $pref_name;
 
     if ($err) {
-      $event->error_reply("I don't understand the value you gave for $full_name: $err");
-      $event->mark_handled;
-      return;
+      return await $event->error_reply("I don't understand the value you gave for $full_name: $err");
     }
 
-    my $got = $self->set_user_preference($user, $pref_name, $actual_value);
+    my $got  = await $self->set_user_preference($user, $pref_name, $actual_value);
     my $desc = $self->describe_user_preference($user, $pref_name);
 
     my $possessive = $user == $event->from_user
                    ? 'Your'
                    : $user->username . q{'s};
 
-    $event->mark_handled;
-    $event->reply("$possessive $full_name setting is now $desc.");
+    return await $event->reply("$possessive $full_name setting is now $desc.");
   };
 
   method user_has_preference => sub ($self, $user, $pref_name) {
@@ -153,7 +151,7 @@ role {
     return $user_prefs->{$pref_name} // default();
   };
 
-  method set_user_preference => sub ($self, $user, $pref_name, $value) {
+  method set_user_preference => async sub ($self, $user, $pref_name, $value) {
     die "unknown pref: $pref_name"
       unless $self->is_known_preference($pref_name);
 
