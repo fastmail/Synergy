@@ -1110,6 +1110,7 @@ __PACKAGE__->add_preference(
   help        => "Default team in Linear. Make sure to enter the three letter team key.",
   description => "Default team for your Linear issues",
   describer   => sub ($value) {
+    return '<none>' unless defined $value;
     return $value;
   },
   validator   => sub ($self, $value, $event) {
