@@ -50,7 +50,7 @@ command set => { # allow_empty_help => 1,  # provided by preferences above
     return await $event->error_reply("I didn't understand that use of set.");
   }
 
-  return $self->_set_pref($event, $who, $pref_name, $pref_value);
+  return await $self->_set_pref($event, $who, $pref_name, $pref_value);
 };
 
 command clear => { # allow_empty_help => 1,  # provided by preferences above
@@ -68,7 +68,7 @@ command clear => { # allow_empty_help => 1,  # provided by preferences above
   return $event->error_reply("You can't pass a value to 'clear'")
     if $rest;
 
-  return $self->_set_pref($event, $who, $pref_name, undef);
+  return await $self->_set_pref($event, $who, $pref_name, undef);
 };
 
 responder list => { # allow_empty_help => 1,  # provided by preferences above
@@ -99,7 +99,7 @@ responder list => { # allow_empty_help => 1,  # provided by preferences above
   }
 
   chomp $text;
-  $event->reply($text);
+  return await $event->reply($text);
 };
 
 responder dump => { # allow_empty_help => 1,  # provided by preferences above
@@ -144,12 +144,12 @@ responder dump => { # allow_empty_help => 1,  # provided by preferences above
   return await $event->reply("Preferences for $name: ```$prefs```");
 };
 
-sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
+async sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
   return unless $who;
   $who =~ s/[’']s$//;
 
   my $user = $self->hub->user_directory->resolve_name($who, $event->from_user);
-  return $event->error_reply("Sorry, I couldn't find a user for <$who>")
+  return await $event->error_reply("Sorry, I couldn't find a user for <$who>")
     unless $user;
 
   my ($comp_name, $pref_name) = split /\./, $full_name, 2;
@@ -165,7 +165,7 @@ sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
   return unless $component;
 
   if ($user != $event->from_user && ! $event->from_user->is_master) {
-    return $event->error_reply(
+    return await $event->error_reply(
       "Sorry, only master users can set preferences for other people"
     );
   }
@@ -174,6 +174,8 @@ sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
     unless $component->can('set_preference');
 
   $component->set_preference($user, $pref_name, $pref_value, $event);
+
+  return;
 }
 
 sub _error_no_prefs ($self, $event, $component) {
