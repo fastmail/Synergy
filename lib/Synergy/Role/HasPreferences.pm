@@ -138,17 +138,19 @@ role {
     die "unknown pref: $pref_name"
       unless $self->is_known_preference($pref_name);
 
-    my $spec = $pref_specs{ $pref_name };
-    my $default = $spec->{default};
-    $default = $default->() if $default && ref $default eq 'CODE';
+    my sub default () {
+      my $default = $pref_specs{$pref_name}{default};
+      $default = $default->() if $default && ref $default eq 'CODE';
+      return $default;
+    }
 
     my $username = blessed $user ? $user->username : $user;
     return unless $username;
 
     my $user_prefs = $all_user_prefs{$username};
 
-    return $default unless $user_prefs && exists $user_prefs->{$pref_name};
-    return $user_prefs->{$pref_name} // $default;
+    return default() unless $user_prefs && exists $user_prefs->{$pref_name};
+    return $user_prefs->{$pref_name} // default();
   };
 
   method set_user_preference => sub ($self, $user, $pref_name, $value) {
