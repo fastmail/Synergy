@@ -1236,9 +1236,10 @@ __PACKAGE__->add_preference(
         $event->reply(
           "Great! I found the PagerDuty user for $email, and will also set your PD user id to $id."
         );
-        $self->set_user_preference($event->from_user, 'user-id', $id);
 
-        return Future->done;
+        $self->set_user_preference($event->from_user, 'user-id', $id)->then(sub {
+          Future->done
+        });
       })
       ->else(sub ($err) {
         $ret_err = $err;
