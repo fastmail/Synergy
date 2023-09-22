@@ -85,6 +85,12 @@ package Synergy::Reactor::Linear::LinearHelper {
   }
 }
 
+has bot_api_token => (
+  is => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
 has attachment_icon_url => (
   is => 'ro',
 );
@@ -140,6 +146,10 @@ sub _linear_client_for_user ($self, $user) {
 
   return undef unless $token;
 
+  return $self->_linear_client_for_token($token);
+}
+
+sub _linear_client_for_token ($self, $token) {
   return Linear::Client->new({
     auth_token      => $token,
     _cache_guts     => $self->_linear_shared_cache,
@@ -1109,7 +1119,17 @@ __PACKAGE__->add_preference(
   name        => 'default-team',
   help        => "Default team in Linear. Make sure to enter the three letter team key.",
   description => "Default team for your Linear issues",
-  describer   => async sub ($self, $value) { $value // '<none>' },
+  describer   => async sub ($self, $value) {
+    return '<none>' unless $value;
+
+    my $linear = $self->_linear_client_for_token($self->bot_api_token);
+
+    my $teams = await $linear->teams;
+
+    my ($team) = grep {; $_->{id} eq $value } values %$teams;
+    return "<unknown-$value>" unless $team;
+    return $team->{key};
+  },
   validator   => async sub ($self, $value, $event) {
     # Look, this is *terrible*.  _with_linear_client will return a reply
     # future, if we failed.  Otherwise it returns the result of the called sub,
