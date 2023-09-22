@@ -13,7 +13,6 @@ use Synergy::Event;
 use Synergy::Logger '$Logger';
 
 use namespace::autoclean;
-use Data::Dumper::Concise;
 
 my $JSON = JSON->new->canonical;
 
