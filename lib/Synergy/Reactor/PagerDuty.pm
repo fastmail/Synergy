@@ -1069,7 +1069,7 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  describer => async sub ($value) { defined $value ? "<redacted>" : '<undef>' },
+  describer => async sub ($self, $value) { defined $value ? "<redacted>" : '<undef>' },
   default   => undef,
   validator => async sub ($self, $token, $event) {
     $token =~ s/^\s*|\s*$//g;

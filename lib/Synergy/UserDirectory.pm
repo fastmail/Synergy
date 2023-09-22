@@ -333,7 +333,7 @@ __PACKAGE__->add_preference(
 
     return \@names;
   },
-  describer => async sub ($value) {
+  describer => async sub ($self, $value) {
     return '<undef>' unless $value;
     return '<undef>' unless @$value;
     return join(q{, }, @$value);
@@ -378,7 +378,7 @@ __PACKAGE__->add_preference(
 __PACKAGE__->add_preference(
   name => 'business-hours',
   help      => q{when you work; you can use "weekdays, 09:00-17:00" or "Mon: 09:00-17:00, Tue: 10:00-12:00, (etc.)"},
-  describer => async sub ($value) { Synergy::Util::describe_business_hours($value) },
+  describer => async sub ($self, $value) { Synergy::Util::describe_business_hours($value) },
   validator => async sub ($self, $value, @) {
     return Synergy::Util::validate_business_hours($value);
   },
@@ -388,7 +388,7 @@ __PACKAGE__->add_preference(
   name => 'wfh-days',
   help      => q{days you work regularly from home; use "Wed, Fri" (etc.)"},
   default   => sub { [] },
-  describer => async sub ($value) {
+  describer => async sub ($self, $value) {
     my @all = map {; day_name_from_abbr($_) } @$value;
     return @all ? WORDLIST(@all) : '<none>';
   },

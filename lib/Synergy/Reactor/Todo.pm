@@ -157,7 +157,7 @@ __PACKAGE__->add_preference(
   name        => 'password',
   help        => "The password to use in accessing your todo list",
   description => "The password to use in accessing your todo list",
-  describer   => async sub ($value) { defined $value ? '<redacted>' : '<unset>' },
+  describer   => async sub ($self, $value) { defined $value ? '<redacted>' : '<unset>' },
   validator   => async sub ($self, $value, $event) {
     return ($value, undef);
   },
@@ -168,7 +168,7 @@ __PACKAGE__->add_preference(
   name        => 'calendar-user',
   help        => "The calendar user where you store your todos",
   description => "The calendar user where you store your todos",
-  describer   => async sub ($value) { $value // '<unset>' },
+  describer   => async sub ($self, $value) { $value // '<unset>' },
   validator   => async sub ($self, $value, $event) {
     return ($value, undef);
   },
@@ -179,7 +179,7 @@ __PACKAGE__->add_preference(
   name        => 'calendar-id',
   help        => "The calendar id where you store your todos",
   description => "The calendar id where you store your todos",
-  describer   => async sub ($value) { $value // '<unset>' },
+  describer   => async sub ($self, $value) { $value // '<unset>' },
   validator   => async sub ($self, $value, $event) {
     return ($value, undef);
   },

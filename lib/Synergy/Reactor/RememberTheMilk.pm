@@ -270,7 +270,7 @@ __PACKAGE__->add_preference(
 
     return (undef, undef);
   },
-  describer => async sub ($v) { defined $v ? "<redacted>" : '<undef>' },
+  describer => async sub ($self, $v) { defined $v ? "<redacted>" : '<undef>' },
   default   => undef,
 );
 

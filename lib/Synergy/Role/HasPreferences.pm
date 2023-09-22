@@ -56,7 +56,7 @@ role {
       $Logger->log("couldn't get value for preference $pref_name: $@");
     }
 
-    return await $pref_specs{$pref_name}->{describer}->($val);
+    return await $pref_specs{$pref_name}->{describer}->($self, $val);
   };
 
   method preference_help => sub ($self) {
@@ -74,7 +74,7 @@ role {
   #   description => "a pref with a name",
   #   default     => value,
   #   validator   => async sub ($self, $val, $event) {},
-  #   describer   => async sub ($val) {},
+  #   describer   => async sub ($self, $val) {},
   #   after_set   => async sub ($self, $username, $value) {},
   # }
   #
@@ -89,7 +89,7 @@ role {
 
     die "preference $name already exists in $class" if $pref_specs{$name};
 
-    $spec{describer} //= async sub ($value) { return $value // '<undef>' };
+    $spec{describer} //= async sub ($self, $value) { return $value // '<undef>' };
     $spec{after_set} //= async sub ($self, $username, $value) {};
 
     $pref_specs{$name} = \%spec;

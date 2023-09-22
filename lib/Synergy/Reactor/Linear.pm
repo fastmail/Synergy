@@ -1088,7 +1088,7 @@ responder ptn_blocked => {
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  describer => async sub ($value) { defined $value ? "<redacted>" : '<undef>' },
+  describer => async sub ($self, $value) { defined $value ? "<redacted>" : '<undef>' },
   default   => undef,
   validator => async sub ($self, $value, $event) {
     $value =~ s/^\s*|\s*$//g;
@@ -1109,7 +1109,7 @@ __PACKAGE__->add_preference(
   name        => 'default-team',
   help        => "Default team in Linear. Make sure to enter the three letter team key.",
   description => "Default team for your Linear issues",
-  describer   => async sub ($value) { $value // '<none>' },
+  describer   => async sub ($self, $value) { $value // '<none>' },
   validator   => async sub ($self, $value, $event) {
     # Look, this is *terrible*.  _with_linear_client will return a reply
     # future, if we failed.  Otherwise it returns the result of the called sub,

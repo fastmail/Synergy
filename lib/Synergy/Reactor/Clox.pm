@@ -26,7 +26,7 @@ __PACKAGE__->add_preference(
   name        => 'include-aelt',
   help        => "Whether or not to include AELT in the output",
   description => "Whether or not to include AELT in the output",
-  describer   => async sub ($value) { $value ? 1 : 0 },
+  describer   => async sub ($self, $value) { $value ? 1 : 0 },
   validator   => async sub ($self, $value, $event) {
     return(($value ? 1 : 0), undef); # Should write a generic bool/yes/no.
   },
