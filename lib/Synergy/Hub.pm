@@ -6,7 +6,7 @@ package Synergy::Hub;
 use Moose;
 use MooseX::StrictConstructor;
 
-use experimental qw(signatures);
+use experimental qw(isa signatures);
 use namespace::clean;
 
 with (
@@ -195,10 +195,20 @@ sub handle_event ($self, $event) {
           "@args", # stupid, but avoids json serialization guff
         ]);
 
+        if ($args[0] isa 'Synergy::X' && $args[0]->is_public) {
+          $event->reply($args[0]->message);
+          return
+        }
+
         $event->error_reply("My $rname reactor crashed (in the background) while handling your message.  Sorry!");
       })->retain;
     } catch {
       my $error = $_;
+
+      if ($error isa Synergy::X && $error->is_public) {
+        $event->reply($error->message);
+        return;
+      }
 
       $error =~ s/\n.*//ms;
 
