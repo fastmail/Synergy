@@ -251,12 +251,8 @@ async sub handle_create ($self, $event, $switches) {
 
   # Add it to the relevant project. If this fails, then...oh well.
   # -- ?
-  #
-  # I'm putting the result in a variable, because not doing so led to some
-  # weird-o error from AsyncAwait.  I'll ask LeoNerd about it. -- rjbs,
-  # 2023-09-15
   if ($self->has_project_id) {
-    my $project_res = await $self->dobby->add_droplet_to_project(
+    await $self->dobby->add_droplet_to_project(
       $droplet->{id},
       $self->box_project_id
     );
