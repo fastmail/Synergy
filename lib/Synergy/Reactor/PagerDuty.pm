@@ -4,7 +4,7 @@ use utf8;
 package Synergy::Reactor::PagerDuty;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
 use experimental qw(signatures);
@@ -20,6 +20,7 @@ use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(first uniq);
+use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
 use Time::Duration qw(ago duration);
@@ -170,146 +171,377 @@ sub start ($self) {
   }
 }
 
-sub listener_specs {
-  return (
-    {
-      name      => 'maint-query',
-      method    => 'handle_maint_query',
-      targeted  => 1,
-      predicate => sub ($, $e) { $e->text =~ /^maint(\s+status)?\s*$/in },
-      help_entries => [
-        # start /force is not documented here because it will mention itself to
-        # the user when needed -- rjbs, 2020-06-15
-        { title => 'maint', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
-Conveniences for managing PagerDuty's "maintenance mode", aka "silence all the
-alerts because everything is on fire."
+# "start /force" is not documented here because it will mention itself to the
+# user when needed -- rjbs, 2020-06-15
+help maint => reformat_help(<<~"EOH");
+  Conveniences for managing PagerDuty's "maintenance mode", aka "silence all
+  the alerts because everything is on fire."
 
-• *maint status*: show current maintenance state
-• *maint start*: enter maintenance mode. All alerts are now silenced! Also acks
-• *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
+  • *maint status*: show current maintenance state • *maint start*: enter
+  maintenance mode. All alerts are now silenced! Also acks • *maint end*,
+  *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
 
-When you leave maintenance mode, any alerts that happened during it, or even
-shortly before it, will be marked resolved.  If you don't want that, say *maint
-end /noresolve*
-EOH
-      ],
-    },
+  When you leave maintenance mode, any alerts that happened during it, or even
+  shortly before it, will be marked resolved.  If you don't want that, say
+  *maint end /noresolve*
+  EOH
+
+responder 'maint-status' => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher => sub ($text, $event) {
+    return [] if $text =~ /\Amaint(\s+status)?\s*\z/ni;
+    return;
+  }
+} => async sub ($self, $event) {
+  $event->mark_handled;
+
+  my @maints = await $self->_relevant_maint_windows;
+
+  unless (@maints) {
+    return await $event->reply("PagerDuty not in maint right now. Everything is fine maybe!");
+  }
+
+  my $maint_text = $self->_format_maints(@maints);
+  return await $event->reply("🚨 PagerDuty in maint: $maint_text");
+};
+
+responder 'maint-start' => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher => sub ($text, $event) {
+    return [ $1 ? 1 : 0 ] if $text =~ m{\Amaint\s+start(?:\s+/force)?\s*\z}ni;
+    return;
+  },
+} => async sub ($self, $event, $force) {
+  $event->mark_handled;
+
+  unless ($self->is_known_user($event)) {
+    return await $event->error_reply("I don't know you, so I'm ignoring that.");
+  }
+
+  unless ($force) {
+    my $is_oncall = await $self->_user_is_oncall($event->from_user);
+
+    unless ($is_oncall) {
+      return await $event->error_reply(join(q{ },
+        "You don't seem to be on call right now.",
+        "Usually, the person oncall is getting the alerts, so they should be",
+        "the one to decide whether or not to shut them up.",
+        "If you really want to do this, try again with /force."
+      ));
+    }
+  }
+
+  my @maints = await $self->_relevant_maint_windows;
+
+  if (@maints) {
+    my $desc = $self->_format_maints(@maints);
+    return await $event->reply("PagerDuty already in maint: $desc");
+  }
+
+  # XXX add reason here?
+  my $data = await $self->_pd_request_for_user(
+    $event->from_user,
+    POST => '/maintenance_windows',
     {
-      name      => 'maint-start',
-      method    => 'handle_maint_start',
-      targeted  => 1,
-      predicate => sub ($, $e) {
-        $e->text =~ m{^maint\s+start\s*(/force)?\s*$}i
+      maintenance_window => {
+        type => 'maintenance_window',
+        start_time => $ISO8601->format_datetime(DateTime->now),
+        end_time   =>  $ISO8601->format_datetime(DateTime->now->add(hours => 1)),
+        services => [{
+          id => $self->service_id,
+          type => 'service_reference',
+        }],
       },
-      allow_empty_help => 1,  # provided by maint-query
-    },
-    {
-      name      => 'maint-end',
-      method    => 'handle_maint_end',
-      targeted  => 1,
-      predicate => sub ($self, $e) {
-        return 1 if $e->text =~ /^maint\s+(end|stop)\b/i;
-        return 1 if $e->text =~ /^unmaint\b/i;
-        return 1 if $e->text =~ /^demaint\b/i;
-      },
-      allow_empty_help => 1,  # provided by maint-query
-    },
-    {
-      name      => 'oncall',
-      method    => 'handle_oncall',
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /^oncall\s*(override)?/in },
-      help_entries => [
-        { title => 'oncall', text => '*oncall*: show a list of who is on call in PagerDuty right now' },
-      ],
-    },
-    {
-      name      => 'give-oncall',
-      method    => 'handle_give_oncall',
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /^give\s+oncall/i },
-      help_entries => [{
-        title => 'give oncall',
-        text => reformat_help(<<'EOH'),
-Give the oncall conch to someone for a while.
-
-• `give oncall to WHO for DURATION`
-• `oncall override WHO DURATION`
-
-`WHO` is the person you want to take the conch, and `DURATION` is how long
-they should keep it. The duration is parsed, so you can say something like
-"30m" or "2h".
-
-This command is (for now?) very limited, and intended for the case where
-you're oncall and need to step away to for a while. It won't let you give
-oncall to someone for more than 8 hours, and won't work if there is already
-more than one person oncall. To set up extended overrides, you should use the
-PagerDuty website.
-EOH
-      }],
-    },
-    {
-      name      => 'ack-all',
-      method    => 'handle_ack_all',
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /^ack all\s*$/i },
-      help_entries => [
-        { title => 'ack', text => '*ack all*: acknowledge all triggered alerts in PagerDuty' },
-      ],
-    },
-    {
-      name      => 'incident-summary',
-      method    => '_handle_incidents',
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /^(incidents|alerts)\s*$/in },
-      help_entries => [
-        { title => 'incidents', text => '*incidents*: list current active incidents' },
-      ],
-    },
-    {
-      name      => 'resolve-all',
-      method    => 'handle_resolve_all',
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+all\s*$}i },
-      help_entries => [
-        { title => 'resolve', text => <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg },
-*resolve*: manage resolving alerts in PagerDuty
-
-You can run this in one of several ways:
-
-• *resolve all*: resolve all triggered and acknowledged alerts in PagerDuty
-• *resolve acked*: resolve the acknowledged alerts in PagerDuty
-• *resolve mine*: resolve the acknowledged alerts assigned to you in PagerDuty
-EOH
-      ],
-    },
-    {
-      name      => 'resolve-acked',
-      method    => 'handle_resolve_acked',
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+acked\s*$}i },
-      allow_empty_help => 1,  # provided by resolve-all
-    },
-    {
-      name      => 'resolve-mine',
-      method    => 'handle_resolve_mine',
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ m{^resolve\s+mine\s*$}i },
-      allow_empty_help => 1,  # provided by resolve-all
-    },
-    {
-      name      => 'snooze',
-      method    => 'handle_snooze',
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ m{^snooze\s}i },
-      help_entries => [
-        { title => 'snooze', text => <<'EOH' },
-Snooze a single PagerDuty incident. Usage: snooze ALERT-NUMBER for DURATION
-EOH
-      ],
-    },
+    }
   );
-}
+
+  my $n_acked = await $self->_ack_all($event);
+  my $ack_text = ' ';
+  $ack_text = " 🚑 $n_acked alert".($n_acked > 1 ? 's' : '')." acked!"
+    if $n_acked;
+
+  return await $event->reply("🚨 PagerDuty now in maint for an hour!$ack_text Good luck!");
+};
+
+responder 'maint-end' => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher => sub ($text, $event) {
+    return [ ] if $text =~ m{\Amaint\s+(end|stop)\s*\z}ni;
+    return [ ] if $text =~ m{\Aunmaint\s*\z}ni;
+    return [ ] if $text =~ m{\Ademaint\s*\z}ni;
+    return;
+  },
+} => async sub ($self, $event) {
+  $event->mark_handled;
+
+  unless ($self->is_known_user($event)) {
+    return await $event->error_reply("I don't know you, so I'm ignoring that.");
+  }
+
+  my @maints = await $self->_relevant_maint_windows;
+
+  unless (@maints) {
+    return await $event->reply("PagerDuty not in maint right now. Everything is fine maybe!");
+  }
+
+  # add 5s to allow for clock skew, otherwise PagerDuty gives you "end cannot
+  # be before now"
+  my $now = $ISO8601->format_datetime(DateTime->now->add(seconds => 5));
+
+  my @futures;
+  for my $window (@maints) {
+    my $id = $window->{id};
+    push @futures, $self->_pd_request_for_user(
+      $event->from_user,
+      PUT => "/maintenance_windows/$id",
+      {
+        maintenance_window => {
+          type       => $window->{type},
+          end_time   => $now,
+        },
+      }
+    );
+  }
+
+  await Future->wait_all(@futures);
+
+  my @failed = grep {; $_->is_failed } @futures;
+
+  unless (@failed) {
+    return await $event->reply("🚨 PagerDuty maint cleared. Good job everyone!");
+  }
+
+  $Logger->log([ "PagerDuty demaint failed: %s", [ map {; $_->failure } @failed ] ]);
+  return await $event->reply(
+    "Something went wrong fiddling PagerDuty maint state; you'll probably want to sort it out on the web. Sorry about that!"
+  );
+};
+
+command oncall => {
+  help => '*oncall*: show a list of who is on call in PagerDuty right now',
+} => async sub ($self, $event, $rest) {
+  if (length $rest) {
+    return await $event->reply_error(q{It's just "oncall".  Did you want "give oncall"?});
+  }
+
+  my @ids = await $self->_current_oncall_ids;
+
+  my @users = uniq map {; $self->username_from_pd($_) // $_ } @ids;
+  return await $event->reply('current oncall: ' . join(', ', sort @users));
+};
+
+help "give oncall" => reformat_help(<<~'EOH'),
+  Give the oncall conch to someone for a while.
+
+  • `give oncall to WHO for DURATION`
+  • `oncall override WHO DURATION`
+
+  `WHO` is the person you want to take the conch, and `DURATION` is how long
+  they should keep it. The duration is parsed, so you can say something like
+  "30m" or "2h".
+
+  This command is (for now?) very limited, and intended for the case where
+  you're oncall and need to step away to for a while. It won't let you give
+  oncall to someone for more than 8 hours, and won't work if there is already
+  more than one person oncall. To set up extended overrides, you should use the
+  PagerDuty website.
+  EOH
+
+responder 'give-oncall' => {
+  exclusive => 1,
+  targeted  => 1,
+  matcher => sub ($text, $event) {
+    my ($who, $dur) = $text =~ /\Agive\s+oncall\s+to\s+(\S+)\s+for\s+(.*)\s*$/i;
+    return [ $who, $dur ] if $who;
+    return;
+  },
+} => async sub ($self, $event, $who, $dur) {
+  # For now, this will work in *extremely* limited situations, so we do a bunch
+  # of error checking up front here.
+  $event->mark_handled;
+
+  my $target = $self->resolve_name($who, $event->from_user);
+  unless ($target) {
+    return await $event->error_reply("Sorry, I can't figure out who '$who' is.");
+  }
+
+  my $target_id = $self->get_user_preference($target, 'user-id');
+  unless ($target_id) {
+    my $they = $target->username;
+    return await $event->error_reply("Hmm, $they doesn't seem to be a PagerDuty user.");
+  }
+
+  my $seconds = eval { parse_duration($dur) };
+  unless ($seconds) {
+    return await $event->error_reply("Hmm, I can't figure out how long you mean by '$dur'.");
+  }
+
+  if ($seconds > 60 * 60 * 8) {
+    return await $event->error_reply("Sorry, I can only give oncall for 8 hours max.");
+  }
+
+  if ($seconds < 60 ) {
+    return await $event->error_reply("That's less than a minute; did you forget a unit?");
+  }
+
+  my $oncalls = await $self->_relevant_oncalls;
+
+  if (@$oncalls > 1) {
+    return await $event->error_reply(
+      "Sorry; there's more than one person oncall right now, so I can't help you!"
+    );
+  }
+
+  my $schedule = $oncalls->[0]{schedule};
+  unless ($schedule) {
+    return await $event->error_reply("Sorry; I couldn't figure out the oncall schedule from PagerDuty.");
+  }
+
+  my $sched_id = $schedule->{id};
+  my $start    = DateTime->now->add(seconds => 15);
+  my $end      = $start->clone->add(seconds => $seconds);
+
+  my $overrides = await  $self->_pd_request_for_user(
+    $event->from_user,
+    POST => "/schedules/$sched_id/overrides",
+    {
+      overrides => [{
+        start => $ISO8601->format_datetime($start),
+        end   => $ISO8601->format_datetime($end),
+        user  => {
+          type => 'user_reference',
+          id   => $target_id,
+        },
+      }],
+    }
+  );
+
+  unless (@$overrides == 1 && $overrides->[0]{status} == 201) {
+    $Logger->log([ "got weird data back from override call: %s", $overrides ]);
+    return await $event->reply(
+      "Sorry, something went wrong talking to PagerDuty. \N{DISAPPOINTED FACE}"
+    );
+  }
+
+  my $duration = duration($seconds);
+  return await $event->reply(
+    sprintf("Okay! %s is now oncall for %s.",
+      $target->username,
+      duration($seconds),
+    )
+  );
+};
+
+command ack => {
+  help => '*ack all*: acknowledge all triggered alerts in PagerDuty',
+} => async sub ($self, $event, $rest) {
+  unless ($rest && $rest eq 'all') {
+    return await $event->error_reply(q{The only thing you can "ack" is "all".});
+  }
+
+  unless ($self->is_known_user($event)) {
+    return await $event->error_reply("I don't know you, so I'm ignoring that.");
+  }
+
+  my $n_acked = await $self->_ack_all($event);
+
+  my $noun = $n_acked == 1 ? 'incident' : 'incidents';
+  $event->reply("Successfully acked $n_acked $noun. Good luck!");
+};
+
+command incidents => {
+  help => '*incidents*: list current active incidents',
+} => async sub ($self, $event, $rest) {
+  my $summary = await $self->_active_incidents_summary;
+  my $text    = delete $summary->{text} // "The board is clear!";
+
+  return await $event->reply($text, $summary);
+};
+
+command resolve => {
+  help => reformat_help(<<~'EOH'),
+    *resolve*: manage resolving alerts in PagerDuty
+
+    You can run this in one of several ways:
+
+    • *resolve all*: resolve all triggered and acknowledged alerts in PagerDuty
+    • *resolve acked*: resolve the acknowledged alerts in PagerDuty
+    • *resolve mine*: resolve the acknowledged alerts assigned to you in PagerDuty
+    EOH
+} => async sub ($self, $event, $rest) {
+  unless ($self->is_known_user($event)) {
+    return await $event->error_reply("I don't know you, so I'm ignoring that.");
+  }
+
+  if ($rest eq 'all')   {
+    return await $self->_resolve_incidents($event, { whose => 'all' });
+  }
+
+  if ($rest eq 'acked') {
+    return await $self->_resolve_incidents($event, {
+      whose => 'all',
+      only_acked => 1,
+    });
+  }
+
+  if ($rest eq 'mine') {
+    return await $self->_resolve_incidents($event, {
+      whose => 'own',
+    });
+  }
+
+  return await $self->error_reply("I don't know what you want to ack.  Check the help!");
+};
+
+command snooze => {
+  help => 'Snooze a single PagerDuty incident. Usage: snooze ALERT-NUMBER for DURATION',
+} => async sub ($self, $event, $rest) {
+  my ($num, $dur) = $rest =~ /^#?(\d+)\s+for\s+(.*)/i;
+
+  unless ($num && $dur) {
+    return await $event->error_reply(
+      "Sorry, I don't understand. Say 'snooze INCIDENT-NUM for DURATION'."
+    );
+  }
+
+  my $seconds = eval { parse_duration($dur) };
+
+  unless ($seconds) {
+    return $event->error_reply("Sorry, I couldn't parse '$dur' into a duration!");
+  }
+
+  my @incidents = $self->_get_incidents(qw(triggered acknowledged));
+
+  my ($relevant) = grep {; $_->{incident_number} == $num } @incidents;
+  unless ($relevant) {
+    return await $event->error_reply("I couldn't find an active incident for #$num");
+  }
+
+  my $id = $relevant->{id};
+
+  my $res = await $self->_pd_request_for_user(
+    $event->from_user,
+    POST => "/incidents/$id/snooze",
+    { duration => $seconds }
+  );
+
+  if (my $incident = $res->{incident}) {
+    my $title = $incident->{title};
+    my $duration = duration($seconds);
+    return await $event->reply(
+      "#$num ($title) snoozed for $duration; enjoy the peace and quiet!"
+    );
+  }
+
+  my $msg = $res->{message} // 'nothing useful';
+
+  return $event->reply(
+    "Something went wrong talking to PagerDuty; they said: $msg"
+  );
+};
 
 sub state ($self) {
   return {
@@ -416,26 +648,6 @@ sub _format_maint_window ($self, $window) {
   return "$services ($ago, started by $who)";
 }
 
-sub handle_maint_query ($self, $event) {
-  $event->mark_handled;
-
-  my $f = $self->_relevant_maint_windows
-    ->then(sub (@maints) {
-      unless (@maints) {
-        return $event->reply("PD not in maint right now. Everything is fine maybe!");
-      }
-
-      my $maint_text = $self->_format_maints(@maints);
-      return $event->reply("🚨 PD in maint: $maint_text");
-    })
-    ->else(sub (@fails) {
-      $Logger->log("PD handle_maint_query failed: @fails");
-      return $event->reply("Something went wrong while getting maint state from PD. Sorry!");
-    });
-
-  $f->retain;
-}
-
 sub _check_long_maint ($self) {
   my $current_time = time();
 
@@ -477,7 +689,7 @@ sub _check_long_maint ($self) {
     ->else(sub ($message, $extra = {}) {
       return if $message eq 'not in maint';
       return if $message eq 'maint duration less than 30m';
-      $Logger->log("PD error _check_long_maint():  $message");
+      $Logger->log("PagerDuty error _check_long_maint():  $message");
     })->retain;
 }
 
@@ -510,282 +722,6 @@ sub _user_is_oncall ($self, $who) {
     });
 }
 
-sub handle_oncall ($self, $event) {
-  $event->mark_handled;
-
-  if ($event->text =~ /^oncall\s+override/i) {
-    return $self->handle_give_oncall($event);
-  }
-
-  $self->_current_oncall_ids
-    ->then(sub (@ids) {
-        my @users = uniq map {; $self->username_from_pd($_) // $_ } @ids;
-        return $event->reply('current oncall: ' . join(', ', sort @users));
-    })
-    ->else(sub { $event->reply("I couldn't look up who's on call. Sorry!") })
-    ->retain;
-}
-
-# For now, this will work in *extremely* limited situations, so we do a bunch
-# of error checking up front here.
-sub handle_give_oncall ($self, $event) {
-  $event->mark_handled;
-
-  my ($who, $dur);
-  if ($event->text =~ /^oncall\s+override/in) {
-    # oncall override syntax
-    ($who, $dur) = $event->text =~ /^oncall\s+override\s+(\S+)\s+(.*)/i;
-  } else {
-    # give oncall syntax
-    ($who, $dur) = $event->text =~ /^give\s+oncall\s+to\s+(\S+)\s+for\s+(.*)\s*$/i;
-  }
-
-  warn "who: $who, dur: $dur";
-
-  unless ($who && $dur) {
-    return $event->error_reply(
-      "Hmm, I didn't catch that, sorry: it's *give oncall to WHO for DURATION*"
-    );
-  }
-
-  my $target = $self->resolve_name($who, $event->from_user);
-  unless ($target) {
-    return $event->error_reply("Sorry, I can't figure out who '$who' is.");
-  }
-
-  my $target_id = $self->get_user_preference($target, 'user-id');
-  unless ($target_id) {
-    my $they = $target->username;
-    return $event->error_reply("Hmm, $they doesn't seem to be a PagerDuty user.");
-  }
-
-  my $seconds = eval { parse_duration($dur) };
-  unless ($seconds) {
-    return $event->error_reply("Hmm, I can't figure out how long you mean by '$dur'.");
-  }
-
-  if ($seconds > 60 * 60 * 8) {
-    return $event->error_reply("Sorry, I can only give oncall for 8 hours max.");
-  }
-
-  if ($seconds < 60 ) {
-    return $event->error_reply("That's less than a minute; did you forget a unit?");
-  }
-
-  $self->_relevant_oncalls->then(sub ($oncalls) {
-    # More early bail-outs
-    if (@$oncalls > 1) {
-      $event->error_reply(
-        "Sorry; there's more than one person oncall right now, so I can't help you!"
-      );
-
-      return Future->fail('bail-out');
-    }
-
-    my $schedule = $oncalls->[0]{schedule};
-    unless ($schedule) {
-      $event->error_reply(
-        "Sorry; I couldn't figure out the oncall schedule from PagerDuty."
-      );
-
-      return Future->fail('bail-out');
-    }
-
-    my $sched_id = $schedule->{id};
-    my $start    = DateTime->now->add(seconds => 15);
-    my $end      = $start->clone->add(seconds => $seconds);
-
-    return $self->_pd_request_for_user(
-      $event->from_user,
-      POST => "/schedules/$sched_id/overrides",
-      {
-        overrides => [{
-          start => $ISO8601->format_datetime($start),
-          end   => $ISO8601->format_datetime($end),
-          user  => {
-            type => 'user_reference',
-            id   => $target_id,
-          },
-        }],
-      }
-    );
-  })->then(sub ($overrides) {
-    unless (@$overrides == 1 && $overrides->[0]{status} == 201) {
-      $Logger->log([ "got weird data back from override call: %s", $overrides ]);
-      return $event->reply(
-        "Sorry, something went wrong talking to PagerDuty. \N{DISAPPOINTED FACE}"
-      );
-    }
-
-    my $duration = duration($seconds);
-    $event->reply(sprintf("Okay! %s is now oncall for %s.",
-      $target->username,
-      duration($seconds),
-    ));
-  })->else(sub ($type, @rest) {
-    return if $type eq 'bail-out';
-
-    if ($type eq 'http') {
-      my $res = shift @rest;
-      my $data = eval { decode_json($res->decoded_content) };
-      $Logger->log([
-        "got http error, status %s, when setting overrides: %s",
-        $res->code,
-        $data // '<no json>',
-      ]);
-    } else {
-      $Logger->log([
-        "unknown error setting overrides: type=%s, err=%s",
-        $type,
-        \@rest,
-      ]);
-    }
-
-    return $event->reply(
-      "Sorry, something went wrong talking to PagerDuty. \N{DISAPPOINTED FACE}"
-    );
-  })->retain;
-}
-
-sub handle_maint_start ($self, $event) {
-  $event->mark_handled;
-  return unless $self->is_known_user($event);
-
-  my $force = $event->text =~ m{/force\s*$};
-  my $f;
-
-  if ($force) {
-    # don't bother checking
-    $f = Future->done;
-  } else {
-    $f = $self->_user_is_oncall($event->from_user)->then(sub ($is_oncall) {
-      return Future->done if $is_oncall;
-
-      $event->error_reply(join(q{ },
-        "You don't seem to be on call right now.",
-        "Usually, the person oncall is getting the alerts, so they should be",
-        "the one to decide whether or not to shut them up.",
-        "If you really want to do this, try again with /force."
-      ));
-      return Future->fail('not-oncall');
-    });
-  }
-
-  $f->then(sub {
-    $self->_relevant_maint_windows
-  })
-  ->then(sub (@maints) {
-    return Future->done unless @maints;
-
-    my $desc = $self->_format_maints(@maints);
-    $event->reply("PD already in maint: $desc");
-
-    return Future->fail('already-maint');
-  })
-  ->then(sub {
-    # XXX add reason here?
-    return $self->_pd_request_for_user(
-      $event->from_user,
-      POST => '/maintenance_windows',
-      {
-        maintenance_window => {
-          type => 'maintenance_window',
-          start_time => $ISO8601->format_datetime(DateTime->now),
-          end_time   =>  $ISO8601->format_datetime(DateTime->now->add(hours => 1)),
-          services => [{
-            id => $self->service_id,
-            type => 'service_reference',
-          }],
-        },
-      }
-    );
-  })
-  ->then(sub ($data) {
-    $self->_ack_all($event);
-  })
-  ->then(sub ($nacked) {
-    my $ack_text = ' ';
-    $ack_text = " 🚑 $nacked alert".($nacked > 1 ? 's' : '')." acked!"
-      if $nacked;
-
-    return $event->reply("🚨 PD now in maint for an hour!$ack_text Good luck!");
-  })
-  ->else(sub ($category, $extra = {}) {
-    return if $category eq 'not-oncall';
-    return if $category eq 'already-maint';
-
-    $Logger->log("PD handle_maint_start failed: $category");
-    return $event->reply("Something went wrong while fiddling with PD maint state. Sorry!");
-  })
-  ->retain;
-
-  return;
-}
-
-sub handle_maint_end ($self, $event) {
-  $event->mark_handled;
-  return unless $self->is_known_user($event);
-
-  my (@args) = split /\s+/, $event->text;
-
-  $self->_relevant_maint_windows
-    ->then(sub (@maints) {
-      unless (@maints) {
-        $event->reply("PD not in maint right now. Everything is fine maybe!");
-        return Future->fail('no-maint');
-      }
-
-      # add 5s to allow for clock skew, otherwise PD gives you "end cannot be
-      # before now"
-      my $now = $ISO8601->format_datetime(DateTime->now->add(seconds => 5));
-      my @futures;
-      for my $window (@maints) {
-        my $id = $window->{id};
-        push @futures, $self->_pd_request_for_user(
-          $event->from_user,
-          PUT => "/maintenance_windows/$id",
-          {
-            maintenance_window => {
-              type       => $window->{type},
-              end_time   => $now,
-            },
-          }
-        );
-      }
-
-      return Future->wait_all(@futures);
-    })
-    ->then(sub (@futures) {
-      my @failed = grep {; $_->is_failed } @futures;
-
-      if (@failed) {
-        $Logger->log([ "PD demaint failed: %s", [ map {; $_->failure } @failed ] ]);
-        $event->reply(
-          "Something went wrong fiddling PD maint state; "
-          . "you'll probably want to sort it out on the web. Sorry about that!"
-        );
-      } else {
-        $event->reply("🚨 PD maint cleared. Good job everyone!");
-      }
-    })
-    ->retain;
-}
-
-sub handle_ack_all ($self, $event) {
-  $event->mark_handled;
-  return unless $self->is_known_user($event);
-
-  $self->_ack_all($event)
-    ->then(sub ($n_acked) {
-      my $noun = $n_acked == 1 ? 'incident' : 'incidents';
-      $event->reply("Successfully acked $n_acked $noun. Good luck!");
-    })
-    ->else(sub {
-      $event->reply("Something went wrong acking incidents. Sorry!");
-    })
-    ->retain;
-}
-
 # returns a future that yields a list of incidents
 sub _get_incidents ($self, @statuses) {
   Carp::confess("no statuses found to get!") unless @statuses;
@@ -812,7 +748,7 @@ sub _get_incidents ($self, @statuses) {
         $offset += $limit;
 
         if (++$i > 20) {
-          $Logger->log("did more than 20 requests getting incidents from PD; aborting to avoid infinite loop!");
+          $Logger->log("did more than 20 requests getting incidents from PagerDuty; aborting to avoid infinite loop!");
           $is_done = 1;
         }
       })
@@ -859,7 +795,7 @@ sub _ack_all ($self, $event) {
   return $self->_get_incidents(qw(triggered))
     ->then(sub (@incidents) {
       my @unacked = map  {; $_->{id} } @incidents;
-      $Logger->log([ "PD: acking incidents: %s", \@unacked ]);
+      $Logger->log([ "PagerDuty: acking incidents: %s", \@unacked ]);
 
       return $self->_update_status_for_incidents(
         $event->from_user,
@@ -869,34 +805,6 @@ sub _ack_all ($self, $event) {
     })->then(sub (@incidents) {
       return Future->done(scalar @incidents);
     });
-}
-
-sub handle_resolve_mine ($self, $event) {
-  $event->mark_handled;
-  return unless $self->is_known_user($event);
-
-  $self->_resolve_incidents($event, {
-    whose => 'own',
-  })->retain;
-}
-
-sub handle_resolve_all ($self, $event) {
-  $event->mark_handled;
-  return unless $self->is_known_user($event);
-
-  $self->_resolve_incidents($event, {
-    whose => 'all',
-  })->retain;
-}
-
-sub handle_resolve_acked ($self, $event) {
-  $event->mark_handled;
-  return unless $self->is_known_user($event);
-
-  $self->_resolve_incidents($event, {
-    whose => 'all',
-    only_acked => 1,
-  })->retain;
 }
 
 sub _resolve_incidents($self, $event, $arg) {
@@ -932,7 +840,7 @@ sub _resolve_incidents($self, $event, $arg) {
         return Future->done;
       }
 
-      $Logger->log([ "PD: acking incidents: %s", \@unresolved ]);
+      $Logger->log([ "PagerDuty: acking incidents: %s", \@unresolved ]);
 
       return $self->_update_status_for_incidents(
         $event->from_user,
@@ -950,7 +858,7 @@ sub _resolve_incidents($self, $event, $arg) {
       $event->reply("Successfully resolved $n $noun. $exclamation");
       return Future->done;
     })->else(sub (@failure) {
-      $Logger->log(["PD error resolving incidents: %s", \@failure ]);
+      $Logger->log(["PagerDuty error resolving incidents: %s", \@failure ]);
       $event->reply("Something went wrong resolving incidents. Sorry!");
     });
 }
@@ -980,7 +888,7 @@ sub _check_at_oncall ($self) {
                     @new;
 
       unless (@userids) {
-        $Logger->log("could not convert PD oncall list into slack userids; ignoring");
+        $Logger->log("could not convert PagerDuty oncall list into slack userids; ignoring");
         return Future->done;
       }
 
@@ -1073,14 +981,6 @@ sub _announce_oncall_change ($self, $before, $after) {
   })->retain;
 }
 
-sub _handle_incidents ($self, $event) {
-  $event->mark_handled;
-  $self->_active_incidents_summary->then(sub ($summary = undef) {
-    my $text = delete $summary->{text} // "The board is clear!";
-    $event->reply($text, $summary);
-  })->retain;
-}
-
 sub _active_incidents_summary ($self) {
   return $self->_get_incidents(qw(triggered acknowledged))
     ->then(sub (@incidents) {
@@ -1136,59 +1036,6 @@ sub _active_incidents_summary ($self) {
   });
 }
 
-sub handle_snooze ($self, $event) {
-  $event->mark_handled;
-
-  my ($num, $dur) = $event->text =~ /^snooze\s+#?(\d+)\s+for\s+(.*)/i;
-
-  unless ($num && $dur) {
-    return $event->error_reply(
-      "Sorry, I don't understand. Say 'snooze INCIDENT-NUM for DURATION'."
-    );
-  }
-
-  my $seconds = eval { parse_duration($dur) };
-
-  unless ($seconds) {
-    return $event->error_reply("Sorry, I couldn't parse '$dur' into a duration!");
-  }
-
-  return $self->_get_incidents(qw(triggered acknowledged))
-    ->then(sub (@incidents) {
-      my ($relevant) = grep {; $_->{incident_number} == $num } @incidents;
-      unless ($relevant) {
-        $event->error_reply("I couldn't find an active incident for #$num");
-        return Future->fail('no-incident');
-      }
-
-      my $id = $relevant->{id};
-
-      return $self->_pd_request_for_user(
-        $event->from_user,
-        POST => "/incidents/$id/snooze",
-        { duration => $seconds }
-      );
-    })->then(sub ($res) {
-      if (my $incident = $res->{incident}) {
-        my $title = $incident->{title};
-        my $duration = duration($seconds);
-        return $event->reply(
-          "#$num ($title) snoozed for $duration; enjoy the peace and quiet!"
-        );
-      }
-
-      my $msg = $res->{message};
-      return $event->reply(
-        "Something went wrong talking to PagerDuty; they said: $msg"
-      );
-    })->else(sub ($type, @extra) {
-      return Future->done if $type eq 'no-incident';
-
-      $Logger->log([ "PD snooze failed: %s, %s", $type, \@extra ]);
-      return $event->reply("Sorry, something went wrong talking to PagerDuty");
-    })->retain;
-}
-
 sub _get_pd_account ($self, $token) {
   return $self->hub->http_get(
     $self->_url_for('/users/me'),
@@ -1236,7 +1083,7 @@ __PACKAGE__->add_preference(
         my $id = $account->{user}{id};
         my $email = $account->{user}{email};
         $event->reply(
-          "Great! I found the PagerDuty user for $email, and will also set your PD user id to $id."
+          "Great! I found the PagerDuty user for $email, and will also set your PagerDuty user id to $id."
         );
 
         $self->set_user_preference($event->from_user, 'user-id', $id)->then(sub {
