@@ -132,9 +132,10 @@ responder dump => { # allow_empty_help => 1,  # provided by preferences above
   for my $component (@components) {
     for my $pref_name (sort $component->preference_names) {
       my $full_name = $component->preference_namespace . q{.} . $pref_name;
+      my $desc      = await $component->describe_user_preference($for_user, $pref_name);
+      $desc //= '(error)';
 
-      push @pref_strings,
-        "$full_name: " . ($component->describe_user_preference($for_user, $pref_name) // '(error)');
+      push @pref_strings, "$full_name: $desc";
     }
   }
 

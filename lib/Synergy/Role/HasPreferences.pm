@@ -47,7 +47,7 @@ role {
   method preference_names    => sub             { sort keys %pref_specs     };
   method is_known_preference => sub ($, $name)  { exists $pref_specs{$name} };
 
-  method describe_user_preference => sub ($self, $user, $pref_name) {
+  method describe_user_preference => async sub ($self, $user, $pref_name) {
     my $val;
 
     my $ok = try { $val = $self->get_user_preference($user, $pref_name); 1 };
@@ -95,7 +95,6 @@ role {
     $pref_specs{$name} = \%spec;
   };
 
-
   method set_preference => async sub ($self, $user, $pref_name, $value, $event) {
     $event->mark_handled;
 
@@ -114,7 +113,7 @@ role {
     }
 
     my $got  = await $self->set_user_preference($user, $pref_name, $actual_value);
-    my $desc = $self->describe_user_preference($user, $pref_name);
+    my $desc = await $self->describe_user_preference($user, $pref_name);
 
     my $possessive = $user == $event->from_user
                    ? 'Your'
