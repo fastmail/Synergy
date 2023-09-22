@@ -15,6 +15,7 @@ use Data::Dumper::Concise;
 use DateTime;
 use DateTime::Format::ISO8601;
 use Future;
+use Future::AsyncAwait;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use Lingua::EN::Inflect qw(PL_N PL_V);
@@ -1208,11 +1209,12 @@ sub _get_pd_account ($self, $token) {
 
 __PACKAGE__->add_preference(
   name      => 'user-id',
-  after_set => sub ($self, $username, $val) {
-    $self->_clear_pd_to_slack_map,
-    $self->_clear_slack_to_pd_map,
+  after_set => async sub ($self, $username, $val) {
+    $self->_clear_pd_to_slack_map;
+    $self->_clear_slack_to_pd_map;
+    return;
   },
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     return (undef, 'user id cannot contain spaces') if $value =~ /\s/;
     return $value;
   },
@@ -1220,9 +1222,9 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
+  describer => async sub ($value) { defined $value ? "<redacted>" : '<undef>' },
   default   => undef,
-  validator => sub ($self, $token, $event) {
+  validator => async sub ($self, $token, $event) {
     $token =~ s/^\s*|\s*$//g;
 
     my ($actual_val, $ret_err);

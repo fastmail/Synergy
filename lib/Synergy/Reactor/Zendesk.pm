@@ -25,7 +25,7 @@ use Synergy::Logger '$Logger';
 
 __PACKAGE__->add_preference(
   name      => 'staff-email-address',
-  validator => sub ($self, $value, @) { return $value =~ /@/ ? $value : undef },
+  validator => async sub ($self, $value, @) { return $value =~ /@/ ? $value : undef },
   description => 'Your staff email address in Zendesk',
 );
 

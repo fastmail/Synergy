@@ -264,13 +264,13 @@ command milkauth => {
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     return (undef, "You can only set your API token with the milkauth command.")
       if defined $value;
 
     return (undef, undef);
   },
-  describer => sub ($v) { return defined $v ? "<redacted>" : '<undef>' },
+  describer => async sub ($v) { defined $v ? "<redacted>" : '<undef>' },
   default   => undef,
 );
 

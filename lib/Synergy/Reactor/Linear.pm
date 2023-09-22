@@ -1088,9 +1088,9 @@ responder ptn_blocked => {
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  describer => sub ($value) { return defined $value ? "<redacted>" : '<undef>' },
+  describer => async sub ($value) { defined $value ? "<redacted>" : '<undef>' },
   default   => undef,
-  validator => sub ($self, $value, $event) {
+  validator => async sub ($self, $value, $event) {
     $value =~ s/^\s*|\s*$//g;
 
     unless ($value =~ /^lin_api/) {
@@ -1109,11 +1109,8 @@ __PACKAGE__->add_preference(
   name        => 'default-team',
   help        => "Default team in Linear. Make sure to enter the three letter team key.",
   description => "Default team for your Linear issues",
-  describer   => sub ($value) {
-    return '<none>' unless defined $value;
-    return $value;
-  },
-  validator   => sub ($self, $value, $event) {
+  describer   => async sub ($value) { $value // '<none>' },
+  validator   => async sub ($self, $value, $event) {
     # Look, this is *terrible*.  _with_linear_client will return a reply
     # future, if we failed.  Otherwise it returns the result of the called sub,
     # which here is the expected (ok, error) tuple.  We need to detect the
@@ -1140,7 +1137,7 @@ __PACKAGE__->add_preference(
   name      => 'agenda-shows-assigned',
   help      => "Whether the agenda command shows assigned items or not (yes/no)",
   default   => 1,
-  validator => sub ($self, $value, @) { return bool_from_text($value) },
+  validator => async sub ($self, $value, @) { return bool_from_text($value) },
 );
 
 1;
