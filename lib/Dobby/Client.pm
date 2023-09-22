@@ -59,7 +59,9 @@ async sub json_get ($self, $path) {
     },
   );
 
-  die "It didn't work!" unless $res->is_success;
+  unless ($res->is_success) {
+    die "error getting $path at DigitalOcean: " . $res->as_string;
+  }
 
   my $json = $res->decoded_content(charset => 'undef');
   decode_json($json);
@@ -77,7 +79,9 @@ async sub _json_req_with_body ($self, $method, $path, $payload) {
     content      => encode_json($payload),
   );
 
-  die "It didn't work!" unless $res->is_success;
+  unless ($res->is_success) {
+    die "error making $method to $path at DigitalOcean: " . $res->as_string;
+  }
 
   my $json = $res->decoded_content(charset => 'undef');
   decode_json($json);
@@ -100,7 +104,9 @@ async sub delete_url ($self, $path) {
     },
   );
 
-  die "It didn't work!" unless $res->is_success;
+  unless ($res->is_success) {
+    die "error deleting resource at $path in DigitalOcean: " . $res->as_string;
+  }
 
   return;
 }
@@ -142,10 +148,17 @@ async sub create_droplet ($self, $arg) {
   );
 
   my $droplet   = $create_res->{droplet};
-  my $action_id = $create_res->{links}{actions}[0]{id};
 
   unless ($droplet) {
     Carp::confess("Error creating Droplet.");
+  }
+
+  my $action_id = $create_res->{links}{actions}[0]{id};
+
+  unless (defined $action_id) {
+    Carp::confess(
+      "no action id from droplet action: " . encode_json($create_res)
+    );
   }
 
   my $waited = await $self->_do_action_status_f("/actions/$action_id");
@@ -160,6 +173,12 @@ async sub take_droplet_action ($self, $droplet_id, $action, $payload = {}) {
   });
 
   my $action_id = $action_res->{action}{id};
+
+  unless (defined $action_id) {
+    Carp::confess(
+      "no action id from droplet action: " . encode_json($action_res)
+    );
+  }
 
   await $self->_do_action_status_f("/droplets/$droplet_id/actions/$action_id");
 
@@ -190,7 +209,7 @@ async sub _do_action_status_f ($self, $action_url) {
     }
 
     if ($status eq 'errored') {
-      Carp::confess("action $action_url failed");
+      Carp::confess("action $action_url failed: " . encode_json($status));
     }
 
     Carp::confess("action $action_url in unknown state: $status");
@@ -206,6 +225,12 @@ async sub _get_droplets ($self, $arg = {}) {
   # TODO Obviously, this should lazily fetch etc.
   if ($droplets_data->{links}{pages}{forward_links}) {
     Carp::cluck("Single-page fetch did not find all droplets!");
+  }
+
+  unless ($droplets_data->{droplets}) {
+    Carp::cluck(
+      "getting /droplets didn't supply droplets: " . encode_json($droplets_data)
+    );
   }
 
   return $droplets_data->{droplets}->@*;
