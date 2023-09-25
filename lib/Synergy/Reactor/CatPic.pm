@@ -132,6 +132,29 @@ my $EMOJI_CONFIG = <<'END_EMOJI';
 🦟  skeeter        mosquito
 🧸  teddy
 🦠  microbe
+
+🦮  guide_dog
+🦥  sloth
+🦦  otter
+🦨  skunk
+🦩  flamingo
+
+🦬  bison
+🦣  mammoth
+🦫  beaver
+🦤  dodo
+🦭  seal
+🪲  beetle
+🪳  cockroach
+🪰  fly
+🪱  worm
+
+🪸  coral
+
+🫏  donkey
+🫎  moose
+🪿  goose
+🪼  jellyfish
 END_EMOJI
 
 has _reactions => (
