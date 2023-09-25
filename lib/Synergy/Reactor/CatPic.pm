@@ -219,7 +219,7 @@ responder cat_pic => {
   targeted  => 1,
   help_titles => [ 'cat pic' ],
   help      => '*cat pic*: get a picture of a cat',
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     # TODO: make this an error instead of a give-up?
     return unless $text =~ /\Acat(?:\s+(pic|jpg|gif|png))?\z/i;
     return [ $1 || 'jpg,gif,png' ];
@@ -319,7 +319,7 @@ responder dog_pic => {
   targeted  => 1,
   help_titles => [ 'dog pic' ],
   help      => '*dog pic*: get a picture of a dog',
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     return unless $text =~ /\Adog\s+pic\z/i
                || $text =~ /\Aunleash\s+the\s+hounds\z/i;
     return [];

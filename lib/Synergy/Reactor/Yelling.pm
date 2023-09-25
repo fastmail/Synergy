@@ -49,8 +49,11 @@ sub start ($self) {
 }
 
 responder mumbling => {
-  matcher => sub ($text, $event) {
+  matcher => sub ($self, $text, $event) {
     return unless $event->from_channel->isa('Synergy::Channel::Slack');
+
+    my $channel = $self->_slack_channel_name_from_event($event);
+    return unless $channel eq $self->yelling_channel_name;
 
     my @words = split /\s+/, $event->text;
     for (@words) {
@@ -65,12 +68,6 @@ responder mumbling => {
     return;
   },
 } => async sub ($self, $event) {
-  # This used to be in the matcher (well, the predicate when this was
-  # EasyListening, but it isn't now because the matcher doesn't have access to
-  # the reactor.  That's probably a mistake. -- rjbs, 2022-10-28
-  my $channel = $self->_slack_channel_name_from_event($event);
-  return unless $channel eq $self->yelling_channel_name;
-
   return await $event->reply("YOU'RE MUMBLING.");
 };
 

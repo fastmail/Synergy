@@ -178,7 +178,7 @@ package Synergy::CommandPost::Object {
 
       if (my $command = $self->_command_named($first)) {
         my $args = $command->{parser}
-                 ? ($command->{parser}->($rest, $event) || [])
+                 ? ($command->{parser}->($reactor, $rest, $event) || [])
                  : [ $rest ];
 
         my $method = $command->{method};
@@ -218,7 +218,7 @@ package Synergy::CommandPost::Object {
       my ($name, $responder) = @$responder_pair;
 
       my $match = $responder->{matcher}
-                ? $responder->{matcher}->($event->text, $event)
+                ? $responder->{matcher}->($reactor, $event->text, $event)
                 : [];
       next unless $match;
 

@@ -48,7 +48,7 @@ responder update_index => {
   help => "*update rfc index*: rebuild the RFC index from the IETF copy",
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     if ($text =~ /\Aupdate rfc index\z/i) {
       return [ ];
     }

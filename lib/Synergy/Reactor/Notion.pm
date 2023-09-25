@@ -79,7 +79,7 @@ sub _project_pages ($self) {
 responder my_projects => {
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($text, @) { fc $text eq 'my projects' ? [] : () },
+  matcher   => sub ($self, $text, @) { fc $text eq 'my projects' ? [] : () },
   help_titles => [ 'my projects', 'projects' ],
   help        => "*my projects*: show all the projects you're working on in Notion",
 } => async sub ($self, $event) {
@@ -148,7 +148,7 @@ responder my_projects => {
 responder support_trends => {
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($text, @) { $text =~ /\Asupport trends/i ? [] : () },
+  matcher   => sub ($self, $text, @) { $text =~ /\Asupport trends/i ? [] : () },
   help_titles => [ 'support trends' ],
   help        => 'Show all the Issues & Trends support is tracking in Notion; '
                . 'you can add /future to show things resolved in the future.',
