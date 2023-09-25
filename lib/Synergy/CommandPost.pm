@@ -40,9 +40,23 @@ sub _generate_command_system ($class, $, $arg, $) {
 
       return;
     },
-    help => sub ($name, $text) {
+    help => sub ($name, $arg, $text = undef) {
+      # Can be called as help(foo => "Text") or help(foo => {...} => "Text")
+      if (! defined) {
+        $text = $arg;
+        $arg  = {};
+      }
+
       my $object = $get_cmdpost->();
-      $object->add_help($name, {}, $text);
+
+      $object->add_help($name, $arg, $text);
+
+      if ($arg->{aliases}) {
+        for my $alias ($arg->{aliases}->@*) {
+          $object->add_help($alias, { %$arg, unlisted => 1 }, $text);
+        }
+      }
+
       return;
     },
     listener => sub ($name, $code) {
