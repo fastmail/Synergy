@@ -191,21 +191,46 @@ package Synergy::CommandPost::Object {
       $first = lc $first;
 
       if (my $command = $self->_command_named($first)) {
-        my $args = $command->{parser}
-                 ? ($command->{parser}->($reactor, $rest, $event) || [])
-                 : [ $rest ];
+        my $args;
 
-        my $method = $command->{method};
+        eval {
+          $args = $command->{parser}
+                ? ($command->{parser}->($reactor, $rest, $event) || [])
+                : [ $rest ];
+        };
 
-        push @reactions, Synergy::PotentialReaction->new({
-          reactor => $reactor,
-          name    => "command-$first",
-          is_exclusive  => 1,
-          event_handler => sub {
-            $event->mark_handled;
-            $reactor->$method($event, @$args)
-          },
-        });
+        unless ($args) {
+          my $error = $@;
+          if ($error isa Synergy::X && $error->is_public) {
+            push @reactions, Synergy::PotentialReaction->new({
+              reactor => $reactor,
+              name    => "command-$first",
+              is_exclusive  => 1,
+              event_handler => sub {
+                $event->mark_handled;
+                $event->error_reply($error->message);
+              },
+            });
+          } else {
+            die $error;
+          }
+        }
+
+        unless (@reactions) {
+          # If we already have something in @reactions, it's got to be the
+          # error handler above, so don't call the method!
+          my $method = $command->{method};
+
+          push @reactions, Synergy::PotentialReaction->new({
+            reactor => $reactor,
+            name    => "command-$first",
+            is_exclusive  => 1,
+            event_handler => sub {
+              $event->mark_handled;
+              $reactor->$method($event, @$args)
+            },
+          });
+        }
       }
     }
 
