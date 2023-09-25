@@ -44,7 +44,7 @@ has discord => (
 
 async sub start ($self) {
   $self->discord->connect;
-  return $self->discord->readiness;
+  return;
 }
 
 sub handle_discord_event ($self, $name, $event) {

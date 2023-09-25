@@ -191,7 +191,7 @@ async sub start ($self) {
     $self->hub->handle_event($event);
   };
 
-  return $self->slack->readiness;
+  return;
 }
 
 sub synergy_event_from_slack_event ($self, $slack_event, $type = 'message') {
