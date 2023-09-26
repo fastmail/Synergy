@@ -61,9 +61,10 @@ passed as the third argument to the method.  In other words, with no parser,
 "eject all pods" calls C<< $command_sub->($reactor, $event, "all pods") >>.
 
 If a parser I<is> provided, it will be called with the reactor as the first
-argument, the default value (like "all pods") as the second, and the event as
-the third.  It is expected to return an arrayref whose elements will be passed
-as the rest of the arguments.  In other words, this code…
+argument, the text that followed the command name (like "all pods") as the
+second argument, and the event object as the third.  It is expected to return
+an arrayref whose elements will be passed as the rest of the arguments.  In
+other words, this code…
 
   command "enjoy" => {
     help    => "It's: enjoy [THING...]",
