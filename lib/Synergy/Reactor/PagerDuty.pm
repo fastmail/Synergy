@@ -688,10 +688,11 @@ sub _check_long_maint ($self) {
         { slack => "<!subteam^$group_address> $text" }
       );
     })
-    ->else(sub ($message, $extra = {}) {
+    ->else(sub {
+      my ($message, $extra) = @_;
       return if $message eq 'not in maint';
       return if $message eq 'maint duration less than 30m';
-      $Logger->log("PagerDuty error _check_long_maint():  $message");
+      $Logger->log([ "PagerDuty error _check_long_maint(): %s", [@_] ]);
     })->retain;
 }
 
@@ -1092,7 +1093,7 @@ __PACKAGE__->add_preference(
           Future->done
         });
       })
-      ->else(sub ($err) {
+      ->else(sub ($err, @) {
         $ret_err = $err;
         return Future->fail('bad auth');
       })
