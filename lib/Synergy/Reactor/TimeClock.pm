@@ -14,6 +14,7 @@ use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text describe_business_hours);
 
 use DBI;
+use Future::AsyncAwait;
 use IO::Async::Timer::Periodic;
 use List::Util qw(max);
 
@@ -454,7 +455,7 @@ sub check_for_shift_changes ($self) {
 
 __PACKAGE__->add_preference(
   name      => 'suppress-reports',
-  validator => sub ($self, $value, @) { return bool_from_text($value) },
+  validator => async sub ($self, $value, @) { return bool_from_text($value) },
   default   => 0,
 );
 

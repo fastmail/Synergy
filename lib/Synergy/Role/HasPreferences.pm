@@ -4,6 +4,7 @@ package Synergy::Role::HasPreferences;
 
 use MooseX::Role::Parameterized;
 
+use Future::AsyncAwait;
 use Scalar::Util qw(blessed);
 use Synergy::Logger '$Logger';
 use Try::Tiny;
@@ -46,7 +47,7 @@ role {
   method preference_names    => sub             { sort keys %pref_specs     };
   method is_known_preference => sub ($, $name)  { exists $pref_specs{$name} };
 
-  method describe_user_preference => sub ($self, $user, $pref_name) {
+  method describe_user_preference => async sub ($self, $user, $pref_name) {
     my $val;
 
     my $ok = try { $val = $self->get_user_preference($user, $pref_name); 1 };
@@ -55,7 +56,7 @@ role {
       $Logger->log("couldn't get value for preference $pref_name: $@");
     }
 
-    return $pref_specs{$pref_name}->{describer}->( $val );
+    return await $pref_specs{$pref_name}->{describer}->($self, $val);
   };
 
   method preference_help => sub ($self) {
@@ -72,9 +73,9 @@ role {
   #   help        => "This is a cool thing.\nIt's very great.",
   #   description => "a pref with a name",
   #   default     => value,
-  #   validator   => sub ($self, $val, $event) {},
-  #   describer   => sub ($val) {},
-  #   after_set   => sub ($self, $username, $value) {},
+  #   validator   => async sub ($self, $val, $event) {},
+  #   describer   => async sub ($self, $val) {},
+  #   after_set   => async sub ($self, $username, $value) {},
   # }
   #
   # The validator sub will receive the raw text value from the user, and is
@@ -88,41 +89,37 @@ role {
 
     die "preference $name already exists in $class" if $pref_specs{$name};
 
-    $spec{describer} //= sub ($value) { return $value // '<undef>' };
-    $spec{after_set} //= sub ($self, $username, $value) {};
+    $spec{describer} //= async sub ($self, $value) { return $value // '<undef>' };
+    $spec{after_set} //= async sub ($self, $username, $value) {};
 
     $pref_specs{$name} = \%spec;
   };
 
+  method set_preference => async sub ($self, $user, $pref_name, $value, $event) {
+    $event->mark_handled;
 
-  method set_preference => sub ($self, $user, $pref_name, $value, $event) {
     unless ($self->is_known_preference($pref_name)) {
       my $full_name = $self->preference_namespace . q{.} . $pref_name;
-      $event->error_reply("I don't know about the $full_name preference");
-      $event->mark_handled;
-      return;
+      return await $event->error_reply("I don't know about the $full_name preference");
     }
 
     my $spec = $pref_specs{ $pref_name };
-    my ($actual_value, $err) = $spec->{validator}->($self, $value, $event);
+    my ($actual_value, $err) = await $spec->{validator}->($self, $value, $event);
 
     my $full_name = $self->preference_namespace . q{.} . $pref_name;
 
     if ($err) {
-      $event->error_reply("I don't understand the value you gave for $full_name: $err");
-      $event->mark_handled;
-      return;
+      return await $event->error_reply("I don't understand the value you gave for $full_name: $err");
     }
 
-    my $got = $self->set_user_preference($user, $pref_name, $actual_value);
-    my $desc = $self->describe_user_preference($user, $pref_name);
+    my $got  = await $self->set_user_preference($user, $pref_name, $actual_value);
+    my $desc = await $self->describe_user_preference($user, $pref_name);
 
     my $possessive = $user == $event->from_user
                    ? 'Your'
                    : $user->username . q{'s};
 
-    $event->mark_handled;
-    $event->reply("$possessive $full_name setting is now $desc.");
+    return await $event->reply("$possessive $full_name setting is now $desc.");
   };
 
   method user_has_preference => sub ($self, $user, $pref_name) {
@@ -138,20 +135,22 @@ role {
     die "unknown pref: $pref_name"
       unless $self->is_known_preference($pref_name);
 
-    my $spec = $pref_specs{ $pref_name };
-    my $default = $spec->{default};
-    $default = $default->() if $default && ref $default eq 'CODE';
+    my sub default () {
+      my $default = $pref_specs{$pref_name}{default};
+      $default = $default->() if $default && ref $default eq 'CODE';
+      return $default;
+    }
 
     my $username = blessed $user ? $user->username : $user;
     return unless $username;
 
     my $user_prefs = $all_user_prefs{$username};
 
-    return $default unless $user_prefs && exists $user_prefs->{$pref_name};
-    return $user_prefs->{$pref_name} // $default;
+    return default() unless $user_prefs && exists $user_prefs->{$pref_name};
+    return $user_prefs->{$pref_name} // default();
   };
 
-  method set_user_preference => sub ($self, $user, $pref_name, $value) {
+  method set_user_preference => async sub ($self, $user, $pref_name, $value) {
     die "unknown pref: $pref_name"
       unless $self->is_known_preference($pref_name);
 
@@ -162,16 +161,10 @@ role {
 
     my $uprefs = $all_user_prefs{$username};
 
-    # This is necessary if the default value is an empty arrayref or something.
-    my $default = $spec->{default};
-    if ($default && ref $default eq 'CODE') {
-      $default = $default->();
-    }
-
-    $uprefs->{$pref_name} = $value // $default;
+    $uprefs->{$pref_name} = $value;
     delete $uprefs->{$pref_name} unless defined $uprefs->{$pref_name};
 
-    $spec->{after_set}->($self, $username, $uprefs->{$pref_name});
+    await $spec->{after_set}->($self, $username, $uprefs->{$pref_name});
 
     $self->save_state;
 

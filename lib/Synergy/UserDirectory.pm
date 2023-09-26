@@ -13,6 +13,8 @@ with (
 
 use experimental qw(signatures lexical_subs);
 use namespace::autoclean;
+
+use Future::AsyncAwait;
 use Path::Tiny;
 use Synergy::User;
 use Synergy::Util qw(known_alphabets read_config_file day_name_from_abbr);
@@ -273,7 +275,7 @@ __PACKAGE__->add_preference(
   name        => 'alphabet',
   help        => "Preferred alphabet (default: Latin): One of: $Alphabets",
   description => "Preferred alphabet for responses",
-  validator   => sub ($self, $value, @) {
+  validator   => async sub ($self, $value, @) {
     my ($known) = grep {; lc $_ eq lc $value } known_alphabets;
     return $known if $known;
     return (undef, "alphabet must be one of $Alphabets");
@@ -285,7 +287,7 @@ __PACKAGE__->add_preference(
   name        => 'phone',
   description => 'your phone number',
   help        => 'Your phone number, in the form +1NNNNNNNNNN',
-  validator   => sub ($self, $value, $event) {
+  validator   => async sub ($self, $value, $event) {
     # clear: allow undef, but no error
     return undef unless defined $value;
 
@@ -300,8 +302,8 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name => 'realname',
-  validator => sub { "$_[1]" },
-  after_set => sub ($self, $username, $value) {
+  validator => async sub { "$_[1]" },
+  after_set => async sub ($self, $username, $value) {
     $self->reload_user($username, { realname => $value });
   },
 );
@@ -311,7 +313,7 @@ __PACKAGE__->add_preference(
   help => 'one or more comma-separated aliases',
   description => "alternate names for a person",
   default => sub { [] },
-  validator => sub ($self, $value, $event) {
+  validator => async sub ($self, $value, $event) {
     my @names = map  {; lc $_    }
                 grep { length $_ }
                 split /\s*,\s*/, $value;
@@ -331,7 +333,7 @@ __PACKAGE__->add_preference(
 
     return \@names;
   },
-  describer => sub ($value) {
+  describer => async sub ($self, $value) {
     return '<undef>' unless $value;
     return '<undef>' unless @$value;
     return join(q{, }, @$value);
@@ -342,7 +344,7 @@ __PACKAGE__->add_preference(
   name => 'pronoun',
   help => q{This is the pronoun you'd prefer to be used for you.},
   description => 'preferred personal pronoun (nominative case)',
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     my %valid_pronouns = map { $_ => 1 } qw(he she they);
 
     $value =~ s/\s*//g;
@@ -360,7 +362,7 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name => 'time-zone',
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     my $err = qq{"$value" doesn't look like a valid time zone name};
 
     eval { DateTime->now(time_zone => $value) };
@@ -376,8 +378,8 @@ __PACKAGE__->add_preference(
 __PACKAGE__->add_preference(
   name => 'business-hours',
   help      => q{when you work; you can use "weekdays, 09:00-17:00" or "Mon: 09:00-17:00, Tue: 10:00-12:00, (etc.)"},
-  describer => \&Synergy::Util::describe_business_hours,
-  validator => sub ($self, $value, @) {
+  describer => async sub ($self, $value) { Synergy::Util::describe_business_hours($value) },
+  validator => async sub ($self, $value, @) {
     return Synergy::Util::validate_business_hours($value);
   },
 );
@@ -386,11 +388,11 @@ __PACKAGE__->add_preference(
   name => 'wfh-days',
   help      => q{days you work regularly from home; use "Wed, Fri" (etc.)"},
   default   => sub { [] },
-  describer => sub ($value) {
+  describer => async sub ($self, $value) {
     my @all = map {; day_name_from_abbr($_) } @$value;
     return @all ? WORDLIST(@all) : '<none>';
   },
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     my @known = qw(mon tue wed thu fri sat sun);
     my %is_valid = map {; $_ => 1 } @known;
 

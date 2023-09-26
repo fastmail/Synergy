@@ -14,6 +14,7 @@ use namespace::clean;
 use Data::GUID qw(guid_string);
 use DateTime;
 use Encode qw( encode );
+use Future::AsyncAwait;
 use MIME::Base64;
 use Synergy::Logger '$Logger';
 
@@ -156,8 +157,8 @@ __PACKAGE__->add_preference(
   name        => 'password',
   help        => "The password to use in accessing your todo list",
   description => "The password to use in accessing your todo list",
-  describer   => sub ($value) { defined $value ? '<redacted>' : '<unset>' },
-  validator   => sub ($self, $value, $event) {
+  describer   => async sub ($self, $value) { defined $value ? '<redacted>' : '<unset>' },
+  validator   => async sub ($self, $value, $event) {
     return ($value, undef);
   },
   default     => undef,
@@ -167,8 +168,8 @@ __PACKAGE__->add_preference(
   name        => 'calendar-user',
   help        => "The calendar user where you store your todos",
   description => "The calendar user where you store your todos",
-  describer   => sub ($value) { $value // '<unset>' },
-  validator   => sub ($self, $value, $event) {
+  describer   => async sub ($self, $value) { $value // '<unset>' },
+  validator   => async sub ($self, $value, $event) {
     return ($value, undef);
   },
   default     => undef,
@@ -178,8 +179,8 @@ __PACKAGE__->add_preference(
   name        => 'calendar-id',
   help        => "The calendar id where you store your todos",
   description => "The calendar id where you store your todos",
-  describer   => sub ($value) { $value // '<unset>' },
-  validator   => sub ($self, $value, $event) {
+  describer   => async sub ($self, $value) { $value // '<unset>' },
+  validator   => async sub ($self, $value, $event) {
     return ($value, undef);
   },
   default     => undef,

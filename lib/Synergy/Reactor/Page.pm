@@ -98,7 +98,7 @@ END
 
 __PACKAGE__->add_preference(
   name      => 'voice-page',
-  validator => sub ($self, $value, @) { return bool_from_text($value) },
+  validator => async sub ($self, $value, @) { return bool_from_text($value) },
   default   => 1,
   help      => "Should paging try make a voice call instead of a text message?",
   description => "Should paging try make a voice call instead of a text message?",

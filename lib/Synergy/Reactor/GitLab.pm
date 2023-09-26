@@ -15,6 +15,7 @@ use namespace::clean;
 use DateTime::Format::ISO8601;
 use Digest::MD5 qw(md5_hex);
 use Future 0.36;  # for ->retain
+use Future::AsyncAwait;
 use IO::Async::Timer::Periodic;
 use JSON::MaybeXS;
 use Lingua::EN::Inflect qw(PL_N PL_V);
@@ -1087,7 +1088,7 @@ sub mr_report ($self, $who, $arg = {}) {
 
 __PACKAGE__->add_preference(
   name      => 'user-id',
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     return $value if $value =~ /\A[0-9]+\z/;
     return (undef, "Your user-id must be a positive integer.")
   },

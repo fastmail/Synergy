@@ -12,6 +12,7 @@ use Synergy::CommandPost;
 use experimental qw(signatures lexical_subs);
 
 use DateTime;
+use Future::AsyncAwait;
 use List::Util qw(first uniq);
 use Synergy::Util qw(parse_date_for_user);
 use Time::Duration::Parse;
@@ -25,8 +26,8 @@ __PACKAGE__->add_preference(
   name        => 'include-aelt',
   help        => "Whether or not to include AELT in the output",
   description => "Whether or not to include AELT in the output",
-  describer   => sub ($value) { $value ? 1 : 0 },
-  validator   => sub ($self, $value, $event) {
+  describer   => async sub ($self, $value) { $value ? 1 : 0 },
+  validator   => async sub ($self, $value, $event) {
     return(($value ? 1 : 0), undef); # Should write a generic bool/yes/no.
   },
   default     => 0,

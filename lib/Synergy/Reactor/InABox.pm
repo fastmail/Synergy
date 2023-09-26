@@ -510,7 +510,7 @@ sub _region_for_user ($self, $user) {
 
 __PACKAGE__->add_preference(
   name      => 'version',
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     # Clearing is fine; we'll pick up the default elsewhere
     return undef unless defined $value;
 
@@ -531,7 +531,7 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name      => 'datacentre',
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     # Clearing is fine; we'll pick up the default elsewhere
     return undef unless defined $value;
 

@@ -257,20 +257,20 @@ command milkauth => {
 
   my $token = $rsp->get('auth')->{token};
 
-  my $got = $self->set_user_preference($user, 'api-token', $token);
+  my $got = await $self->set_user_preference($user, 'api-token', $token);
 
   return await $event->reply("You're authenticated!");
 };
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
-  validator => sub ($self, $value, @) {
+  validator => async sub ($self, $value, @) {
     return (undef, "You can only set your API token with the milkauth command.")
       if defined $value;
 
     return (undef, undef);
   },
-  describer => sub ($v) { return defined $v ? "<redacted>" : '<undef>' },
+  describer => async sub ($self, $v) { defined $v ? "<redacted>" : '<undef>' },
   default   => undef,
 );
 
