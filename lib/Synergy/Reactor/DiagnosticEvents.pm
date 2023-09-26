@@ -21,7 +21,7 @@ command 'diag-die' => {
 command 'diag-die-x' => {
   help => '*diag-die-x*: reacts by throwing a public Synergy::X exception',
 } => async sub ($self, $event, $rest) {
-  Synergy::X->throw_public("This exception was caused on purpose via Synergy::X.");
+  Synergy::X->throw_public("This exception was caused on purpose via a Synergy::X thrown by diag-die-x.");
 };
 
 1;
