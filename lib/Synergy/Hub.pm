@@ -196,8 +196,7 @@ sub handle_event ($self, $event) {
         ]);
 
         if ($args[0] isa 'Synergy::X' && $args[0]->is_public) {
-          $event->reply($args[0]->message);
-          return
+          return $event->reply($args[0]->message);
         }
 
         $event->error_reply("My $rname reactor crashed (in the background) while handling your message.  Sorry!");
