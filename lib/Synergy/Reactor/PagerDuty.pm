@@ -177,9 +177,11 @@ help maint => reformat_help(<<~"EOH");
   Conveniences for managing PagerDuty's "maintenance mode", aka "silence all
   the alerts because everything is on fire."
 
-  • *maint status*: show current maintenance state • *maint start*: enter
-  maintenance mode. All alerts are now silenced! Also acks • *maint end*,
-  *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts are noisy again!
+  • *maint status*: show current maintenance state
+  • *maint start*: enter maintenance mode. All alerts are now silenced! Also
+  acks
+  • *maint end*, *demaint*, *unmaint*, *stop*: leave maintenance mode. Alerts
+  are noisy again!
 
   When you leave maintenance mode, any alerts that happened during it, or even
   shortly before it, will be marked resolved.  If you don't want that, say
