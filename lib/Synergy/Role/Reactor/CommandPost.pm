@@ -4,6 +4,12 @@ use MooseX::Role::Parameterized;
 
 use experimental 'signatures';
 
+=head1 OVERVIEW
+
+To understand how to use CommandPost, see L<Synergy::CommandPost>.
+
+=cut
+
 use Synergy::CommandPost ();
 use Synergy::Logger '$Logger';
 use Synergy::PotentialReaction;

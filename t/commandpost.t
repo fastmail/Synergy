@@ -56,7 +56,7 @@ subtest "aliases" => sub {
 
 subtest "matchers and parsers" => sub {
   my sub split_if_matching ($regex) {
-    return sub ($text, @) {
+    return sub ($, $text, @) {
       return unless $text =~ $regex;
       return [ split //, $text ];
     }

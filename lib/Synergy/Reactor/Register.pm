@@ -14,7 +14,7 @@ use Synergy::Util qw(reformat_help);
 responder register_me => {
   is_exclusive  => 1,
   is_targeted   => 1,
-  matcher       => sub ($text, @) {
+  matcher       => sub ($self, $text, @) {
     $text =~ /\Aregister me as\s+(.+)\z/ ? [$1] : ()
   },
   help          => reformat_help(<<'EOH'),

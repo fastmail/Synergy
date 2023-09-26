@@ -49,7 +49,7 @@ responder reload_slack => {
   help => "*reload slack `{users, channels}`*: reload Slack data; you shouldn't need this!",
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     if ($text =~ /^reload slack (users|channels)\z/i) {
       return [ $1 ];
     }

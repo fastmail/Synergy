@@ -826,7 +826,7 @@ responder update_project => {
   EOH
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     if ($text =~ /\Aupdate ##([-a-zA-Z]+):\s+(.+)\z/i) {
       return [ $1, $2 ];
     }
@@ -982,7 +982,7 @@ command comment => {
 responder new_issue => {
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     return unless $text =~ /\A ( \+\+ (\@\w+)? | >\s?> ) \s+/nx;
     return [];
   },
@@ -1048,7 +1048,7 @@ responder new_issue => {
 responder ptn_blocked => {
   targeted  => 1,
   exclusive => 1,
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     my ($ptn, $rest) = $text =~ m{\Aptn\s*([0-9]+) blocked:\s*(.+)}is;
     return unless $ptn;
 
