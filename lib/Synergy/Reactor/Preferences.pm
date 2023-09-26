@@ -74,7 +74,7 @@ command clear => { # allow_empty_help => 1,  # provided by preferences above
 responder list => { # allow_empty_help => 1,  # provided by preferences above
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     return [] if $text =~ /\Alist(\s+all)?\s+(settings|pref(erence)?s)\s*\z/i;
     return;
   },
@@ -105,7 +105,7 @@ responder list => { # allow_empty_help => 1,  # provided by preferences above
 responder dump => { # allow_empty_help => 1,  # provided by preferences above
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($text, @) {
+  matcher   => sub ($self, $text, @) {
     return [ 'me' ] if $text =~ /\Apref(erence)?s\z/in;
     return [ 'me' ] if $text =~ /\A(dump|show)(\s+my)?\s+(settings|pref(erence)?s)/in;
     return [ $1   ] if $text =~ /\A(?:dump|show)\s+(?:settings|pref(?:erence)?s)\s+for\s+(\s+)\s*\z/i;
