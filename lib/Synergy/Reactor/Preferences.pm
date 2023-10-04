@@ -107,8 +107,8 @@ responder dump => { # allow_empty_help => 1,  # provided by preferences above
   targeted  => 1,
   matcher   => sub ($self, $text, @) {
     return [ 'me' ] if $text =~ /\Apref(erence)?s\z/in;
-    return [ 'me' ] if $text =~ /\A(dump|show)(\s+my)?\s+(settings|pref(erence)?s)/in;
-    return [ $1   ] if $text =~ /\A(?:dump|show)\s+(?:settings|pref(?:erence)?s)\s+for\s+(\s+)\s*\z/i;
+    return [ 'me' ] if $text =~ /\A(dump|show)(\s+my)?\s+(settings|pref(erence)?s)\s*\z/in;
+    return [ $1   ] if $text =~ /\A(?:dump|show)\s+(?:settings|pref(?:erence)?s)\s+for\s+(\S+)\s*\z/i;
     return;
   },
 } => async sub ($self, $event, $who) {
