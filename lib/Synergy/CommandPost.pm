@@ -234,7 +234,7 @@ package Synergy::CommandPost::Object {
 
   use Moose;
 
-  use experimental 'signatures';
+  use experimental qw(isa signatures);
 
   has commands => (
     isa => 'HashRef',
