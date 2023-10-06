@@ -7,6 +7,7 @@ use experimental qw(signatures);
 use utf8;
 use JSON::MaybeXS;
 use Defined::KV;
+use Future::AsyncAwait;
 
 use Synergy::External::Discord;
 use Synergy::Event;
@@ -41,8 +42,9 @@ has discord => (
   }
 );
 
-sub start ($self) {
+async sub start ($self) {
   $self->discord->connect;
+  return;
 }
 
 sub handle_discord_event ($self, $name, $event) {
@@ -50,7 +52,7 @@ sub handle_discord_event ($self, $name, $event) {
 
   return if $event->{author}{bot};
 
-  unless ($self->discord->is_ready) {
+  unless ($self->readiness->is_ready) {
     $Logger->log("discord: ignoring message, we aren't ready yet");
     return;
   }

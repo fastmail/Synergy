@@ -9,7 +9,22 @@ use namespace::clean;
 
 with 'Synergy::Role::HubComponent';
 
-sub start ($self) { }
+use Future::AsyncAwait;
+
+has readiness => (
+  is    => 'ro',
+  lazy  => 1,
+  default => sub {
+    Future->new;
+  }
+);
+
+async sub become_ready ($self) {
+  await $self->start;
+  $self->readiness->done;
+}
+
+async sub start {}
 
 requires 'potential_reactions_to';
 

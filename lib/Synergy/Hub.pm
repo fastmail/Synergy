@@ -253,10 +253,10 @@ sub set_loop ($self, $loop) {
   # Force this here, because reactor/channel startup might use it and creating
   # it can be racy (I think).
   $self->http_client;
-  $self->server->start;
+  $self->server->start->get;
 
-  $_->start for $self->reactors;
-  $_->start for $self->channels;
+  Future->needs_all(map {; $_->become_ready } $self->reactors)->get;
+  Future->needs_all(map {; $_->become_ready } $self->channels)->get;
 
   if (my $metrics_path = $self->env->metrics_path) {
     $self->server->register_path($metrics_path, $self->prom->psgi, 'the hub');
@@ -283,7 +283,7 @@ sub _maybe_setup_diagnostic_uplink ($self) {
     %$config,
   });
   $uplink->register_with_hub($self);
-  $uplink->start;
+  $uplink->start->get;
 
   $self->_set_diagnostic_uplink($uplink);
 

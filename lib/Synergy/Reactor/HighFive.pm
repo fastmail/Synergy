@@ -143,8 +143,6 @@ sub listener_specs {
   };
 }
 
-sub start ($self) {}
-
 sub highfive ($self, $event, $arg = {}) {
   $event->mark_handled;
 

@@ -145,7 +145,7 @@ around '_set_oncall_list' => sub ($orig, $self, @rest) {
   $self->save_state;
 };
 
-sub start ($self) {
+async sub start ($self) {
   if ($self->oncall_channel && $self->oncall_group_address) {
     my $check_oncall_timer = IO::Async::Timer::Periodic->new(
       notifier_name  => 'pagerduty-oncall',
@@ -169,6 +169,8 @@ sub start ($self) {
       $self->hub->loop->add($maint_warning_timer);
     }
   }
+
+  return;
 }
 
 # "start /force" is not documented here because it will mention itself to the

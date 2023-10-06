@@ -28,7 +28,7 @@ sub state ($self) {
   };
 }
 
-sub start ($self) {
+async sub start ($self) {
   if ($self->has_page_channel_name) {
     my $name    = $self->page_channel_name;
     my $channel = $self->hub->channel_named($name);

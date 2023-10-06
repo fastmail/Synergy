@@ -10,6 +10,7 @@ use namespace::clean;
 use utf8;
 
 use DateTime;
+use Future::AsyncAwait;
 use IO::Async::Timer::Periodic;
 use Synergy::Logger '$Logger';
 
@@ -77,7 +78,7 @@ after register_with_hub => sub ($self, @) {
   }
 };
 
-sub start ($self) {
+async sub start ($self) {
   my $timer = IO::Async::Timer::Periodic->new(
     notifier_name => 'office-poll-timer',
     interval => 15 * 60,
@@ -86,6 +87,8 @@ sub start ($self) {
   );
 
   $self->hub->loop->add($timer->start);
+
+  return;
 }
 
 my %next_weekday_for = (
