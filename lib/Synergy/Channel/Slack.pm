@@ -116,12 +116,8 @@ my %allowable_subtypes = map {; $_ => 1 } qw(
   me_message
 );
 
-async sub start ($self) {
-  await $self->slack->connect;
-
-  $self->loop->add($self->reply_reaper->start);
-
-  $self->slack->client->{on_frame} = sub ($client, $frame) {
+sub _mk_frame_handler ($self) {
+  return sub ($client, $frame) {
     return unless $frame;
 
     my $slack_event;
@@ -191,6 +187,14 @@ async sub start ($self) {
 
     $self->hub->handle_event($event);
   };
+}
+
+async sub start ($self) {
+  await $self->slack->connect;
+
+  $self->loop->add($self->reply_reaper->start);
+
+  $self->slack->client->{on_frame} = $self->_mk_frame_handler;
 
   await $self->slack->readiness;
 
