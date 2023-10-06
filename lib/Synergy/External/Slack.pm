@@ -473,34 +473,25 @@ sub dm_channel_for_address ($self, $slack_id) {
   return $channel_id;
 }
 
-has loaded_users => (is => 'rw', isa => 'Bool');
-has loaded_channels => (is => 'rw', isa => 'Bool');
-has loaded_dm_channels => (is => 'rw', isa => 'Bool');
-has loaded_group_conversations => (is => 'rw', isa => 'Bool');
+my @LAZY_THINGS;
+BEGIN {
+  @LAZY_THINGS = qw(users channels dm_channels group_conversations);
+}
 
-has _ready_f => (
-  is => 'rw',
-  isa => 'Future',
-  default => sub {
-    Future->new
-  }
-);
+for my $name (@LAZY_THINGS) {
+  has "loaded_$name" => (is => 'rw', isa => 'Bool');
+
+  has "loaded_$name\_f" => (
+    is  => 'ro',
+    isa => 'Future',
+    default => sub {
+      IO::Async::Loop->new->new_future
+    }
+  );
+}
 
 sub readiness ($self) {
-  my $ready_f = $self->_ready_f;
-  return $ready_f if $ready_f->is_ready;
-
-  # Stupid micro-opt
-  if (
-       $self->loaded_users
-    && $self->loaded_channels
-    && $self->loaded_dm_channels
-    && $self->loaded_group_conversations
-  ) {
-    $ready_f->done;
-  }
-
-  return $ready_f;
+  Future->needs_all(map {; my $m = "loaded_$_\_f"; $self->$m } @LAZY_THINGS);
 }
 
 sub load_users ($self) {
@@ -520,6 +511,7 @@ sub load_users ($self) {
     $Logger->log("Users loaded");
 
     $self->loaded_users(1);
+    $self->loaded_users_f->done;
   });
 }
 
@@ -538,6 +530,7 @@ sub load_channels ($self) {
     $Logger->log("Slack channels loaded");
 
     $self->loaded_channels(1);
+    $self->loaded_channels_f->done;
   });
 }
 
@@ -555,6 +548,7 @@ sub load_group_conversations ($self) {
     $Logger->log("Slack group conversations loaded");
 
     $self->loaded_group_conversations(1);
+    $self->loaded_group_conversations_f->done;
   });
 }
 
@@ -589,6 +583,7 @@ sub load_dm_channels ($self) {
     $Logger->log("Slack dm channels loaded");
 
     $self->loaded_dm_channels(1);
+    $self->loaded_dm_channels_f->done;
   });
 }
 

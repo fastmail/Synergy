@@ -191,6 +191,8 @@ async sub start ($self) {
     $self->hub->handle_event($event);
   };
 
+  await $self->slack->readiness;
+
   return;
 }
 
