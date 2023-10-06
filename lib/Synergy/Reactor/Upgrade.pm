@@ -58,7 +58,7 @@ command upgrade => {
   help => "*upgrade*: upgrade Synergy to the latest version",
 } => async sub ($self, $event, $rest) {
   if (length $rest && $rest !~ /\Ayour gr[ae]y matter\z/) {
-    return await $event->error_reply("That's now how upgrading works.");
+    return await $event->error_reply("That's not how upgrading works.");
   }
 
   my $old_version = $self->get_version;
