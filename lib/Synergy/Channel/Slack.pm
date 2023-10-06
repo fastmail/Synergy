@@ -117,7 +117,8 @@ my %allowable_subtypes = map {; $_ => 1 } qw(
 );
 
 async sub start ($self) {
-  $self->slack->connect;
+  await $self->slack->connect;
+
   $self->loop->add($self->reply_reaper->start);
 
   $self->slack->client->{on_frame} = sub ($client, $frame) {

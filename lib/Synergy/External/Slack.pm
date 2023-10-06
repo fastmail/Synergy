@@ -7,6 +7,7 @@ use experimental qw(lexical_subs signatures);
 use namespace::autoclean;
 use utf8;
 
+use Future::AsyncAwait;
 use JSON::MaybeXS qw(decode_json encode_json);
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
@@ -35,18 +36,21 @@ has users => (
   is => 'ro',
   isa => 'HashRef',
   writer => '_set_users',
+  predicate => '_has_users',
 );
 
 has channels => (
   is => 'ro',
   isa => 'HashRef',
   writer => '_set_channels',
+  predicate => '_has_channels',
 );
 
 has group_conversations => (
   is => 'ro',
   isa => 'HashRef',
   writer => '_set_group_conversations',
+  predicate => '_has_group_conversations',
 );
 
 has _channels_by_name => (
@@ -72,6 +76,7 @@ has dm_channels => (
   isa     => 'HashRef',
   traits  => [ 'Hash' ],
   writer  => '_set_dm_channels',
+  predicate => '_has_dm_channels',
   default => sub { {} },
   handles => {
     dm_channel_for      => 'get',
@@ -119,15 +124,59 @@ has pending_timeouts => (
   default => sub { {} },
 );
 
-sub connect ($self) {
+async sub connect ($self) {
   $self->connected(0);
 
-  $self->hub->http_client
-            ->GET("https://slack.com/api/rtm.connect?token=" . $self->api_key)
-            ->on_done(sub ($res) { $self->_register_slack_rtm($res) })
-            ->on_fail(sub { die "couldn't start RTM API: @_" })
-            ->get;
-};
+  my $res = await $self->hub->http_client->GET(
+    "https://slack.com/api/rtm.connect?token=" . $self->api_key
+  );
+
+  my $json = decode_json($res->content);
+
+  die "Could not connect to Slack RTM: $json->{error}"
+    unless $json->{ok};
+
+  # This is a dumb hack: when I converted synergy to a Slack app, I gave her
+  # perms to add a user with the name "synergee" because I thought "synergy"
+  # would conflict. So now "synergee ++ do a thing" works, which is not ideal,
+  # since we use often that as a way of joking about making tasks we'd never
+  # do. I *think* that reinstalling the app to our workspace would fix this,
+  # but I'm not entirely sure and I don't want to make everyone open yet
+  # another DM with synergy, so here we are. -- michael, 2019-06-03
+  my $our_name = $json->{self}->{name};
+  $our_name = 'synergy' if $our_name eq 'synergee';
+
+  $self->_set_own_name($our_name);
+  $self->_set_own_id($json->{self}->{id});
+  $self->_set_team_data($json->{team});
+
+  $self->loop->add($self->client);
+  $self->client->connect(
+    url => $json->{url},
+    service => 'https',
+    on_connected => sub {
+      $self->connected(1);
+
+      $self->flush_queue;
+
+      state $i = 1;
+
+      # Send pings to slack so it knows we're still alive
+      my $timer = IO::Async::Timer::Periodic->new(
+        notifier_name => 'slack-ping',
+        interval => 10,
+        on_tick  => sub {
+          $self->send_frame({ type => 'ping' });
+        }
+      );
+
+      $timer->start;
+      $self->loop->add($timer);
+    },
+  );
+
+  return;
+}
 
 sub send_frame ($self, $frame) {
   state $i = 1;
@@ -313,52 +362,6 @@ sub send_file ($self, $channel, $filename, $content) {
   return $f;
 }
 
-sub _register_slack_rtm ($self, $res) {
-  my $json = decode_json($res->content);
-
-  die "Could not connect to Slack RTM: $json->{error}"
-    unless $json->{ok};
-
-  # This is a dumb hack: when I converted synergy to a Slack app, I gave her
-  # perms to add a user with the name "synergee" because I thought "synergy"
-  # would conflict. So now "synergee ++ do a thing" works, which is not ideal,
-  # since we use often that as a way of joking about making tasks we'd never
-  # do. I *think* that reinstalling the app to our workspace would fix this,
-  # but I'm not entirely sure and I don't want to make everyone open yet
-  # another DM with synergy, so here we are. -- michael, 2019-06-03
-  my $our_name = $json->{self}->{name};
-  $our_name = 'synergy' if $our_name eq 'synergee';
-
-  $self->_set_own_name($our_name);
-  $self->_set_own_id($json->{self}->{id});
-  $self->_set_team_data($json->{team});
-
-  $self->loop->add($self->client);
-  $self->client->connect(
-    url => $json->{url},
-    service => 'https',
-    on_connected => sub {
-      $self->connected(1);
-
-      $self->flush_queue;
-
-      state $i = 1;
-
-      # Send pings to slack so it knows we're still alive
-      my $timer = IO::Async::Timer::Periodic->new(
-        notifier_name => 'slack-ping',
-        interval => 10,
-        on_tick  => sub {
-          $self->send_frame({ type => 'ping' });
-        }
-      );
-
-      $timer->start;
-      $self->loop->add($timer);
-    },
-  );
-}
-
 sub _api_url ($self, $method) {
   return "https://slack.com/api/$method";
 }
@@ -473,83 +476,71 @@ sub dm_channel_for_address ($self, $slack_id) {
   return $channel_id;
 }
 
-my @LAZY_THINGS;
-BEGIN {
-  @LAZY_THINGS = qw(users channels dm_channels group_conversations);
-}
-
-for my $name (@LAZY_THINGS) {
-  has "loaded_$name" => (is => 'rw', isa => 'Bool');
-
-  has "loaded_$name\_f" => (
-    is  => 'ro',
-    isa => 'Future',
-    default => sub {
-      IO::Async::Loop->new->new_future
-    }
+sub readiness ($self) {
+  Future->needs_all(
+    map {; my $m = "load_$_"; $self->$m }
+      qw( users channels group_conversations dm_channels )
   );
 }
 
-sub readiness ($self) {
-  Future->needs_all(map {; my $m = "loaded_$_\_f"; $self->$m } @LAZY_THINGS);
-}
+async sub load_users ($self) {
+  return if $self->_has_users;
 
-sub load_users ($self) {
-  $self->api_call('users.list', {
+  my $http_res = await $self->api_call('users.list', {
     presence => 0,
-  })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content(charset => undef));
-    my %users = map { $_->{id} => $_ } $res->{members}->@*;
-
-    # See comment in _register_slack_rtm: here, we coerce our username to be
-    # our ->own_name, because decode_slack_formatting converts @U12345 into
-    # usernames. -- michael, 2019-06-04
-    my $me = $users{ $self->own_id };
-    $me->{name} = $self->own_name;
-
-    $self->_set_users(\%users);
-    $Logger->log("Users loaded");
-
-    $self->loaded_users(1);
-    $self->loaded_users_f->done;
   });
+
+  my $res = decode_json($http_res->decoded_content(charset => undef));
+  my %users = map { $_->{id} => $_ } $res->{members}->@*;
+
+  # See comment in _register_slack_rtm: here, we coerce our username to be
+  # our ->own_name, because decode_slack_formatting converts @U12345 into
+  # usernames. -- michael, 2019-06-04
+  my $me = $users{ $self->own_id };
+  $me->{name} = $self->own_name;
+
+  $self->_set_users(\%users);
+  $Logger->log("Slack users loaded");
+  return;
 }
 
-sub load_channels ($self) {
-  $self->api_call('conversations.list', {
+async sub load_channels ($self) {
+  return if $self->_has_channels;
+
+  my $http_res = await $self->api_call('conversations.list', {
     exclude_archived => 'true',
     types => 'public_channel',
     limit => 200,
     form_encoded => 1,
-  })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content(charset => undef));
-    $self->_set_channels({
-      map { $_->{id}, $_ } $res->{channels}->@*
-    });
-
-    $Logger->log("Slack channels loaded");
-
-    $self->loaded_channels(1);
-    $self->loaded_channels_f->done;
   });
+
+  my $res = decode_json($http_res->decoded_content(charset => undef));
+  $self->_set_channels({
+    map { $_->{id}, $_ } $res->{channels}->@*
+  });
+
+  $Logger->log("Slack channels loaded");
+
+  return;
 }
 
-sub load_group_conversations ($self) {
-  $self->api_call('conversations.list', {
+async sub load_group_conversations ($self) {
+  return if $self->_has_group_conversations;
+
+  my $http_res = await $self->api_call('conversations.list', {
     types => 'mpim,private_channel',
     form_encoded => 1,
-  })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content(charset => undef));
-
-    $self->_set_group_conversations({
-      map { $_->{id},  $_ } $res->{channels}->@*
-    });
-
-    $Logger->log("Slack group conversations loaded");
-
-    $self->loaded_group_conversations(1);
-    $self->loaded_group_conversations_f->done;
   });
+
+  my $res = decode_json($http_res->decoded_content(charset => undef));
+
+  $self->_set_group_conversations({
+    map { $_->{id},  $_ } $res->{channels}->@*
+  });
+
+  $Logger->log("Slack group conversations loaded");
+
+  return;
 }
 
 sub group_conversation_name ($self, $id) {
@@ -567,24 +558,24 @@ sub group_conversation_name ($self, $id) {
   return $conversation->{name} || 'group';
 }
 
+async sub load_dm_channels ($self) {
+  return if $self->_has_dm_channels;
 
-sub load_dm_channels ($self) {
-  $self->api_call('conversations.list', {
+  my $http_res = await $self->api_call('conversations.list', {
     exclude_archived => 'true',
     types => 'im',
     form_encoded => 1,
-  })->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content(charset => undef));
-
-    $self->_set_dm_channels({
-      map { $_->{user}, $_->{id} } $res->{ims}->@*
-    });
-
-    $Logger->log("Slack dm channels loaded");
-
-    $self->loaded_dm_channels(1);
-    $self->loaded_dm_channels_f->done;
   });
+
+  my $res = decode_json($http_res->decoded_content(charset => undef));
+
+  $self->_set_dm_channels({
+    map { $_->{user}, $_->{id} } $res->{ims}->@*
+  });
+
+  $Logger->log("Slack dm channels loaded");
+
+  return;
 }
 
 1;
