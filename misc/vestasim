@@ -1,0 +1,50 @@
+#!/usr/bin/env perl
+use 5.34.0;
+use warnings;
+
+use lib 'lib';
+
+use Getopt::Long::Descriptive;
+use Synergy::VestaUtil;
+
+use utf8;
+
+binmode *STDOUT, 'encoding(UTF-8)';
+
+my ($opt, $usage) = describe_options(
+  '%c %o',
+  [ 'img', 'fetch image and show it with imgcat' ],
+);
+
+my $input  = $ARGV[0];
+
+$input =~ s/\\r/🟥/g;
+$input =~ s/\\o/🟧/g;
+$input =~ s/\\y/🟨/g;
+$input =~ s/\\g/🟩/g;
+$input =~ s/\\b/🟦/g;
+$input =~ s/\\p/🟪/g;
+$input =~ s/\\w/⬜/g;
+
+my ($board, $err) = Synergy::VestaUtil->text_to_board($input);
+
+die "Problem with input: $err\n" if $err;
+
+my $string = Synergy::VestaUtil->encode_board($board);
+my $show   = Synergy::VestaUtil->board_to_text($board);
+
+my $url = sprintf "http://s.yner.gy:8111/%s", $string;
+
+$show =~ s/^/│ /gm;
+$show =~ s/$/ │/gm;
+
+say "╭──────────────────────────────────────────────╮";
+say $show;
+say "╰──────────────────────────────────────────────╯";
+say $url;
+
+if ($opt->img) {
+  say `bash -c "curl -s $url | imgcat"`;
+}
+
+1;
