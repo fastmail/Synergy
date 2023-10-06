@@ -421,7 +421,7 @@ sub check_for_shift_changes ($self) {
     for my $which (sort keys %if) {
       my $will_send = $if{$which}->($shift->@{ qw(start end) });
 
-      $Logger->log([
+      $Logger->log_debug([
         "TimeClock: DEBUG: %s",
         {
           global_last => $global_last,
