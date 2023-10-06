@@ -43,7 +43,7 @@ async sub start ($self) {
       my $channel = $self->hub->channel_named($to_channel);
 
       $channel->readiness->on_done(sub {
-        $channel->send_message($to_address, "Restarted! Now at version $version_desc");
+        $channel->send_message($to_address, "Restarted! Now at version $version_desc")->retain;
 
         # Notified. Maybe. Don't notify again
         $self->save_state({});
