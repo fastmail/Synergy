@@ -22,7 +22,7 @@ has readiness => (
   is    => 'ro',
   lazy  => 1,
   default => sub {
-    Future->new;
+    IO::Async::Loop->new->new_future;
   }
 );
 

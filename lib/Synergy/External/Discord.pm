@@ -500,28 +500,13 @@ sub username ($self, $id) {
 has loaded_users => (is => 'rw', isa => 'Bool');
 has loaded_channels => (is => 'rw', isa => 'Bool');
 
-has _ready_f => (
+has readiness => (
   is => 'rw',
   isa => 'Future',
   default => sub {
-    Future->new
+    IO::Async::Loop->new->new_future;
   }
 );
-
-sub readiness ($self) {
-  my $ready_f = $self->_ready_f;
-  return $ready_f if $ready_f->is_ready;
-
-  # Stupid micro-opt
-  if (
-       $self->loaded_users
-    && $self->loaded_channels
-  ) {
-    $ready_f->done;
-  }
-
-  return $ready_f;
-}
 
 sub load_users ($self) {
   my $guild_id = $self->guild_id;
@@ -539,6 +524,9 @@ sub load_users ($self) {
     });
 
     $self->loaded_users(1);
+    if ($self->loaded_channels) {
+      $self->readiness->done;
+    }
   })->retain;
 }
 
@@ -556,6 +544,9 @@ sub load_channels ($self) {
     $Logger->log("Discord: channels loaded");
 
     $self->loaded_channels(1);
+    if ($self->loaded_users) {
+      $self->readiness->done;
+    }
   })->retain;
 }
 

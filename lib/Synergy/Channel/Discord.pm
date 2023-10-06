@@ -44,6 +44,7 @@ has discord => (
 
 async sub start ($self) {
   $self->discord->connect;
+  await $self->discord->readiness;
   return;
 }
 
