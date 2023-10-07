@@ -10,6 +10,7 @@ use namespace::clean;
 
 use Synergy::Logger '$Logger';
 
+use Future::AsyncAwait;
 use Synergy::CommandPost;
 use Synergy::Util qw(pick_one);
 
@@ -38,7 +39,7 @@ responder good_morning => {
   matcher => sub {[]},
   help_titles => [ 'good morning', 'good evening' ],
   help    => 'be polite; say good morning or good night',
-} => sub ($self, $event) {
+} => async sub ($self, $event) {
   my $what = $event->text =~ s/\Pl//igr;
   $what = lc $what;
   $what =~ s/^go{2,}d/good/i;
@@ -61,7 +62,7 @@ responder good_morning => {
 
   if ($reply) {
     $event->mark_handled;
-    return $event->reply($reply);
+    return await $event->reply($reply);
   }
 
   return;
