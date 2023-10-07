@@ -17,9 +17,17 @@ use Encode qw( encode );
 use Future::AsyncAwait;
 use MIME::Base64;
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(reformat_help);
 
 command todo => {
-  help => 'add something to your personal todo list'
+  help => reformat_help(<<~"EOH"),
+    *todo `TITLE`*: add something to your personal todo list
+
+    If the task's title ends with exclamation points (after a space separating
+    them from the rest of the title), it indicates the priority of the task.
+    One (!) is low, two (!!) is medium, and more than two (like !!!!!!) is
+    high.
+    EOH
 } => async sub ($self, $event, $rest) {
   my $user = $event->from_user;
 
