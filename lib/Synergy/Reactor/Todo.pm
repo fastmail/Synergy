@@ -20,20 +20,20 @@ use Synergy::Logger '$Logger';
 
 command todo => {
   help => 'add something to your personal todo list'
-} => sub ($self, $event, $rest) {
+} => async sub ($self, $event, $rest) {
   my $user = $event->from_user;
 
-  return $event->error_reply("Sorry, I don't know who you are!")
+  return await $event->error_reply("Sorry, I don't know who you are!")
     unless $user;
 
-  return $event->error_reply("I can't tell you to do nothing!")
+  return await $event->error_reply("I can't tell you to do nothing!")
     unless length $rest;
 
   my $password = $self->get_user_preference($user, 'password');
   my $username = $self->get_user_preference($user, 'calendar-user');
   my $calendar = $self->get_user_preference($user, 'calendar-id');
 
-  return $event->error_reply("You haven't configured your todo calendar")
+  return await $event->error_reply("You haven't configured your todo calendar")
     unless $password and $username and $calendar;
 
   my ($summary, $description) = split /\n+/, $rest, 2;
@@ -53,22 +53,29 @@ command todo => {
 
   my $uri_username = $username =~ s/@/%40/gr;
 
-  $self->hub->http_client->do_request(
-    method => 'PUT',
-    uri    => "https://caldav.fastmail.com/dav/calendars/user/$uri_username/$calendar/$uid.ics",
-    content_type => 'text/calendar',
-    content      => $ical,
-    headers => [
-      Authorization => 'Basic ' . encode_base64("$username:$password", ""),
-    ],
-  )->then(sub ($res) {
-    if ($res->is_success) {
-      return $event->reply("Todo created!");
-    } else {
-      $Logger->log([ "todo creation failed: %s", $res->as_string ]);
-      return $event->reply_error("Sorry, something went wrong!");
-    }
-  });
+  my $res = eval {
+    await $self->hub->http_client->do_request(
+      method => 'PUT',
+      uri    => "https://caldav.fastmail.com/dav/calendars/user/$uri_username/$calendar/$uid.ics",
+      content_type => 'text/calendar',
+      content      => $ical,
+      headers => [
+        Authorization => 'Basic ' . encode_base64("$username:$password", ""),
+      ],
+    );
+  };
+
+  if ($@) {
+    $Logger->log([ "exception making todo: %s", $@ ]);
+    return await $event->reply_error("Sorry, something went really wrong!");
+  }
+
+  unless ($res->is_success) {
+    $Logger->log([ "todo creation failed: %s", $res->as_string ]);
+    return await $event->reply_error("Sorry, something went wrong!");
+  }
+
+  return await $event->reply("Todo created!");
 };
 
 # SUMMARY is the one-line summary.
