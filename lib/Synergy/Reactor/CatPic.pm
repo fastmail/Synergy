@@ -8,6 +8,7 @@ use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor::CommandPost';
 
+use Future::AsyncAwait;
 use Synergy::CommandPost;
 
 use Synergy::Logger '$Logger';
@@ -324,27 +325,22 @@ responder dog_pic => {
                || $text =~ /\Aunleash\s+the\s+hounds\z/i;
     return [];
   },
-} => sub ($self, $event) {
+} => async sub ($self, $event) {
   $event->mark_handled;
 
-  my $http_future = $self->hub->http_get(
+  my $res = await $self->hub->http_get(
     "https://dog.ceo/api/breeds/image/random",
   );
 
-  $http_future->on_done(sub ($res) {
-    my $json = eval { JSON::MaybeXS->new->decode( $res->decoded_content ) };
-    my $error = $@;
+  my $json = eval { JSON::MaybeXS->new->decode( $res->decoded_content ) };
+  my $error = $@;
 
-    if ($json && $json->{status} eq 'success') {
-      $event->reply($json->{message});
-      return;
-    }
+  if ($json && $json->{status} eq 'success') {
+    return await $event->reply($json->{message});
+  }
 
-    $Logger->log("doggo error: $error") if $error;
-    $event->reply("Something went wrong getting the doggos!");
-  });
-
-  return;
+  $Logger->log("doggo error: $error") if $error;
+  return await $event->reply("Something went wrong getting the doggos!");
 };
 
 1;
