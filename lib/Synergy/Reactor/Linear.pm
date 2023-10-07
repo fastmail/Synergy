@@ -1046,13 +1046,13 @@ responder new_issue => {
     it's treated like `/discuss`.  Finally, if it ends with `##hashtag`, this
     is treated as short for `/project hashtag`.
     EOH
-} => sub ($self, $event) {
+} => async sub ($self, $event) {
   if ($event->text =~ /\A>> triage /i) {
     $event->mark_handled;
     return $event->error_reply(q{You can't assign directly to triage anymore.  Instead, use the Zendesk integration!  You can also look at help for "ptn blocked".});
   }
 
-  $self->_handle_creation_event($event);
+  return await $self->_handle_creation_event($event);
 };
 
 responder ptn_blocked => {
