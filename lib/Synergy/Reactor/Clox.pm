@@ -68,7 +68,7 @@ has been set up to always show up in the clocks).  You can also write:
 
 • *clox `TIME`*: when it's the given time _for you_, see the time elsewhere
 END
-} => sub ($self, $event, $spec) {
+} => async sub ($self, $event, $spec) {
   my $user = $event->from_user;
 
   # Some of our Australian colleagues feel very strongly about being able to
@@ -89,7 +89,7 @@ END
   }
 
   if (length $spec) {
-    return $event->error_reply(qq{Sorry, I couldn't understand the time "$time".})
+    return await $event->error_reply(qq{Sorry, I couldn't understand the time "$time".})
       unless $time = parse_date_for_user($spec, $user, 1);
   } else {
     $time = $NOW_FACTORY->();
@@ -185,15 +185,15 @@ END
 
   my $slack = $reply =~ s/AELT /:flag-brisbane: /r;
 
-  $event->reply($reply, { slack => $slack });
+  return await $event->reply($reply, { slack => $slack });
 };
 
 command when => {
   help => <<'END'
 *when is `WHEN`*: tells you how the given "when" string would be interpreted
 END
-} => sub ($self, $event, $rest) {
-  return $event->reply_error("Sorry, I don't understand your *when* request.")
+} => async sub ($self, $event, $rest) {
+  return await $event->reply_error("Sorry, I don't understand your *when* request.")
     unless $rest =~ s/\Ais\s+//;
 
   if ($rest =~ s/\Anow\s+(plus|\+|-|minus)\s+//) {
@@ -201,7 +201,7 @@ END
     my $now  = time;
     my $dur  = parse_duration($rest);
 
-    return $event->reply_error("Sorry, I don't understand that duration.")
+    return await $event->reply_error("Sorry, I don't understand that duration.")
       unless defined $dur;
 
     my $time = $now + ($sign * $dur);
@@ -213,12 +213,12 @@ END
       }
     );
 
-    return $event->reply("That would be: $str");
+    return await $event->reply("That would be: $str");
   }
 
   my $time = parse_date_for_user($rest, $event->from_user);
 
-  return $event->reply("Sorry, I didn't understand that time.")
+  return await $event->reply("Sorry, I didn't understand that time.")
     unless $time;
 
 
@@ -229,7 +229,7 @@ END
     }
   );
 
-  return $event->reply("That would be: $str");
+  return await $event->reply("That would be: $str");
 };
 
 1;
