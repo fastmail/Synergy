@@ -110,6 +110,7 @@ sub frob_for ($self, $user) {
 }
 
 command todo => {
+  help => '*todo `create-string`*: Given an RTM "quick create" string, this makes a new task.',
 } => async sub ($self, $event, $todo) {
   return await $event->error_reply("I don't have an RTM auth token for you.")
     unless my $token = $self->get_user_preference($event->from_user, 'api-token');
@@ -151,6 +152,7 @@ command todo => {
 };
 
 command milk => {
+  help => '*milk [`filter`]*: list all your tasks; default filter is "status:incomplete"'
 } => async sub ($self, $event, $filter) {
   return await $event->error_reply("I don't have an RTM auth token for you.")
     unless my $token = $self->get_user_preference($event->from_user, 'api-token');
@@ -201,6 +203,7 @@ command milk => {
 };
 
 command milkauth => {
+  help => '*milkauth*: authorize Synergy to act as an RTM client for you',
 } => async sub ($self, $event, $arg) {
   my $user = $event->from_user;
 
