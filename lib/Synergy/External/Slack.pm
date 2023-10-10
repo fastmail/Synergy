@@ -411,14 +411,6 @@ sub _form_encoded_api_call ($self, $url, $arg, %extra) {
   ));
 }
 
-sub setup ($self) {
-  $Logger->log("Connected to Slack!");
-  $self->load_users;
-  $self->load_channels;
-  $self->load_group_conversations;
-  $self->load_dm_channels;
-}
-
 sub username ($self, $id) {
   my $users = $self->users;
 
