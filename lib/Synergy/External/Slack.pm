@@ -197,8 +197,11 @@ sub send_frame ($self, $frame) {
   $timeout->on_fail(sub {
     $Logger->log("failed to get response from slack; trying to reconnect");
 
+    # XXX Blocking here is crappy.  This is another place where we've pushed
+    # the "where is it async" around under the carpet, but haven't fully ironed
+    # out the lump yet. -- rjbs, 2023-10-10
     $self->client->close;
-    $self->connect;
+    $self->connect->get;
 
     # Also fail any pending futures for this frame.
     my $f = delete $self->pending_frames->{$frame_id};
