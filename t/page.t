@@ -63,7 +63,7 @@ wait_for {
 is_deeply(
   [ $synergy->channel_named('test-1')->sent_messages ],
   [
-    { address => 'public', text => 'Page sent!' },
+    { address => 'public', text => 'Page sent to roxy!' },
   ],
   "sent a reply on the chat channel",
 );
