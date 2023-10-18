@@ -66,21 +66,28 @@ END
     } else {
       $Logger->log("Unable to find reactor 'pagerduty'") unless $pd;
     }
-
   } else {
     push @to_page, $who;
   }
 
-  my $paged;
-  for my $who (@to_page) {
-    $paged = 1 if await $self->_do_page($event, $who, $what);
+  unless (@to_page) {
+    # This happens if there are zero members of oncall, for example.
+    return await $event->error_reply("It doesn't look like there's anybody to page!");
   }
 
-  if ($paged) {
-    return await $event->reply("Page sent!");
-  } else {
-    return await $event->reply("I don't know how to page $who, sorry.");
+  TARGET: for my $who (@to_page) {
+    $Logger->log("paging $who");
+    my $paged = await $self->_do_page($event, $who, $what);
+
+    if ($paged) {
+      await $event->reply("Page sent to $who!");
+      next TARGET;
+    }
+
+    await $event->reply("I don't know how to page $who, sorry.");
   }
+
+  return;
 };
 
 async sub _do_page($self, $event, $who, $what) {
