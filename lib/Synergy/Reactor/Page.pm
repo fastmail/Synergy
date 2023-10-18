@@ -15,6 +15,7 @@ use Future::AsyncAwait;
 use List::Util qw(first);
 use Synergy::CommandPost;
 use Synergy::Util qw(bool_from_text);
+use Synergy::Logger '$Logger';
 
 has page_channel_name => (
   is => 'ro',
@@ -51,6 +52,45 @@ END
     return await $event->error_reply("usage: page USER: MESSAGE");
   }
 
+  my @to_page;
+  if ($who eq 'oncall') {
+    my $pd = $self->hub->reactor_named('pagerduty');
+
+    if ($pd) {
+      # Really, this should be able to use $pd->oncall_list, but that isn't set
+      # eagerly enough.  That should probably be made into a lazily cached
+      # attribute like we use for (for example) the Slack user list.  But we
+      # can do that in the future. -- rjbs, 2023-10-18
+      my @oncall_ids = await $pd->_current_oncall_ids;
+      @to_page = grep {; $_ } map {; $pd->username_from_pd($_) } @oncall_ids;
+    } else {
+      $Logger->log("Unable to find reactor 'pagerduty'") unless $pd;
+    }
+  } else {
+    push @to_page, $who;
+  }
+
+  unless (@to_page) {
+    # This happens if there are zero members of oncall, for example.
+    return await $event->error_reply("It doesn't look like there's anybody to page!");
+  }
+
+  TARGET: for my $who (@to_page) {
+    $Logger->log("paging $who");
+    my $paged = await $self->_do_page($event, $who, $what);
+
+    if ($paged) {
+      await $event->reply("Page sent to $who!");
+      next TARGET;
+    }
+
+    await $event->reply("I don't know how to page $who, sorry.");
+  }
+
+  return;
+};
+
+async sub _do_page($self, $event, $who, $what) {
   my $user = $self->resolve_name($who, $event->from_user);
 
   unless ($user) {
@@ -91,12 +131,9 @@ END
     }
   }
 
-  if ($paged) {
-    return await $event->reply("Page sent!");
-  } else {
-    return await $event->reply("I don't know how to page $who, sorry.");
-  }
-};
+  return $paged;
+
+}
 
 __PACKAGE__->add_preference(
   name      => 'voice-page',
