@@ -57,7 +57,12 @@ END
     my $pd = $self->hub->reactor_named('pagerduty');
 
     if ($pd) {
-      @to_page = map {; $pd->username_from_pd($_) } $pd->oncall_list->@*;
+      # Really, this should be able to use $pd->oncall_list, but that isn't set
+      # eagerly enough.  That should probably be made into a lazily cached
+      # attribute like we use for (for example) the Slack user list.  But we
+      # can do that in the future. -- rjbs, 2023-10-18
+      my @oncall_ids = await $pd->_current_oncall_ids;
+      @to_page = map {; $pd->username_from_pd($_) } @oncall_ids;
     } else {
       $Logger->log("Unable to find reactor 'pagerduty'") unless $pd;
     }
