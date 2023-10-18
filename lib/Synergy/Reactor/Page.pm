@@ -62,7 +62,7 @@ END
       # attribute like we use for (for example) the Slack user list.  But we
       # can do that in the future. -- rjbs, 2023-10-18
       my @oncall_ids = await $pd->_current_oncall_ids;
-      @to_page = map {; $pd->username_from_pd($_) } @oncall_ids;
+      @to_page = grep {; $_ } map {; $pd->username_from_pd($_) } @oncall_ids;
     } else {
       $Logger->log("Unable to find reactor 'pagerduty'") unless $pd;
     }
