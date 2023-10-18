@@ -15,6 +15,7 @@ use Future::AsyncAwait;
 use List::Util qw(first);
 use Synergy::CommandPost;
 use Synergy::Util qw(bool_from_text);
+use Synergy::Logger '$Logger';
 
 has page_channel_name => (
   is => 'ro',
@@ -51,6 +52,33 @@ END
     return await $event->error_reply("usage: page USER: MESSAGE");
   }
 
+  my @to_page;
+  if ($who eq 'oncall') {
+    my $pd = $self->hub->reactor_named('pagerduty');
+
+    if ($pd) {
+      @to_page = map {; $pd->username_from_pd($_) } $pd->oncall_list->@*;
+    } else {
+      $Logger->log("Unable to find reactor 'pagerduty'") unless $pd;
+    }
+
+  } else {
+    push @to_page, $who;
+  }
+
+  my $paged;
+  for my $who (@to_page) {
+    $paged = 1 if await $self->_do_page($event, $who, $what);
+  }
+
+  if ($paged) {
+    return await $event->reply("Page sent!");
+  } else {
+    return await $event->reply("I don't know how to page $who, sorry.");
+  }
+};
+
+async sub _do_page($self, $event, $who, $what) {
   my $user = $self->resolve_name($who, $event->from_user);
 
   unless ($user) {
@@ -91,12 +119,9 @@ END
     }
   }
 
-  if ($paged) {
-    return await $event->reply("Page sent!");
-  } else {
-    return await $event->reply("I don't know how to page $who, sorry.");
-  }
-};
+  return $paged;
+
+}
 
 __PACKAGE__->add_preference(
   name      => 'voice-page',
