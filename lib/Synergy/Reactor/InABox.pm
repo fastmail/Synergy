@@ -146,7 +146,14 @@ command box => {
   my ($switches, $error) = parse_switches($args);
   return await $event->error_reply("couldn't parse switches: $error") if $error;
 
-  my %switches = map { $_->[0] => ($_->[1] // []) } @$switches;
+  my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
+
+  # This should be simplified into a more generic "validate and normalize
+  # switches" call. -- rjbs, 2023-10-20
+  for my $k (qw( version tag size )) {
+    next unless $switches{$k};
+    $switches{$k} = $switches{$k}[0];
+  }
 
   eval {
     await $handler->($self, $event, \%switches);
