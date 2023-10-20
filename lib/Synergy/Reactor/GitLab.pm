@@ -220,7 +220,7 @@ sub _load_auto_shortcuts ($self) {
         next if $self->is_known_project($name);
 
         if ($names{$name}) {
-          $Logger->log([ "GitLab: ignoring auto-shorcut %s: %s conflicts with %s",
+          $Logger->log([ "GitLab: ignoring auto-shortcut %s: %s conflicts with %s",
             $name,
             $path,
             $names{$name},
