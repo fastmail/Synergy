@@ -312,7 +312,12 @@ async sub handle_create ($self, $event, $switches) {
         . $self->_format_droplet($droplet)
       );
 
-      return await $self->_setup_droplet($event, $droplet, $key_file);
+      return await $self->_setup_droplet(
+        $event,
+        $droplet,
+        $key_file,
+        $switches->{setup},
+      );
     }
 
     return await $event->reply(
@@ -325,8 +330,17 @@ async sub handle_create ($self, $event, $switches) {
   await $event->reply("Box created: " . $self->_format_droplet($droplet));
 }
 
-async sub _setup_droplet ($self, $event, $droplet, $key_file) {
+sub _validate_setup_args ($self, $args) {
+  return !! (@$args == grep {; /\A[-a-zA-Z0-9]+\z/ } @$args);
+}
+
+async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
   my $ip_address = $self->_ip_address_for_droplet($droplet);
+
+  unless ($self->_validate_setup_args($args)) {
+    $event->reply("Your /setup arguments don't meet my strict and undocumented requirements, sorry.  I'll act like you provided none.");
+    $args = [];
+  }
 
   $event->reply("I will now set up your Fastmail In-a-Box! :fminabox:");
 
@@ -395,6 +409,8 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file) {
       (
         qw( fmdev mysetup ),
         '--user', $event->from_user->username,
+        '--',
+        @$args
       ),
     ],
   );
