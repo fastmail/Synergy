@@ -128,7 +128,9 @@ command box => {
 
     • version: which version to create by default
     • datacentre: which datacentre to create boxes in (if unset, chooses one near you)
+    • setup-by-default: if true, run your setup on the box when it's ready
     EOH
+#' # <-- idiotic thing to help Vim synhi cope with <<~, sorry -- rjbs, 2023-10-20
 } => async sub ($self, $event, $rest) {
   unless ($event->from_user) {
     return await $event->error_reply("Sorry, I don't know you.");
@@ -199,8 +201,17 @@ async sub handle_create ($self, $event, $switches) {
   # XXX call /v2/sizes API to validate
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
   my $size = $switches->{size} // $self->default_box_size;
+  my $user = $event->from_user;
 
-  my $maybe_droplet = await $self->_get_droplet_for($event->from_user, $tag);
+  if ($switches->{setup} && $switches->{nosetup}) {
+    Synergy::X->throw_public("Passing /setup and /nosetup together is too weird for me to handle.");
+  }
+
+  my $should_run_setup  = $switches->{setup}    ? 1
+                        : $switches->{nosetup}  ? 0
+                        : $self->get_user_preference($user, 'setup-by-default');
+
+  my $maybe_droplet = await $self->_get_droplet_for($user, $tag);
 
   if ($maybe_droplet) {
     Synergy::X->throw_public(
@@ -208,7 +219,6 @@ async sub handle_create ($self, $event, $switches) {
     );
   }
 
-  my $user = $event->from_user;
   my $name = $self->_box_name_for($user, $tag);
   my $region = $self->_region_for_user($user);
   $event->reply("Creating $name in $region, this will take a minute or two.");
@@ -284,17 +294,28 @@ async sub handle_create ($self, $event, $switches) {
     );
   }
 
-  await $event->reply("Box created: " . $self->_format_droplet($droplet));
+  if ($should_run_setup) {
+    my $key_file = $self->ssh_key_id
+                 ? ("$ENV{HOME}/.ssh/" . $self->ssh_key_id)
+                 : undef;
 
-  my $key_file = $self->ssh_key_id
-               ? ("$ENV{HOME}/.ssh/" . $self->ssh_key_id)
-               : undef;
+    if ($key_file && -r $key_file) {
+      await $event->reply(
+        "Box created, will now run setup. Your box is: "
+        . $self->_format_droplet($droplet)
+      );
 
-  if ($key_file && -r $key_file) {
-    await $self->_setup_droplet($event, $droplet, $key_file);
+      return await $self->_setup_droplet($event, $droplet, $key_file);
+    }
+
+    return await $event->reply(
+      "Box created.  I can't run setup because I have no SSH credentials. "
+      . $self->_format_droplet($droplet)
+    );
   }
 
-  return;
+  # We only get here if we shouldn't run setup.
+  await $event->reply("Box created: " . $self->_format_droplet($droplet));
 }
 
 async sub _setup_droplet ($self, $event, $droplet, $key_file) {
@@ -375,7 +396,7 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file) {
   $Logger->log([ "we ran ssh, stderr: %s", $stderr ]);
 
   if ($exitcode == 0) {
-    return await $event->reply("In-a-Box is now set up!");
+    return await $event->reply("In-a-Box ($droplet->{name}) is now set up!");
   }
 
   return await $event->reply("Something went wrong setting up your box, sorry!");
@@ -649,6 +670,13 @@ __PACKAGE__->add_preference(
   },
   default   => undef,
   description => 'The Digital Ocean data centre to spin up fminabox in',
+);
+
+__PACKAGE__->add_preference(
+  name      => 'setup-by-default',
+  validator => async sub ($self, $value, @) { return bool_from_text($value) },
+  default   => 0,
+  description => 'should box creation run setup by default?',
 );
 
 1;
