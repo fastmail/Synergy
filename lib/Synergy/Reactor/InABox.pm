@@ -14,6 +14,7 @@ use namespace::clean;
 use Future::AsyncAwait;
 
 use Dobby::Client;
+use Process::Status;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
@@ -21,6 +22,13 @@ use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
+
+# This SSH key, if given and present, will be used to connect to boxes after
+# they're stood up to run commands. -- rjbs, 2023-10-20
+has ssh_key_id => (
+  is  => 'ro',
+  isa => 'Str',
+);
 
 has digitalocean_api_token => (
   is       => 'ro',
@@ -241,7 +249,6 @@ async sub handle_create ($self, $event, $switches) {
 
   if ($droplet) {
     $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-    $event->reply("Box created: " . $self->_format_droplet($droplet));
   } else {
     # We don't fail here, because we want to try to update DNS regardless.
     $event->error_reply(
@@ -277,7 +284,101 @@ async sub handle_create ($self, $event, $switches) {
     );
   }
 
+  await $event->reply("Box created: " . $self->_format_droplet($droplet));
+
+  my $key_file = $self->ssh_key_id
+               ? ("$ENV{HOME}/.ssh/" . $self->ssh_key_id)
+               : undef;
+
+  if ($key_file && -r $key_file) {
+    await $self->_setup_droplet($event, $droplet, $key_file);
+  }
+
   return;
+}
+
+async sub _setup_droplet ($self, $event, $droplet, $key_file) {
+  my $ip_address = $self->_ip_address_for_droplet($droplet);
+
+  $event->reply("I will now set up your Fastmail In-a-Box! :fminabox:");
+
+  my $success;
+  my $max_tries = 20;
+  TRY: for my $try (1..$max_tries) {
+    my $socket;
+    eval {
+      $socket = await $self->hub->loop->connect(addr => {
+        family   => 'inet',
+        socktype => 'stream',
+        port     => 22,
+        ip       => $ip_address,
+      });
+    };
+
+    if ($socket) {
+      # We didn't need the connection, just to know it worked!
+      undef $socket;
+
+      $Logger->log([
+        "ssh on %s is up, will now move on to running setup",
+        $ip_address,
+      ]);
+
+      $success = 1;
+
+      last TRY;
+    }
+
+    my $error = $@;
+    if ($error !~ /Connection refused/) {
+      $Logger->log([
+        "weird error connecting to %s:22: %s",
+        $ip_address,
+        $error,
+      ]);
+    }
+
+    $Logger->log([
+      "ssh on %s is not up, maybe wait and try again; %s tries remain",
+      $ip_address,
+      $max_tries - $try,
+    ]);
+
+    await $self->hub->loop->delay_future(after => 1);
+  }
+
+  unless ($success) {
+    return await $event->reply("I couldn't connect to your box to set it up.");
+  }
+
+  # ssh to the box and touch a file for proof of life
+  $Logger->log("about to run ssh!");
+
+  my ($exitcode, $stderr) = await $self->hub->loop->run_process(
+    capture => [ qw( exitcode stderr ) ],
+    command => [
+      "ssh",
+        '-i', "$key_file",
+        '-l', 'root',
+        '-o', 'UserKnownHostsFile=/dev/null',
+        '-o', 'StrictHostKeyChecking=no',
+
+      $ip_address,
+      (
+        qw( fmdev mysetup ),
+        '--user', $event->from_user->username,
+      ),
+    ],
+  );
+
+  $Logger->log([ "we ran ssh: %s", Process::Status->new($exitcode)->as_struct ]);
+  $Logger->log([ "we ran ssh, stderr: %s", $stderr ]);
+
+  if ($exitcode == 0) {
+    return await $event->reply("In-a-Box is now set up!");
+  }
+
+  return await $event->reply("Something went wrong setting up your box, sorry!");
 }
 
 async sub handle_destroy ($self, $event, $switches) {
