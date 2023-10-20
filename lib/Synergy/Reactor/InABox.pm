@@ -14,6 +14,7 @@ use namespace::clean;
 use Future::AsyncAwait;
 
 use Dobby::Client;
+use Process::Status;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
@@ -21,6 +22,13 @@ use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
+
+# This SSH key, if given and present, will be used to connect to boxes after
+# they're stood up to run commands. -- rjbs, 2023-10-20
+has ssh_key_id => (
+  is  => 'ro',
+  isa => 'Str',
+);
 
 has digitalocean_api_token => (
   is       => 'ro',
@@ -120,7 +128,9 @@ command box => {
 
     • version: which version to create by default
     • datacentre: which datacentre to create boxes in (if unset, chooses one near you)
+    • setup-by-default: if true, run your setup on the box when it's ready
     EOH
+#' # <-- idiotic thing to help Vim synhi cope with <<~, sorry -- rjbs, 2023-10-20
 } => async sub ($self, $event, $rest) {
   unless ($event->from_user) {
     return await $event->error_reply("Sorry, I don't know you.");
@@ -136,7 +146,14 @@ command box => {
   my ($switches, $error) = parse_switches($args);
   return await $event->error_reply("couldn't parse switches: $error") if $error;
 
-  my %switches = map { $_->[0] => ($_->[1] // []) } @$switches;
+  my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
+
+  # This should be simplified into a more generic "validate and normalize
+  # switches" call. -- rjbs, 2023-10-20
+  for my $k (qw( version tag size )) {
+    next unless $switches{$k};
+    $switches{$k} = $switches{$k}[0];
+  }
 
   eval {
     await $handler->($self, $event, \%switches);
@@ -191,8 +208,17 @@ async sub handle_create ($self, $event, $switches) {
   # XXX call /v2/sizes API to validate
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
   my $size = $switches->{size} // $self->default_box_size;
+  my $user = $event->from_user;
 
-  my $maybe_droplet = await $self->_get_droplet_for($event->from_user, $tag);
+  if ($switches->{setup} && $switches->{nosetup}) {
+    Synergy::X->throw_public("Passing /setup and /nosetup together is too weird for me to handle.");
+  }
+
+  my $should_run_setup  = $switches->{setup}    ? 1
+                        : $switches->{nosetup}  ? 0
+                        : $self->get_user_preference($user, 'setup-by-default');
+
+  my $maybe_droplet = await $self->_get_droplet_for($user, $tag);
 
   if ($maybe_droplet) {
     Synergy::X->throw_public(
@@ -200,7 +226,6 @@ async sub handle_create ($self, $event, $switches) {
     );
   }
 
-  my $user = $event->from_user;
   my $name = $self->_box_name_for($user, $tag);
   my $region = $self->_region_for_user($user);
   $event->reply("Creating $name in $region, this will take a minute or two.");
@@ -241,7 +266,6 @@ async sub handle_create ($self, $event, $switches) {
 
   if ($droplet) {
     $Logger->log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
-    $event->reply("Box created: " . $self->_format_droplet($droplet));
   } else {
     # We don't fail here, because we want to try to update DNS regardless.
     $event->error_reply(
@@ -277,7 +301,128 @@ async sub handle_create ($self, $event, $switches) {
     );
   }
 
-  return;
+  if ($should_run_setup) {
+    my $key_file = $self->ssh_key_id
+                 ? ("$ENV{HOME}/.ssh/" . $self->ssh_key_id)
+                 : undef;
+
+    if ($key_file && -r $key_file) {
+      await $event->reply(
+        "Box created, will now run setup. Your box is: "
+        . $self->_format_droplet($droplet)
+      );
+
+      return await $self->_setup_droplet(
+        $event,
+        $droplet,
+        $key_file,
+        $switches->{setup},
+      );
+    }
+
+    return await $event->reply(
+      "Box created.  I can't run setup because I have no SSH credentials. "
+      . $self->_format_droplet($droplet)
+    );
+  }
+
+  # We only get here if we shouldn't run setup.
+  await $event->reply("Box created: " . $self->_format_droplet($droplet));
+}
+
+sub _validate_setup_args ($self, $args) {
+  return !! (@$args == grep {; /\A[-a-zA-Z0-9]+\z/ } @$args);
+}
+
+async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
+  my $ip_address = $self->_ip_address_for_droplet($droplet);
+
+  unless ($self->_validate_setup_args($args)) {
+    $event->reply("Your /setup arguments don't meet my strict and undocumented requirements, sorry.  I'll act like you provided none.");
+    $args = [];
+  }
+
+  $event->reply("I will now set up your Fastmail In-a-Box! :fminabox:");
+
+  my $success;
+  my $max_tries = 20;
+  TRY: for my $try (1..$max_tries) {
+    my $socket;
+    eval {
+      $socket = await $self->hub->loop->connect(addr => {
+        family   => 'inet',
+        socktype => 'stream',
+        port     => 22,
+        ip       => $ip_address,
+      });
+    };
+
+    if ($socket) {
+      # We didn't need the connection, just to know it worked!
+      undef $socket;
+
+      $Logger->log([
+        "ssh on %s is up, will now move on to running setup",
+        $ip_address,
+      ]);
+
+      $success = 1;
+
+      last TRY;
+    }
+
+    my $error = $@;
+    if ($error !~ /Connection refused/) {
+      $Logger->log([
+        "weird error connecting to %s:22: %s",
+        $ip_address,
+        $error,
+      ]);
+    }
+
+    $Logger->log([
+      "ssh on %s is not up, maybe wait and try again; %s tries remain",
+      $ip_address,
+      $max_tries - $try,
+    ]);
+
+    await $self->hub->loop->delay_future(after => 1);
+  }
+
+  unless ($success) {
+    return await $event->reply("I couldn't connect to your box to set it up.");
+  }
+
+  # ssh to the box and touch a file for proof of life
+  $Logger->log("about to run ssh!");
+
+  my ($exitcode, $stderr) = await $self->hub->loop->run_process(
+    capture => [ qw( exitcode stderr ) ],
+    command => [
+      "ssh",
+        '-i', "$key_file",
+        '-l', 'root',
+        '-o', 'UserKnownHostsFile=/dev/null',
+        '-o', 'StrictHostKeyChecking=no',
+
+      $ip_address,
+      (
+        qw( fmdev mysetup ),
+        '--user', $event->from_user->username,
+        '--',
+        @$args
+      ),
+    ],
+  );
+
+  $Logger->log([ "we ran ssh: %s", Process::Status->new($exitcode)->as_struct ]);
+  $Logger->log([ "we ran ssh, stderr: %s", $stderr ]);
+
+  if ($exitcode == 0) {
+    return await $event->reply("In-a-Box ($droplet->{name}) is now set up!");
+  }
+
+  return await $event->reply("Something went wrong setting up your box, sorry!");
 }
 
 async sub handle_destroy ($self, $event, $switches) {
@@ -548,6 +693,13 @@ __PACKAGE__->add_preference(
   },
   default   => undef,
   description => 'The Digital Ocean data centre to spin up fminabox in',
+);
+
+__PACKAGE__->add_preference(
+  name      => 'setup-by-default',
+  validator => async sub ($self, $value, @) { return bool_from_text($value) },
+  default   => 0,
+  description => 'should box creation run setup by default?',
 );
 
 1;
