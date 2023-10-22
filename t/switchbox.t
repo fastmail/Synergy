@@ -43,19 +43,27 @@ $box->switches_ok(
 
 $box->errors_ok(
   "/name Dana Cassidy /age unknown /unexpected inquisition",
-  [
-    { switch => 'age',        type => 'value' },
-    { switch => 'unexpected', type => 'unknown' },
-  ],
+  {
+    structs => [
+      { switch => 'age',        type => 'value' },
+      { switch => 'unexpected', type => 'unknown' },
+    ],
+  },
   "simple example with errors",
 );
 
 $box->errors_ok(
   "/age 17 /age unknown /age 19",
-  [
-    { switch => 'age', type => 'value' },
-    { switch => 'age', type => 'multi' },
-  ],
+  {
+    structs => [
+      { switch => 'age', type => 'value' },
+      { switch => 'age', type => 'multi' },
+    ],
+    sentences => [
+      "These switches had invalid values: age.",
+      "These switches can only be given once, but were given multiple times: age.",
+    ],
+  },
   "simple example with type errors, /age x3",
 );
 
@@ -64,17 +72,21 @@ $box->errors_ok(
 # enough. -- rjbs, 2023-10-22
 $box->errors_ok(
   "/age 17 unknown 19",
-  [
-    { switch => 'age', type => 'value' },
-  ],
+  {
+    structs => [
+      { switch => 'age', type => 'value' },
+    ],
+  },
   "simple example with type errors, /age with 3 values",
 );
 
 $box->errors_ok(
   "/age",
-  [
-    { switch => 'age', type => 'novalue' },
-  ],
+  {
+    structs => [
+      { switch => 'age', type => 'novalue' },
+    ],
+  },
   "non-bool switch with no value",
 );
 

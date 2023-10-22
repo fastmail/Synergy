@@ -202,16 +202,78 @@ package Synergy::SwitchBox::Error {
     }
 
     # These are super weird but let's not just drop them on the floor.
-    push @structs, { type => 'undef-name' }   if $errors{undef_name};
-    push @structs, { type => 'empty-switch' } if $errors{empty_switch};
+    push @structs, { type => 'undef_name' }   if $errors{undef_name};
+    push @structs, { type => 'empty_switch' } if $errors{empty_switch};
 
     return @structs;
+  }
+
+  sub as_sentences ($self) {
+    my sub andlist ($set) {
+      my @words = sort keys %$set;
+      $words[-1] = "and $words[-1]" if @words > 2;
+      join q{, }, @words;
+    }
+
+    my @structs = $self->as_structs;
+    return unless @structs;
+
+    my %switch_value;
+    my %switch_multi;
+    my %switch_novalue;
+    my %switch_unknown;
+    my %switch_misc;
+    my %other;
+
+    STRUCT: for my $struct (@structs) {
+      if (defined(my $switch = $struct->{switch})) {
+        if    ($struct->{type} eq 'value')    { $switch_value{$switch}   = 1 }
+        elsif ($struct->{type} eq 'multi')    { $switch_multi{$switch}   = 1 }
+        elsif ($struct->{type} eq 'novalue')  { $switch_novalue{$switch} = 1 }
+        elsif ($struct->{type} eq 'unknown')  { $switch_unknown{$switch} = 1 }
+        else                                  { $switch_misc{$switch}    = 1 }
+
+        next STRUCT;
+      }
+
+      if    ($struct->{undef_name})   { $other{undef_name}   = 1 }
+      elsif ($struct->{empty_switch}) { $other{empty_switch} = 1 }
+      else                            { $other{misc} = 1 }
+    }
+
+    my @sentences;
+    if (keys %switch_value) {
+      push @sentences,
+        "These switches had invalid values: " . andlist(\%switch_value) . ".";
+    }
+
+    if (keys %switch_novalue) {
+      push @sentences,
+        "These switches need to be given a value, but weren't: " . andlist(\%switch_novalue) . ".";
+    }
+
+    if (keys %switch_multi) {
+      push @sentences,
+        "These switches can only be given once, but were given multiple times: " . andlist(\%switch_multi) . ".";
+    }
+
+    if (keys %switch_unknown) {
+      push @sentences,
+        "There was something inexplicably wrong with these switches: " . andlist(\%switch_multi) . ".";
+    }
+
+    if (%other) {
+      push @sentences, "Some weird thing happened that probably shouldn't.";
+    }
+
+    return @sentences;
   }
 
   no Moose;
 }
 
 package Synergy::SwitchBox::Set {
+  # This package exists only so that the generated packages can subclass it.
   use Moose;
 
   no Moose;

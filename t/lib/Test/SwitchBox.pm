@@ -60,13 +60,25 @@ sub errors_ok ($self, $str, $want, $desc) {
 
     isa_ok($error, 'Synergy::SwitchBox::Error', 'result of handle_switches');
 
-    my @structs = $error->as_structs;
+    if ($want->{structs}) {
+      my @structs = $error->as_structs;
 
-    cmp_deeply(
-      \@structs,
-      bag(@$want),
-      "got the expected error structs",
-    );
+      cmp_deeply(
+        \@structs,
+        bag($want->{structs}->@*),
+        "got the expected error structs",
+      );
+    }
+
+    if ($want->{sentences}) {
+      my @sentences = $error->as_sentences;
+
+      cmp_deeply(
+        \@sentences,
+        bag($want->{sentences}->@*),
+        "got the expected error sentences",
+      );
+    }
   };
 }
 
