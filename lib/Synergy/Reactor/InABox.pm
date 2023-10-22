@@ -144,7 +144,7 @@ command box => {
 
   my $handler = $cmd ? $command_handler{$cmd} : undef;
   unless ($handler) {
-    return await $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
+    return await $event->error_reply(q{I didn't understand that use of "box".  Check out "help box".});
   }
 
   my ($switches, $error) = parse_switches($args);
