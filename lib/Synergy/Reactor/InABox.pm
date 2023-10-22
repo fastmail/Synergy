@@ -114,20 +114,24 @@ command box => {
   help => reformat_help(<<~"EOH"),
     box is a tool for managing cloud-based fminabox instances
 
-    All subcommands can take /version and /tag can be used to target a specific box. If not provided, defaults will be used.
+    All subcommands can take /version and /tag can be used to target a specific
+    box. If not provided, defaults will be used.
 
-    • status: show some info about your boxes, including IP address, fminabox build it was built from, and its current power status
+    • status: show some info about your boxes, including IP address, fminabox
+    build it was built from, and its current power status
     • create: create a new box
     • destroy: destroy a box. if its powered on, you have to shut it down first
     • shutdown: gracefully shut down and power off your box
-    • poweroff: forcibly shut down and power off your box (like pulling the power)
+    • poweroff: forcibly shut down and power off your box (like pulling the
+    power)
     • poweron: start up your box
     • vpn: get an OpenVPN config file to connect to your box
 
     The following preferences exist:
 
     • version: which version to create by default
-    • datacentre: which datacentre to create boxes in (if unset, chooses one near you)
+    • datacentre: which datacentre to create boxes in (if unset, chooses one
+    near you)
     • setup-by-default: if true, run your setup on the box when it's ready
     EOH
 #' # <-- idiotic thing to help Vim synhi cope with <<~, sorry -- rjbs, 2023-10-20
