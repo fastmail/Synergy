@@ -5,7 +5,7 @@ package Test::SwitchBox;
 use Moose;
 extends 'Synergy::SwitchBox';
 
-use experimental qw(signatures);
+use experimental qw(isa signatures);
 
 use String::Switches ();
 use Test::Deep ':v1';
@@ -18,8 +18,19 @@ sub switches_ok ($self, $str, $want, $desc) {
 
   local $Test::Builder::Level = $Test::Builder::Level + 1;
 
+  my $set;
+
   subtest "switches_ok: $desc" => sub {
-    my $set = $self->handle_switches($switches);
+    $set = eval {
+      $self->handle_switches($switches);
+    };
+
+    if ($@ and $@ isa 'Synergy::SwitchBox::Error') {
+      my $error = $@;
+      fail("SwitchBox rejected the input");
+      diag(explain([ $error->as_structs ]));
+      return;
+    }
 
     isa_ok($set, 'Synergy::SwitchBox::Set', 'result of handle_switches');
 
@@ -39,6 +50,8 @@ sub switches_ok ($self, $str, $want, $desc) {
       "methods on SwitchBox::Set act as expected",
     );
   };
+
+  return $set;
 }
 
 sub errors_ok ($self, $str, $want, $desc) {
@@ -69,6 +82,8 @@ sub errors_ok ($self, $str, $want, $desc) {
         "got the expected error structs",
       );
     }
+
+    diag "S: $_" for $error->as_sentences;
 
     if ($want->{sentences}) {
       my @sentences = $error->as_sentences;

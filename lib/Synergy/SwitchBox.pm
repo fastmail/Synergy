@@ -49,12 +49,26 @@ sub _build_switchset_class ($self) {
         handles => { $name => 'elements' },
         default => sub {  []  },
       );
+
+      # You might think "this is absurd, this should be a predicate method on
+      # the $name attribute, but we have a conundrum:
+      # * We want $obj->attr to return () if no "attr" was given, and this
+      #   requires that attr is [], because it returns @{ $attr_slot }.
+      # * We want to know that no value was present.
+      #
+      # Since we need to have a default [] value for the "elements" delegation
+      # to work, we'll store "was explicit" in another attribute.  Since we
+      # know we're the only one making these objects, we can get away with it.
+      # Gross, though, I know! -- rjbs, 2023-10-22
+      $meta->add_attribute("has_$name", is => 'ro');
+
       next ATTR;
     }
 
     $meta->add_attribute($name,
       is    => 'ro',
       isa   => 'Value',
+      predicate => "has_$name",
     );
   }
 
@@ -106,6 +120,7 @@ sub _check_and_coerce_values ($self, $schema, $values) {
 
 sub handle_switches ($self, $switches) {
   my %switch;
+  my %predicate;
 
   my %error;
   # return SwitchBox::Set if good
@@ -137,6 +152,8 @@ sub handle_switches ($self, $switches) {
     if (@args == 0) {
       if ($schema->{type} eq 'bool') {
         @args = 1;
+      } elsif ($schema->{multi} && $schema->{zero_ok}) {
+        # ... just let it become set ...
       } else {
         $error{switch}{$name}{novalue} = 1;
         next SWITCH;
@@ -154,6 +171,7 @@ sub handle_switches ($self, $switches) {
     if ($schema->{multi}) {
       $switch{$name} //= [];
       push $switch{$name}->@*, @args;
+      $predicate{"has_$name"} = 1;
       next SWITCH;
     }
 
@@ -173,7 +191,12 @@ sub handle_switches ($self, $switches) {
     Synergy::SwitchBox::Error->throw({ errors => \%error });
   }
 
-  return $self->switchset_class->new(\%switch);
+  # Maybe later: barf, now or much earlier, if there's a multi-value switch S
+  # and also any switch named has_S.  Honestly, though... -- rjbs, 2023-10-22
+  return $self->switchset_class->new({
+    %switch,
+    %predicate,
+  });
 }
 
 package Synergy::SwitchBox::Error {
@@ -259,7 +282,7 @@ package Synergy::SwitchBox::Error {
 
     if (keys %switch_unknown) {
       push @sentences,
-        "There was something inexplicably wrong with these switches: " . andlist(\%switch_multi) . ".";
+        "There was something inexplicably wrong with these switches: " . andlist(\%switch_unknown) . ".";
     }
 
     if (%other) {
