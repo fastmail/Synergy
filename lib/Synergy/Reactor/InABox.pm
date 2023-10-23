@@ -17,7 +17,7 @@ use Dobby::Client;
 use Process::Status;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
-use Synergy::Util qw(reformat_help);
+use Synergy::Util qw(bool_from_text reformat_help);
 use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
