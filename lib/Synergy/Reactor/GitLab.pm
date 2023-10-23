@@ -75,6 +75,18 @@ has relevant_owners => (
   default => sub { [] },
 );
 
+has group_emoji => (
+  isa => 'HashRef',
+  default => sub {  {}  },
+  traits  => [ 'Hash' ],
+  handles => { emoji_for => 'get' },
+);
+
+has default_group_emoji => (
+  is => 'ro',
+  default => '➖',
+);
+
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
     my $repo_state = $state->{repos} // {};
@@ -265,6 +277,14 @@ sub _parse_search ($self, $text) {
   return if $error;
 
   return $hunks;
+}
+
+sub _icon_for_mr ($self, $mr) {
+  # See below, _short_name_for_mr, for this annoying thing. -- rjbs, 2023-10-23
+  my ($g_slash_p, $id) = $mr->{web_url} =~ m{([^/]+/[^/]+)/-/merge_requests/([0-9]+)\z};
+  my ($group) = split m{/}, $g_slash_p;
+
+  return $self->emoji_for($group) // $self->default_group_emoji;
 }
 
 sub _short_name_for_mr ($self, $mr) {
@@ -669,11 +689,12 @@ sub _handle_mr_search_string ($self, $text, $event) {
       $icons .= " " if length $icons;
 
       $text  .= "\n* $icons $mr->{title}";
-      $slack .= sprintf "\n*<%s|%s>* %s%s — _(%s)_",
+      $slack .= sprintf "\n%s *<%s|%s>* %s%s — _(%s)_",
+        $self->_icon_for_mr($mr),
         $mr->{web_url},
         $self->_short_name_for_mr($mr),
         $icons,
-        $mr->{title},
+        ($mr->{title} =~ s/^Draft: //r),
         $mr->{author}{username}
           . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
 
