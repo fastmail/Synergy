@@ -400,6 +400,7 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
     capture => [ qw( exitcode stderr ) ],
     command => [
       "ssh",
+        '-A',
         '-i', "$key_file",
         '-l', 'root',
         '-o', 'UserKnownHostsFile=/dev/null',
