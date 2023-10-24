@@ -157,6 +157,19 @@ sub listener_specs {
       ],
     },
     {
+      name      => 'vesta_show_text',
+      method    => 'handle_vesta_show_text',
+      exclusive => 1,
+      targeted  => 1,
+      predicate => sub ($, $e) { $e->text =~ /\Avesta show text /i },
+      help_entries => [
+        {
+          title => 'vesta',
+          text  => "*vesta show text `TEXT`*: show a preview of given text",
+        }
+      ],
+    },
+    {
       name      => 'vesta_show_design',
       method    => 'handle_vesta_show_design',
       exclusive => 1,
@@ -500,6 +513,55 @@ sub handle_vesta_show ($self, $event) {
 
   my $display = Synergy::VestaUtil->board_to_text($curr);
   my $reply   = "Currently on the board:\n$display";
+
+  my $whitespace = "\N{WHITE LARGE SQUARE}";
+
+  $event->reply(
+    $reply,
+    {
+      slack => ($reply =~ s/$whitespace/:spacer:/gr)
+    }
+  );
+}
+
+sub handle_vesta_show_text ($self, $event) {
+  $event->mark_handled;
+
+  my $text = $event->text;
+  $text =~ s/\Avesta show text\s+//;
+
+  my $user = $event->from_user;
+
+  unless ($user) {
+    $event->error_reply("I don't know who you are, so I'm not going to do that.");
+    return;
+  }
+
+  my ($board, $error) = Synergy::VestaUtil->text_to_board($text);
+
+  unless ($board) {
+    $event->error_reply("Sorry, I can't find that design!");
+    return;
+  }
+
+  if ($self->vesta_image_base) {
+    my $url = join q{/},
+              ($self->vesta_image_base =~ s{/\z}{}r),
+              Synergy::VestaUtil->encode_board($board),
+              'cropped';
+
+    $event->reply(
+      "You can see that design at: $url",
+      {
+        slack => sprintf("Behold, <%s|your text>", $url),
+      },
+    );
+
+    return;
+  }
+
+  my $display = Synergy::VestaUtil->board_to_text($board);
+  my $reply   = "Your text:\n$display";
 
   my $whitespace = "\N{WHITE LARGE SQUARE}";
 
