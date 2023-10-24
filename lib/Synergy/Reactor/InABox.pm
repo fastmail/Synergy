@@ -605,7 +605,8 @@ async sub _get_snapshot ($self, $version) {
   my $dobby = $self->dobby;
   my $data  = await $dobby->json_get('/snapshots?per_page=200');
 
-  my ($snapshot) = sort { $b->{name} cmp $a->{name} }
+  my ($snapshot) = sort { $b->{name} cmp $a->{name}
+                       || $b->{created_at} cmp $a->{created_at} }
                    grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
                    $data->{snapshots}->@*;
 
