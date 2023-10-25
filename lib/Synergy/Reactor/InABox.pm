@@ -18,7 +18,8 @@ use Process::Status;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
-use String::Switches qw(parse_switches);
+use Synergy::SwitchBox;
+use String::Switches;
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
@@ -114,20 +115,24 @@ command box => {
   help => reformat_help(<<~"EOH"),
     box is a tool for managing cloud-based fminabox instances
 
-    All subcommands can take /version and /tag can be used to target a specific box. If not provided, defaults will be used.
+    All subcommands can take /version and /tag can be used to target a specific
+    box. If not provided, defaults will be used.
 
-    • status: show some info about your boxes, including IP address, fminabox build it was built from, and its current power status
+    • status: show some info about your boxes, including IP address, fminabox
+    build it was built from, and its current power status
     • create: create a new box
     • destroy: destroy a box. if its powered on, you have to shut it down first
     • shutdown: gracefully shut down and power off your box
-    • poweroff: forcibly shut down and power off your box (like pulling the power)
+    • poweroff: forcibly shut down and power off your box (like pulling the
+    power)
     • poweron: start up your box
     • vpn: get an OpenVPN config file to connect to your box
 
     The following preferences exist:
 
     • version: which version to create by default
-    • datacentre: which datacentre to create boxes in (if unset, chooses one near you)
+    • datacentre: which datacentre to create boxes in (if unset, chooses one
+    near you)
     • setup-by-default: if true, run your setup on the box when it's ready
     EOH
 #' # <-- idiotic thing to help Vim synhi cope with <<~, sorry -- rjbs, 2023-10-20
@@ -140,23 +145,11 @@ command box => {
 
   my $handler = $cmd ? $command_handler{$cmd} : undef;
   unless ($handler) {
-    return await $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
-  }
-
-  my ($switches, $error) = parse_switches($args);
-  return await $event->error_reply("couldn't parse switches: $error") if $error;
-
-  my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
-
-  # This should be simplified into a more generic "validate and normalize
-  # switches" call. -- rjbs, 2023-10-20
-  for my $k (qw( version tag size )) {
-    next unless $switches{$k};
-    $switches{$k} = $switches{$k}[0];
+    return await $event->error_reply(q{I didn't understand that use of "box".  Check out "help box".});
   }
 
   eval {
-    await $handler->($self, $event, \%switches);
+    await $handler->($self, $event, $args);
   };
 
   if (my $error = $@) {
@@ -171,6 +164,38 @@ command box => {
   return;
 };
 
+sub _parse_switches ($self, $args) {
+  my ($switches, $error) = String::Switches::parse_switches($args);
+  Synergy::X->throw_public("couldn't parse switches: $error") if $error;
+
+  state $switchbox = Synergy::SwitchBox->new({
+    schema => {
+      version => { type => 'str' },
+      tag     => { type => 'str' },
+      size    => { type => 'str' },
+      force   => { type => 'bool' },
+
+      setup   => { type => 'str', multi => 1 },
+      nosetup => { type => 'bool' },
+    },
+  });
+
+  my $set = eval { $switchbox->handle_switches($switches); };
+
+  return $set if $set;
+
+  my $error = $@;
+  if ($error isa 'Synergy::SwitchBox::Error') {
+    Synergy::X->throw_public({
+      ident => "bad-switches",
+      message => "Your switches were no good: \n"
+      . join(qq{}, map {; "* $_\n" } $error->as_sentences)
+    });
+  }
+
+  die $error;
+}
+
 sub _determine_version_and_tag ($self, $event, $switches) {
   # this convoluted mess is about figuring out:
   # - the version, by request or from prefs or implied
@@ -179,7 +204,9 @@ sub _determine_version_and_tag ($self, $event, $switches) {
   my $default_version = $self->get_user_preference($event->from_user, 'version')
                      // $self->default_box_version;
 
-  my ($version, $tag) = $switches->@{qw(version tag)};
+  my $version = $switches->version;
+  my $tag     = $switches->tag;
+
   my $is_default_box = !($version || $tag);
   $version //= $default_version;
   $tag //= $version;
@@ -189,7 +216,10 @@ sub _determine_version_and_tag ($self, $event, $switches) {
   return ($version, $tag, $is_default_box);
 }
 
-async sub handle_status ($self, $event, $switches) {
+async sub handle_status ($self, $event, $args) {
+  return await $event->reply_error(q{"box status" doesn't take any arguments.})
+    if length $args;
+
   my $droplets = await $self->_get_droplets_for($event->from_user);
 
   if (@$droplets) {
@@ -202,20 +232,21 @@ async sub handle_status ($self, $event, $switches) {
   return await $event->reply("You don't seem to have any boxes.");
 }
 
-async sub handle_create ($self, $event, $switches) {
+async sub handle_create ($self, $event, $args) {
+  my $switches = $self->_parse_switches($args);
   my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
 
   # XXX call /v2/sizes API to validate
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
-  my $size = $switches->{size} // $self->default_box_size;
+  my $size = $switches->size // $self->default_box_size;
   my $user = $event->from_user;
 
-  if ($switches->{setup} && $switches->{nosetup}) {
+  if ($switches->has_setup && $switches->nosetup) {
     Synergy::X->throw_public("Passing /setup and /nosetup together is too weird for me to handle.");
   }
 
-  my $should_run_setup  = $switches->{setup}    ? 1
-                        : $switches->{nosetup}  ? 0
+  my $should_run_setup  = $switches->has_setup  ? 1
+                        : $switches->nosetup    ? 0
                         : $self->get_user_preference($user, 'setup-by-default');
 
   my $maybe_droplet = await $self->_get_droplet_for($user, $tag);
@@ -316,7 +347,7 @@ async sub handle_create ($self, $event, $switches) {
         $event,
         $droplet,
         $key_file,
-        $switches->{setup},
+        [ $switches->setup ],
       );
     }
 
@@ -426,7 +457,8 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
   return await $event->reply("Something went wrong setting up your box, sorry!");
 }
 
-async sub handle_destroy ($self, $event, $switches) {
+async sub handle_destroy ($self, $event, $args) {
+  my $switches = $self->_parse_switches($args);
   my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
   my $droplet = await $self->_get_droplet_for($event->from_user, $tag);
@@ -437,7 +469,7 @@ async sub handle_destroy ($self, $event, $switches) {
     );
   }
 
-  if ($droplet->{status} eq 'active' && !$switches->{force}) {
+  if ($droplet->{status} eq 'active' && !$switches->force) {
     Synergy::X->throw_public(
       "That box is powered on. Shut it down first, or use /force to destroy it anyway."
     );
@@ -526,25 +558,29 @@ async sub _handle_power ($self, $event, $action, $tag = undef) {
   return;
 }
 
-sub handle_shutdown ($self, $event, $switches) {
+sub handle_shutdown ($self, $event, $args) {
+  my $switches = $self->_parse_switches($args);
   my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
   return $self->_handle_power($event, 'shutdown', $tag);
 }
 
-sub handle_poweroff ($self, $event, $switches) {
+sub handle_poweroff ($self, $event, $args) {
+  my $switches = $self->_parse_switches($args);
   my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
   $self->_handle_power($event, 'off', $tag);
 }
 
-sub handle_poweron ($self, $event, $switches) {
+sub handle_poweron ($self, $event, $args) {
+  my $switches = $self->_parse_switches($args);
   my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
   return $self->_handle_power($event, 'on', $tag);
 }
 
-sub handle_vpn ($self, $event, $switches) {
+sub handle_vpn ($self, $event, $args) {
+  my $switches = $self->_parse_switches($args);
   my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
   my $template = Text::Template->new(
