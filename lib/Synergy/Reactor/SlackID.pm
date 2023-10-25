@@ -59,14 +59,20 @@ responder reload_slack => {
 } => async sub ($self, $event, $what) {
   $event->mark_handled;
 
+  my $channel = $event->from_channel;
+
+  unless ($channel->can('slack')) {
+    return await $event->error_reply("Sorry, you can't use *slackid* outside Slack");
+  }
+
   if ($what eq 'users') {
-    $event->from_channel->slack->load_users;
-    $event->from_channel->slack->load_dm_channels;
+    $channel->slack->load_users;
+    $channel->slack->load_dm_channels;
     return $event->reply('Slack users reloaded');
   }
 
   if ($what eq 'channels') {
-    $event->from_channel->slack->load_channels;
+    $channel->slack->load_channels;
     return $event->reply('Slack channels reloaded');
   }
 
