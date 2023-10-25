@@ -37,7 +37,7 @@ my %CHAR_FOR = (
   56 => "\N{FULLWIDTH FULL STOP}",
 
   59 => "\N{FULLWIDTH SOLIDUS}",
-  60 => "\N{FULLWIDTH QUOTATION MARK}",
+  60 => "\N{FULLWIDTH QUESTION MARK}",
   62 => "° ", # no full-width variant available
 
   # I don't think I should need a space after these, but I did in my
