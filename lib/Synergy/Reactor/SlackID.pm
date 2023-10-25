@@ -79,4 +79,28 @@ responder reload_slack => {
   return $event->reply_error("Sorry, I didn't understand your reload command.");
 };
 
+command slacksnippet => {
+} => async sub ($self, $event, $text) {
+  my $channel = $event->from_channel;
+
+  unless ($channel->can('slack')) {
+    return await $event->error_reply("Sorry, you can't use *slackid* outside Slack");
+  }
+
+  my $text = join q{}, ("$text\n") x 25;
+
+  my $res = await $channel->slack->api_call(
+    'files.upload',
+    {
+      form_encoded => 1, # Sigh.
+
+      content => $text,
+      channels => $event->conversation_address,
+      initial_comment => "Here's what you said, as a snippet.",
+    },
+  );
+
+  return;
+};
+
 1;
