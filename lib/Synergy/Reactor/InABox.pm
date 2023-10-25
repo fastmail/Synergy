@@ -316,7 +316,7 @@ async sub handle_create ($self, $event, $switches) {
         $event,
         $droplet,
         $key_file,
-        $switches->{setup},
+        $switches->{setup} // [], # might be undef if setting up by default
       );
     }
 
