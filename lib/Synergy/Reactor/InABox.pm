@@ -331,7 +331,7 @@ async sub handle_create ($self, $event, $switches) {
 }
 
 sub _validate_setup_args ($self, $args) {
-  return !! (@$args == grep {; /\A[-a-zA-Z0-9]+\z/ } @$args);
+  return !! (@$args == grep {; /\A[-.a-zA-Z0-9]+\z/ } @$args);
 }
 
 async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
