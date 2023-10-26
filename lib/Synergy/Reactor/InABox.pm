@@ -396,8 +396,8 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
   # ssh to the box and touch a file for proof of life
   $Logger->log("about to run ssh!");
 
-  my ($exitcode, $stderr) = await $self->hub->loop->run_process(
-    capture => [ qw( exitcode stderr ) ],
+  my ($exitcode, $stdout, $stderr) = await $self->hub->loop->run_process(
+    capture => [ qw( exitcode stdout stderr ) ],
     command => [
       "ssh",
         '-A',
@@ -417,7 +417,6 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
   );
 
   $Logger->log([ "we ran ssh: %s", Process::Status->new($exitcode)->as_struct ]);
-  $Logger->log([ "we ran ssh, stderr: %s", $stderr ]);
 
   if ($exitcode == 0) {
     return await $event->reply("In-a-Box ($droplet->{name}) is now set up!");
@@ -429,11 +428,13 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
       {
         form_encoded => 1, # Sigh.
 
-        content => $stderr,
+        content => "$stderr\n----(stdout)----\n$stdout",
         channels => $event->conversation_address,
         initial_comment => "Something went wrong setting up your box:",
       },
     );
+  } else {
+    $Logger->log("we ran ssh, but not via Slack, so stdout/stderr discarded");
   }
 
   return await $event->reply("Something went wrong setting up your box, sorry!");
