@@ -423,6 +423,19 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
     return await $event->reply("In-a-Box ($droplet->{name}) is now set up!");
   }
 
+  if ($event->from_channel->isa('Synergy::Channel::Slack')) {
+    return await $event->from_channel->slack->api_call(
+      'files.upload',
+      {
+        form_encoded => 1, # Sigh.
+
+        content => $stderr,
+        channels => $event->conversation_address,
+        initial_comment => "Something went wrong setting up your box:",
+      },
+    );
+  }
+
   return await $event->reply("Something went wrong setting up your box, sorry!");
 }
 
