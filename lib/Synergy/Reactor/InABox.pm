@@ -422,7 +422,13 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
     return await $event->reply("In-a-Box ($droplet->{name}) is now set up!");
   }
 
+  my $message = $exitcode == 0
+              ? "In-a-Box ($droplet->{name}) is now set up!"
+              : "Something went wrong setting up your box.";
+
   if ($event->from_channel->isa('Synergy::Channel::Slack')) {
+    $message .= " Here's the output from setup:";
+
     return await $event->from_channel->slack->api_call(
       'files.upload',
       {
@@ -430,14 +436,14 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
 
         content => "$stderr\n----(stdout)----\n$stdout",
         channels => $event->conversation_address,
-        initial_comment => "Something went wrong setting up your box:",
+        initial_comment => $message,
       },
     );
   } else {
     $Logger->log("we ran ssh, but not via Slack, so stdout/stderr discarded");
   }
 
-  return await $event->reply("Something went wrong setting up your box, sorry!");
+  return await $event->reply($message);
 }
 
 async sub handle_destroy ($self, $event, $switches) {
