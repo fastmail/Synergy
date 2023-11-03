@@ -63,7 +63,7 @@ async sub json_get ($self, $path) {
     die "error getting $path at DigitalOcean: " . $res->as_string;
   }
 
-  my $json = $res->decoded_content(charset => 'undef');
+  my $json = $res->decoded_content(charset => undef);
   decode_json($json);
 }
 
@@ -83,7 +83,7 @@ async sub _json_req_with_body ($self, $method, $path, $payload) {
     die "error making $method to $path at DigitalOcean: " . $res->as_string;
   }
 
-  my $json = $res->decoded_content(charset => 'undef');
+  my $json = $res->decoded_content(charset => undef);
   decode_json($json);
 }
 
