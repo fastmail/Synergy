@@ -1109,6 +1109,27 @@ sub mr_report ($self, $who, $arg = {}) {
   });
 }
 
+async sub post_gitlab_snippet ($self, $payload) {
+  my $res = await $self->hub->http_client->do_request(
+    method => 'POST',
+    uri    => $self->api_uri . '/v4/snippets',
+    headers => {
+      'PRIVATE-TOKEN' => $self->api_token,
+    },
+
+    content_type => 'application/json',
+    content      => encode_json($payload),
+  );
+
+  unless ($res->is_success) {
+    die "error creating snippet on GitLab: " . $res->as_string;
+  }
+
+  my $json = $res->decoded_content(charset => undef);
+  my $snippet_metadata = decode_json($json);
+  return $snippet_metadata->{web_url};
+}
+
 __PACKAGE__->add_preference(
   name      => 'user-id',
   validator => async sub ($self, $value, @) {
