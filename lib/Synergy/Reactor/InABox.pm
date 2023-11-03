@@ -422,9 +422,7 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
     return await $event->reply("In-a-Box ($droplet->{name}) is now set up!");
   }
 
-  my $message = $exitcode == 0
-              ? "In-a-Box ($droplet->{name}) is now set up!"
-              : "Something went wrong setting up your box.";
+  my $message = "Something went wrong setting up your box.";
 
   if ($event->from_channel->isa('Synergy::Channel::Slack')) {
     $message .= " Here's the output from setup:";
