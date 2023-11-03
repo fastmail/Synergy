@@ -255,7 +255,7 @@ responder 'maint-start' => {
         type => 'maintenance_window',
         start_time => $ISO8601->format_datetime(DateTime->now),
         end_time   =>  $ISO8601->format_datetime(DateTime->now->add(hours => 1)),
-        services => \%services
+        services => \@services
       },
     }
   );
