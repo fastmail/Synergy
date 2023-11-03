@@ -42,9 +42,9 @@ has api_key => (
 
 # the id for "Platform" or whatever. If we wind up having more than one
 # "service", we'll need to tweak this
-has service_id => (
+has service_ids => (
   is => 'ro',
-  isa => 'Str',
+  isa => 'ArrayRef',
   required => 1,
 );
 
@@ -244,6 +244,8 @@ responder 'maint-start' => {
     return await $event->reply("PagerDuty already in maint: $desc");
   }
 
+  my @services = map {; { type => 'service_reference', id => $_} } $self->service_ids->@*;
+
   # XXX add reason here?
   my $data = await $self->_pd_request_for_user(
     $event->from_user,
@@ -253,10 +255,7 @@ responder 'maint-start' => {
         type => 'maintenance_window',
         start_time => $ISO8601->format_datetime(DateTime->now),
         end_time   =>  $ISO8601->format_datetime(DateTime->now->add(hours => 1)),
-        services => [{
-          id => $self->service_id,
-          type => 'service_reference',
-        }],
+        services => \%services
       },
     }
   );
@@ -628,10 +627,13 @@ sub _relevant_maint_windows ($self) {
     ->then(sub ($data) {
       my $maint = $data->{maintenance_windows} // [];
 
+      # create a search/lookup hash
+      my %services = map {; $_ => 1} $self->service_ids->@*;
+
       # We only care if maint window covers a service we care about.
       my @relevant;
       for my $window (@$maint) {
-        next unless grep {; $_->{id} eq $self->service_id } $window->{services}->@*;
+        next unless grep {; $services{$_->{id}} } $window->{services}->@*;
         push @relevant, $window;
       }
 
@@ -734,7 +736,7 @@ sub _get_incidents ($self, @statuses) {
   # url params
   my $offset   = 0;
   my $limit    = 100;
-  my $sid      = $self->service_id;
+  my $services = join q{&}, map {; "service_ids[]=$_" } $self->service_ids->@*;
   my $statuses = join q{&}, map {; "statuses[]=$_" } @statuses;
 
   # iteration variables
@@ -743,7 +745,7 @@ sub _get_incidents ($self, @statuses) {
   my @results;
 
   while (! $is_done) {
-    my $url = "/incidents?service_ids[]=$sid&$statuses&limit=$limit&offset=$offset";
+    my $url = "/incidents?$services&$statuses&limit=$limit&offset=$offset";
 
     $self->_pd_request(GET => $url)
       ->then(sub ($data) {
@@ -795,8 +797,6 @@ sub _update_status_for_incidents ($self, $who, $status, $incident_ids) {
 }
 
 sub _ack_all ($self, $event) {
-  my $sid = $self->service_id;
-
   return $self->_get_incidents(qw(triggered))
     ->then(sub (@incidents) {
       my @unacked = map  {; $_->{id} } @incidents;
@@ -813,8 +813,6 @@ sub _ack_all ($self, $event) {
 }
 
 sub _resolve_incidents($self, $event, $arg) {
-  my $sid = $self->service_id;
-
   my $whose = $arg->{whose};
   Carp::confess("_resolve_incidents called with bogus args")
     unless $whose && ($whose eq 'all' || $whose eq 'own');

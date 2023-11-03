@@ -355,7 +355,7 @@ sub synergize {
       my $thing_config = $cfg->{$name};
       my $thing_class  = delete $thing_config->{class};
 
-      confess "no class given for $thing" unless $thing_class;
+      confess "no class given for $thing $name" unless $thing_class;
       require_module($thing_class);
 
       my $component = $thing_class->new({
