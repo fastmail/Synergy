@@ -36,6 +36,11 @@ has digitalocean_api_token => (
   required => 1,
 );
 
+has snippet_reactor_name => (
+  is       => 'ro',
+  isa      => 'Str',
+);
+
 has dobby => (
   is    => 'ro',
   lazy  => 1,
@@ -422,9 +427,22 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
     return await $event->reply("In-a-Box ($droplet->{name}) is now set up!");
   }
 
-  my $message = $exitcode == 0
-              ? "In-a-Box ($droplet->{name}) is now set up!"
-              : "Something went wrong setting up your box.";
+  my $message = "Something went wrong setting up your box.";
+
+  # If there's a pastebin/snippet capable reactor, use that
+  # If there isn't, and the current channel is slack, use a slack snippet
+  # else, discard stdout/stderr and return only an error message
+  if ($self->snippet_reactor_name && $self->hub->reactor_named($self->snippet_reactor_name)) {
+    my %payload;
+    $payload{title} = "In-a-Box setup failure ($droplet->{name})";
+    $payload{file_name} = "In-a-Box-setup-failure-$droplet->{name}.txt";
+    $payload{content} = "$stderr\n----(stdout)----\n$stdout";
+
+    my $snippet_url = await $self->hub->reactor_named('gitlab')
+      ->post_gitlab_snippet(\%payload);
+    $message .= " Here's a link to the output: $snippet_url";
+    return await $event->reply($message);
+  }
 
   if ($event->from_channel->isa('Synergy::Channel::Slack')) {
     $message .= " Here's the output from setup:";
