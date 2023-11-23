@@ -205,7 +205,7 @@ listener merge_request_mention => async sub ($self, $event) {
   my $replied = 0;
   my $declined_to_reply = 0;
 
-  for my $mr (@mrs) {
+  MR: for my $mr (@mrs) {
     my ($proj, $num) = split /!/, $mr, 2;
 
     # $proj might be a shortcut, or it might be an owner/repo string
@@ -230,127 +230,121 @@ listener merge_request_mention => async sub ($self, $event) {
       'PRIVATE-TOKEN' => $self->api_token,
     );
 
-    my $http_future = Future->wait_all($mr_get, $approval_get);
-    push @futures, $http_future;
+    await Future->wait_all($mr_get, $approval_get);
 
-    $http_future->on_done(sub ($mr_f, $approval_f) {
-      my $mr_res = $mr_f->get;
-      unless ($mr_res->is_success) {
-        $Logger->log([ "Error: %s", $mr_res->as_string ]);
-        return;
-      }
+    my $mr_res = $mr_get->get;
+    my $approval_res = $approval_get->get;
 
-      my $approval_res = $approval_f->get;
-      unless ($approval_res->is_success) {
-        $Logger->log([ "Error: %s", $approval_res->as_string ]);
-        return;
-      }
+    unless ($mr_res->is_success) {
+      $Logger->log([ "Error fetching MR: %s", $mr_res->as_string ]);
+      next MR;
+    }
 
-      my $data = $JSON->decode($mr_res->decoded_content);
-      my $approval_data = $JSON->decode($approval_res->decoded_content);
+    unless ($approval_res->is_success) {
+      $Logger->log([ "Error fetching approvals: %s", $approval_res->as_string ]);
+      next MR;
+    }
 
-      my $is_approved = $approval_data->{approved};
+    my $data = $JSON->decode($mr_res->decoded_content);
+    my $approval_data = $JSON->decode($approval_res->decoded_content);
 
-      if ($self->has_expanded_mr_recently($event, $data->{id})) {
-        $declined_to_reply++;
-        return;
-      }
+    my $is_approved = $approval_data->{approved};
 
-      $self->note_mr_expansion($event, $data->{id});
+    if ($self->has_expanded_mr_recently($event, $data->{id})) {
+      $event->ephemeral_reply("I've expanded $mr recently here; just scroll up a bit.");
+      $declined_to_reply++;
+      next MR;
+    }
 
-      my $state = $data->{state};
+    $self->note_mr_expansion($event, $data->{id});
 
-      my $reply = "$mr [$state, created by $data->{author}->{username}]: ";
-      $reply   .= "$data->{title} ($data->{web_url})";
+    my $state = $data->{state};
 
-      my $color = $state eq 'opened' ? '#1aaa4b'
-                : $state eq 'merged' ? '#1f78d1'
-                : $state eq 'closed' ? '#db3b21'
-                : undef;
+    my $reply = "$mr [$state, created by $data->{author}->{username}]: ";
+    $reply   .= "$data->{title} ($data->{web_url})";
 
-      my @fields;
-      if ($state eq 'opened') {
-        my $assignee = $data->{assignee}{name} // 'nobody';
-        push @fields, {
-          title => "Assigned",
-          value => $assignee,
-          short => \1
-        };
+    my $color = $state eq 'opened' ? '#1aaa4b'
+              : $state eq 'merged' ? '#1f78d1'
+              : $state eq 'closed' ? '#db3b21'
+              : undef;
 
-        my $created = DateTime::Format::ISO8601->parse_datetime($data->{created_at});
-
-        push @fields, {
-          title => "Opened",
-          value => ago(time - $created->epoch),
-          short => \1,
-        };
-      } else {
-        my $date = $data->{merged_at} // $data->{closed_at};
-        if ($date) {
-          # Huh! Turns out, sometimes MRs are marked merged or closed, but do
-          # not have an associated timestamp. -- michael, 2018-11-21
-          my $dt = DateTime::Format::ISO8601->parse_datetime($date);
-          push @fields, {
-            title => ucfirst $state,
-            value => ago(time - $dt->epoch),
-            short => \1,
-          };
-        }
-      }
-
-      my $approval_str = join q{, },
-        ($data->{work_in_progress} ? 'Work in progress' : ()),
-        ($is_approved ? "Approved" : "Not yet approved");
-
-      my $dv = $data->{downvotes};
-      my $downvote_str = $dv
-                       ? sprintf(' (%s %s)', $dv, PL_N('downvote', $dv))
-                       : '';
-
+    my @fields;
+    if ($state eq 'opened') {
+      my $assignee = $data->{assignee}{name} // 'nobody';
       push @fields, {
-        title => "Review status",
-        value => $approval_str . $downvote_str,
+        title => "Assigned",
+        value => $assignee,
         short => \1
       };
 
-      if (my $pipeline = $data->{pipeline}) {
-        my $status = ucfirst $pipeline->{status};
-        $status =~ s/_/ /g;
+      my $created = DateTime::Format::ISO8601->parse_datetime($data->{created_at});
+
+      push @fields, {
+        title => "Opened",
+        value => ago(time - $created->epoch),
+        short => \1,
+      };
+    } else {
+      my $date = $data->{merged_at} // $data->{closed_at};
+      if ($date) {
+        # Huh! Turns out, sometimes MRs are marked merged or closed, but do
+        # not have an associated timestamp. -- michael, 2018-11-21
+        my $dt = DateTime::Format::ISO8601->parse_datetime($date);
         push @fields, {
-          title => "Pipeline status",
-          value => $status,
+          title => ucfirst $state,
+          value => ago(time - $dt->epoch),
           short => \1,
         };
       }
+    }
 
-      my $slack = {
-        text        => "",
-        attachments => [{
-          fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
-          author_name => $data->{author}->{name},
-          author_icon => $data->{author}->{avatar_url},
-          title       => "$mr: $data->{title}",
-          title_link  => "$data->{web_url}",
-          color       => $color,
-          fields      => \@fields,
-        }],
+    my $approval_str = join q{, },
+      ($data->{work_in_progress} ? 'Work in progress' : ()),
+      ($is_approved ? "Approved" : "Not yet approved");
+
+    my $dv = $data->{downvotes};
+    my $downvote_str = $dv
+                     ? sprintf(' (%s %s)', $dv, PL_N('downvote', $dv))
+                     : '';
+
+    push @fields, {
+      title => "Review status",
+      value => $approval_str . $downvote_str,
+      short => \1
+    };
+
+    if (my $pipeline = $data->{pipeline}) {
+      my $status = ucfirst $pipeline->{status};
+      $status =~ s/_/ /g;
+      push @fields, {
+        title => "Pipeline status",
+        value => $status,
+        short => \1,
       };
+    }
 
-      $event->reply($reply, { slack => $slack });
-      $replied++;
-    });
+    my $slack = {
+      text        => "",
+      attachments => [{
+        fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
+        author_name => $data->{author}->{name},
+        author_icon => $data->{author}->{avatar_url},
+        title       => "$mr: $data->{title}",
+        title_link  => "$data->{web_url}",
+        color       => $color,
+        fields      => \@fields,
+      }],
+    };
+
+    $event->reply($reply, { slack => $slack });
+    $replied++;
   }
 
-  Future->wait_all(@futures)->on_done(sub {
-    return if $replied;
-
-    return $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
-      if $declined_to_reply;
-
-    return unless $event->was_targeted;
-
+  if ($event->was_targeted && !$replied && !$declined_to_reply) {
     $event->reply("Sorry, I couldn't find any merge request matching that.");
-  })->retain;
+  }
+
+  return;
 };
 
 listener mention_commit => async sub ($self, $event) {
