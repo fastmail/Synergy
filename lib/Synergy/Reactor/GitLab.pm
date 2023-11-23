@@ -57,12 +57,15 @@ has project_shortcuts => (
   traits => ['Hash'],
   writer => '_set_shortcuts',
   handles => {
-    is_known_project => 'exists',
-    project_named    => 'get',
+    _is_known_project => 'exists',
+    _project_named    => 'get',
     all_shortcuts    => 'keys',
     add_shortcuts    => 'set',
   }
 );
+
+sub is_known_project ($self, $key) { $self->_is_known_project(lc $key) }
+sub project_named    ($self, $key) { $self->_project_named(lc $key) }
 
 has custom_project_shortcuts => (
   is => 'ro',
@@ -492,18 +495,18 @@ sub _load_auto_shortcuts ($self) {
 
         next if $self->is_known_project($name);
 
-        if ($names{$name}) {
+        if ($names{lc $name}) {
           $Logger->log([ "GitLab: ignoring auto-shortcut %s: %s conflicts with %s",
-            $name,
+            lc $name,
             $path,
-            $names{$name},
+            $names{lc $name},
           ]);
 
-          push @conflicts, $name;
+          push @conflicts, lc $name;
           next;
         }
 
-        $names{$name} = $path;
+        $names{lc $name} = $path;
       }
     });
   }
