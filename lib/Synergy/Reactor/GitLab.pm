@@ -376,7 +376,7 @@ listener mention_commit => async sub ($self, $event) {
   my $replied = 0;
   my $declined_to_reply = 0;
 
-  for my $commit (@commits) {
+  COMMIT: for my $commit (@commits) {
     my ($proj, $sha) = split /\@/, $commit, 2;
 
     # $proj might be a shortcut, or it might be an owner/repo string
@@ -390,79 +390,70 @@ listener mention_commit => async sub ($self, $event) {
       $sha,
     );
 
-    my $http_future = $self->hub->http_get(
+    my $res = await $self->hub->http_get(
       $url,
       'PRIVATE-TOKEN' => $self->api_token,
     );
-    push @futures, $http_future;
 
-    $http_future->on_done(sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log([ "Error: %s", $res->as_string ]);
-        return;
-      }
+    unless ($res->is_success) {
+      $Logger->log([ "Error fetching commit: %s", $res->as_string ]);
+      next COMMIT;
+    }
 
-      my $data = $JSON->decode($res->decoded_content);
+    my $data = $JSON->decode($res->decoded_content);
 
-      if ($self->has_expanded_commit_recently($event, $data->{id})) {
-        $declined_to_reply++;
-        return;
-      }
+    if ($self->has_expanded_commit_recently($event, $data->{id})) {
+      $event->ephemeral_reply("I've expanded $commit recently here; just scroll up a bit.");
+      $declined_to_reply++;
+      next COMMIT;
+    }
 
-      $self->note_commit_expansion($event, $data->{id});
+    $self->note_commit_expansion($event, $data->{id});
 
-      my $commit_url = sprintf("%s/%s/commit/%s",
-        $self->url_base,
-        $project_id,
-        $data->{short_id},
-      );
+    my $commit_url = sprintf("%s/%s/commit/%s",
+      $self->url_base,
+      $project_id,
+      $data->{short_id},
+    );
 
-      my $reply = "$commit [$data->{author_name}]: $data->{title} ($commit_url)";
-      my $slack = sprintf("<%s|%s>: %s [%s]",
-        $commit_url,
-        $commit,
-        $data->{title},
-        $data->{author_name},
-      );
+    my $reply = "$commit [$data->{author_name}]: $data->{title} ($commit_url)";
+    my $slack = sprintf("<%s|%s>: %s [%s]",
+      $commit_url,
+      $commit,
+      $data->{title},
+      $data->{author_name},
+    );
 
-      my $author_icon = sprintf("https://www.gravatar.com/avatar/%s?s=16",
-        md5_hex($data->{author_email}),
-      );
+    my $author_icon = sprintf("https://www.gravatar.com/avatar/%s?s=16",
+      md5_hex($data->{author_email}),
+    );
 
-      # We don't need to be _quite_ that precise.
-      $data->{authored_date} =~ s/\.[0-9]{3}Z$/Z/;
+    # We don't need to be _quite_ that precise.
+    $data->{authored_date} =~ s/\.[0-9]{3}Z$/Z/;
 
-      my $msg = sprintf("commit <%s|%s>\nAuthor: %s\nDate: %s\n\n%s",
-        $commit_url,
-        $data->{id},
-        $data->{author_name},
-        $data->{authored_date},
-        $data->{message}
-      );
+    my $msg = sprintf("commit <%s|%s>\nAuthor: %s\nDate: %s\n\n%s",
+      $commit_url,
+      $data->{id},
+      $data->{author_name},
+      $data->{authored_date},
+      $data->{message}
+    );
 
-      $slack = {
-        text        => '',
-        attachments => [{
-          fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
-          text        => $msg,
-        }],
-      };
+    $slack = {
+      text        => '',
+      attachments => [{
+        fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
+        text        => $msg,
+      }],
+    };
 
-      $event->reply($reply, { slack => $slack });
-      $replied++;
-    });
+    $event->reply($reply, { slack => $slack });
+    $replied++;
   }
 
-  Future->wait_all(@futures)->on_done(sub {
-    return if $replied;
-
-    return $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
-      if $declined_to_reply;
-
-    return unless $event->was_targeted;
-
+  if ($event->was_targeted && !$replied && !$declined_to_reply) {
     $event->reply("I couldn't find a commit with that description.");
-  })->retain;
+  }
 };
 
 # For every namespace we care about (i.e., $self->relevant_owners), we'll add
