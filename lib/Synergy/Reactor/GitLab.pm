@@ -102,17 +102,10 @@ after register_with_hub => sub ($self, @) {
 async sub start ($self) {
   $self->add_shortcuts($self->custom_project_shortcuts->%*);
 
-  my $timer = IO::Async::Timer::Countdown->new(
-    delay => 60,
-    notifier_name => 'gitlab-load-shortcuts',
-    remove_on_expire => 1,
-    on_expire => sub {
-      $Logger->log("loading shortcuts from GitLab");
-      $self->_load_auto_shortcuts;
-    }
-  );
-
-  $self->hub->loop->add($timer->start);
+  $self->hub->loop->delay_future(after => 60)->then(sub {
+    $Logger->log("loading shortcuts from GitLab");
+    $self->_load_auto_shortcuts;
+  })->retain;
 
   return;
 }
@@ -461,63 +454,60 @@ listener mention_commit => async sub ($self, $event) {
 
 # For every namespace we care about (i.e., $self->relevant_owners), we'll add
 # a shortcut that's just the project name, unless it conflicts.
-sub _load_auto_shortcuts ($self) {
+async sub _load_auto_shortcuts ($self) {
   my @conflicts;
   my %names;
 
   my @futures;
 
-  for my $owner ($self->relevant_owners->@*) {
+  OWNER: for my $owner ($self->relevant_owners->@*) {
     my $url = sprintf("%s/v4/groups/$owner/projects?simple=1&per_page=100",
       $self->api_uri,
     );
 
-    my $http_future = $self->hub->http_get($url,
+    my $res = await $self->hub->http_get($url,
       'PRIVATE-TOKEN' => $self->api_token,
     );
-    push @futures, $http_future;
 
-    $http_future->on_done(sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log([ "Error: %s", $res->as_string ]);
-        return;
+    unless ($res->is_success) {
+      $Logger->log([ "Error fetching projects: %s", $res->as_string ]);
+      next OWNER;
+    }
+
+    my $data = $JSON->decode($res->decoded_content);
+
+    PROJECT: for my $proj (@$data) {
+      my $path = $proj->{path_with_namespace};
+
+      # Sometimes, for reasons I don't fully understand, this returns projects
+      # that are not actually owned by the owner.
+      my ($p_owner, $name) = split '/', $path;
+      next PROJECT unless $p_owner eq $owner;
+
+      next PROJECT if $self->is_known_project($name);
+
+      if ($names{lc $name}) {
+        $Logger->log([ "GitLab: ignoring auto-shortcut %s: %s conflicts with %s",
+          lc $name,
+          $path,
+          $names{lc $name},
+        ]);
+
+        push @conflicts, lc $name;
+        next PROJECT;
       }
 
-      my $data = $JSON->decode($res->decoded_content);
-
-      for my $proj (@$data) {
-        my $path = $proj->{path_with_namespace};
-
-        # Sometimes, for reasons I don't fully understand, this returns projects
-        # that are not actually owned by the owner.
-        my ($p_owner, $name) = split '/', $path;
-        next unless $p_owner eq $owner;
-
-        next if $self->is_known_project($name);
-
-        if ($names{lc $name}) {
-          $Logger->log([ "GitLab: ignoring auto-shortcut %s: %s conflicts with %s",
-            lc $name,
-            $path,
-            $names{lc $name},
-          ]);
-
-          push @conflicts, lc $name;
-          next;
-        }
-
-        $names{lc $name} = $path;
-      }
-    });
+      $names{lc $name} = $path;
+    }
   }
 
-  Future->wait_all(@futures)->on_ready(sub {
-    $Logger->log("loaded project auto-shortcuts");
-    delete $names{$_} for @conflicts;
-    return unless keys %names;
-    $self->add_shortcuts(%names);
-    $self->save_state;
-  })->retain;
+  $Logger->log("loaded project auto-shortcuts");
+  delete $names{$_} for @conflicts;
+  return unless keys %names;
+  $self->add_shortcuts(%names);
+  $self->save_state;
+
+  return;
 }
 
 sub _parse_search ($self, $text) {
