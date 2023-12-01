@@ -789,7 +789,6 @@ sub _queue_produce_page_list ($self, $queue_arg) {
   $Logger->log("GitLab GET: $uri");
 
   my $event   = $queue_arg->{event};
-  my $on_done = $queue_arg->{on_done};
 
   my $http_future = $self->hub->http_get(
     $uri,
@@ -864,7 +863,7 @@ sub _queue_produce_page_list ($self, $queue_arg) {
         $zero + 1,
         $zero + @page;
 
-      return $on_done->($header, \@page);
+      return Future->done($header, \@page);
     }
 
     return $self->_queue_produce_page_list({
@@ -896,55 +895,51 @@ async sub _handle_mr_search_string ($self, $text, $event) {
     return;
   }
 
-  my $reply_with_list = sub ($header, $mrs) {
-    my $text  = $header;
-    my $slack = "*$header*";
-
-    for my $mr (@$mrs) {
-      my $icons = q{};
-      if ($mr->{work_in_progress}) {
-        $icons .= "🚧";
-        $mr->{title} =~ s/^wip:?\s+//i;
-      }
-
-      $icons .= "✅" if $mr->{_is_approved};
-      $icons .= "👍" if $mr->{upvotes};
-      $icons .= "👎" if $mr->{downvotes};
-
-      $icons .= " " if length $icons;
-
-      $text  .= "\n* $icons $mr->{title}";
-      $slack .= sprintf "\n%s *<%s|%s>* %s%s — _(%s)_",
-        $self->_icon_for_mr($mr),
-        $mr->{web_url},
-        $self->_short_name_for_mr($mr),
-        $icons,
-        ($mr->{title} =~ s/^Draft: //r),
-        $mr->{author}{username}
-          . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
-
-      $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
-        if $mr->{labels} && $mr->{labels}->@*;
-    }
-
-    return $event->reply($text, { slack => $slack });
-    return Future->done;
-  };
-
   # We want N items, where N is the per-display-page value, always 10.
   # We want the Pth page.  This means items from index (P-1)*10 to P*10-1.
   #
   # If all items will be client-side approved, we need to fetch at least P*10
   # items, filter those, and see whether we need more.
 
-  return await $self->_queue_produce_page_list({
+  my ($header, $mrs) = await $self->_queue_produce_page_list({
     event     => $event,
-    on_done   => $reply_with_list,
     query_uri => $query->{uri},
     display_page  => $query->{page},
     local_filters     => $query->{local_filters},
     approval_filters  => $query->{approval_filters},
   });
+
+  my $text  = $header;
+  my $slack = "*$header*";
+
+  for my $mr (@$mrs) {
+    my $icons = q{};
+    if ($mr->{work_in_progress}) {
+      $icons .= "🚧";
+      $mr->{title} =~ s/^wip:?\s+//i;
+    }
+
+    $icons .= "✅" if $mr->{_is_approved};
+    $icons .= "👍" if $mr->{upvotes};
+    $icons .= "👎" if $mr->{downvotes};
+
+    $icons .= " " if length $icons;
+
+    $text  .= "\n* $icons $mr->{title}";
+    $slack .= sprintf "\n%s *<%s|%s>* %s%s — _(%s)_",
+      $self->_icon_for_mr($mr),
+      $mr->{web_url},
+      $self->_short_name_for_mr($mr),
+      $icons,
+      ($mr->{title} =~ s/^Draft: //r),
+      $mr->{author}{username}
+        . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
+
+    $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
+      if $mr->{labels} && $mr->{labels}->@*;
+  }
+
+  return await $event->reply($text, { slack => $slack });
 }
 
 sub mr_report ($self, $who, $arg = {}) {
