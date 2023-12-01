@@ -762,24 +762,22 @@ async sub _populate_mr_approvals ($self, $mrs) {
   return;
 }
 
-async sub _queue_produce_page_list ($self, $queue_arg) {
+async sub _execute_query ($self, $event, $query) {
   # Don't confuse API page with display page!  The API page is the page of 20
   # that we get from the API.  The display page is the page of 10 that we will
   # display to the user. -- rjbs, 2021-11-28
-  my $display_page = $queue_arg->{display_page} // 1;
-  my $per_page     = $queue_arg->{per_page}     // 10;
-  my $api_page     = $queue_arg->{api_page}     // 1;
+  my $display_page = $query->{display_page} // 1;
+  my $per_page     = $query->{per_page}     // 10;
+  my $api_page     = $query->{api_page}     // 1;
 
-  my @local_filters    = ($queue_arg->{local_filters}    // [])->@*;
-  my @approval_filters = ($queue_arg->{approval_filters} // [])->@*;
-
-  my $event   = $queue_arg->{event};
+  my @local_filters    = ($query->{local_filters}    // [])->@*;
+  my @approval_filters = ($query->{approval_filters} // [])->@*;
 
   my @mrs;
   my $saw_last_page;
 
   until (@mrs >= $display_page*$per_page || $saw_last_page) {
-    my $uri  = $queue_arg->{query_uri}->clone;
+    my $uri  = $query->{uri}->clone;
     $uri->query_param(page => $api_page);
 
     $Logger->log("GitLab GET: $uri");
@@ -871,15 +869,13 @@ async sub _page_for_search_string ($self, $text, $event, $arg = undef) {
   # If all items will be client-side approved, we need to fetch at least P*10
   # items, filter those, and see whether we need more.
 
-  my $page = await $self->_queue_produce_page_list({
-    event     => $event,
-    query_uri => $query->{uri},
-    display_page  => $query->{page},
-    local_filters     => $query->{local_filters},
-    approval_filters  => $query->{approval_filters},
-
-    ($arg && $arg->{per_page} ? (per_page => $arg->{per_page}) : ()),
-  });
+  my $page = await $self->_execute_query(
+    $event,
+    {
+      ($arg && $arg->{per_page} ? (per_page => $arg->{per_page}) : ()),
+      %$query,
+    },
+  );
 }
 
 async sub _handle_mr_search_string ($self, $text, $event) {
