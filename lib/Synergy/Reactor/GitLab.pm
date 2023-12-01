@@ -16,19 +16,15 @@ use DateTime::Format::ISO8601;
 use Digest::MD5 qw(md5_hex);
 use Future 0.36;  # for ->retain
 use Future::AsyncAwait;
-use IO::Async::Timer::Periodic;
 use JSON::MaybeXS;
-use Lingua::EN::Inflect qw(PL_N PL_V);
+use Lingua::EN::Inflect qw(PL_N);
 use List::Util qw(all uniq);
-use MIME::Base64;
-use POSIX qw(ceil);
 use String::Switches;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
 use Time::Duration qw(ago);
 use URI::Escape;
-use YAML::XS;
 
 my $JSON = JSON::MaybeXS->new->utf8->canonical;
 
@@ -546,9 +542,6 @@ sub _short_name_for_mr ($self, $mr) {
   # give us much about the project other than an id, but we do have the web_url
   # field, which is:
   #   https://gitlab.example.com/fastmail/hm/-/merge_requests/5094
-  #
-  # So, we extract the my-group/my-project and see whether we have a shortcut
-  # from (say) repos.yaml.
 
   my ($g_slash_p, $id) = $mr->{web_url} =~ m{([^/]+/[^/]+)/-/merge_requests/([0-9]+)\z};
 
