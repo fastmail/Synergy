@@ -910,7 +910,7 @@ async sub _handle_mr_search_string ($self, $text, $event) {
     my $icons = q{};
     if ($mr->{work_in_progress}) {
       $icons .= "🚧";
-      $mr->{title} =~ s/^wip:?\s+//i;
+      $mr->{title} =~ s/^Draft:?\s+//i;
     }
 
     $icons .= "✅" if $mr->{_is_approved};
