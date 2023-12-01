@@ -725,7 +725,7 @@ sub _compile_search ($self, $conds, $event) {
   };
 }
 
-async sub _populate_mr_approvals ($self, $arg, $mrs) {
+async sub _populate_mr_approvals ($self, $mrs) {
   my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @$mrs;
 
   my @approval_gets;
@@ -745,7 +745,7 @@ async sub _populate_mr_approvals ($self, $arg, $mrs) {
   }
 
   # Maybe they're all already populated!
-  return Future->done($arg, $mrs) unless @approval_gets;
+  return unless @approval_gets;
 
   my @res_f = await Future->wait_all(@approval_gets);
 
@@ -770,114 +770,94 @@ async sub _populate_mr_approvals ($self, $arg, $mrs) {
     $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
   }
 
-  return($arg, $mrs);
+  return;
 }
 
-sub _queue_produce_page_list ($self, $queue_arg) {
+async sub _queue_produce_page_list ($self, $queue_arg) {
   # Don't confuse API page with display page!  The API page is the page of 20
   # that we get from the API.  The display page is the page of 10 that we will
   # display to the user. -- rjbs, 2021-11-28
   my $display_page = $queue_arg->{display_page} // 1;
   my $api_page     = $queue_arg->{api_page}     // 1;
-  my $uri  = $queue_arg->{query_uri}->clone;
-  $uri->query_param(page => $api_page);
 
   my @local_filters    = ($queue_arg->{local_filters}    // [])->@*;
   my @approval_filters = ($queue_arg->{approval_filters} // [])->@*;
-  my @starting_list    = ($queue_arg->{starting_list}    // [])->@*;
-
-  $Logger->log("GitLab GET: $uri");
 
   my $event   = $queue_arg->{event};
 
-  my $http_future = $self->hub->http_get(
-    $uri,
-    'PRIVATE-TOKEN' => $self->api_token,
-  );
+  my @mrs;
+  my $saw_last_page;
 
-  $http_future->then(sub ($res) {
+  until (@mrs >= $display_page*10 || $saw_last_page) {
+    my $uri  = $queue_arg->{query_uri}->clone;
+    $uri->query_param(page => $api_page);
+
+    $Logger->log("GitLab GET: $uri");
+
+    my $res = await $self->hub->http_get(
+      $uri,
+      'PRIVATE-TOKEN' => $self->api_token,
+    );
+
     unless ($res->is_success) {
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      Future->fail("response no good");
+      $Logger->log([ "error fetching merge requests: %s", $res->as_string ]);
+      Synergy::X->throw_public("Something went wrong fetching merge requests.");
     }
 
-    my $data = $JSON->decode($res->decoded_content);
+    my $mr_batch = $JSON->decode($res->decoded_content);
 
-    unless (@$data) {
+    unless (@$mr_batch) {
       $event->error_reply("No results!");
-      return Future->fail('no result'); # Failure seems wrong.
+      return;
     }
 
     my $zero = ($display_page-1) * 10;
 
-    if ($zero > $#$data) {
+    if ($zero > $#$mr_batch) {
       $event->error_reply("You've gone past the last page!");
-      return Future->fail('past last page'); # Failure seems wrong.
+      return;
     }
 
-    my $is_last_page = ($res->header('x-page')        // -1)
-                    == ($res->header('x-total-pages') // -2);
+    $saw_last_page = 1
+      if ($res->header('x-page') // -1) == ($res->header('x-total-pages') // -2);
 
-    my %arg = (
-      is_last_page  => $is_last_page,
-      starting_list => \@starting_list,
-    );
+    if (@approval_filters) {
+      # If we need to have approvals before postfilters, we will get them now.
+      await $self->_populate_mr_approvals($mr_batch);
 
-    Future->done(\%arg, $data);
-  })->then(sub ($arg, $mrs) {
-    # If we need to have approvals before postfilters, we will get them now.
-    return Future->done($arg, $mrs) unless @approval_filters;
-
-    $self->_populate_mr_approvals($arg, $mrs)->then(sub ($arg, $mrs) {
-      @$mrs = grep {;
+      @$mr_batch = grep {;
         my $datum = $_;
         all { $_->($datum) } @approval_filters;
-      } @$mrs;
+      } @$mr_batch;
+    }
 
-      Future->done($arg, $mrs);
-    });
-  })->then(sub ($arg, $mrs) {
-    if (@$mrs) {
+    if (@$mr_batch) {
       # Stupid, inefficient, good enough. -- rjbs, 2019-07-29
-      @$mrs = grep {;
+      @$mr_batch = grep {;
         my $datum = $_;
         all { $_->($datum) } @local_filters;
-      } @$mrs;
+      } @$mr_batch;
     }
 
-    my @list = (
-      $arg->{starting_list}->@*,
-      @$mrs,
-    );
-
-    return @approval_filters
-      ? Future->done($arg, \@list)
-      : $self->_populate_mr_approvals($arg, \@list);
-  })->then(sub ($arg, $mrs) {
-    if (@$mrs >= $display_page*10 || $arg->{is_last_page}) {
-      my $zero = ($display_page-1) * 10;
-      my @page = grep {; $_ } $mrs->@[ $zero .. $zero+9 ];
-
-      my $header = sprintf "Results, page %s (items %s .. %s):",
-        $display_page,
-        $zero + 1,
-        $zero + @page;
-
-      return Future->done($header, \@page);
+    if (!@approval_filters) {
+      # We didn't have to do this before local filters, so we'll do it now.
+      await $self->_populate_mr_approvals($mr_batch);
     }
 
-    return $self->_queue_produce_page_list({
-      %$queue_arg,
-      starting_list => $mrs,
-      api_page      => $api_page + 1,
-    });
-  })->else(sub ($err, @rest) {
-    # handle known-fine cases
-    return Future->done if $err eq 'no result' || $err eq 'past last page';
+    push @mrs, @$mr_batch;
 
-    $Logger->log([ "ERROR: %s", [$err, @rest] ]);
-    Future->fail($err, @rest);
-  });
+    $api_page++;
+  }
+
+  my $zero = ($display_page-1) * 10;
+  my @page = grep {; $_ } @mrs[ $zero .. $zero+9 ];
+
+  my $header = sprintf "Results, page %s (items %s .. %s):",
+    $display_page,
+    $zero + 1,
+    $zero + @page;
+
+  return($header, \@page);
 }
 
 async sub _handle_mr_search_string ($self, $text, $event) {
@@ -908,6 +888,8 @@ async sub _handle_mr_search_string ($self, $text, $event) {
     local_filters     => $query->{local_filters},
     approval_filters  => $query->{approval_filters},
   });
+
+  return unless defined $header;
 
   my $text  = $header;
   my $slack = "*$header*";
