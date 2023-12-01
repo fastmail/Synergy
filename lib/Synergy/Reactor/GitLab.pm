@@ -852,12 +852,12 @@ async sub _queue_produce_page_list ($self, $queue_arg) {
   my $zero = ($display_page-1) * 10;
   my @page = grep {; $_ } @mrs[ $zero .. $zero+9 ];
 
-  my $header = sprintf "Results, page %s (items %s .. %s):",
-    $display_page,
-    $zero + 1,
-    $zero + @page;
-
-  return($header, \@page);
+  return {
+    page_number => $display_page,
+    first_index => $zero + 1,
+    last_index  => $zero + @page,
+    mrs         => \@page,
+  };
 }
 
 async sub _handle_mr_search_string ($self, $text, $event) {
@@ -881,7 +881,7 @@ async sub _handle_mr_search_string ($self, $text, $event) {
   # If all items will be client-side approved, we need to fetch at least P*10
   # items, filter those, and see whether we need more.
 
-  my ($header, $mrs) = await $self->_queue_produce_page_list({
+  my $page = await $self->_queue_produce_page_list({
     event     => $event,
     query_uri => $query->{uri},
     display_page  => $query->{page},
@@ -889,12 +889,17 @@ async sub _handle_mr_search_string ($self, $text, $event) {
     approval_filters  => $query->{approval_filters},
   });
 
-  return unless defined $header;
+  return unless defined $page;
+
+  my $header = sprintf "Results, page %s (items %s .. %s):",
+    $page->{page_number},
+    $page->{first_index},
+    $page->{last_index};
 
   my $text  = $header;
   my $slack = "*$header*";
 
-  for my $mr (@$mrs) {
+  for my $mr ($page->{mrs}->@*) {
     my $icons = q{};
     if ($mr->{work_in_progress}) {
       $icons .= "🚧";
