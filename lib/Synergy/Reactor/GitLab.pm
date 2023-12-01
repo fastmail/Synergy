@@ -861,11 +861,11 @@ async sub _queue_produce_page_list ($self, $queue_arg) {
   };
 }
 
-async sub _handle_mr_search_string ($self, $text, $event) {
+async sub _page_for_search_string ($self, $text, $event) {
   my $conds = $self->_parse_search($text);
 
   unless ($conds) {
-    return await $event->error_reply("I didn't understand your search.");
+    Synergy::X->throw_public("I didn't understand your search.");
   }
 
   my $query = $self->_compile_search($conds, $event);
@@ -889,6 +889,10 @@ async sub _handle_mr_search_string ($self, $text, $event) {
     local_filters     => $query->{local_filters},
     approval_filters  => $query->{approval_filters},
   });
+}
+
+async sub _handle_mr_search_string ($self, $text, $event) {
+  my $page = await $self->_page_for_search_string($text, $event);
 
   return unless defined $page;
 
@@ -913,11 +917,13 @@ async sub _handle_mr_search_string ($self, $text, $event) {
 
     $icons .= " " if length $icons;
 
-    $text  .= "\n* $icons $mr->{title}";
+    my $short_name = $self->_short_name_for_mr($mr);
+
+    $text  .= "\n* $icons $short_name $mr->{title}";
     $slack .= sprintf "\n%s *<%s|%s>* %s%s — _(%s)_",
       $self->_icon_for_mr($mr),
       $mr->{web_url},
-      $self->_short_name_for_mr($mr),
+      $short_name,
       $icons,
       ($mr->{title} =~ s/^Draft: //r),
       $mr->{author}{username}
