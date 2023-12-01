@@ -614,7 +614,7 @@ sub _compile_search ($self, $conds, $event) {
         $value = $value eq '*' ? 'Any' : 'None';
       } else {
         $not = $value =~ s/\A!//;
-        my $who = $self->resolve_name($value, $event->from_user);
+        my $who = $self->resolve_name($value, $event && $event->from_user);
         unless ($who) {
           $event->error_reply("I don't know who $value is.");
           return;
@@ -861,7 +861,7 @@ async sub _queue_produce_page_list ($self, $queue_arg) {
   };
 }
 
-async sub _page_for_search_string ($self, $text, $event) {
+async sub _page_for_search_string ($self, $text, $event, $arg = undef) {
   my $conds = $self->_parse_search($text);
 
   unless ($conds) {
@@ -888,6 +888,8 @@ async sub _page_for_search_string ($self, $text, $event) {
     display_page  => $query->{page},
     local_filters     => $query->{local_filters},
     approval_filters  => $query->{approval_filters},
+
+    ($arg && $arg->{per_page} ? (per_page => $arg->{per_page}) : ()),
   });
 }
 
@@ -936,116 +938,87 @@ async sub _handle_mr_search_string ($self, $text, $event) {
   return await $event->reply($text, { slack => $slack });
 }
 
-sub mr_report ($self, $who, $arg = {}) {
+async sub mr_report ($self, $who, $arg = {}) {
   my @futures;
 
   my $user_id = $self->get_user_preference($who, 'user-id');
 
   return unless $user_id;
 
-  for my $pair (
-    # TODO: Cope with pagination for real. -- rjbs, 2018-08-17
-    [ filed => sprintf("%s/v4/merge_requests/?scope=all&author_id=%s&state=opened&per_page=100",
-        $self->api_uri, $user_id) ],
-    [ assigned => sprintf("%s/v4/merge_requests/?scope=all&assignee_id=%s&state=opened&per_page=100",
-        $self->api_uri, $user_id) ],
-  ) {
-    my ($type, $uri) = @$pair;
+  my $uri = URI->new(sprintf '%s/dashboard/merge_requests?scope=all&state=opened',
+    $self->url_base,
+  );
 
-    my $http_future = $self->hub->http_get(
-      $uri,
-      'PRIVATE-TOKEN' => $self->api_token,
+  my $username = $who->username;
+
+  ### These categories copied from the shortcuts for "mrs SHORTCUT":
+  #
+  # todo    => 'by:!me for:me backlogged:no',
+  # ready   => 'by:me for:me approved:yes',
+  # waiting => 'by:me for:!me for:* backlogged:no',
+  #
+  # The third element in the arrayrefs below is URI query parameters to put on
+  # the link to human-facing GitLab for these.
+  my @to_report = (
+    [
+      "awaiting your review",
+      "by:!$username for:$username backlogged:no",
+      { assignee_username => $username, 'not[author_username]' => $username },
+    ],
+    [
+      "approved and with you",
+      "by:$username for:$username approved:yes",
+      {
+        assignee_username => $username,
+        author_username   => $username,
+        'approved_by_usernames[]', 'Any'
+      },
+    ],
+    [
+      "awaiting review by someone else",
+      "by:$username for:!$username backlogged:no",
+      { 'not[assignee_username]' => $username, 'author_username' => $username },
+    ],
+  );
+
+  my @text;
+  my @slack;
+
+  for my $pair (@to_report) {
+    my ($desc, $search, $link_params) = @$pair;
+
+    # We don't have an $event, which would be a problem if anything in here was
+    # going to hit an error, which it shouldn't.  Still, we should replace
+    # event with something better in the future, like "who".  We could
+    # eliminate using $event->error_reply by using Synergy::X.
+    # -- rjbs, 2023-12-01
+    my $page = await $self->_page_for_search_string(
+      $search,
+      undef, # should be $event
+      { per_page => 26 },
     );
 
-    push @futures, $http_future->then(sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log([ "Error: %s", $res->as_string ]);
+    next unless $page && $page->{last_index};
 
-        return Future->done($type => undef);
-      }
+    my $link = $uri->clone;
+    $link->query_param($_ => $link_params->{$_}) for keys %$link_params;
 
-      my $data = $JSON->decode($res->decoded_content);
-      for my $mr (@$data) {
-        $mr->{_isBacklogged} = 1
-          if grep {; lc $_ eq 'backlogged' } $mr->{labels}->@*;
+    push @text, sprintf "\N{LOWER LEFT CRAYON} Merge requests %s: %i",
+      $desc,
+      $page->{last_index} == 26 ? '25+' : $page->{last_index};
 
-        $mr->{_isSelfAssigned} = 1
-          if $mr->{assignee} && $mr->{assignee}{id} == $user_id
-                             && $mr->{author}{id}   == $user_id;
-      }
-
-      return Future->done($type => $data);
-    });
+    push @slack, sprintf "\N{LOWER LEFT CRAYON} Merge requests <%s|%s>: %i",
+      $link,
+      $desc,
+      $page->{last_index} == 26 ? '25+' : $page->{last_index};
   }
 
-  Future->wait_all(@futures)->then(sub (@futures) {
-    my %result = map {; $_->get } @futures;
-
-    if (! defined $result{assigned} || ! defined $result{filed}) {
-      return Future->new->done(
-        [ "Something when wrong when trying to get merge request data." ]
-      );
-    }
-
-    my @selfies  = grep {; ! $_->{_isBacklogged} &&   $_->{_isSelfAssigned} }
-                   $result{filed}->@*;
-    my @filed    = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
-                   $result{filed}->@*;
-    my @assigned = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
-                   $result{assigned}->@*;
-
-    return Future->done unless @filed || @assigned || @selfies;
-
-    my $wipstr = sub ($mrs) {
-      my $wip = grep {; $_->{title} =~ /^wip:/i } @$mrs;
-      return $wip
-        ? (sprintf ' (of which %i %s WIP)', $wip, PL_V('is', $wip))
-        : '';
-    };
-
-    my $link = sub ($author, $assignee) {
-      return sprintf '<%s/dashboard/merge_requests?scope=all&state=opened%s%s|GL>',
-        $self->url_base,
-        (defined $author   ? "&author_username=$author"     : ''),
-        (defined $assignee ? "&assignee_username=$assignee" : ''),
-    };
-
-    my @plain;
-    my @slack;
-
-    if (@filed) {
-      push @plain, sprintf "\N{LOWER LEFT CRAYON} Merge %s waiting on others: %i%s",
-        PL_N('request', 0+@filed), 0+@filed, $wipstr->(\@filed);
-
-      my $url = $link->($who->username, undef);
-      push @slack, $plain[-1] =~ s/ / $url /r;
-    }
-
-    if (@assigned) {
-      my $wip = grep {; $_->{title} =~ /^wip:/i } @filed;
-      push @plain, sprintf "\N{LOWER LEFT CRAYON} Merge %s to review: %i%s",
-        PL_N('request', 0+@assigned), 0+@assigned, $wipstr->(\@assigned);
-
-      my $url = $link->(undef, $who->username);
-      push @slack, $plain[-1] =~ s/ / $url /r;
-    }
-
-    if (@selfies) {
-      my $wip = grep {; $_->{title} =~ /^wip:/i } @filed;
-      push @plain, sprintf "\N{LOWER LEFT CRAYON} Self-assigned merge %s: %i%s",
-        PL_N('request', 0+@selfies), 0+@selfies, $wipstr->(\@selfies);
-
-      my $url = $link->($who->username, $who->username);
-      push @slack, $plain[-1] =~ s/ / $url /r;
-    }
-
-    return Future->done([
-      (join qq{\n}, @plain),
-      {
-        slack => (join qq{\n}, @slack),
-      }
-    ]);
-  });
+  return [
+    (join qq{\n}, @text),
+    {
+      slack => join qq{\n}, @slack
+    },
+  ];
 }
 
 async sub post_gitlab_snippet ($self, $payload) {
