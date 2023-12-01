@@ -222,10 +222,7 @@ listener merge_request_mention => async sub ($self, $event) {
       'PRIVATE-TOKEN' => $self->api_token,
     );
 
-    await Future->wait_all($mr_get, $approval_get);
-
-    my $mr_res = $mr_get->get;
-    my $approval_res = $approval_get->get;
+    my ($mr_res, $approval_res) = await Future->needs_all($mr_get, $approval_get);
 
     unless ($mr_res->is_success) {
       $Logger->log([ "Error fetching MR: %s", $mr_res->as_string ]);
@@ -740,10 +737,9 @@ async sub _populate_mr_approvals ($self, $mrs) {
   # Maybe they're all already populated!
   return unless @approval_gets;
 
-  my @res_f = await Future->wait_all(@approval_gets);
+  my @responses = await Future->needs_all(@approval_gets);
 
-  for my $res_f (@res_f) {
-    my $res = $res_f->get;
+  for my $res (@responses) {
     my $approval_data = $JSON->decode($res->decoded_content);
 
     # This is absurd.  The docs on getting approvals show that the id,
