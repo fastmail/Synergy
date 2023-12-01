@@ -4,7 +4,7 @@ use utf8;
 package Synergy::Reactor::GitLab;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening',
+with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences',
      'Synergy::Role::DeduplicatesExpandos' => {
        expandos => [qw( mr commit )],
@@ -16,17 +16,15 @@ use DateTime::Format::ISO8601;
 use Digest::MD5 qw(md5_hex);
 use Future 0.36;  # for ->retain
 use Future::AsyncAwait;
-use IO::Async::Timer::Periodic;
 use JSON::MaybeXS;
-use Lingua::EN::Inflect qw(PL_N PL_V);
+use Lingua::EN::Inflect qw(PL_N);
 use List::Util qw(all uniq);
-use MIME::Base64;
-use POSIX qw(ceil);
 use String::Switches;
+use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
+use Synergy::Util qw(reformat_help);
 use Time::Duration qw(ago);
 use URI::Escape;
-use YAML::XS;
 
 my $JSON = JSON::MaybeXS->new->utf8->canonical;
 
@@ -55,12 +53,15 @@ has project_shortcuts => (
   traits => ['Hash'],
   writer => '_set_shortcuts',
   handles => {
-    is_known_project => 'exists',
-    project_named    => 'get',
+    _is_known_project => 'exists',
+    _project_named    => 'get',
     all_shortcuts    => 'keys',
     add_shortcuts    => 'set',
   }
 );
+
+sub is_known_project ($self, $key) { $self->_is_known_project(lc $key) }
+sub project_named    ($self, $key) { $self->_project_named(lc $key) }
 
 has custom_project_shortcuts => (
   is => 'ro',
@@ -97,17 +98,10 @@ after register_with_hub => sub ($self, @) {
 async sub start ($self) {
   $self->add_shortcuts($self->custom_project_shortcuts->%*);
 
-  my $timer = IO::Async::Timer::Countdown->new(
-    delay => 60,
-    notifier_name => 'gitlab-load-shortcuts',
-    remove_on_expire => 1,
-    on_expire => sub {
-      $Logger->log("loading shortcuts from GitLab");
-      $self->_load_auto_shortcuts;
-    }
-  );
-
-  $self->hub->loop->add($timer->start);
+  $self->hub->loop->delay_future(after => 60)->then(sub {
+    $Logger->log("loading shortcuts from GitLab");
+    $self->_load_auto_shortcuts;
+  })->retain;
 
   return;
 }
@@ -118,142 +112,395 @@ sub state ($self) {
   };
 }
 
-my $MRS_HELP = <<'EOH' =~ s/(\S)\n([^\s•])/$1 $2/rg;
-The *mrsearch* command searches merge requests in GitLab.  You can pass in a
-list of colon-separated pairs like *for:me* to limit the results, or just words
-to search for.  Here are the arguments you can pass:
+my %MR_SHORTCUT = (
+  todo    => 'by:!me for:me backlogged:no',
+  ready   => 'by:me for:me approved:yes',
+  waiting => 'by:me for:!me for:* backlogged:no',
+);
 
-• *for:`USER`*: MRs assigned to the named user; `*` for "assigned to anybody"
-or `~` for "assigned to nobody"
-• *by:`USER`*: MRs authored by the named user
-• *approved:`{yes,no,both}`*: only MRs that are (or are not) approved to merge
-• *label:`LABEL`*: MRs with the given label; `*` for "has a label at all" or
-`~` for "has no labels"
-• *backlogged:`{yes,no,both}`*: whether or not to include MRs with the "backlogged" label
-• *wip:`{yes,no,both}`*: whether or not to include works in progress
+command "mrsearch" => {
+  aliases => [ "mrs" ],
+  help    => reformat_help(<<~'EOH'),
+    The *mrsearch* command searches merge requests in GitLab.  You can pass in
+    a list of colon-separated pairs like *for:me* to limit the results, or just
+    words to search for.  Here are the arguments you can pass:
 
-Alternatively, you can just pass a single argument as a shortcut:
-• *todo*: MRs that are waiting for your review
-• *waiting*: MRs you sent out for review
-• *ready*: MRs that you wrote, are assigned to you, and are approved
-EOH
+    • *for:`USER`*: MRs assigned to the named user; `*` for "assigned to
+    anybody" or `~` for "assigned to nobody"
+    • *by:`USER`*: MRs authored by the named user
+    • *approved:`{yes,no,both}`*: only MRs that are (or are not) approved to merge
+    • *label:`LABEL`*: MRs with the given label; `*` for "has a label at all"
+    or `~` for "has no labels"
+    • *backlogged:`{yes,no,both}`*: whether or not to include MRs with the
+    "backlogged" label
+    • *wip:`{yes,no,both}`*: whether or not to include works in progress
 
-sub listener_specs {
-  return (
-    {
-      name      => 'r?',
-      method    => 'handle_r_hook',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text eq 'r?' },
-      help_entries => [
-        { title => 'r?',
-          text  => 'This is short for `mrsearch for:me backlogged:no` -- in other words, "what can I act on right now?".'
-        },
-      ],
-    },
-    {
-      name      => 'mr-search',
-      method    => 'handle_mr_search',
-      exclusive => 1,
-      targeted  => 1,
-      predicate => sub ($self, $e) { $e->text =~ /^mrs(?:earch)?(?:\z|\s+)/i },
-      help_entries => [
-        {
-          title => 'mrs',
-          text  => $MRS_HELP,
-        },
-        {
-          title => 'mrsearch',
-          text  => $MRS_HELP,
-        },
-      ],
-    },
-    {
-      name => 'mention-mr',
-      method => 'handle_merge_request',
-      predicate => sub ($self, $e) {
-        return if $e->text =~ /^\s*\@?bort/i;
-        return 1 if $e->text =~ /\b[-_a-z]+!\d+(\W|$)/in;
+    Alternatively, you can just pass a single argument as a shortcut:
+    • *todo*: MRs that are waiting for your review
+    • *waiting*: MRs you sent out for review
+    • *ready*: MRs that you wrote, are assigned to you, and are approved
+    EOH
+} => async sub ($self, $event, $rest) {
+  unless (length $rest) {
+    return await $event->error_reply("What should I search for?  (Maybe look at `help mrsearch`?)");
+  }
 
-        my $base = $self->url_base;
-        return 1 if $e->text =~ /\Q$base\E.*?merge_requests/;
-      },
-      allow_empty_help => 1,
-    },
-    {
-      name => 'mention-commit',
-      method => 'handle_commit',
-      predicate => sub ($self, $e) {
-        return 1 if $e->text =~ /(^|\s)[-_a-z]+\@[0-9a-f]{7,40}(\W|$)/in;
+  # Fun fact: we document only "mrs todo" but "mrs todo x:y" works, 99% so that
+  # you can say "mrs todo page:2" -- rjbs, 2021-11-29
+  if ($rest =~ s/\A([a-z]\S+)(\s|$)//i) {
+    $rest = ($MR_SHORTCUT{$1} // $1) . " $rest";
+    $rest =~ s/\s+$//;
+  }
 
-        state $base = $self->url_base;
-        return 1 if $e->text =~ /\Q$base\E.*?commit/;
-      },
-      allow_empty_help => 1,
-    },
-  );
-}
+  return await $self->_handle_mr_search_string($rest, $event);
+};
+
+command 'r?' => {
+  help => reformat_help(<<~'EOH'),
+    This is short for `mrsearch for:me backlogged:no` -- in other words, "what
+    can I act on right now?".
+    EOH
+} => async sub ($self, $event, $rest) {
+  return await $self->_handle_mr_search_string("for:me backlogged:no", $event);
+};
+
+listener merge_request_mention => async sub ($self, $event) {
+  my $text = $event->text;
+
+  # Don't have a bot loop.  (There are better ways to deal with this later.)
+  return if $text =~ /^\s*\@?bort/i;
+
+  my $base = $self->url_base;
+  unless (
+    $text =~ /\b[-_a-z]+!\d+(\W|$)/in
+    ||
+    $text =~ /\Q$base\E.*?merge_requests/
+  ) {
+    # No mention, move on.
+    return;
+  }
+
+  my @mrs = $text =~ /\b([-_a-z]+!\d+)(?=\W|$)/gi;
+
+  $text =~ s/\Q$_// for @mrs;
+
+  $event->mark_handled if $event->was_targeted && $text !~ /\S/;
+
+  my @found = $event->text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/merge_requests/([0-9]+)}g;
+
+  while (my ($key, $num) = splice @found, 0, 2) {
+    push @mrs, "$key!$num";
+  }
+
+  @mrs = uniq @mrs;
+  my @futures;
+  my $replied = 0;
+  my $declined_to_reply = 0;
+
+  MR: for my $mr (@mrs) {
+    my ($proj, $num) = split /!/, $mr, 2;
+
+    # $proj might be a shortcut, or it might be an owner/repo string
+    my $project_id = $self->is_known_project($proj)
+                   ? $self->project_named($proj)
+                   : $proj;
+
+    my $url = sprintf("%s/v4/projects/%s/merge_requests/%d",
+      $self->api_uri,
+      uri_escape($project_id),
+      $num,
+    );
+
+    my $mr_get = $self->hub->http_get(
+      $url,
+      'PRIVATE-TOKEN' => $self->api_token,
+    );
+
+    # approval status is a separate call (sigh)
+    my $approval_get = $self->hub->http_get(
+      "$url/approvals",
+      'PRIVATE-TOKEN' => $self->api_token,
+    );
+
+    my ($mr_res, $approval_res) = await Future->needs_all($mr_get, $approval_get);
+
+    unless ($mr_res->is_success) {
+      $Logger->log([ "Error fetching MR: %s", $mr_res->as_string ]);
+      next MR;
+    }
+
+    unless ($approval_res->is_success) {
+      $Logger->log([ "Error fetching approvals: %s", $approval_res->as_string ]);
+      next MR;
+    }
+
+    my $data = $JSON->decode($mr_res->decoded_content);
+    my $approval_data = $JSON->decode($approval_res->decoded_content);
+
+    my $is_approved = $approval_data->{approved};
+
+    if ($self->has_expanded_mr_recently($event, $data->{id})) {
+      $event->ephemeral_reply("I've expanded $mr recently here; just scroll up a bit.");
+      $declined_to_reply++;
+      next MR;
+    }
+
+    $self->note_mr_expansion($event, $data->{id});
+
+    my $state = $data->{state};
+
+    my $reply = "$mr [$state, created by $data->{author}->{username}]: ";
+    $reply   .= "$data->{title} ($data->{web_url})";
+
+    my $color = $state eq 'opened' ? '#1aaa4b'
+              : $state eq 'merged' ? '#1f78d1'
+              : $state eq 'closed' ? '#db3b21'
+              : undef;
+
+    my @fields;
+    if ($state eq 'opened') {
+      my $assignee = $data->{assignee}{name} // 'nobody';
+      push @fields, {
+        title => "Assigned",
+        value => $assignee,
+        short => \1
+      };
+
+      my $created = DateTime::Format::ISO8601->parse_datetime($data->{created_at});
+
+      push @fields, {
+        title => "Opened",
+        value => ago(time - $created->epoch),
+        short => \1,
+      };
+    } else {
+      my $date = $data->{merged_at} // $data->{closed_at};
+      if ($date) {
+        # Huh! Turns out, sometimes MRs are marked merged or closed, but do
+        # not have an associated timestamp. -- michael, 2018-11-21
+        my $dt = DateTime::Format::ISO8601->parse_datetime($date);
+        push @fields, {
+          title => ucfirst $state,
+          value => ago(time - $dt->epoch),
+          short => \1,
+        };
+      }
+    }
+
+    my $approval_str = join q{, },
+      ($data->{work_in_progress} ? 'Work in progress' : ()),
+      ($is_approved ? "Approved" : "Not yet approved");
+
+    my $dv = $data->{downvotes};
+    my $downvote_str = $dv
+                     ? sprintf(' (%s %s)', $dv, PL_N('downvote', $dv))
+                     : '';
+
+    push @fields, {
+      title => "Review status",
+      value => $approval_str . $downvote_str,
+      short => \1
+    };
+
+    if (my $pipeline = $data->{pipeline}) {
+      my $status = ucfirst $pipeline->{status};
+      $status =~ s/_/ /g;
+      push @fields, {
+        title => "Pipeline status",
+        value => $status,
+        short => \1,
+      };
+    }
+
+    my $slack = {
+      text        => "",
+      attachments => [{
+        fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
+        author_name => $data->{author}->{name},
+        author_icon => $data->{author}->{avatar_url},
+        title       => "$mr: $data->{title}",
+        title_link  => "$data->{web_url}",
+        color       => $color,
+        fields      => \@fields,
+      }],
+    };
+
+    $event->reply($reply, { slack => $slack });
+    $replied++;
+  }
+
+  if ($event->was_targeted && !$replied && !$declined_to_reply) {
+    $event->reply("Sorry, I couldn't find any merge request matching that.");
+  }
+
+  return;
+};
+
+listener mention_commit => async sub ($self, $event) {
+  my $text = $event->text;
+
+  my $base = $self->url_base;
+
+  unless (
+    $text =~ /(^|\s)[-_a-z]+\@[0-9a-f]{7,40}(\W|$)/in
+    ||
+    $text =~ /\Q$base\E.*?commit/
+  ) {
+    # No mention, move on.
+    return;
+  }
+
+  $event->mark_handled if $event->was_targeted;
+  my @commits = $text =~ /(?:^|\s)([-_a-z]+\@[0-9a-fA-F]{7,40})(?=\W|$)/gi;
+
+  my %found = $text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/commit/([0-9a-f]{6,40})}i;
+
+  for my $key (keys %found) {
+    my $sha = $found{$key};
+    push @commits, "$key\@$sha";
+  }
+
+  @commits = uniq @commits;
+  my @futures;
+  my $replied = 0;
+  my $declined_to_reply = 0;
+
+  COMMIT: for my $commit (@commits) {
+    my ($proj, $sha) = split /\@/, $commit, 2;
+
+    # $proj might be a shortcut, or it might be an owner/repo string
+    my $project_id = $self->is_known_project($proj)
+                   ? $self->project_named($proj)
+                   : $proj;
+
+    my $url = sprintf("%s/v4/projects/%s/repository/commits/%s",
+      $self->api_uri,
+      uri_escape($project_id),
+      $sha,
+    );
+
+    my $res = await $self->hub->http_get(
+      $url,
+      'PRIVATE-TOKEN' => $self->api_token,
+    );
+
+    unless ($res->is_success) {
+      $Logger->log([ "Error fetching commit: %s", $res->as_string ]);
+      next COMMIT;
+    }
+
+    my $data = $JSON->decode($res->decoded_content);
+
+    if ($self->has_expanded_commit_recently($event, $data->{id})) {
+      $event->ephemeral_reply("I've expanded $commit recently here; just scroll up a bit.");
+      $declined_to_reply++;
+      next COMMIT;
+    }
+
+    $self->note_commit_expansion($event, $data->{id});
+
+    my $commit_url = sprintf("%s/%s/commit/%s",
+      $self->url_base,
+      $project_id,
+      $data->{short_id},
+    );
+
+    my $reply = "$commit [$data->{author_name}]: $data->{title} ($commit_url)";
+    my $slack = sprintf("<%s|%s>: %s [%s]",
+      $commit_url,
+      $commit,
+      $data->{title},
+      $data->{author_name},
+    );
+
+    my $author_icon = sprintf("https://www.gravatar.com/avatar/%s?s=16",
+      md5_hex($data->{author_email}),
+    );
+
+    # We don't need to be _quite_ that precise.
+    $data->{authored_date} =~ s/\.[0-9]{3}Z$/Z/;
+
+    my $msg = sprintf("commit <%s|%s>\nAuthor: %s\nDate: %s\n\n%s",
+      $commit_url,
+      $data->{id},
+      $data->{author_name},
+      $data->{authored_date},
+      $data->{message}
+    );
+
+    $slack = {
+      text        => '',
+      attachments => [{
+        fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
+        text        => $msg,
+      }],
+    };
+
+    $event->reply($reply, { slack => $slack });
+    $replied++;
+  }
+
+  if ($event->was_targeted && !$replied && !$declined_to_reply) {
+    $event->reply("I couldn't find a commit with that description.");
+  }
+};
 
 # For every namespace we care about (i.e., $self->relevant_owners), we'll add
 # a shortcut that's just the project name, unless it conflicts.
-sub _load_auto_shortcuts ($self) {
+async sub _load_auto_shortcuts ($self) {
   my @conflicts;
   my %names;
 
   my @futures;
 
-  for my $owner ($self->relevant_owners->@*) {
+  OWNER: for my $owner ($self->relevant_owners->@*) {
     my $url = sprintf("%s/v4/groups/$owner/projects?simple=1&per_page=100",
       $self->api_uri,
     );
 
-    my $http_future = $self->hub->http_get($url,
+    my $res = await $self->hub->http_get($url,
       'PRIVATE-TOKEN' => $self->api_token,
     );
-    push @futures, $http_future;
 
-    $http_future->on_done(sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log([ "Error: %s", $res->as_string ]);
-        return;
+    unless ($res->is_success) {
+      $Logger->log([ "Error fetching projects: %s", $res->as_string ]);
+      next OWNER;
+    }
+
+    my $data = $JSON->decode($res->decoded_content);
+
+    PROJECT: for my $proj (@$data) {
+      my $path = $proj->{path_with_namespace};
+
+      # Sometimes, for reasons I don't fully understand, this returns projects
+      # that are not actually owned by the owner.
+      my ($p_owner, $name) = split '/', $path;
+      next PROJECT unless $p_owner eq $owner;
+
+      next PROJECT if $self->is_known_project($name);
+
+      if ($names{lc $name}) {
+        $Logger->log([ "GitLab: ignoring auto-shortcut %s: %s conflicts with %s",
+          lc $name,
+          $path,
+          $names{lc $name},
+        ]);
+
+        push @conflicts, lc $name;
+        next PROJECT;
       }
 
-      my $data = $JSON->decode($res->decoded_content);
-
-      for my $proj (@$data) {
-        my $path = $proj->{path_with_namespace};
-
-        # Sometimes, for reasons I don't fully understand, this returns projects
-        # that are not actually owned by the owner.
-        my ($p_owner, $name) = split '/', $path;
-        next unless $p_owner eq $owner;
-
-        next if $self->is_known_project($name);
-
-        if ($names{$name}) {
-          $Logger->log([ "GitLab: ignoring auto-shortcut %s: %s conflicts with %s",
-            $name,
-            $path,
-            $names{$name},
-          ]);
-
-          push @conflicts, $name;
-          next;
-        }
-
-        $names{$name} = $path;
-      }
-    });
+      $names{lc $name} = $path;
+    }
   }
 
-  Future->wait_all(@futures)->on_ready(sub {
-    $Logger->log("loaded project auto-shortcuts");
-    delete $names{$_} for @conflicts;
-    return unless keys %names;
-    $self->add_shortcuts(%names);
-    $self->save_state;
-  })->retain;
+  $Logger->log("loaded project auto-shortcuts");
+  delete $names{$_} for @conflicts;
+  return unless keys %names;
+  $self->add_shortcuts(%names);
+  $self->save_state;
+
+  return;
 }
 
 sub _parse_search ($self, $text) {
@@ -292,9 +539,6 @@ sub _short_name_for_mr ($self, $mr) {
   # give us much about the project other than an id, but we do have the web_url
   # field, which is:
   #   https://gitlab.example.com/fastmail/hm/-/merge_requests/5094
-  #
-  # So, we extract the my-group/my-project and see whether we have a shortcut
-  # from (say) repos.yaml.
 
   my ($g_slash_p, $id) = $mr->{web_url} =~ m{([^/]+/[^/]+)/-/merge_requests/([0-9]+)\z};
 
@@ -304,35 +548,6 @@ sub _short_name_for_mr ($self, $mr) {
 
   my $name = $found[0] // $g_slash_p;
   return "$name!$id";
-}
-
-sub handle_r_hook ($self, $event) {
-  $event->mark_handled;
-  $self->_handle_mr_search_string("for:me backlogged:no", $event);
-}
-
-my %MR_SHORTCUT = (
-  todo    => 'by:!me for:me backlogged:no',
-  ready   => 'by:me for:me approved:yes',
-  waiting => 'by:me for:!me for:* backlogged:no',
-);
-
-sub handle_mr_search ($self, $event) {
-  $event->mark_handled;
-  my $rest = $event->text =~ s/\Amrs(?:earch)?\s*//ir;
-
-  unless (length $rest) {
-    return $event->reply($MRS_HELP);
-  }
-
-  # Fun fact: we document only "mrs todo" but "mrs todo x:y" works, 99% so that
-  # you can say "mrs todo page:2" -- rjbs, 2021-11-29
-  if ($rest =~ s/\A([a-z]\S+)(\s|$)//i) {
-    $rest = ($MR_SHORTCUT{$1} // $1) . " $rest";
-    $rest =~ s/\s+$//;
-  }
-
-  $self->_handle_mr_search_string($rest, $event);
 }
 
 sub _compile_search ($self, $conds, $event) {
@@ -389,7 +604,7 @@ sub _compile_search ($self, $conds, $event) {
         $value = $value eq '*' ? 'Any' : 'None';
       } else {
         $not = $value =~ s/\A!//;
-        my $who = $self->resolve_name($value, $event->from_user);
+        my $who = $self->resolve_name($value, $event && $event->from_user);
         unless ($who) {
           $event->error_reply("I don't know who $value is.");
           return;
@@ -500,7 +715,7 @@ sub _compile_search ($self, $conds, $event) {
   };
 }
 
-sub _populate_mr_approvals ($self, $arg, $mrs) {
+async sub _populate_mr_approvals ($self, $mrs) {
   my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @$mrs;
 
   my @approval_gets;
@@ -520,147 +735,124 @@ sub _populate_mr_approvals ($self, $arg, $mrs) {
   }
 
   # Maybe they're all already populated!
-  return Future->done($arg, $mrs) unless @approval_gets;
+  return unless @approval_gets;
 
-  Future->wait_all(@approval_gets)->then(sub (@res_f) {
-    for my $res_f (@res_f) {
-      my $res = $res_f->get;
-      my $approval_data = $JSON->decode($res->decoded_content);
+  my @responses = await Future->needs_all(@approval_gets);
 
-      # This is absurd.  The docs on getting approvals show that the id,
-      # project id, and iid are included in the response.
-      # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
-      # ...but they are not.  So, rather than screw around with decorating the
-      # future in @approval_gets, we'll parse project and MR id out of the
-      # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
-      my ($project_id, $iid) = $res->request->uri =~ m{
-        /projects/([0-9]+)
-        /merge_requests/([0-9]+)/
-      }x;
+  for my $res (@responses) {
+    my $approval_data = $JSON->decode($res->decoded_content);
 
-      next unless $project_id;
-      my $mr = $mr_by_piid{ "$project_id/$iid" };
-      my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
-      $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
-    }
+    # This is absurd.  The docs on getting approvals show that the id,
+    # project id, and iid are included in the response.
+    # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
+    # ...but they are not.  So, rather than screw around with decorating the
+    # future in @approval_gets, we'll parse project and MR id out of the
+    # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
+    my ($project_id, $iid) = $res->request->uri =~ m{
+      /projects/([0-9]+)
+      /merge_requests/([0-9]+)/
+    }x;
 
-    Future->done($arg, $mrs);
-  });
+    next unless $project_id;
+    my $mr = $mr_by_piid{ "$project_id/$iid" };
+    my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
+    $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
+  }
+
+  return;
 }
 
-sub _queue_produce_page_list ($self, $queue_arg) {
+async sub _execute_query ($self, $event, $query) {
   # Don't confuse API page with display page!  The API page is the page of 20
   # that we get from the API.  The display page is the page of 10 that we will
   # display to the user. -- rjbs, 2021-11-28
-  my $display_page = $queue_arg->{display_page} // 1;
-  my $api_page     = $queue_arg->{api_page}     // 1;
-  my $uri  = $queue_arg->{query_uri}->clone;
-  $uri->query_param(page => $api_page);
+  my $display_page = $query->{display_page} // 1;
+  my $per_page     = $query->{per_page}     // 10;
+  my $api_page     = $query->{api_page}     // 1;
 
-  my @local_filters    = ($queue_arg->{local_filters}    // [])->@*;
-  my @approval_filters = ($queue_arg->{approval_filters} // [])->@*;
-  my @starting_list    = ($queue_arg->{starting_list}    // [])->@*;
+  my @local_filters    = ($query->{local_filters}    // [])->@*;
+  my @approval_filters = ($query->{approval_filters} // [])->@*;
 
-  $Logger->log("GitLab GET: $uri");
+  my @mrs;
+  my $saw_last_page;
 
-  my $event   = $queue_arg->{event};
-  my $on_done = $queue_arg->{on_done};
+  until (@mrs >= $display_page*$per_page || $saw_last_page) {
+    my $uri  = $query->{uri}->clone;
+    $uri->query_param(page => $api_page);
 
-  my $http_future = $self->hub->http_get(
-    $uri,
-    'PRIVATE-TOKEN' => $self->api_token,
-  );
+    $Logger->log("GitLab GET: $uri");
 
-  $http_future->then(sub ($res) {
-    unless ($res->is_success) {
-      $Logger->log([ "Error: %s", $res->as_string ]);
-      Future->fail("response no good");
-    }
-
-    my $data = $JSON->decode($res->decoded_content);
-
-    unless (@$data) {
-      $event->error_reply("No results!");
-      return Future->fail('no result'); # Failure seems wrong.
-    }
-
-    my $zero = ($display_page-1) * 10;
-
-    if ($zero > $#$data) {
-      $event->error_reply("You've gone past the last page!");
-      return Future->fail('past last page'); # Failure seems wrong.
-    }
-
-    my $is_last_page = ($res->header('x-page')        // -1)
-                    == ($res->header('x-total-pages') // -2);
-
-    my %arg = (
-      is_last_page  => $is_last_page,
-      starting_list => \@starting_list,
+    my $res = await $self->hub->http_get(
+      $uri,
+      'PRIVATE-TOKEN' => $self->api_token,
     );
 
-    Future->done(\%arg, $data);
-  })->then(sub ($arg, $mrs) {
-    # If we need to have approvals before postfilters, we will get them now.
-    return Future->done($arg, $mrs) unless @approval_filters;
+    unless ($res->is_success) {
+      $Logger->log([ "error fetching merge requests: %s", $res->as_string ]);
+      Synergy::X->throw_public("Something went wrong fetching merge requests.");
+    }
 
-    $self->_populate_mr_approvals($arg, $mrs)->then(sub ($arg, $mrs) {
-      @$mrs = grep {;
+    my $mr_batch = $JSON->decode($res->decoded_content);
+
+    unless (@$mr_batch) {
+      $event->error_reply("No results!");
+      return;
+    }
+
+    my $zero = ($display_page-1) * $per_page;
+
+    if ($zero > $#$mr_batch) {
+      $event->error_reply("You've gone past the last page!");
+      return;
+    }
+
+    $saw_last_page = 1
+      if ($res->header('x-page') // -1) == ($res->header('x-total-pages') // -2);
+
+    if (@approval_filters) {
+      # If we need to have approvals before postfilters, we will get them now.
+      await $self->_populate_mr_approvals($mr_batch);
+
+      @$mr_batch = grep {;
         my $datum = $_;
         all { $_->($datum) } @approval_filters;
-      } @$mrs;
+      } @$mr_batch;
+    }
 
-      Future->done($arg, $mrs);
-    });
-  })->then(sub ($arg, $mrs) {
-    if (@$mrs) {
+    if (@$mr_batch) {
       # Stupid, inefficient, good enough. -- rjbs, 2019-07-29
-      @$mrs = grep {;
+      @$mr_batch = grep {;
         my $datum = $_;
         all { $_->($datum) } @local_filters;
-      } @$mrs;
+      } @$mr_batch;
     }
 
-    my @list = (
-      $arg->{starting_list}->@*,
-      @$mrs,
-    );
-
-    return @approval_filters
-      ? Future->done($arg, \@list)
-      : $self->_populate_mr_approvals($arg, \@list);
-  })->then(sub ($arg, $mrs) {
-    if (@$mrs >= $display_page*10 || $arg->{is_last_page}) {
-      my $zero = ($display_page-1) * 10;
-      my @page = grep {; $_ } $mrs->@[ $zero .. $zero+9 ];
-
-      my $header = sprintf "Results, page %s (items %s .. %s):",
-        $display_page,
-        $zero + 1,
-        $zero + @page;
-
-      return $on_done->($header, \@page);
+    if (!@approval_filters) {
+      # We didn't have to do this before local filters, so we'll do it now.
+      await $self->_populate_mr_approvals($mr_batch);
     }
 
-    return $self->_queue_produce_page_list({
-      %$queue_arg,
-      starting_list => $mrs,
-      api_page      => $api_page + 1,
-    });
-  })->else(sub ($err, @rest) {
-    # handle known-fine cases
-    return Future->done if $err eq 'no result' || $err eq 'past last page';
+    push @mrs, @$mr_batch;
 
-    $Logger->log([ "ERROR: %s", [$err, @rest] ]);
-    Future->fail($err, @rest);
-  });
+    $api_page++;
+  }
+
+  my $zero = ($display_page-1) * $per_page;
+  my @page = grep {; $_ } @mrs[ $zero .. $zero+$per_page-1 ];
+
+  return {
+    page_number => $display_page,
+    first_index => $zero + 1,
+    last_index  => $zero + @page,
+    mrs         => \@page,
+  };
 }
 
-sub _handle_mr_search_string ($self, $text, $event) {
+async sub _page_for_search_string ($self, $text, $event, $arg = undef) {
   my $conds = $self->_parse_search($text);
 
   unless ($conds) {
-    return $event->error_reply("I didn't understand your search.");
+    Synergy::X->throw_public("I didn't understand your search.");
   }
 
   my $query = $self->_compile_search($conds, $event);
@@ -668,43 +860,8 @@ sub _handle_mr_search_string ($self, $text, $event) {
   unless ($query) {
     # if _compile_search returned undef, we should have already done an error
     # reply, so we can just return here
-    return Future->done;
+    return;
   }
-
-  my $reply_with_list = sub ($header, $mrs) {
-    my $text  = $header;
-    my $slack = "*$header*";
-
-    for my $mr (@$mrs) {
-      my $icons = q{};
-      if ($mr->{work_in_progress}) {
-        $icons .= "🚧";
-        $mr->{title} =~ s/^wip:?\s+//i;
-      }
-
-      $icons .= "✅" if $mr->{_is_approved};
-      $icons .= "👍" if $mr->{upvotes};
-      $icons .= "👎" if $mr->{downvotes};
-
-      $icons .= " " if length $icons;
-
-      $text  .= "\n* $icons $mr->{title}";
-      $slack .= sprintf "\n%s *<%s|%s>* %s%s — _(%s)_",
-        $self->_icon_for_mr($mr),
-        $mr->{web_url},
-        $self->_short_name_for_mr($mr),
-        $icons,
-        ($mr->{title} =~ s/^Draft: //r),
-        $mr->{author}{username}
-          . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
-
-      $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
-        if $mr->{labels} && $mr->{labels}->@*;
-    }
-
-    $event->reply($text, { slack => $slack });
-    return Future->done;
-  };
 
   # We want N items, where N is the per-display-page value, always 10.
   # We want the Pth page.  This means items from index (P-1)*10 to P*10-1.
@@ -712,401 +869,141 @@ sub _handle_mr_search_string ($self, $text, $event) {
   # If all items will be client-side approved, we need to fetch at least P*10
   # items, filter those, and see whether we need more.
 
-  $self->_queue_produce_page_list({
-    event     => $event,
-    on_done   => $reply_with_list,
-    query_uri => $query->{uri},
-    display_page  => $query->{page},
-    local_filters     => $query->{local_filters},
-    approval_filters  => $query->{approval_filters},
-  })->retain;
+  my $page = await $self->_execute_query(
+    $event,
+    {
+      ($arg && $arg->{per_page} ? (per_page => $arg->{per_page}) : ()),
+      %$query,
+    },
+  );
 }
 
-sub handle_merge_request ($self, $event) {
-  my $text = $event->text;
+async sub _handle_mr_search_string ($self, $text, $event) {
+  my $page = await $self->_page_for_search_string($text, $event);
 
-  my @mrs = $text =~ /\b([-_a-z]+!\d+)(?=\W|$)/gi;
+  return unless defined $page;
 
-  $text =~ s/\Q$_// for @mrs;
+  my $header = sprintf "Results, page %s (items %s .. %s):",
+    $page->{page_number},
+    $page->{first_index},
+    $page->{last_index};
 
-  $event->mark_handled if $event->was_targeted && $text !~ /\S/;
+  my $text  = $header;
+  my $slack = "*$header*";
 
-  my $base = $self->url_base;
-  my @found = $event->text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/merge_requests/([0-9]+)}g;
+  for my $mr ($page->{mrs}->@*) {
+    my $icons = q{};
+    if ($mr->{work_in_progress}) {
+      $icons .= "🚧";
+      $mr->{title} =~ s/^Draft:?\s+//i;
+    }
 
-  while (my ($key, $num) = splice @found, 0, 2) {
-    push @mrs, "$key!$num";
+    $icons .= "✅" if $mr->{_is_approved};
+    $icons .= "👍" if $mr->{upvotes};
+    $icons .= "👎" if $mr->{downvotes};
+
+    $icons .= " " if length $icons;
+
+    my $short_name = $self->_short_name_for_mr($mr);
+
+    $text  .= "\n* $icons $short_name $mr->{title}";
+    $slack .= sprintf "\n%s *<%s|%s>* %s%s — _(%s)_",
+      $self->_icon_for_mr($mr),
+      $mr->{web_url},
+      $short_name,
+      $icons,
+      ($mr->{title} =~ s/^Draft: //r),
+      $mr->{author}{username}
+        . ($mr->{assignee} ? " → $mr->{assignee}{username}" : ", unassigned");
+
+    $slack .= sprintf "— {%s}", join q{, }, $mr->{labels}->@*
+      if $mr->{labels} && $mr->{labels}->@*;
   }
 
-  @mrs = uniq @mrs;
-  my @futures;
-  my $replied = 0;
-  my $declined_to_reply = 0;
-
-  for my $mr (@mrs) {
-    my ($proj, $num) = split /!/, $mr, 2;
-
-    # $proj might be a shortcut, or it might be an owner/repo string
-    my $project_id = $self->is_known_project($proj)
-                   ? $self->project_named($proj)
-                   : $proj;
-
-    my $url = sprintf("%s/v4/projects/%s/merge_requests/%d",
-      $self->api_uri,
-      uri_escape($project_id),
-      $num,
-    );
-
-    my $mr_get = $self->hub->http_get(
-      $url,
-      'PRIVATE-TOKEN' => $self->api_token,
-    );
-
-    # approval status is a separate call (sigh)
-    my $approval_get = $self->hub->http_get(
-      "$url/approvals",
-      'PRIVATE-TOKEN' => $self->api_token,
-    );
-
-    my $http_future = Future->wait_all($mr_get, $approval_get);
-    push @futures, $http_future;
-
-    $http_future->on_done(sub ($mr_f, $approval_f) {
-      my $mr_res = $mr_f->get;
-      unless ($mr_res->is_success) {
-        $Logger->log([ "Error: %s", $mr_res->as_string ]);
-        return;
-      }
-
-      my $approval_res = $approval_f->get;
-      unless ($approval_res->is_success) {
-        $Logger->log([ "Error: %s", $approval_res->as_string ]);
-        return;
-      }
-
-      my $data = $JSON->decode($mr_res->decoded_content);
-      my $approval_data = $JSON->decode($approval_res->decoded_content);
-
-      my $is_approved = $approval_data->{approved};
-
-      if ($self->has_expanded_mr_recently($event, $data->{id})) {
-        $declined_to_reply++;
-        return;
-      }
-
-      $self->note_mr_expansion($event, $data->{id});
-
-      my $state = $data->{state};
-
-      my $reply = "$mr [$state, created by $data->{author}->{username}]: ";
-      $reply   .= "$data->{title} ($data->{web_url})";
-
-      my $color = $state eq 'opened' ? '#1aaa4b'
-                : $state eq 'merged' ? '#1f78d1'
-                : $state eq 'closed' ? '#db3b21'
-                : undef;
-
-      my @fields;
-      if ($state eq 'opened') {
-        my $assignee = $data->{assignee}{name} // 'nobody';
-        push @fields, {
-          title => "Assigned",
-          value => $assignee,
-          short => \1
-        };
-
-        my $created = DateTime::Format::ISO8601->parse_datetime($data->{created_at});
-
-        push @fields, {
-          title => "Opened",
-          value => ago(time - $created->epoch),
-          short => \1,
-        };
-      } else {
-        my $date = $data->{merged_at} // $data->{closed_at};
-        if ($date) {
-          # Huh! Turns out, sometimes MRs are marked merged or closed, but do
-          # not have an associated timestamp. -- michael, 2018-11-21
-          my $dt = DateTime::Format::ISO8601->parse_datetime($date);
-          push @fields, {
-            title => ucfirst $state,
-            value => ago(time - $dt->epoch),
-            short => \1,
-          };
-        }
-      }
-
-      my $approval_str = join q{, },
-        ($data->{work_in_progress} ? 'Work in progress' : ()),
-        ($is_approved ? "Approved" : "Not yet approved");
-
-      my $dv = $data->{downvotes};
-      my $downvote_str = $dv
-                       ? sprintf(' (%s %s)', $dv, PL_N('downvote', $dv))
-                       : '';
-
-      push @fields, {
-        title => "Review status",
-        value => $approval_str . $downvote_str,
-        short => \1
-      };
-
-      if (my $pipeline = $data->{pipeline}) {
-        my $status = ucfirst $pipeline->{status};
-        $status =~ s/_/ /g;
-        push @fields, {
-          title => "Pipeline status",
-          value => $status,
-          short => \1,
-        };
-      }
-
-      my $slack = {
-        text        => "",
-        attachments => [{
-          fallback    => "$mr: $data->{title} [$data->{state}] $data->{web_url}",
-          author_name => $data->{author}->{name},
-          author_icon => $data->{author}->{avatar_url},
-          title       => "$mr: $data->{title}",
-          title_link  => "$data->{web_url}",
-          color       => $color,
-          fields      => \@fields,
-        }],
-      };
-
-      $event->reply($reply, { slack => $slack });
-      $replied++;
-    });
-  }
-
-  Future->wait_all(@futures)->on_done(sub {
-    return if $replied;
-
-    return $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
-      if $declined_to_reply;
-
-    return unless $event->was_targeted;
-
-    $event->reply("Sorry, I couldn't find any merge request matching that.");
-  })->retain;
+  return await $event->reply($text, { slack => $slack });
 }
 
-sub handle_commit ($self, $event) {
-  $event->mark_handled if $event->was_targeted;
-  my @commits = $event->text =~ /(?:^|\s)([-_a-z]+\@[0-9a-fA-F]{7,40})(?=\W|$)/gi;
-
-  state $base = $self->url_base;
-  my %found = $event->text =~ m{\Q$base\E/(.*?/.*?)(?:/-)?/commit/([0-9a-f]{6,40})}i;
-
-  for my $key (keys %found) {
-    my $sha = $found{$key};
-    push @commits, "$key\@$sha";
-  }
-
-  @commits = uniq @commits;
-  my @futures;
-  my $replied = 0;
-  my $declined_to_reply = 0;
-
-  for my $commit (@commits) {
-    my ($proj, $sha) = split /\@/, $commit, 2;
-
-    # $proj might be a shortcut, or it might be an owner/repo string
-    my $project_id = $self->is_known_project($proj)
-                   ? $self->project_named($proj)
-                   : $proj;
-
-    my $url = sprintf("%s/v4/projects/%s/repository/commits/%s",
-      $self->api_uri,
-      uri_escape($project_id),
-      $sha,
-    );
-
-    my $http_future = $self->hub->http_get(
-      $url,
-      'PRIVATE-TOKEN' => $self->api_token,
-    );
-    push @futures, $http_future;
-
-    $http_future->on_done(sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log([ "Error: %s", $res->as_string ]);
-        return;
-      }
-
-      my $data = $JSON->decode($res->decoded_content);
-
-      if ($self->has_expanded_commit_recently($event, $data->{id})) {
-        $declined_to_reply++;
-        return;
-      }
-
-      $self->note_commit_expansion($event, $data->{id});
-
-      my $commit_url = sprintf("%s/%s/commit/%s",
-        $self->url_base,
-        $project_id,
-        $data->{short_id},
-      );
-
-      my $reply = "$commit [$data->{author_name}]: $data->{title} ($commit_url)";
-      my $slack = sprintf("<%s|%s>: %s [%s]",
-        $commit_url,
-        $commit,
-        $data->{title},
-        $data->{author_name},
-      );
-
-      my $author_icon = sprintf("https://www.gravatar.com/avatar/%s?s=16",
-        md5_hex($data->{author_email}),
-      );
-
-      # We don't need to be _quite_ that precise.
-      $data->{authored_date} =~ s/\.[0-9]{3}Z$/Z/;
-
-      my $msg = sprintf("commit <%s|%s>\nAuthor: %s\nDate: %s\n\n%s",
-        $commit_url,
-        $data->{id},
-        $data->{author_name},
-        $data->{authored_date},
-        $data->{message}
-      );
-
-      $slack = {
-        text        => '',
-        attachments => [{
-          fallback    => "$data->{author_name}: $data->{short_id} $data->{title} $commit_url",
-          text        => $msg,
-        }],
-      };
-
-      $event->reply($reply, { slack => $slack });
-      $replied++;
-    });
-  }
-
-  Future->wait_all(@futures)->on_done(sub {
-    return if $replied;
-
-    return $event->ephemeral_reply("I've expanded that recently here; just scroll up a bit.")
-      if $declined_to_reply;
-
-    return unless $event->was_targeted;
-
-    $event->reply("I couldn't find a commit with that description.");
-  })->retain;
-}
-
-sub mr_report ($self, $who, $arg = {}) {
+async sub mr_report ($self, $who, $arg = {}) {
   my @futures;
 
   my $user_id = $self->get_user_preference($who, 'user-id');
 
   return unless $user_id;
 
-  for my $pair (
-    # TODO: Cope with pagination for real. -- rjbs, 2018-08-17
-    [ filed => sprintf("%s/v4/merge_requests/?scope=all&author_id=%s&state=opened&per_page=100",
-        $self->api_uri, $user_id) ],
-    [ assigned => sprintf("%s/v4/merge_requests/?scope=all&assignee_id=%s&state=opened&per_page=100",
-        $self->api_uri, $user_id) ],
-  ) {
-    my ($type, $uri) = @$pair;
+  my $uri = URI->new(sprintf '%s/dashboard/merge_requests?scope=all&state=opened',
+    $self->url_base,
+  );
 
-    my $http_future = $self->hub->http_get(
-      $uri,
-      'PRIVATE-TOKEN' => $self->api_token,
+  my $username = $who->username;
+
+  ### These categories copied from the shortcuts for "mrs SHORTCUT":
+  #
+  # todo    => 'by:!me for:me backlogged:no',
+  # ready   => 'by:me for:me approved:yes',
+  # waiting => 'by:me for:!me for:* backlogged:no',
+  #
+  # The third element in the arrayrefs below is URI query parameters to put on
+  # the link to human-facing GitLab for these.
+  my @to_report = (
+    [
+      "awaiting your review",
+      "by:!$username for:$username backlogged:no",
+      { assignee_username => $username, 'not[author_username]' => $username },
+    ],
+    [
+      "approved and with you",
+      "by:$username for:$username approved:yes",
+      {
+        assignee_username => $username,
+        author_username   => $username,
+        'approved_by_usernames[]', 'Any'
+      },
+    ],
+    [
+      "awaiting review by someone else",
+      "by:$username for:!$username backlogged:no",
+      { 'not[assignee_username]' => $username, 'author_username' => $username },
+    ],
+  );
+
+  my @text;
+  my @slack;
+
+  for my $pair (@to_report) {
+    my ($desc, $search, $link_params) = @$pair;
+
+    # We don't have an $event, which would be a problem if anything in here was
+    # going to hit an error, which it shouldn't.  Still, we should replace
+    # event with something better in the future, like "who".  We could
+    # eliminate using $event->error_reply by using Synergy::X.
+    # -- rjbs, 2023-12-01
+    my $page = await $self->_page_for_search_string(
+      $search,
+      undef, # should be $event
+      { per_page => 26 },
     );
 
-    push @futures, $http_future->then(sub ($res) {
-      unless ($res->is_success) {
-        $Logger->log([ "Error: %s", $res->as_string ]);
+    next unless $page && $page->{last_index};
 
-        return Future->done($type => undef);
-      }
+    my $link = $uri->clone;
+    $link->query_param($_ => $link_params->{$_}) for keys %$link_params;
 
-      my $data = $JSON->decode($res->decoded_content);
-      for my $mr (@$data) {
-        $mr->{_isBacklogged} = 1
-          if grep {; lc $_ eq 'backlogged' } $mr->{labels}->@*;
+    push @text, sprintf "\N{LOWER LEFT CRAYON} Merge requests %s: %i",
+      $desc,
+      $page->{last_index} == 26 ? '25+' : $page->{last_index};
 
-        $mr->{_isSelfAssigned} = 1
-          if $mr->{assignee} && $mr->{assignee}{id} == $user_id
-                             && $mr->{author}{id}   == $user_id;
-      }
-
-      return Future->done($type => $data);
-    });
+    push @slack, sprintf "\N{LOWER LEFT CRAYON} Merge requests <%s|%s>: %i",
+      $link,
+      $desc,
+      $page->{last_index} == 26 ? '25+' : $page->{last_index};
   }
 
-  Future->wait_all(@futures)->then(sub (@futures) {
-    my %result = map {; $_->get } @futures;
-
-    if (! defined $result{assigned} || ! defined $result{filed}) {
-      return Future->new->done(
-        [ "Something when wrong when trying to get merge request data." ]
-      );
-    }
-
-    my @selfies  = grep {; ! $_->{_isBacklogged} &&   $_->{_isSelfAssigned} }
-                   $result{filed}->@*;
-    my @filed    = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
-                   $result{filed}->@*;
-    my @assigned = grep {; ! $_->{_isBacklogged} && ! $_->{_isSelfAssigned} }
-                   $result{assigned}->@*;
-
-    return Future->done unless @filed || @assigned || @selfies;
-
-    my $wipstr = sub ($mrs) {
-      my $wip = grep {; $_->{title} =~ /^wip:/i } @$mrs;
-      return $wip
-        ? (sprintf ' (of which %i %s WIP)', $wip, PL_V('is', $wip))
-        : '';
-    };
-
-    my $link = sub ($author, $assignee) {
-      return sprintf '<%s/dashboard/merge_requests?scope=all&state=opened%s%s|GL>',
-        $self->url_base,
-        (defined $author   ? "&author_username=$author"     : ''),
-        (defined $assignee ? "&assignee_username=$assignee" : ''),
-    };
-
-    my @plain;
-    my @slack;
-
-    if (@filed) {
-      push @plain, sprintf "\N{LOWER LEFT CRAYON} Merge %s waiting on others: %i%s",
-        PL_N('request', 0+@filed), 0+@filed, $wipstr->(\@filed);
-
-      my $url = $link->($who->username, undef);
-      push @slack, $plain[-1] =~ s/ / $url /r;
-    }
-
-    if (@assigned) {
-      my $wip = grep {; $_->{title} =~ /^wip:/i } @filed;
-      push @plain, sprintf "\N{LOWER LEFT CRAYON} Merge %s to review: %i%s",
-        PL_N('request', 0+@assigned), 0+@assigned, $wipstr->(\@assigned);
-
-      my $url = $link->(undef, $who->username);
-      push @slack, $plain[-1] =~ s/ / $url /r;
-    }
-
-    if (@selfies) {
-      my $wip = grep {; $_->{title} =~ /^wip:/i } @filed;
-      push @plain, sprintf "\N{LOWER LEFT CRAYON} Self-assigned merge %s: %i%s",
-        PL_N('request', 0+@selfies), 0+@selfies, $wipstr->(\@selfies);
-
-      my $url = $link->($who->username, $who->username);
-      push @slack, $plain[-1] =~ s/ / $url /r;
-    }
-
-    return Future->done([
-      (join qq{\n}, @plain),
-      {
-        slack => (join qq{\n}, @slack),
-      }
-    ]);
-  });
+  return [
+    (join qq{\n}, @text),
+    {
+      slack => join qq{\n}, @slack
+    },
+  ];
 }
 
 async sub post_gitlab_snippet ($self, $payload) {

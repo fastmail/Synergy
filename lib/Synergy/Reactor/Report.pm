@@ -10,6 +10,7 @@ use namespace::clean;
 
 use Future::AsyncAwait;
 use Synergy::CommandPost;
+use Synergy::Logger '$Logger';
 
 has default_report => (
   is  => 'ro',
@@ -67,6 +68,10 @@ async sub begin_report ($self, $report, $target) {
   await Future->wait_all(@results);
 
   my @hunks = map {;
+    if ($_->is_failed) {
+      $Logger->log([ "Failure during report: %s", [ $_->failure ] ]);
+    }
+
     $_->is_done ? $_->get
                 : [ "[ internal error during report ]" ]
   } @results;
