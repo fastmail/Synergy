@@ -725,7 +725,7 @@ sub _compile_search ($self, $conds, $event) {
   };
 }
 
-sub _populate_mr_approvals ($self, $arg, $mrs) {
+async sub _populate_mr_approvals ($self, $arg, $mrs) {
   my %mr_by_piid = map {; "$_->{project_id}/$_->{iid}" => $_ } @$mrs;
 
   my @approval_gets;
@@ -747,30 +747,30 @@ sub _populate_mr_approvals ($self, $arg, $mrs) {
   # Maybe they're all already populated!
   return Future->done($arg, $mrs) unless @approval_gets;
 
-  Future->wait_all(@approval_gets)->then(sub (@res_f) {
-    for my $res_f (@res_f) {
-      my $res = $res_f->get;
-      my $approval_data = $JSON->decode($res->decoded_content);
+  my @res_f = await Future->wait_all(@approval_gets);
 
-      # This is absurd.  The docs on getting approvals show that the id,
-      # project id, and iid are included in the response.
-      # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
-      # ...but they are not.  So, rather than screw around with decorating the
-      # future in @approval_gets, we'll parse project and MR id out of the
-      # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
-      my ($project_id, $iid) = $res->request->uri =~ m{
-        /projects/([0-9]+)
-        /merge_requests/([0-9]+)/
-      }x;
+  for my $res_f (@res_f) {
+    my $res = $res_f->get;
+    my $approval_data = $JSON->decode($res->decoded_content);
 
-      next unless $project_id;
-      my $mr = $mr_by_piid{ "$project_id/$iid" };
-      my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
-      $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
-    }
+    # This is absurd.  The docs on getting approvals show that the id,
+    # project id, and iid are included in the response.
+    # (See https://docs.gitlab.com/ee/api/merge_request_approvals.html#get-configuration-1 )
+    # ...but they are not.  So, rather than screw around with decorating the
+    # future in @approval_gets, we'll parse project and MR id out of the
+    # response's request's URI.  But this is absurd. -- rjbs, 2021-11-28
+    my ($project_id, $iid) = $res->request->uri =~ m{
+      /projects/([0-9]+)
+      /merge_requests/([0-9]+)/
+    }x;
 
-    Future->done($arg, $mrs);
-  });
+    next unless $project_id;
+    my $mr = $mr_by_piid{ "$project_id/$iid" };
+    my $approval_count = $approval_data->{approved_by} && $approval_data->{approved_by}->@*;
+    $mr->{_is_approved} = $approval_count > 0 ? 1 : 0;
+  }
+
+  return($arg, $mrs);
 }
 
 sub _queue_produce_page_list ($self, $queue_arg) {
@@ -881,11 +881,11 @@ sub _queue_produce_page_list ($self, $queue_arg) {
   });
 }
 
-sub _handle_mr_search_string ($self, $text, $event) {
+async sub _handle_mr_search_string ($self, $text, $event) {
   my $conds = $self->_parse_search($text);
 
   unless ($conds) {
-    return $event->error_reply("I didn't understand your search.");
+    return await $event->error_reply("I didn't understand your search.");
   }
 
   my $query = $self->_compile_search($conds, $event);
@@ -893,7 +893,7 @@ sub _handle_mr_search_string ($self, $text, $event) {
   unless ($query) {
     # if _compile_search returned undef, we should have already done an error
     # reply, so we can just return here
-    return Future->done;
+    return;
   }
 
   my $reply_with_list = sub ($header, $mrs) {
@@ -927,7 +927,7 @@ sub _handle_mr_search_string ($self, $text, $event) {
         if $mr->{labels} && $mr->{labels}->@*;
     }
 
-    $event->reply($text, { slack => $slack });
+    return $event->reply($text, { slack => $slack });
     return Future->done;
   };
 
@@ -937,14 +937,14 @@ sub _handle_mr_search_string ($self, $text, $event) {
   # If all items will be client-side approved, we need to fetch at least P*10
   # items, filter those, and see whether we need more.
 
-  $self->_queue_produce_page_list({
+  return await $self->_queue_produce_page_list({
     event     => $event,
     on_done   => $reply_with_list,
     query_uri => $query->{uri},
     display_page  => $query->{page},
     local_filters     => $query->{local_filters},
     approval_filters  => $query->{approval_filters},
-  })->retain;
+  });
 }
 
 sub mr_report ($self, $who, $arg = {}) {
