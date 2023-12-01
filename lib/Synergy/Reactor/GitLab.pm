@@ -778,6 +778,7 @@ async sub _queue_produce_page_list ($self, $queue_arg) {
   # that we get from the API.  The display page is the page of 10 that we will
   # display to the user. -- rjbs, 2021-11-28
   my $display_page = $queue_arg->{display_page} // 1;
+  my $per_page     = $queue_arg->{per_page}     // 10;
   my $api_page     = $queue_arg->{api_page}     // 1;
 
   my @local_filters    = ($queue_arg->{local_filters}    // [])->@*;
@@ -788,7 +789,7 @@ async sub _queue_produce_page_list ($self, $queue_arg) {
   my @mrs;
   my $saw_last_page;
 
-  until (@mrs >= $display_page*10 || $saw_last_page) {
+  until (@mrs >= $display_page*$per_page || $saw_last_page) {
     my $uri  = $queue_arg->{query_uri}->clone;
     $uri->query_param(page => $api_page);
 
@@ -811,7 +812,7 @@ async sub _queue_produce_page_list ($self, $queue_arg) {
       return;
     }
 
-    my $zero = ($display_page-1) * 10;
+    my $zero = ($display_page-1) * $per_page;
 
     if ($zero > $#$mr_batch) {
       $event->error_reply("You've gone past the last page!");
@@ -849,8 +850,8 @@ async sub _queue_produce_page_list ($self, $queue_arg) {
     $api_page++;
   }
 
-  my $zero = ($display_page-1) * 10;
-  my @page = grep {; $_ } @mrs[ $zero .. $zero+9 ];
+  my $zero = ($display_page-1) * $per_page;
+  my @page = grep {; $_ } @mrs[ $zero .. $zero+$per_page-1 ];
 
   return {
     page_number => $display_page,
