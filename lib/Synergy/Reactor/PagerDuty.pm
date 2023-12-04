@@ -1011,29 +1011,8 @@ sub _active_incidents_summary ($self) {
         );
       }
 
-      my $text = join qq{\n}, $title, @text;
-
-      my $blocks = [
-        {
-          type => "section",
-          text => {
-            type => "mrkdwn",
-            text => "*$title*",
-          }
-        },
-        {
-          type => "section",
-          text => {
-            type => "mrkdwn",
-            text => join qq{\n}, @slack,
-          }
-        },
-      ];
-
-      my $slack = {
-        blocks => $blocks,
-        text => $text,
-      };
+      my $text  = join qq{\n}, $title, @text;
+      my $slack = join qq{\n}, "*$title*", @slack;
 
       return Future->done({ text => $text, slack => $slack });
   });
