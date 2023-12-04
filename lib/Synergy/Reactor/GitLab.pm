@@ -776,7 +776,7 @@ async sub _execute_query ($self, $event, $query) {
   my @mrs;
   my $saw_last_page;
 
-  until (@mrs >= $display_page*$per_page || $saw_last_page) {
+  PAGE: until (@mrs >= $display_page*$per_page || $saw_last_page) {
     my $uri  = $query->{uri}->clone;
     $uri->query_param(page => $api_page);
 
@@ -795,8 +795,7 @@ async sub _execute_query ($self, $event, $query) {
     my $mr_batch = $JSON->decode($res->decoded_content);
 
     unless (@$mr_batch) {
-      $event->error_reply("No results!");
-      return;
+      last PAGE;
     }
 
     my $zero = ($display_page-1) * $per_page;
@@ -882,6 +881,10 @@ async sub _handle_mr_search_string ($self, $text, $event) {
   my $page = await $self->_page_for_search_string($text, $event);
 
   return unless defined $page;
+
+  unless ($page->{mrs} && $page->{mrs}->@*) {
+    return await $event->error_reply("No results for that search.");
+  }
 
   my $header = sprintf "Results, page %s (items %s .. %s):",
     $page->{page_number},
