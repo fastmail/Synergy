@@ -977,7 +977,6 @@ sub _announce_oncall_change ($self, $before, $after) {
       {
         slack => {
           blocks => $blocks,
-          text => $text,
         }
       }
     );
@@ -1032,7 +1031,6 @@ sub _active_incidents_summary ($self) {
 
       my $slack = {
         blocks => $blocks,
-        text => $text,
       };
 
       return Future->done({ text => $text, slack => $slack });
