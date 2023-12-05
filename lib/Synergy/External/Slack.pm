@@ -325,12 +325,30 @@ sub _send_rich_text ($self, $channel, $rich) {
     as_user => \1,
   });
 
+  $http_future->on_fail(sub (@rest) {
+    $Logger->log([ "error with chat.postMessage: %s", \@rest ]);
+  });
+
   my $f = $self->loop->new_future;
   $http_future->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content(charset => undef));
+    my $payload = eval {
+      decode_json($http_res->decoded_content(charset => undef));
+    };
+
+    unless ($payload) {
+      my $error = $@;
+
+      $Logger->log([
+        "chat.postMessage did not return JSON in %s reply",
+        $http_res->code,
+      ]);
+
+      die $error;
+    }
+
     $f->done({
       type => 'slack',
-      transport_data => $res
+      transport_data => $payload,
     });
   });
 
