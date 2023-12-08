@@ -969,10 +969,11 @@ async sub mr_report ($self, $who, $arg = {}) {
     ],
     [
       "awaiting review by someone else",
-      "by:$username for:!$username backlogged:no",
+      "by:$username for:!$username for:* backlogged:no",
       {
         'not[assignee_username]' => $username,
         'author_username' => $username,
+        'assignee_username' => 'Any',
         'not[label_name][]' => 'backlogged',
       },
     ],
