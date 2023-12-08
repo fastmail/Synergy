@@ -958,12 +958,13 @@ async sub mr_report ($self, $who, $arg = {}) {
       },
     ],
     [
-      "approved and with you",
-      "by:$username for:$username approved:yes",
+      "you're still working on",
+      "by:$username for:$username backlogged:no approved:no",
       {
         assignee_username => $username,
-        author_username   => $username,
-        'approved_by_usernames[]', 'Any'
+        'author_username' => $username,
+        'not[label_name][]' => 'backlogged',
+        'approved_by_usernames[]', 'None'
       },
     ],
     [
@@ -973,6 +974,15 @@ async sub mr_report ($self, $who, $arg = {}) {
         'not[assignee_username]' => $username,
         'author_username' => $username,
         'not[label_name][]' => 'backlogged',
+      },
+    ],
+    [
+      "approved and with you",
+      "by:$username for:$username approved:yes",
+      {
+        assignee_username => $username,
+        author_username   => $username,
+        'approved_by_usernames[]', 'Any'
       },
     ],
   );
