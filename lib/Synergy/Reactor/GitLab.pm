@@ -114,7 +114,7 @@ sub state ($self) {
 
 my %MR_SHORTCUT = (
   todo    => 'by:!me for:me backlogged:no',
-  ready   => 'by:me for:me approved:yes',
+  ready   => 'by:me maybefor:me approved:yes',
   waiting => 'by:me for:!me for:* backlogged:no',
 );
 
@@ -628,6 +628,35 @@ sub _compile_search ($self, $conds, $event) {
       next COND;
     }
 
+    if ($name eq 'maybefor') {
+      # This is like "assignee" but will ALSO allow "no assignee", which stinks
+      # because we have to do it client side, but it's still useful enough to
+      # implement.  Good thing we have this post-query filter system? 😕
+      # -- rjbs, 2023-12-08
+      my $field = "assignee\_id";
+
+      $value =~ s/\A!//;
+      my $who = $self->resolve_name($value, $event && $event->from_user);
+      unless ($who) {
+        $event->error_reply("I don't know who $value is.");
+        return;
+      }
+
+      my $user_id = $self->get_user_preference($who, 'user-id');
+      unless ($user_id) {
+        $event->error_reply("I don't know the GitLab user id for " .  $who->username . ".");
+        return;
+      }
+
+      push @local_filters, sub ($mr) {
+        return 1 unless $mr->{assignee} && $mr->{assignee}{id};
+        return 1 if $mr->{assignee}{id} == $user_id;
+        return;
+      };
+
+      next COND;
+    }
+
     if ($name eq 'label') {
       # Having "foo" and "None" is nonsensical, but I'm not going to sweat it
       # just now. -- rjbs, 2019-07-23
@@ -942,7 +971,7 @@ async sub mr_report ($self, $who, $arg = {}) {
   ### These categories copied from the shortcuts for "mrs SHORTCUT":
   #
   # todo    => 'by:!me for:me backlogged:no',
-  # ready   => 'by:me for:me approved:yes',
+  # ready   => 'by:me maybefor:me approved:yes',
   # waiting => 'by:me for:!me for:* backlogged:no',
   #
   # The third element in the arrayrefs below is URI query parameters to put on
@@ -959,9 +988,13 @@ async sub mr_report ($self, $who, $arg = {}) {
     ],
     [
       "you're still working on",
-      "by:$username for:$username backlogged:no approved:no",
+      "by:$username maybefor:$username backlogged:no approved:no",
       {
-        assignee_username => $username,
+        # We can't quite link to this correctly, because we need:
+        #
+        #   assignee is $username || assignee is None
+        #
+        # ...and GitLab doesn't have a mechanism to query that.
         'author_username' => $username,
         'not[label_name][]' => 'backlogged',
         'approved_by_usernames[]', 'None'
@@ -979,9 +1012,8 @@ async sub mr_report ($self, $who, $arg = {}) {
     ],
     [
       "approved and with you",
-      "by:$username for:$username approved:yes",
+      "by:$username maybefor:$username approved:yes",
       {
-        assignee_username => $username,
         author_username   => $username,
         'approved_by_usernames[]', 'Any'
       },
