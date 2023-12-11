@@ -1006,7 +1006,7 @@ async sub mr_report ($self, $who, $arg = {}) {
       {
         'not[assignee_username]' => $username,
         'author_username' => $username,
-        'assignee_username' => 'Any',
+        'assignee_id' => 'Any',
         'not[label_name][]' => 'backlogged',
       },
     ],
