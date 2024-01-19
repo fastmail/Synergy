@@ -1012,10 +1012,11 @@ async sub mr_report ($self, $who, $arg = {}) {
     ],
     [
       "approved and with you",
-      "by:$username maybefor:$username approved:yes",
+      "by:$username maybefor:$username approved:yes backlogged:no",
       {
         author_username   => $username,
-        'approved_by_usernames[]', 'Any'
+        'approved_by_usernames[]', 'Any',
+        'not[label_name][]' => 'backlogged',
       },
     ],
   );
