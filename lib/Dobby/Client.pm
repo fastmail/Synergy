@@ -142,20 +142,6 @@ async sub delete_url ($self, $path) {
   return;
 }
 
-async sub _get_snapshot ($self, $version) {
-  my $data = await $self->json_get('/snapshots?per_page=200');
-
-  my ($snapshot) = sort { $b->{name} cmp $a->{name} }
-                   grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
-                   $data->{snapshots}->@*;
-
-  if ($snapshot) {
-    return $snapshot;
-  }
-
-  die "no snapshot found for fminabox-$version";
-}
-
 async sub create_droplet ($self, $arg) {
   state @required_keys = qw( name region size tags image ssh_keys );
 
