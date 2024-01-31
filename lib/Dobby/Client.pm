@@ -67,6 +67,37 @@ async sub json_get ($self, $path) {
   decode_json($json);
 }
 
+async sub json_get_pages_of ($self, $path, $key) {
+  my $url = $self->api_base . $path;
+
+  my @items;
+
+  while ($url) {
+    my $res = await $self->http->do_request(
+      method => 'GET',
+      uri    => $url,
+      headers => {
+        'Authorization' => "Bearer " . $self->bearer_token,
+      },
+    );
+
+    unless ($res->is_success) {
+      die "error getting $path at DigitalOcean: " . $res->as_string;
+    }
+
+    my $json = $res->decoded_content(charset => undef);
+    my $data = decode_json($json);
+
+    die "no entry for $key in returned page"
+      unless exists $data->{$key};
+
+    push @items, $data->{$key}->@*;
+    $url = $data->{links}{pages}{next};
+  }
+
+  return \@items;
+}
+
 async sub _json_req_with_body ($self, $method, $path, $payload) {
   my $res = await $self->http->do_request(
     method => $method,
@@ -109,20 +140,6 @@ async sub delete_url ($self, $path) {
   }
 
   return;
-}
-
-async sub _get_snapshot ($self, $version) {
-  my $data = await $self->json_get('/snapshots?per_page=200');
-
-  my ($snapshot) = sort { $b->{name} cmp $a->{name} }
-                   grep { $_->{name} =~ m/^fminabox-\Q$version\E/ }
-                   $data->{snapshots}->@*;
-
-  if ($snapshot) {
-    return $snapshot;
-  }
-
-  die "no snapshot found for fminabox-$version";
 }
 
 async sub create_droplet ($self, $arg) {
