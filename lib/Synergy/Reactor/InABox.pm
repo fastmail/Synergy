@@ -657,9 +657,9 @@ async sub _get_snapshot ($self, $version) {
 
 async sub _get_ssh_key ($self) {
   my $dobby = $self->dobby;
-  my $keys_res = await $dobby->json_get("/account/keys");
+  my $keys = await $dobby->json_get_pages_of("/account/keys", 'ssh_keys');
 
-  my ($ssh_key) = grep {; $_->{name} eq 'fminabox' } $keys_res->{ssh_keys}->@*;
+  my ($ssh_key) = grep {; $_->{name} eq 'fminabox' } @$keys;
 
   if ($ssh_key) {
     $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->@{ qw(id name) } ]);
