@@ -20,7 +20,6 @@ command uptime => {
   help => 'uptime: Say how long synergy was up for.',
 } => async sub ($self, $event, $text) {
   my $uptime = duration(time - $^T);
-  $event->mark_handled;
   await $event->reply("Online for $uptime.");
 };
 
