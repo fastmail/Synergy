@@ -36,8 +36,6 @@ async sub start ($self) {
 command announce => {
   help => '*announce MESSAGE*: send a message to the general announcement place',
 } => async sub ($self, $event, $rest) {
-  $event->mark_handled;
-
   if ($event->from_channel->name eq $self->to_channel_name) {
     return await $event->error_reply("You're already using the target system!");
   }
