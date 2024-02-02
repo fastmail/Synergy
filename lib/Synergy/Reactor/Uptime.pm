@@ -12,8 +12,6 @@ use namespace::clean;
 use Future::AsyncAwait;
 
 use Synergy::CommandPost;
-use List::Util qw(first);
-use Time::Duration::Parse;
 use Time::Duration;
 
 command uptime => {
