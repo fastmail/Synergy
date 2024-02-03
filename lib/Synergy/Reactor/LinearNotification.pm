@@ -4,8 +4,7 @@ use utf8;
 package Synergy::Reactor::LinearNotification;
 
 use Moose;
-with 'Synergy::Role::Reactor::EasyListening';
-with 'Synergy::Role::HTTPEndpoint';
+with 'Synergy::Role::Reactor', 'Synergy::Role::HTTPEndpoint';
 
 use experimental qw(signatures postderef);
 use namespace::clean;
@@ -14,6 +13,9 @@ use Synergy::Logger '$Logger';
 use JSON::MaybeXS qw(encode_json decode_json);
 use Try::Tiny;
 use Synergy::Reactor::Linear;
+
+# Because we're a generic Reactor and not EasyListening or CommandPost:
+sub potential_reactions_to {}
 
 my $ESCALATION_EMOJI = "\N{HELMET WITH WHITE CROSS}";
 
@@ -149,7 +151,8 @@ sub http_app ($self, $env) {
           $who = 'someone' unless $was_create;
 
           my $text = sprintf
-            "$ESCALATION_EMOJI %s escalation by %s in %s: %s (%s)",
+            "%s %s escalation by %s in %s: %s (%s)",
+            $ESCALATION_EMOJI,
             $desc,
             $who,
             $app,
