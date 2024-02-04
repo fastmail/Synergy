@@ -61,16 +61,29 @@ sub start ($channel) {
 
       return if $hints->{is_notice};
 
-      my $text = $hints->{text};
-      my $had_prefix = $text =~ s/\A\@?\Q$nick\E:?\s*//i;
+      my $me    = $channel->hub->name; # Should be IRC client name, actually.
+      my $text  = Encode::decode('UTF-8', $hints->{text});
+      my $was_targeted = 0;
+
+      my $new = $channel->text_without_target_prefix($text, $me);
+      if (defined $new) {
+        $text = $new;
+        $was_targeted = 1;
+      }
+
+      my $from_user = $channel->hub->user_directory->user_by_channel_and_address(
+        $channel->name,
+        $hints->{prefix_nick},
+      );
 
       my $event = Synergy::Event->new({
         type => 'message',
         text => $text,
-        was_targeted  => $hints->{target_is_me} || $had_prefix,
+        was_targeted  => $was_targeted,
         is_public     => !! ($hints->{target_type} eq 'channel'),
         from_channel  => $channel,
         from_address  => $hints->{prefix_nick},
+        from_user     => $from_user,
         transport_data => $hints, # XXX ???
         conversation_address => $hints->{target_name},
       });
