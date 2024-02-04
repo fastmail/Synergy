@@ -4,6 +4,9 @@ package Synergy::Channel::IRC;
 
 use Moose;
 use experimental qw(signatures);
+
+use Future::AsyncAwait;
+
 use JSON::MaybeXS;
 
 use Synergy::Event;
@@ -16,7 +19,12 @@ use Net::Async::IRC;
 sub describe_event {}
 sub describe_conversation {}
 
-sub send_message_to_user { ...}
+async sub send_message_to_user ($self, $user, $text, $alts = {}) {
+  await $self->send_message(
+    $user->identity_for($self->name),
+    $alts->{irc} // $text,
+  );
+}
 
 sub send_message ($self, $address, $text, $alts = {}) {
   my @lines = split /\n/, $text;
