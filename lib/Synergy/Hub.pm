@@ -182,7 +182,11 @@ sub handle_event ($self, $event) {
       # (Michael notes that if this is a pain to fix, we can use Future->wrap
       # here.  Legit.)
       my $result = $hit->handle_event($event);
-      return unless $result;
+
+      unless ($result) {
+        $Logger->log([ "false result from %s", $hit->description ]);
+        return;
+      }
 
       # The retain here should be harmless, but I have low-key anxiety that
       # we're going to end up with a skrillion futures that never go away.  We
