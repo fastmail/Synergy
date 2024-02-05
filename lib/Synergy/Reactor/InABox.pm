@@ -30,6 +30,12 @@ has ssh_key_id => (
   isa => 'Str',
 );
 
+has digitalocean_ssh_key_name => (
+  is  => 'ro',
+  isa => 'Str',
+  default => 'synergy',
+);
+
 has digitalocean_api_token => (
   is       => 'ro',
   isa      => 'Str',
@@ -659,7 +665,7 @@ async sub _get_ssh_key ($self) {
   my $dobby = $self->dobby;
   my $keys = await $dobby->json_get_pages_of("/account/keys", 'ssh_keys');
 
-  my ($ssh_key) = grep {; $_->{name} eq 'fminabox' } @$keys;
+  my ($ssh_key) = grep {; $_->{name} eq $self->digitalocean_ssh_key_name } @$keys;
 
   if ($ssh_key) {
     $Logger->log([ "Found SSH key: %s (%s)", $ssh_key->@{ qw(id name) } ]);
