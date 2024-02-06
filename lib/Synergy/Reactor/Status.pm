@@ -191,8 +191,6 @@ command status => {
 
   my $who = $self->resolve_name($who_name, $event->from_user);
 
-  $event->mark_handled;
-
   unless ($who) {
     return await $event->error_reply(qq{Sorry, I don't know who "$who_name" is.});
   }
