@@ -86,7 +86,12 @@ async sub start ($channel) {
   my $client = Net::Async::IRC->new(
     on_message_text => sub {
       my ($irc, $message, $hints) = @_;
-      $Logger->log([ "%s", { message => $message, hints => $hints } ]);
+
+      $Logger->log_debug([
+        "%s channel: IRC message: %s",
+        $channel->name,
+        { message => $message, hints => $hints }
+      ]);
 
       return if $hints->{is_notice};
 
