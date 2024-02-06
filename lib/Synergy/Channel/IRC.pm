@@ -17,6 +17,34 @@ use namespace::autoclean;
 use Defined::KV;
 use Net::Async::IRC;
 
+has irc_channels => (
+  isa => 'ArrayRef[Str]',
+  traits  => [ 'Array' ],
+  handles => { irc_channels => 'elements' },
+  required => 1,
+);
+
+before start => sub ($self) {
+  # This really should be done with a MooseX::Type, probably, but for now this
+  # is faster and simpler.
+  my @irc_channels = $self->irc_channels;
+  unless (@irc_channels) {
+    $Logger->log_fatal([
+      "channel %s: empty irc_channels specified",
+      $self->name,
+    ]);
+  }
+
+  my @bad = grep {; ! /\A[#&][-_0-9a-z]*\z/ } @irc_channels;
+  if (@bad) {
+    $Logger->log_fatal([
+      "channel %s: invalid irc_channels specified: %s",
+      $self->name,
+      \@bad,
+    ]);
+  }
+};
+
 sub describe_event {}
 sub describe_conversation {}
 
@@ -104,11 +132,12 @@ async sub start ($channel) {
     realname => $nick,
   );
 
-  $Logger->log("connected to server");
+  $Logger->log([ "channel %s: connected to IRC server", $channel->name ]);
 
-  await $client->send_message(JOIN => (undef) => "#synergy-bot");
-
-  $Logger->log("joined channel");
+  for my $channel_name ($channel->irc_channels) {
+    await $client->send_message(JOIN => (undef) => "#synergy-bot");
+    $Logger->log([ "channel %s: joined %s", $channel->name, $channel_name ]);
+  }
 
   return;
 }
