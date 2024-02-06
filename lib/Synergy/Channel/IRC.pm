@@ -52,7 +52,7 @@ with 'Synergy::Role::Channel';
 has host   => (is => 'ro', required => 1, isa => 'Str');
 has client => (is => 'rw');
 
-sub start ($channel) {
+async sub start ($channel) {
   my $nick = $channel->hub->name;
 
   my $client = Net::Async::IRC->new(
@@ -99,18 +99,18 @@ sub start ($channel) {
 
   $channel->hub->loop->add($client);
 
-  $client->login(
+  await $client->login(
     host => $channel->host,
     nick => $nick,
     user => $nick,
     realname => $nick,
-  )->then(sub {
-    # This doesn't work yet.  I think it's because I don't understand how
-    # send_message works properly. -- rjbs, 2019-06-12
-    $client->send_message(JOIN => (undef) => "#synergy-bot");
-  })->then(sub {
-    $Logger->log("connected"); Future->done
-  })->get;
+  );
+
+  $Logger->log("connected to server");
+
+  await $client->send_message(JOIN => (undef) => "#synergy-bot");
+
+  $Logger->log("joined channel");
 
   return;
 }
