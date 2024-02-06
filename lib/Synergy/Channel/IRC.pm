@@ -14,6 +14,7 @@ use Synergy::Logger '$Logger';
 
 use namespace::autoclean;
 
+use Defined::KV;
 use Net::Async::IRC;
 
 sub describe_event {}
@@ -83,7 +84,7 @@ sub start ($channel) {
         is_public     => !! ($hints->{target_type} eq 'channel'),
         from_channel  => $channel,
         from_address  => $hints->{prefix_nick},
-        from_user     => $from_user,
+        defined_kv(from_user => $from_user),
         transport_data => $hints, # XXX ???
         conversation_address => $hints->{target_name},
       });
