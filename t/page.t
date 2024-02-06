@@ -14,7 +14,7 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
-use Net::EmptyPort qw(empty_port);
+use Synergy::Test::EmptyPort qw(empty_port);
 use Path::Tiny ();
 use Synergy::Tester;
 
