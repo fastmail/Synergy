@@ -291,6 +291,7 @@ sub handle_reconnect {
   $self->client->close_now;
   $self->clear_client;
   $self->_clear_heartbeat_timer;
+  $self->_clear_waiting_for_heartbeat_ack_since;
 
   $self->connect;
 }
