@@ -97,7 +97,7 @@ async sub start ($channel) {
 
       my $me    = $channel->hub->name; # Should be IRC client name, actually.
       my $text  = Encode::decode('UTF-8', $hints->{text});
-      my $was_targeted = 0;
+      my $was_targeted = $hints->{target_type} eq 'user' ? 1 : 0;
 
       my $new = $channel->text_without_target_prefix($text, $me);
       if (defined $new) {
@@ -114,12 +114,16 @@ async sub start ($channel) {
         type => 'message',
         text => $text,
         was_targeted  => $was_targeted,
-        is_public     => !! ($hints->{target_type} eq 'channel'),
+        is_public     => ($hints->{target_type} eq 'channel' ? 1 : 0),
         from_channel  => $channel,
         from_address  => $hints->{prefix_nick},
         defined_kv(from_user => $from_user),
         transport_data => $hints, # XXX ???
-        conversation_address => $hints->{target_name},
+        conversation_address => (
+          $hints->{target_type} eq 'channel'
+            ? $hints->{target_name}
+            : $hints->{prefix_nick}
+        )
       });
 
       $channel->hub->handle_event($event);
