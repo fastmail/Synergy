@@ -89,8 +89,6 @@ async sub start ($channel) {
         conversation_address => $hints->{target_name},
       });
 
-      $Logger->log("Event <<$text>> from <<$hints->{prefix_nick}>>");
-
       $channel->hub->handle_event($event);
     },
   );
