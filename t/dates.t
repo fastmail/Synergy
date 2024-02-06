@@ -4,6 +4,8 @@ use utf8;
 
 use lib 'lib', 't/lib';
 
+use lib 'lib', 't/lib';
+
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';
@@ -12,7 +14,7 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
-use Net::EmptyPort qw(empty_port);
+use Synergy::Test::EmptyPort qw(empty_port);
 use Synergy::Hub;
 
 my $synergy = Synergy::Hub->synergize(

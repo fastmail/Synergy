@@ -11,7 +11,6 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
-use Net::EmptyPort qw(empty_port);
 use Plack::Response;
 use Synergy::Tester;
 

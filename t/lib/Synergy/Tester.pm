@@ -5,7 +5,9 @@ package Synergy::Tester;
 use Synergy::Logger::Test '$Logger';
 
 use Defined::KV;
-use Net::EmptyPort qw(empty_port);
+use IO::Async::Test;
+use Synergy::Hub;
+use Synergy::Test::EmptyPort qw(empty_port);
 
 my sub _test_logger {
   Synergy::Logger->default_logger_class->new({

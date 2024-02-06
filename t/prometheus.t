@@ -11,8 +11,9 @@ use IO::Async::Loop;
 use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
-use Net::EmptyPort qw(empty_port);
 use Synergy::Tester;
+use Synergy::Test::EmptyPort qw(empty_port);
+use Synergy::Hub;
 
 my $synergy = Synergy::Tester->new_tester({
   server_port => empty_port(),
