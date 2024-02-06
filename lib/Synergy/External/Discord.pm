@@ -284,7 +284,7 @@ sub handle_heartbeat {
 }
 
 sub handle_reconnect {
-  my ($self, $data) = @_;
+  my ($self) = @_;
 
   $Logger->log("Discord: handle_reconnect: attempting to reconnect");
 
@@ -372,6 +372,13 @@ sub send_heartbeat {
       my $ago  = $now - $last;
 
       $Logger->log([ "$msg; last heartbeat ack %0.4fs ago", $ago ]);
+
+      if ($ago > 300) {
+        # If we haven't heard back in 5m, reconnect.  Why 5m?  Will this work?
+        # I don't know, I'm grasping. -- rjbs, 2024-02-06
+        $self->handle_reconnect;
+        return;
+      }
     } else {
       $Logger->log("$msg; no heartbeat has ever been acked");
     }
