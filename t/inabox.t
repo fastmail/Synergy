@@ -220,7 +220,7 @@ my %CREATE_RESPONSES = (
 
   ssh_key_fetch => gen_response(200, {
     ssh_keys => [{
-      name => 'fminabox',
+      name => 'synergy',
       id => 99,
     }],
   }),
