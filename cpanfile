@@ -47,6 +47,7 @@ requires "MooseX::Role::Parameterized" => "0";
 requires "MooseX::StrictConstructor" => "0";
 requires "Net::Async::HTTP" => "0";
 requires "Net::Async::HTTP::Server::PSGI" => "0";
+requires "Net::Async::IRC" => "0";
 requires "Net::Async::WebSocket::Client" => "0";
 requires "POSIX" => "0";
 requires "Params::Util" => "0";
