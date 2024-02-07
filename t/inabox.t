@@ -12,6 +12,7 @@ use Sub::Override;
 use Storable qw(dclone);
 use Test::More;
 use Test::Deep;
+use Time::HiRes ();
 
 use Synergy::Logger::Test '$Logger';
 use Synergy::Reactor::InABox;
@@ -73,6 +74,27 @@ sub send_message ($text, $from = $channel->default_from, $wait_arg = {}) {
   $channel->queue_todo([ send => { text => $text, from => $from }  ]);
   $channel->queue_todo([ wait => $wait_arg ]);
   wait_for { $channel->is_exhausted; };
+
+  # This is sort of idiotic, by which I mean a few things:
+  # * This code is doing something stupid because that's how to make it work.
+  # * I am (only a little bit) an idiot for making this necessary.
+  # * This is stupidly unoptimized because optimizing something like this is
+  #   stupid.
+  #
+  # The above *should* work, but it only measures that every event has been
+  # sent through the queue.  Instead, we should make exhaustion on the test
+  # channel mean that every fired reaction handler has fully completed.  This
+  # is probably doable, but it will need some real thinking.  Instead, we are
+  # going to just let the loop run for one quarter second.
+  #
+  # Annoyingly, this code was not needed on Rik's laptop, either because it's
+  # very fast or because the loop behavior is somewhat different there.
+  #
+  # Deleting this code later will be a delight. -- rjbs, 2024-02-07
+  my $now = Time::HiRes::time();
+  until (Time::HiRes::time() - $now > 0.25) {
+    $channel->hub->loop->loop_once(1);
+  }
 }
 
 sub single_message_text {
