@@ -13,7 +13,7 @@ use Synergy::CommandPost;
 
 use Synergy::Logger '$Logger';
 
-use experimental qw(lexical_subs signatures);
+use experimental qw(isa lexical_subs signatures);
 
 my $EMOJI_CONFIG = <<'END_EMOJI';
 🐀 rat
@@ -248,6 +248,8 @@ responder cat_pic => {
 
 listener misc_pic => async sub ($self, $event) {
   my $text = $event->text;
+  my $from_channel = $event->from_channel;
+
   while ($text =~ /(\w+)\s+pic/ig) {
     my $name = lc $1;
     $Logger->log("looking for $name pic");
@@ -261,27 +263,17 @@ listener misc_pic => async sub ($self, $event) {
     my $emoji  = $e->{emoji}->[ int rand $e->{emoji}->@* ];
     my $slack  = $e->{slackname}->[ int rand $e->{slackname}->@* ];
 
-    if ($event->from_channel->isa('Synergy::Channel::Slack')) {
+    if ($from_channel isa Synergy::Channel::Slack
+     || $from_channel isa Synergy::Channel::Discord
+     || $from_channel isa Synergy::Channel::Console
+    ) {
       return await $event->reply(
-        $emoji,
-        {
-          slack_reaction => { event => $event, reaction => $slack },
-        },
-      );
-    }
-
-    if ($event->from_channel->isa('Synergy::Channel::Discord')) {
-      $Logger->log("discord");
-      return await $event->reply(
-        $emoji,
+        "[ pretend you got this cute reaction: $emoji ]",
         {
           discord_reaction => { event => $event, reaction => $emoji },
+          slack_reaction   => { event => $event, reaction => $slack },
         },
       );
-    }
-
-    if ($event->from_channel->isa('Synergy::Channel::Console')) {
-      return await $event->reply("[ pretend you got this cute reaction: $emoji ]");
     }
 
     # This is sort of a mess.  If someone addresses us from an unsupported
@@ -299,7 +291,7 @@ listener misc_pic => async sub ($self, $event) {
 # slackmoji. -- michael, 2019-02-06
 listener jazz_pic => async sub ($self, $event) {
   return unless $event->text =~ /jazz/i;
-  return unless $event->from_channel->isa('Synergy::Channel::Slack');
+  return unless $event->from_channel isa Synergy::Channel::Slack;
   return unless rand() < 0.1;
 
   return await $event->reply(
