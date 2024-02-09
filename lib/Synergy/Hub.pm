@@ -140,6 +140,27 @@ sub component_named ($self, $name) {
   confess("Could not find channel or reactor named '$name'");
 }
 
+has _events_in_flight => (
+  isa    => 'ArrayRef',
+  traits => [ 'Array' ],
+  init_arg => undef,
+  default  => sub {  []  },
+  writer   => '_set_events_in_flight',
+  handles  => {
+    _events_in_flight     => 'elements',
+    _log_event_in_flight  => 'push',
+  },
+);
+
+sub _cull_events_in_flight ($self) {
+  my @events_in_flight = grep {; ! $_->{event}->completeness->is_ready }
+                         $self->_events_in_flight;
+
+  $self->_set_events_in_flight(\@events_in_flight);
+
+  return;
+}
+
 sub handle_event ($self, $event) {
   my $log_method = $self->env->log_all_incoming_messages ? 'log' : 'log_debug';
 
@@ -164,6 +185,8 @@ sub handle_event ($self, $event) {
     return;
   }
 
+  my @to_react;
+
   for my $hit (@hits) {
     my $reactor = $hit->reactor;
     my $rname   = $reactor->name;
@@ -184,6 +207,11 @@ sub handle_event ($self, $event) {
         $Logger->log([ "false result from %s", $hit->description ]);
         return;
       }
+
+      push @to_react, {
+        hit    => $hit,
+        result => $result,
+      };
 
       # The retain here should be harmless, but I have low-key anxiety that
       # we're going to end up with a skrillion futures that never go away.  We
@@ -220,6 +248,16 @@ sub handle_event ($self, $event) {
       ]);
     };
   }
+
+  $self->_log_event_in_flight({
+    event     => $event,
+    reactions => \@to_react,
+  });
+
+  Future->wait_all(map {; $_->{result} } @to_react)->on_ready(sub {
+    $event->completeness->done;
+    $self->_cull_events_in_flight;
+  })->retain;
 
   unless ($event->was_handled) {
     return unless $event->was_targeted;
@@ -265,6 +303,7 @@ sub set_loop ($self, $loop) {
 
   $self->_maybe_setup_diagnostic_uplink;
   $self->_setup_diagnostic_metrics_timer;
+  $self->_setup_event_in_flight_timer;
 
   return $loop;
 }
@@ -321,6 +360,23 @@ sub _setup_diagnostic_metrics_timer ($self) {
   $loop->add($diag_timer);
 
   $diag_timer->start;
+
+  return;
+}
+
+sub _setup_event_in_flight_timer ($self) {
+  my $cull_timer = IO::Async::Timer::Periodic->new(
+    notifier_name => 'cull-handled-events',
+    interval => 60,
+    on_tick  => sub { $self->_cull_events_in_flight; }
+  );
+
+  # As with the diagnostic timer, we're not keeping a reference to this
+  # timer either, so we can never stop it.  We can address this later, if
+  # needed. --r
+  $self->loop->add($cull_timer);
+
+  $cull_timer->start;
 
   return;
 }
