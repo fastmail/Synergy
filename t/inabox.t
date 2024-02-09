@@ -28,6 +28,8 @@ my $result = Synergy::Tester->testergize({
       digitalocean_api_token => '1234',
       default_box_version    => 'bullseye',
       box_datacentres        => ['nyc3', 'sfo3'],
+
+      post_creation_delay    => 0.01,
     },
   },
   default_from => 'alice',

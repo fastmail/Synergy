@@ -213,6 +213,13 @@ async sub handle_status ($self, $event, $switches) {
   return await $event->reply("You don't seem to have any boxes.");
 }
 
+# This is not here so we can set it to zero and get rate limited or see bugs in
+# production.  It's here so we can make the tests run fast. -- rjbs, 2024-02-09
+has post_creation_delay => (
+  is => 'ro',
+  default => 5,
+);
+
 async sub handle_create ($self, $event, $switches) {
   my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
 
@@ -267,11 +274,11 @@ async sub handle_create ($self, $event, $switches) {
     Synergy::X->throw_public("There was an error creating the box. Try again.");
   }
 
-  # We delay this 5 seconds because a completed droplet sometimes does not
-  # show up in GET /droplets immediately, which causes annoying problems.
-  # Waiting 5s is a silly fix, but seems to work, and it's not like box
-  # creation is lightning-fast anyway. -- michael, 2021-04-16
-  await $self->hub->loop->delay_future(after => 5);
+  # We delay this because a completed droplet sometimes does not show up in GET
+  # /droplets immediately, which causes annoying problems.  Waiting 5s is a
+  # silly fix, but seems to work, and it's not like box creation is
+  # lightning-fast anyway. -- michael, 2021-04-16
+  await $self->hub->loop->delay_future(after => $self->post_creation_delay);
 
   $droplet = await $self->_get_droplet_for($user, $tag);
 
