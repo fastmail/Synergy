@@ -67,7 +67,14 @@ sub testergize {
   testing_loop($synergy->loop);
 
   wait_for {
-    $synergy->channel_named('test-channel')->is_exhausted;
+    return unless $synergy->channel_named('test-channel')->is_exhausted;
+
+    my @events = grep {; ! $_->{event}->completeness->is_ready }
+                 $synergy->_events_in_flight;
+
+    return if @events;
+
+    return 1;
   };
 
   return Synergy::Tester::Result->new({

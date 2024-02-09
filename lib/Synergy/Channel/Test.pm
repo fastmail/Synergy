@@ -134,7 +134,7 @@ sub is_exhausted ($self) {
   # If any http requests are in flight, our reactors are waitig and haven't
   # responded yet, so give them some more time
   return $self->hub->requests_in_flight ? 0 : 1;
-};
+}
 
 sub _todo_to_notifier ($self, $todo) {
   my ($method, @rest) = @$todo;
