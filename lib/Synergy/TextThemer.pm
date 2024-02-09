@@ -13,6 +13,10 @@ use utf8;
 
 use Term::ANSIColor qw(colored);
 
+my sub plainlength ($str) {
+  length Term::ANSIColor::colorstrip($str);
+}
+
 my %THEME = (
   cyan    => { decoration_color =>   75,  text_color => 117 },
   green   => { decoration_color =>   10,  text_color =>  84 },
@@ -91,9 +95,14 @@ sub _format_generic_box ($self, $text, $closed, $title) {
   for my $line (split /\n/, $text) {
     $new_text .= "$line_C$B_ver $text_C";
 
-    if ($closed && length $line <= 76) {
-      $new_text .= sprintf '%-76s', $line;
-      $new_text .= "$line_C$B_ver" if length $line <= 76;
+    state $CLEAR = Term::ANSIColor::color('reset');
+    $line =~ s/\Q$CLEAR/$text_C/g;
+
+    my $plainlength = plainlength($line);
+
+    if ($closed && $plainlength <= 76) {
+      $new_text .= $line . (q{ } x (76 - $plainlength));
+      $new_text .= "$line_C$B_ver";
     } else {
       $new_text .= $line;
     }
