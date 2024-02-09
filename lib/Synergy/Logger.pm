@@ -26,6 +26,25 @@ sub default_logger_args {
     Synergy::Logger::_Logger;
   use parent 'Log::Dispatchouli';
 
+  use experimental 'signatures';
+
+  sub new ($self, $arg) {
+    my $logger = $self->SUPER::new($arg);
+
+    if ($arg->{to_tap}) {
+      require Log::Dispatch::TAP;
+      my $tap_output = Log::Dispatch::TAP->new(
+        method    => 'note',
+        min_level => 'debug',
+        callbacks => [ sub (%arg) { return "LOG: $arg{message}" } ],
+      );
+
+      $logger->dispatcher->add($tap_output);
+    }
+
+    return $logger;
+  }
+
   sub env_prefix { 'SYNERGY_LOG' }
 }
 
