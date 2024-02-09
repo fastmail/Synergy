@@ -226,7 +226,7 @@ async sub _do_action_status_f ($self, $action_url) {
     }
 
     if ($status eq 'errored') {
-      Carp::confess("action $action_url failed: " . encode_json($status));
+      Carp::confess("action $action_url failed: " .  encode_json($action->{action}));
     }
 
     Carp::confess("action $action_url in unknown state: $status");
