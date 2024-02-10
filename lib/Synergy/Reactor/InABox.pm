@@ -450,7 +450,7 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
     return await $event->reply($message);
   }
 
-  if ($event->from_channel->isa('Synergy::Channel::Slack')) {
+  if ($event->from_channel isa Synergy::Channel::Slack) {
     $message .= " Here's the output from setup:";
 
     return await $event->from_channel->slack->api_call(

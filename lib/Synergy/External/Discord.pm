@@ -3,7 +3,7 @@ use warnings;
 package Synergy::External::Discord;
 
 use Moose;
-use experimental qw(lexical_subs signatures);
+use experimental qw(isa lexical_subs signatures);
 use namespace::autoclean;
 use utf8;
 
@@ -402,7 +402,7 @@ async sub send_message ($self, $channel_id, $text, $alts = {}) {
     my $e = $r->{event};
 
     if ( $e
-      && $e->from_channel->isa('Synergy::Channel::Discord')
+      && $e->from_channel isa Synergy::Channel::Discord
       && $e->from_channel->discord == $self
     ) {
       my $remove = $r->{reaction} =~ s/^-//;

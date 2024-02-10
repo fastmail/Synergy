@@ -7,7 +7,7 @@ use Moose;
 with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
-use experimental qw(signatures);
+use experimental qw(isa signatures);
 use namespace::clean;
 
 use Carp ();
@@ -868,7 +868,7 @@ sub _resolve_incidents($self, $event, $arg) {
 
 sub _check_at_oncall ($self) {
   my $channel = $self->oncall_channel;
-  return unless $channel && $channel->isa('Synergy::Channel::Slack');
+  return unless $channel && $channel isa Synergy::Channel::Slack;
 
   $Logger->log("checking PagerDuty for oncall updates");
 
