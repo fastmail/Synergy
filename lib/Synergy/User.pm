@@ -70,13 +70,6 @@ sub theirs    { $_[0]->_pronoun->[3] }
 sub theyre    { my $p = $_[0]->_pronoun->[0]; $p eq 'they' ? "they're" : "$p\'s" }
 sub themself  { $_[0]->_pronoun->[4] }
 
-has wtf_replies => (
-  isa => 'ArrayRef',
-  traits  => [ qw(Array) ],
-  handles => { wtf_replies => 'elements' },
-  default => sub {  []  },
-);
-
 has _time_zone => (
   is => 'ro',
   init_arg => 'time_zone',

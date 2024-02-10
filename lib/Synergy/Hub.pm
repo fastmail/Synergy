@@ -254,15 +254,12 @@ sub handle_event ($self, $event) {
     $self->_cull_events_in_flight;
   })->retain;
 
-  unless ($event->was_handled) {
-    return unless $event->was_targeted;
-
-    my @replies = $event->from_user ? $event->from_user->wtf_replies : ();
-    @replies  = $self->env->wtf_replies unless @replies;
-    @replies  = 'Does not compute.'     unless @replies;
-
-    $event->error_reply($replies[int(rand @replies)]);
-    return;
+  if ($event->was_targeted && ! $event->was_handled) {
+    if (my @replies = $self->env->wtf_replies) {
+      $event->error_reply($replies[int(rand @replies)]);
+    } else {
+      $event->error_reply('Does not compute.');
+    }
   }
 
   return;
