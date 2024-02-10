@@ -62,10 +62,15 @@ sub testergize {
   my $directory = $synergy->user_directory;
 
   for my $username (keys %$users) {
+    my $config = $users->{$username} // {};
+
     my $user = Synergy::User->new({
-      username => $username,
-      directory => $directory,
-      identities => { 'test-channel' => $username },
+      username   => $username,
+      directory  => $directory,
+      identities => {
+        ($config->{extra_identities} ? $config->{extra_identities}->%* : ()),
+        'test-channel' => $username,
+      },
     });
 
     $directory->register_user($user);
