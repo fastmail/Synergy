@@ -324,11 +324,18 @@ sub _diagnostic_cmd_events ($self, $rest) {
       elide($entry->{event}->text, 40);
 
     for my $reaction_entry ($entry->{reactions}->@*) {
+      my $state = $reaction_entry->{result}->state;
+      $state  = $state eq 'done'      ? colored(['bright_green'], $state)
+              : $state eq 'cancelled' ? colored(['bright_black'], $state)
+              : $state eq 'pending'   ? colored(['ansi214'], $state)
+              : $state eq 'failed'    ? colored(['bright_red'], $state)
+              :                         $state;
+
       $msg .= sprintf "- reaction %s=%s %s=%s\n",
-        Term::ANSIColor::colored([ 'bright_white' ], 'desc'),
+        colored([ 'bright_white' ], 'desc'),
         $reaction_entry->{hit}->description,
-        Term::ANSIColor::colored([ 'bright_white' ], 'state'),
-        $reaction_entry->{result}->state;
+        colored([ 'bright_white' ], 'state'),
+        $state;
     }
   }
 
