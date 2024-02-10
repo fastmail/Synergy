@@ -3,20 +3,16 @@
 use v5.32.0;
 use warnings;
 
-use lib 'lib';
+use lib 'lib', 't/lib';
 
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';
 
-use IO::Async::Loop;
-use IO::Async::Test;
-use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
-use Net::EmptyPort qw(empty_port);
 use Plack::Response;
 use MIME::Base64 'encode_base64';
-use Synergy::Hub;
+use Synergy::Tester;
 
 package Synergy::Channel::Test::HTTPEndpoint {
 
@@ -33,40 +29,23 @@ package Synergy::Channel::Test::HTTPEndpoint {
   }
 }
 
-package Synergy::Channel::Test::HTTPEndpointAuth {
-
-  use Moose;
-  extends 'Synergy::Channel::Test::HTTPEndpoint';
-
-  has '+http_path' => (
-    default => '/auth',
-  );
-}
-
-# Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
-    user_directory => "t/data/users.yaml",
-    server_port => empty_port(),
-    channels => {
-      'test-channel-endpoint' => {
-        class => 'Synergy::Channel::Test::HTTPEndpoint',
-      },
-      'test-channel-endpoint-auth' => {
-        class => 'Synergy::Channel::Test::HTTPEndpointAuth',
-        http_username => 'someuser',
-        http_password => 'somepass',
-      },
+my $result = Synergy::Tester->testergize({
+  extra_channels => {
+    'test-channel-endpoint' => {
+      class => 'Synergy::Channel::Test::HTTPEndpoint',
     },
-  }
-);
-
-# Tests begin here.
-testing_loop($synergy->loop);
+    'test-channel-endpoint-auth' => {
+      class => 'Synergy::Channel::Test::HTTPEndpoint',
+      http_path => '/auth',
+      http_username => 'someuser',
+      http_password => 'somepass',
+    },
+  },
+});
 
 my $http = Net::Async::HTTP->new(timeout => 2);
-$synergy->loop->add($http);
-my $port = $synergy->server_port;
+$result->synergy->loop->add($http);
+my $port = $result->synergy->server_port;
 
 {
   my ($res) = $http->do_request(uri => "http://localhost:$port/test")->get;

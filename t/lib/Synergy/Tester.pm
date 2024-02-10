@@ -45,7 +45,8 @@ sub testergize {
         'test-channel' => {
           class     => 'Synergy::Channel::Test',
           default_from => $arg->{default_from} // 'tester',
-        }
+        },
+        ($arg->{extra_channels} // {})->%*,
       },
       reactors => $arg->{reactors},
       server_port => empty_port(),
