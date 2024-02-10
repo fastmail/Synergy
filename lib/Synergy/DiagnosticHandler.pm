@@ -84,6 +84,7 @@ Help topics:
   nlist   - print a list of all notifiers, counted by name/class
   ntree   - print a tree of all notifiers
   events  - print a list of all events in flight
+  prom    - print the current Prometheus metrics
 
 EOH
 
@@ -126,6 +127,10 @@ EOH
 
 $HELP{events} = <<'EOH';
 Prints a list of every event still in flight.
+EOH
+
+$HELP{prom} = <<'EOH';
+Prints the current Prometheus metrics.
 EOH
 
 sub _help_for ($self, $arg) {
@@ -344,6 +349,12 @@ sub _diagnostic_cmd_events ($self, $rest) {
   }
 
   return [ box => $msg ];
+}
+
+sub _diagnostic_cmd_prom ($self, $rest) {
+  $self->hub->_update_prom;
+  my $prom = $self->hub->prom;
+  return [ box => $prom->format ];
 }
 
 sub _do_diagnostic_command ($self, $text) {
