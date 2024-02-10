@@ -8,9 +8,10 @@ use experimental 'signatures';
 
 use Synergy::Logger::Test '$Logger';
 
+use Defined::KV;
 use IO::Async::Test;
-use Synergy::Hub;
 use Net::EmptyPort qw(empty_port);
+use Synergy::Hub;
 
 package Synergy::Tester::Result {
   use Moose;
@@ -50,6 +51,9 @@ sub testergize {
       },
       reactors => $arg->{reactors},
       server_port => empty_port(),
+
+      defined_kv(tls_cert_file => $arg->{tls_cert_file}),
+      defined_kv(tls_key_file  => $arg->{tls_key_file}),
     }
   );
 
