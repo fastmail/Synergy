@@ -212,18 +212,14 @@ sub handle_event ($self, $event) {
         result => $result,
       };
 
-      # The retain here should be harmless, but I have low-key anxiety that
-      # we're going to end up with a skrillion futures that never go away.  We
-      # can add accounting for this another day. -- rjbs, 2021-11-29
-      $result->else(sub {
-        my (@args) = @_;
+      $result->else(sub (@args) {
         $Logger->log([
           "reaction %s resulted in failure: %s",
           $hit->description,
           "@args", # stupid, but avoids json serialization guff
         ]);
 
-        if ($args[0] isa 'Synergy::X' && $args[0]->is_public) {
+        if ($args[0] isa Synergy::X && $args[0]->is_public) {
           return $event->reply($args[0]->message);
         }
 
