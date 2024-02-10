@@ -51,6 +51,7 @@ sub testergize {
       },
       reactors => $arg->{reactors},
       server_port => empty_port(),
+      metrics_path => '/metrics',
 
       defined_kv(tls_cert_file => $arg->{tls_cert_file}),
       defined_kv(tls_key_file  => $arg->{tls_key_file}),

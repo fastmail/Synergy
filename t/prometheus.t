@@ -3,7 +3,7 @@
 use v5.32.0;
 use warnings;
 
-use lib 'lib';
+use lib 'lib', 't/lib';
 
 use Test::More;
 
@@ -14,41 +14,27 @@ use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
-use Synergy::Hub;
+use Synergy::Tester;
 
 # Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
+my $result = Synergy::Tester->testergize(
   {
-    user_directory => "t/data/users.yaml",
     server_port => empty_port(),
-    metrics_path => '/metrics',
-    channels => {
-      'test-channel' => {
-        class     => 'Synergy::Channel::Test',
-        todo      => [
-          [ send => { text => "one" } ],
-          [ send => { text => "two" } ],
-          [ send => { text => "three" } ],
-        ],
-      }
-    },
+    todo      => [
+      [ send => { text => "one" } ],
+      [ send => { text => "two" } ],
+      [ send => { text => "three" } ],
+    ],
     reactors => {
       prometheus => { class => 'Synergy::Reactor::Prometheus' },
     },
   }
 );
 
-# Tests begin here.
-testing_loop($synergy->loop);
-
-wait_for {
-  $synergy->channel_named('test-channel')->is_exhausted;
-};
-
 my $http = Net::Async::HTTP->new;
-$synergy->loop->add($http);
+$result->synergy->loop->add($http);
 
-my $port = $synergy->server_port;
+my $port = $result->synergy->server_port;
 
 my ($res) = $http->do_request(uri => "http://localhost:$port/metrics")->get;
 my $expect = <<'END';
