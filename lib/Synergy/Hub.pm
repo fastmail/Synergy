@@ -193,19 +193,17 @@ sub handle_event ($self, $event) {
     my $rname   = $reactor->name;
 
     try {
-      # We should always return a future -- specifically, a single future that
-      # represents all pending (or complete) action as the result of this
-      # method.  Sometimes, though, we don't, largely for historical reasons.
-      # Rather than force ourselves to fix them all up front, let's just ignore
-      # false-returning reactions.  Things that return true, non-future values,
-      # though, will be problems… and we'll fix them! -- rjbs, 2021-11-29
-      #
-      # (Michael notes that if this is a pain to fix, we can use Future->wrap
-      # here.  Legit.)
       my $result = $hit->handle_event($event);
 
-      unless ($result) {
-        $Logger->log([ "false result from %s", $hit->description ]);
+      # This should probably be fatal, but before we make it fatal, let's find
+      # out where it might still be happening. -- rjbs, 2024-02-09
+      unless ($result isa Future) {
+        $Logger->log([
+          "non-Future result from %s: %s",
+          $hit->description,
+          $result,
+        ]);
+
         return;
       }
 
