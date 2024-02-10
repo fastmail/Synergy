@@ -2,7 +2,7 @@
 use v5.32.0;
 use warnings;
 
-use lib 'lib';
+use lib 'lib', 't/lib';
 
 use Test::More;
 
@@ -13,38 +13,26 @@ use IO::Async::Test;
 use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
-use Synergy::Hub;
+use Synergy::Tester;
 
 # Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
-    user_directory => "t/data/users.yaml",
-    server_port => empty_port(),
-    channels => {
-      'test-channel' => {
-        class     => 'Synergy::Channel::Test',
-        todo      => [
-          [ send    => { text => "synergy: help" }  ],
-          [ wait    => { seconds => 0.1  }  ],
-        ],
-      }
-    },
-    reactors => {
-      help1 => { class => 'Synergy::Reactor::Help' },
-      help2 => { class => 'Synergy::Reactor::Help' },
-      echo => { class => 'Synergy::Reactor::Echo' },
-    }
+my $result = Synergy::Tester->testergize({
+  todo      => [
+    [ send    => { text => "synergy: help" }  ],
+  ],
+  default_from => 'alice',
+  users => {
+    alice   => undef,
+    charlie => undef,
+  },
+  reactors => {
+    help1 => { class => 'Synergy::Reactor::Help' },
+    help2 => { class => 'Synergy::Reactor::Help' },
+    echo => { class => 'Synergy::Reactor::Echo' },
   }
-);
+});
 
-# Tests begin here.
-testing_loop($synergy->loop);
-
-wait_for {
-  $synergy->channel_named('test-channel')->is_exhausted;
-};
-
-my @replies = $synergy->channel_named('test-channel')->sent_messages;
+my @replies = $result->synergy->channel_named('test-channel')->sent_messages;
 
 is(@replies, 1, "one reply recorded");
 
