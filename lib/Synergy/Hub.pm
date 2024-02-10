@@ -149,6 +149,7 @@ has _events_in_flight => (
   handles  => {
     _events_in_flight     => 'elements',
     _log_event_in_flight  => 'push',
+    _count_of_events_in_flight  => 'count',
   },
 );
 
@@ -339,19 +340,16 @@ sub _setup_diagnostic_metrics_timer ($self) {
     type => 'gauge',
   );
 
+  $self->prom->declare('synergy_active_events',
+    help => 'Number of Synergy::Event objects in flight',
+    type => 'gauge',
+  );
+
   my $diag_timer = IO::Async::Timer::Periodic->new(
     notifier_name => 'diag-metrics',
     interval => 60,
     on_tick  => sub ($timer, @arg) {
-      my %notifier_count;
-      $notifier_count{ ref $_ }++ for $loop->notifiers;
-
-      for my $class (keys %notifier_count) {
-        $prom->set(
-          synergy_ioasync_notifiers => $notifier_count{$class},
-          { class => $class },
-        );
-      }
+      $self->_update_prom;
     },
   );
 
@@ -362,6 +360,24 @@ sub _setup_diagnostic_metrics_timer ($self) {
   $diag_timer->start;
 
   return;
+}
+
+sub _update_prom ($self) {
+  my $prom = $self->prom;
+
+  $prom->set(
+    synergy_active_events => $self->_count_of_events_in_flight,
+  );
+
+  my %notifier_count;
+  $notifier_count{ ref $_ }++ for $self->loop->notifiers;
+
+  for my $class (keys %notifier_count) {
+    $prom->set(
+      synergy_ioasync_notifiers => $notifier_count{$class},
+      { class => $class },
+    );
+  }
 }
 
 sub _setup_event_in_flight_timer ($self) {
