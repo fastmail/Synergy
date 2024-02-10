@@ -2,8 +2,6 @@
 use v5.32.0;
 use warnings;
 
-use lib 'lib', 't/lib';
-
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';
@@ -15,7 +13,6 @@ use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
 use Synergy::Tester;
 
-# Initialize Synergy.
 my $result = Synergy::Tester->testergize({
   todo      => [
     [ send    => { text => "synergy: help" }  ],

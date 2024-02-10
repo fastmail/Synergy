@@ -3,8 +3,6 @@ use v5.32.0;
 use warnings;
 use experimental 'signatures';
 
-use lib 'lib', 't/lib';
-
 use Test::More;
 
 use IO::Async::Test;

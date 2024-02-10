@@ -2,8 +2,6 @@
 use v5.32.0;
 use warnings;
 
-use lib 'lib';
-
 use Test::More;
 
 use Synergy::Channel::Slack;

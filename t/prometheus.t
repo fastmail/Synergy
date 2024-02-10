@@ -1,9 +1,6 @@
 #!perl
-
 use v5.32.0;
 use warnings;
-
-use lib 'lib', 't/lib';
 
 use Test::More;
 
@@ -16,7 +13,6 @@ use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
 use Synergy::Tester;
 
-# Initialize Synergy.
 my $result = Synergy::Tester->testergize(
   {
     server_port => empty_port(),
