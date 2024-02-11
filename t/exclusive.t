@@ -13,10 +13,7 @@ use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
 use Synergy::Tester;
 
-my $result = Synergy::Tester->testergize({
-  todo      => [
-    [ send    => { text => "synergy: help" }  ],
-  ],
+my $synergy = Synergy::Tester->new_tester({
   default_from => 'alice',
   users => {
     alice   => undef,
@@ -28,6 +25,10 @@ my $result = Synergy::Tester->testergize({
     echo => { class => 'Synergy::Reactor::Echo' },
   }
 });
+
+my $result = $synergy->run_test_program([
+  [ send    => { text => "synergy: help" }  ],
+]);
 
 my @replies = $result->synergy->channel_named('test-channel')->sent_messages;
 

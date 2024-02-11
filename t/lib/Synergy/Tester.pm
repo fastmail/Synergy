@@ -9,9 +9,18 @@ use experimental 'signatures';
 use Synergy::Logger::Test '$Logger';
 
 use Defined::KV;
-use IO::Async::Test;
 use Net::EmptyPort qw(empty_port);
-use Synergy::Hub;
+
+my sub _test_logger {
+  Synergy::Logger->default_logger_class->new({
+    ident     => "synergy-tester",
+    to_self   => 1,
+    facility  => undef,
+    log_pid   => 0,
+    to_stderr => !! Synergy::Logger->default_logger_class->env_value('STDERR'),
+    to_tap    => !! Synergy::Logger->default_logger_class->env_value('TAP'),
+  });
+}
 
 package Synergy::Tester::Result {
   use Moose;
@@ -23,40 +32,67 @@ package Synergy::Tester::Result {
   __PACKAGE__->meta->make_immutable;
 }
 
-sub _test_logger {
-  Synergy::Logger->default_logger_class->new({
-    ident     => "synergy-tester",
-    to_self   => 1,
-    facility  => undef,
-    log_pid   => 0,
-    to_stderr => !! Synergy::Logger->default_logger_class->env_value('STDERR'),
-    to_tap    => !! Synergy::Logger->default_logger_class->env_value('TAP'),
-  });
+package Synergy::Tester::Hub {
+  use Moose;
+  extends 'Synergy::Hub';
+
+  use Synergy::Logger '$Logger';
+
+  use IO::Async::Test;
+
+  sub test_channel ($self) {
+    return $self->channel_named('test-channel');
+  }
+
+  sub run_test_program ($self, $todo) {
+    local $Logger = _test_logger;
+
+    $self->test_channel->queue_todo($_) for $todo->@*;
+
+    testing_loop($self->loop);
+
+    wait_for {
+      return unless $self->test_channel->is_exhausted;
+
+      my @events = grep {; ! $_->{event}->completeness->is_ready }
+                   $self->_events_in_flight;
+
+      return if @events;
+
+      return 1;
+    };
+
+    return Synergy::Tester::Result->new({
+      synergy => $self,
+      logger  => $Logger,
+    });
+  }
+
+  no Moose;
+  __PACKAGE__->meta->make_immutable;
 }
 
-sub testergize {
+sub new_tester {
   my ($class, $arg) = @_;
 
-  local $Logger = $class->_test_logger;
+  local $Logger = _test_logger;
 
-  my $synergy = Synergy::Hub->synergize(
-    {
-      state_dbfile => ':memory:',
-      channels => {
-        'test-channel' => {
-          class     => 'Synergy::Channel::Test',
-          default_from => $arg->{default_from} // 'tester',
-        },
-        ($arg->{extra_channels} // {})->%*,
+  my $synergy = Synergy::Tester::Hub->synergize({
+    state_dbfile => ':memory:',
+    channels => {
+      ($arg->{extra_channels} // {})->%*,
+      'test-channel' => {
+        class     => 'Synergy::Channel::Test',
+        default_from => $arg->{default_from} // 'tester',
       },
-      reactors => $arg->{reactors},
-      server_port => empty_port(),
-      metrics_path => '/metrics',
+    },
+    reactors => $arg->{reactors},
+    server_port => empty_port(),
+    metrics_path => '/metrics',
 
-      defined_kv(tls_cert_file => $arg->{tls_cert_file}),
-      defined_kv(tls_key_file  => $arg->{tls_key_file}),
-    }
-  );
+    defined_kv(tls_cert_file => $arg->{tls_cert_file}),
+    defined_kv(tls_key_file  => $arg->{tls_key_file}),
+  });
 
   my $users = $arg->{users};
   my $directory = $synergy->user_directory;
@@ -76,31 +112,7 @@ sub testergize {
     $directory->register_user($user);
   }
 
-  return $class->test_synergy($synergy, $arg->{todo}, { logger => $Logger });
-}
-
-sub test_synergy ($class, $synergy, $todo, $arg = {}) {
-  local $Logger = $arg->{logger} // $class->_test_logger;
-
-  $synergy->channel_named('test-channel')->queue_todo($_) for $todo->@*;
-
-  testing_loop($synergy->loop);
-
-  wait_for {
-    return unless $synergy->channel_named('test-channel')->is_exhausted;
-
-    my @events = grep {; ! $_->{event}->completeness->is_ready }
-                 $synergy->_events_in_flight;
-
-    return if @events;
-
-    return 1;
-  };
-
-  return Synergy::Tester::Result->new({
-    synergy => $synergy,
-    logger  => $Logger,
-  });
+  return wantarray ? ($synergy, $Logger) : $synergy;
 }
 
 1;

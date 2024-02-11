@@ -8,7 +8,7 @@ use Test::More;
 use IO::Async::Test;
 use Synergy::Tester;
 
-my $result = Synergy::Tester->testergize({
+my $synergy = Synergy::Tester->new_tester({
   reactors => {
     echo => { class => 'Synergy::Reactor::Echo' },
     pref => { class => 'Synergy::Reactor::Preferences' },
@@ -18,14 +18,15 @@ my $result = Synergy::Tester->testergize({
     alice   => undef,
     charlie => undef,
   },
-  todo => [
-    [ send    => { text => "synergy: Hi." }  ],
-    [ wait    => { seconds => 0.1  }  ],
-    [ repeat  => { text => "synergy: Hello?", times => 3, sleep => 0.34 } ],
-    [ wait    => { seconds => 0.1  }  ],
-    [ send    => { text => "synergy: Bye." } ],
-  ],
 });
+
+my $result = $synergy->run_test_program([
+  [ send    => { text => "synergy: Hi." }  ],
+  [ wait    => { seconds => 0.1  }  ],
+  [ repeat  => { text => "synergy: Hello?", times => 3, sleep => 0.34 } ],
+  [ wait    => { seconds => 0.1  }  ],
+  [ send    => { text => "synergy: Bye." } ],
+]);
 
 my @sent = $result->synergy->channel_named('test-channel')->sent_messages;
 

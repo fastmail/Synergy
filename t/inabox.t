@@ -16,9 +16,7 @@ use Synergy::Logger::Test '$Logger';
 use Synergy::Reactor::InABox;
 use Synergy::Tester;
 
-# I'm not actually using this to do any testing, but it's convenient to set up
-# users.
-my $result = Synergy::Tester->testergize({
+my $synergy = Synergy::Tester->new_tester({
   reactors => {
     inabox => {
       class                  => 'Synergy::Reactor::InABox',
@@ -36,18 +34,15 @@ my $result = Synergy::Tester->testergize({
     alice   => undef,
     bob => undef,
   },
-  todo => [],
 });
 
 # Set up a bunch of nonsense
-local $Logger = $result->logger;
-my $s = $result->synergy;
-my $channel = $s->channel_named('test-channel');
+my $channel = $synergy->test_channel;
 
 # Fake up responses from VO.
 my @DO_RESPONSES;
 my $DO_RESPONSE = gen_response(200, {});
-$s->server->register_path(
+$synergy->server->register_path(
   '/digital-ocean',
   sub {
     return shift @DO_RESPONSES if @DO_RESPONSES;
@@ -56,7 +51,7 @@ $s->server->register_path(
   'test file',
 );
 
-my $url = sprintf("http://localhost:%s/digital-ocean", $s->server->server_port);
+my $url = sprintf("http://localhost:%s/digital-ocean", $synergy->server->server_port);
 
 # Muck with the guts of Dobby to catch our fakes.
 my $endpoint = Sub::Override->new(
@@ -71,7 +66,7 @@ sub gen_response ($code, $data) {
 }
 
 sub cmp_replies ($text, $want, $desc = "got expected replies", $arg = {}) {
-  my $result = Synergy::Tester->test_synergy($s, [[
+  my $result = $synergy->run_test_program([[
     send => {
       text => $text,
       from => $arg->{from} // $channel->default_from,

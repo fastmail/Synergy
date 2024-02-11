@@ -16,7 +16,7 @@ use Synergy::Tester;
 
 my $PAGE = "Hello\n\nfriend.";
 
-my $result = Synergy::Tester->testergize({
+my $synergy = Synergy::Tester->new_tester({
   users => {
     roxy => {
       extra_identities => {
@@ -31,10 +31,6 @@ my $result = Synergy::Tester->testergize({
       }
     },
   },
-  todo      => [
-    [ send    => { text => "synergy: page roxy: $PAGE" }  ],
-    [ wait    => { seconds => 0.1  }  ],
-  ],
   extra_channels => {
     'test-2' => {
       class     => 'Synergy::Channel::Test',
@@ -54,8 +50,13 @@ my $result = Synergy::Tester->testergize({
   },
 });
 
+my $result = $synergy->run_test_program([
+  [ send    => { text => "synergy: page roxy: $PAGE" }  ],
+  [ wait    => { seconds => 0.1  }  ],
+]);
+
 is_deeply(
-  [ $result->synergy->channel_named('test-channel')->sent_messages ],
+  [ $synergy->channel_named('test-channel')->sent_messages ],
   [
     { address => 'public', text => 'Page sent to roxy!' },
   ],
@@ -63,7 +64,7 @@ is_deeply(
 );
 
 is_deeply(
-  [ $result->synergy->channel_named('test-2')->sent_messages ],
+  [ $synergy->channel_named('test-2')->sent_messages ],
   [
     { address => 'Rtwo', text => "tester says: $PAGE" },
   ],

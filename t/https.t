@@ -14,12 +14,10 @@ use Net::EmptyPort qw(empty_port);
 use Plack::Response;
 use Synergy::Tester;
 
-my $result = Synergy::Tester->testergize({
+my $synergy = Synergy::Tester->new_tester({
   tls_cert_file => "t/data/synergy.crt",
   tls_key_file  => "t/data/synergy.key",
 });
-
-my $synergy = $result->synergy;
 
 $synergy->server->register_path(
   '/ok',

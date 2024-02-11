@@ -13,24 +13,23 @@ use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
 use Synergy::Tester;
 
-my $result = Synergy::Tester->testergize(
-  {
-    server_port => empty_port(),
-    todo      => [
-      [ send => { text => "one" } ],
-      [ send => { text => "two" } ],
-      [ send => { text => "three" } ],
-    ],
-    reactors => {
-      prometheus => { class => 'Synergy::Reactor::Prometheus' },
-    },
-  }
-);
+my $synergy = Synergy::Tester->new_tester({
+  server_port => empty_port(),
+  reactors => {
+    prometheus => { class => 'Synergy::Reactor::Prometheus' },
+  },
+});
+
+my $result = $synergy->run_test_program([
+  [ send => { text => "one" } ],
+  [ send => { text => "two" } ],
+  [ send => { text => "three" } ],
+]);
 
 my $http = Net::Async::HTTP->new;
 $result->synergy->loop->add($http);
 
-my $port = $result->synergy->server_port;
+my $port = $synergy->server_port;
 
 my ($res) = $http->do_request(uri => "http://localhost:$port/metrics")->get;
 my $expect = <<'END';

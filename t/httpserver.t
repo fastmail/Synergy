@@ -14,9 +14,7 @@ use Net::EmptyPort qw(empty_port);
 use Plack::Response;
 use Synergy::Tester;
 
-my $result = Synergy::Tester->testergize;
-
-my $synergy = $result->synergy;
+my $synergy = Synergy::Tester->new_tester;
 
 my $port = $synergy->server_port;
 

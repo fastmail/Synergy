@@ -26,7 +26,7 @@ package Synergy::Channel::Test::HTTPEndpoint {
   }
 }
 
-my $result = Synergy::Tester->testergize({
+my $synergy = Synergy::Tester->new_tester({
   extra_channels => {
     'test-channel-endpoint' => {
       class => 'Synergy::Channel::Test::HTTPEndpoint',
@@ -41,8 +41,8 @@ my $result = Synergy::Tester->testergize({
 });
 
 my $http = Net::Async::HTTP->new(timeout => 2);
-$result->synergy->loop->add($http);
-my $port = $result->synergy->server_port;
+$synergy->loop->add($http);
+my $port = $synergy->server_port;
 
 {
   my ($res) = $http->do_request(uri => "http://localhost:$port/test")->get;
