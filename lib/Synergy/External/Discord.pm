@@ -532,7 +532,12 @@ sub load_users ($self) {
 
     $self->loaded_users(1);
     if ($self->loaded_channels) {
-      $self->readiness->done;
+      # This is sort of weird and probably indicates the need to reconsider how
+      # reconnections work.  If we lose the connection to Discord, we end up
+      # reconnecting, which ends up reloading users, which then calls
+      # ->readiness->done.  Since we will have already set readiness to done on
+      # the previous connection, this was fatal.
+      $self->readiness->done unless $self->readiness->is_ready;
     }
   })->retain;
 }
@@ -552,7 +557,12 @@ sub load_channels ($self) {
 
     $self->loaded_channels(1);
     if ($self->loaded_users) {
-      $self->readiness->done;
+      # This is sort of weird and probably indicates the need to reconsider how
+      # reconnections work.  If we lose the connection to Discord, we end up
+      # reconnecting, which ends up reloading users, which then calls
+      # ->readiness->done.  Since we will have already set readiness to done on
+      # the previous connection, this was fatal.
+      $self->readiness->done unless $self->readiness->is_ready;
     }
   })->retain;
 }
