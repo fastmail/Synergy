@@ -14,8 +14,9 @@ use utf8;
 use DBI;
 use Future::AsyncAwait;
 use JSON::MaybeXS ();
-use Synergy::Logger '$Logger';
 use Synergy::CommandPost;
+use Synergy::Logger '$Logger';
+use Synergy::Util qw(reformat_help);
 use XML::LibXML;
 
 sub _slink {
@@ -152,6 +153,11 @@ responder update_index => {
 };
 
 command rfcs => {
+  help => reformat_help(<<~'EOH'),
+    *rfcs*: search through the RFCs
+
+    Right now, there's only one way to search: `author:"J. Smith"`.
+    EOH
 } => async sub ($self, $event, $rest) {
   my ($author) = $rest =~ /\Aauthor:[“”"]([^"]+)[“”"]\z/;
 
