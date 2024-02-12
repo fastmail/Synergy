@@ -35,7 +35,9 @@ role {
     my $post = $self->_commandpost;
 
     for my $name ($post->_command_names, $post->_responder_names) {
-      unless ($post->_has_registered_help_for($name)) {
+      unless ( $post->_has_registered_help_for($name)
+            || $post->_has_help_exemption_for($name)
+      ) {
         $Logger->log("notice: missing help in $pkg for command $name");
       }
     }
