@@ -15,7 +15,8 @@ use Synergy::CommandPost;
 responder eject_warp_core => {
   exclusive => 1,
   targeted  => 1,
-  matcher   => sub ($self, $text, @) { fc $text eq 'eject warp core' ? [] : () },
+  skip_help => 1,
+  matcher   => sub ($, $text, @) { fc $text eq 'eject warp core' ? [] : () },
 } => async sub ($self, $event) {
   $event->mark_handled;
   await $event->reply('Good bye.');

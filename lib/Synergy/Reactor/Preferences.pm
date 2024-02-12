@@ -38,7 +38,8 @@ help preferences => reformat_help(<<~"EOH");
   • *clear `USER`'s `PREF`*: unset some other user's preference
   EOH
 
-command set => { # allow_empty_help => 1,  # provided by preferences above
+command set => {
+  skip_help => 1, # provided by "help preferences"
 } => async sub ($self, $event, $rest) {
   my ($who, $pref_name, $pref_value) =
     $event->text =~ m{\A set \s+ (my|\w+[’']s) \s+      # set my
@@ -53,7 +54,8 @@ command set => { # allow_empty_help => 1,  # provided by preferences above
   return await $self->_set_pref($event, $who, $pref_name, $pref_value);
 };
 
-command clear => { # allow_empty_help => 1,  # provided by preferences above
+command clear => {
+  skip_help => 1, # provided by "help preferences"
 } => async sub ($self, $event, $rest) {
   my ($who, $pref_name, $rest) =
     $event->text =~ m{\A clear \s+ (my|\w+[’']s) \s+    # set my
@@ -71,9 +73,10 @@ command clear => { # allow_empty_help => 1,  # provided by preferences above
   return await $self->_set_pref($event, $who, $pref_name, undef);
 };
 
-responder list => { # allow_empty_help => 1,  # provided by preferences above
+responder list => {
   exclusive => 1,
   targeted  => 1,
+  skip_help => 1, # provided by "help preferences"
   matcher   => sub ($self, $text, @) {
     return [] if $text =~ /\Alist(\s+all)?\s+(settings|pref(erence)?s)\s*\z/i;
     return;
@@ -102,9 +105,10 @@ responder list => { # allow_empty_help => 1,  # provided by preferences above
   return await $event->reply($text);
 };
 
-responder dump => { # allow_empty_help => 1,  # provided by preferences above
+responder dump => {
   exclusive => 1,
   targeted  => 1,
+  skip_help => 1, # provided by "help preferences"
   matcher   => sub ($self, $text, @) {
     return [ 'me' ] if $text =~ /\Apref(erence)?s\z/in;
     return [ 'me' ] if $text =~ /\A(dump|show)(\s+my)?\s+(settings|pref(erence)?s)\s*\z/in;

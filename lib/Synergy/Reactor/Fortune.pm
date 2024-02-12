@@ -93,6 +93,7 @@ END
 };
 
 command add => {
+  skip_help => 1, # covered by "help fortune" but kinda meh
 } => async sub ($self, $event, $rest) {
   my ($f) = $event->text =~ /\Aadd\s+fortune:?\s+(.*)/ism;
 
