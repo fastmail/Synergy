@@ -33,7 +33,7 @@ my $result = $synergy->run_test_program([
   [ wait  => { seconds => 0.1  }  ],
 ]);
 
-my @sent = $result->synergy->channel_named('test-channel')->sent_messages;
+my @sent = $synergy->channel_named('test-channel')->sent_messages;
 
 is(@sent, 3, "three replies recorded");
 

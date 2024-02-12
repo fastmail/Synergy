@@ -30,7 +30,7 @@ my $result = $synergy->run_test_program([
   [ send    => { text => "synergy: help" }  ],
 ]);
 
-my @replies = $result->synergy->channel_named('test-channel')->sent_messages;
+my @replies = $synergy->channel_named('test-channel')->sent_messages;
 
 is(@replies, 1, "one reply recorded");
 

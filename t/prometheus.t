@@ -27,7 +27,7 @@ my $result = $synergy->run_test_program([
 ]);
 
 my $http = Net::Async::HTTP->new;
-$result->synergy->loop->add($http);
+$synergy->loop->add($http);
 
 my $port = $synergy->server_port;
 

@@ -28,7 +28,7 @@ my $result = $synergy->run_test_program([
   [ send    => { text => "synergy: Bye." } ],
 ]);
 
-my @sent = $result->synergy->channel_named('test-channel')->sent_messages;
+my @sent = $synergy->channel_named('test-channel')->sent_messages;
 
 is(@sent, 5, "five replies recorded");
 
@@ -41,7 +41,7 @@ like($sent[4]{text},    qr{I heard you, .* "Bye\."}, "5th: expected text");
 subtest 'run_process' => sub {
   my $done;
 
-  my $hub = $result->synergy;
+  my $hub = $synergy;
   my $f = $hub->run_process([ '/usr/bin/uptime' ]);
 
   $f->on_done(sub ($ec, $stdout, $stderr) {
