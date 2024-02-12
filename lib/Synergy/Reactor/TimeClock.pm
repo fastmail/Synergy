@@ -252,13 +252,11 @@ sub handle_clock_out ($self, $event) {
   my ($w2, $comment) = $event->text =~ /^clock\s*(out|off):\s*(\S.+)\z/is;
 
   unless ($comment) {
-    $event->error_reply("To clock \L$w2\E, it's: *clock \L$w2\E: `SUMMARY`*.");
-    return;
+    return $event->error_reply("To clock \L$w2\E, it's: *clock \L$w2\E: `SUMMARY`*.");
   }
 
   unless ($event->from_user) {
-    $event->error_reply("I don't know who you are, so you can't clock \L$w2\E.");
-    return;
+    return $event->error_reply("I don't know who you are, so you can't clock \L$w2\E.");
   }
 
   $self->_timeclock_dbh->do(
@@ -281,12 +279,10 @@ sub handle_clock_out ($self, $event) {
   }
 
   if ($event->is_public) {
-    $event->reply("See you later!");
-  } else {
-    $event->reply("See you later! Next time, consider clocking \L$w2\E in public!");
+    return $event->reply("See you later!");
   }
 
-  return;
+  return $event->reply("See you later! Next time, consider clocking \L$w2\E in public!");
 }
 
 sub handle_recent_clockouts ($self, $event) {

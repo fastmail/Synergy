@@ -5,7 +5,7 @@ package Synergy::Reactor::Yelling;
 use Moose;
 with 'Synergy::Role::Reactor::CommandPost';
 
-use experimental qw(signatures);
+use experimental qw(isa signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;
@@ -52,7 +52,7 @@ async sub start ($self) {
 
 responder mumbling => {
   matcher => sub ($self, $text, $event) {
-    return unless $event->from_channel->isa('Synergy::Channel::Slack');
+    return unless $event->from_channel isa Synergy::Channel::Slack;
 
     my $channel = $self->_slack_channel_name_from_event($event);
     return unless $channel eq $self->yelling_channel_name;

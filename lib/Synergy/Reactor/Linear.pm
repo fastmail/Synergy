@@ -300,8 +300,6 @@ command teams => {
 };
 
 async sub _handle_search ($self, $event, $arg) {
-  $event->mark_handled;
-
   my $search = $arg->{search};
   my $zero   = $arg->{zero};
   my $header = $arg->{header};

@@ -181,15 +181,4 @@ sub http_app ($self, $env) {
   return [ "200", [], [ '{"o":"k"}' ] ];
 }
 
-# We're using easylistener so we need listener specs. We don't need to
-# actually handle any commands yet though. (We might, some day)
-sub listener_specs {
-  return {
-    name      => 'linear_notification',
-    method    => 'linear_notification',
-    predicate => sub ($, $e) { 0 },
-    allow_empty_help => 1,
-  };
-}
-
 1;

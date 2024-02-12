@@ -15,8 +15,6 @@ use Synergy::Util qw(known_alphabets transliterate);
 command transliterate => {
   help => '*transliterate to `SCRIPT`: `MESSAGE`*: rewrite a string with a different alphabet',
 } => async sub ($self, $event, $rest) {
-  $event->mark_handled;
-
   my ($alphabet, $text) = $rest =~ /\Ato (\S+): (.+)\z/i;
 
   return await $event->error_reply("Sorry, I don't know that alphabet.")

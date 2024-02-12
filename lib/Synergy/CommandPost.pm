@@ -176,6 +176,10 @@ sub _generate_command_system ($class, $, $arg, $) {
         $object->add_help($name, {}, $arg->{help});
       }
 
+      if ($arg->{skip_help}) {
+        $object->_set_help_exemption_for($name, 1);
+      }
+
       if ($arg->{aliases}) {
         for my $alias ($arg->{aliases}->@*) {
           $object->add_command($alias, $arg, $code);
@@ -223,6 +227,10 @@ sub _generate_command_system ($class, $, $arg, $) {
       if ($arg->{help}) {
         my @help_titles = ($arg->{help_titles} || [ $name ])->@*;
         $object->add_help($_, { _thing_name => $name }, $arg->{help}) for @help_titles;
+      }
+
+      if ($arg->{skip_help}) {
+        $object->_set_help_exemption_for($name, 1);
       }
 
       return;
@@ -321,6 +329,17 @@ package Synergy::CommandPost::Object {
     handles   => {
       _register_help => 'set',
       _has_registered_help_for => 'get',
+    },
+  );
+
+  has _help_exemptions => (
+    isa => 'HashRef',
+    init_arg  => undef,
+    default   => sub {  {}  },
+    traits    => [ 'Hash' ],
+    handles   => {
+      _has_help_exemption_for => 'get',
+      _set_help_exemption_for => 'set',
     },
   );
 

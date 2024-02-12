@@ -3,7 +3,7 @@ use warnings;
 package Synergy::External::Discord;
 
 use Moose;
-use experimental qw(lexical_subs signatures);
+use experimental qw(isa lexical_subs signatures);
 use namespace::autoclean;
 use utf8;
 
@@ -284,7 +284,7 @@ sub handle_heartbeat {
 }
 
 sub handle_reconnect {
-  my ($self, $data) = @_;
+  my ($self) = @_;
 
   $Logger->log("Discord: handle_reconnect: attempting to reconnect");
 
@@ -372,6 +372,13 @@ sub send_heartbeat {
       my $ago  = $now - $last;
 
       $Logger->log([ "$msg; last heartbeat ack %0.4fs ago", $ago ]);
+
+      if ($ago > 300) {
+        # If we haven't heard back in 5m, reconnect.  Why 5m?  Will this work?
+        # I don't know, I'm grasping. -- rjbs, 2024-02-06
+        $self->handle_reconnect;
+        return;
+      }
     } else {
       $Logger->log("$msg; no heartbeat has ever been acked");
     }
@@ -395,7 +402,7 @@ async sub send_message ($self, $channel_id, $text, $alts = {}) {
     my $e = $r->{event};
 
     if ( $e
-      && $e->from_channel->isa('Synergy::Channel::Discord')
+      && $e->from_channel isa Synergy::Channel::Discord
       && $e->from_channel->discord == $self
     ) {
       my $remove = $r->{reaction} =~ s/^-//;
@@ -525,7 +532,12 @@ sub load_users ($self) {
 
     $self->loaded_users(1);
     if ($self->loaded_channels) {
-      $self->readiness->done;
+      # This is sort of weird and probably indicates the need to reconsider how
+      # reconnections work.  If we lose the connection to Discord, we end up
+      # reconnecting, which ends up reloading users, which then calls
+      # ->readiness->done.  Since we will have already set readiness to done on
+      # the previous connection, this was fatal.
+      $self->readiness->done unless $self->readiness->is_ready;
     }
   })->retain;
 }
@@ -545,7 +557,12 @@ sub load_channels ($self) {
 
     $self->loaded_channels(1);
     if ($self->loaded_users) {
-      $self->readiness->done;
+      # This is sort of weird and probably indicates the need to reconsider how
+      # reconnections work.  If we lose the connection to Discord, we end up
+      # reconnecting, which ends up reloading users, which then calls
+      # ->readiness->done.  Since we will have already set readiness to done on
+      # the previous connection, this was fatal.
+      $self->readiness->done unless $self->readiness->is_ready;
     }
   })->retain;
 }

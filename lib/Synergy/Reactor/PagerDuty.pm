@@ -7,7 +7,7 @@ use Moose;
 with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
-use experimental qw(signatures);
+use experimental qw(isa signatures);
 use namespace::clean;
 
 use Carp ();
@@ -193,6 +193,7 @@ help maint => reformat_help(<<~"EOH");
 responder 'maint-status' => {
   exclusive => 1,
   targeted  => 1,
+  skip_help => 1, # provided by "help maint"
   matcher => sub ($self, $text, $event) {
     return [] if $text =~ /\Amaint(\s+status)?\s*\z/ni;
     return;
@@ -213,6 +214,7 @@ responder 'maint-status' => {
 responder 'maint-start' => {
   exclusive => 1,
   targeted  => 1,
+  skip_help => 1, # provided by "help maint"
   matcher => sub ($self, $text, $event) {
     return [ $1 ? 1 : 0 ] if $text =~ m{\Amaint\s+start(?:\s+/force)?\s*\z}ni;
     return;
@@ -271,6 +273,7 @@ responder 'maint-start' => {
 responder 'maint-end' => {
   exclusive => 1,
   targeted  => 1,
+  skip_help => 1, # provided by "help maint"
   matcher => sub ($self, $text, $event) {
     return [ ] if $text =~ m{\Amaint\s+(end|stop)\s*\z}ni;
     return [ ] if $text =~ m{\Aunmaint\s*\z}ni;
@@ -356,6 +359,7 @@ help "give oncall" => reformat_help(<<~'EOH'),
 responder 'give-oncall' => {
   exclusive => 1,
   targeted  => 1,
+  skip_help => 1, # provided by "help give oncall"
   matcher => sub ($self, $text, $event) {
     my ($who, $dur) = $text =~ /\Agive\s+oncall\s+to\s+(\S+)\s+for\s+(.*)\s*$/i;
     return [ $who, $dur ] if $who;
@@ -868,7 +872,7 @@ sub _resolve_incidents($self, $event, $arg) {
 
 sub _check_at_oncall ($self) {
   my $channel = $self->oncall_channel;
-  return unless $channel && $channel->isa('Synergy::Channel::Slack');
+  return unless $channel && $channel isa Synergy::Channel::Slack;
 
   $Logger->log("checking PagerDuty for oncall updates");
 

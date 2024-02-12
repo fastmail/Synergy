@@ -493,8 +493,7 @@ sub handle_vesta_show ($self, $event) {
   my $curr = $self->_current_characters;
 
   unless ($curr) {
-    $event->reply("Sorry, I don't know what's on the board!");
-    return;
+    return $event->reply("Sorry, I don't know what's on the board!");
   }
 
   if ($self->vesta_image_base) {
@@ -502,13 +501,12 @@ sub handle_vesta_show ($self, $event) {
               ($self->vesta_image_base =~ s{/\z}{}r),
               Synergy::VestaUtil->encode_board($curr);
 
-    $event->reply(
+    return $event->reply(
       "The current board status is: $url",
       {
         slack => sprintf("Enjoy <%s|the current board status!>", $url),
       },
     );
-    return;
   }
 
   my $display = Synergy::VestaUtil->board_to_text($curr);
@@ -533,15 +531,13 @@ sub handle_vesta_show_text ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I'm not going to do that.");
-    return;
+    return $event->error_reply("I don't know who you are, so I'm not going to do that.");
   }
 
   my ($board, $error) = Synergy::VestaUtil->text_to_board($text);
 
   unless ($board) {
-    $event->error_reply("Sorry, I can't find that design!");
-    return;
+    return $event->error_reply("Sorry, I can't find that design!");
   }
 
   if ($self->vesta_image_base) {
@@ -550,14 +546,12 @@ sub handle_vesta_show_text ($self, $event) {
               Synergy::VestaUtil->encode_board($board),
               'cropped';
 
-    $event->reply(
+    return $event->reply(
       "You can see that design at: $url",
       {
         slack => sprintf("Behold, <%s|your text>", $url),
       },
     );
-
-    return;
   }
 
   my $display = Synergy::VestaUtil->board_to_text($board);
@@ -583,15 +577,13 @@ sub handle_vesta_show_design ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I'm not going to do that.");
-    return;
+    return $event->error_reply("I don't know who you are, so I'm not going to do that.");
   }
 
   my $design = $self->_get_user_design_named($user, $name);
 
   unless ($design) {
-    $event->error_reply("Sorry, I can't find that design!");
-    return;
+    return $event->error_reply("Sorry, I can't find that design!");
   }
 
   my $board = $design->{characters};
@@ -602,13 +594,12 @@ sub handle_vesta_show_design ($self, $event) {
               Synergy::VestaUtil->encode_board($board),
               'cropped';
 
-    $event->reply(
+    return $event->reply(
       "You can see that design at: $url",
       {
         slack => sprintf("Behold, your design <%s|%s>", $url, $design->{name}),
       },
     );
-    return;
   }
 
   my $display = Synergy::VestaUtil->board_to_text($board);
@@ -630,20 +621,17 @@ sub handle_vesta_lock ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I can't help you out!");
-    return;
+    return $event->error_reply("I don't know who you are, so I can't help you out!");
   }
 
   unless (grep {; $_ eq $user->username } $self->board_admins) {
-    $event->error_reply("Sorry, only board admins can lock or unlock the board");
-    return;
+    return $event->error_reply("Sorry, only board admins can lock or unlock the board");
   }
 
   if ($event->text =~ /vesta unlock/i) {
     $self->_set_lock_state({});
     $self->save_state;
-    $event->reply("The board is now unlocked!");
-    return
+    return $event->reply("The board is now unlocked!");
   }
 
   $self->_set_lock_state({
@@ -653,8 +641,7 @@ sub handle_vesta_lock ($self, $event) {
 
   $self->save_state;
 
-  $event->reply("The board is locked!  Don't forget to unlock it later.");
-  return
+  return $event->reply("The board is locked!  Don't forget to unlock it later.");
 }
 
 sub handle_vesta_grant ($self, $event) {
@@ -701,22 +688,19 @@ sub handle_vesta_designs ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I can't help you out!");
-    return;
+    return $event->error_reply("I don't know who you are, so I can't help you out!");
   }
 
   my $state = $self->_user_state->{ $user->username } //= {};
 
   unless ($state->{designs} && keys $state->{designs}->%*) {
-    $event->reply("You don't have any Vestaboard designs on file.");
-    return;
+    return $event->reply("You don't have any Vestaboard designs on file.");
   }
 
   my $text = "Here are your designs on file:\n";
   $text .= "• $_->{name}\n" for values $state->{designs}->%*;
 
-  $event->reply($text);
-  return;
+  return $event->reply($text);
 }
 
 sub handle_vesta_delete_design ($self, $event) {
@@ -725,8 +709,7 @@ sub handle_vesta_delete_design ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I can't help you out!");
-    return;
+    return $event->error_reply("I don't know who you are, so I can't help you out!");
   }
 
   my ($name) = $event->text =~ /\Avesta delete design\s+(.+)/;
@@ -739,16 +722,14 @@ sub handle_vesta_delete_design ($self, $event) {
   my $state = $self->_user_state->{ $user->username } //= {};
 
   unless (exists $state->{designs}{ $name_key }) {
-    $event->reply("You don't have a design with that name.");
-    return;
+    return $event->reply("You don't have a design with that name.");
   }
 
   delete $state->{designs}{$name_key};
 
   $self->save_state;
 
-  $event->reply("Okay, I've deleted that design.");
-  return;
+  return $event->reply("Okay, I've deleted that design.");
 }
 
 sub handle_vesta_status ($self, $event) {
@@ -757,8 +738,7 @@ sub handle_vesta_status ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I'm not going to do that.");
-    return;
+    return $event->error_reply("I don't know who you are, so I'm not going to do that.");
   }
 
   my $status;
@@ -801,8 +781,7 @@ sub handle_vesta_edit ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I'm not going to do that.");
-    return;
+    return $event->error_reply("I don't know who you are, so I'm not going to do that.");
   }
 
   if ($event->is_public) {
@@ -839,8 +818,6 @@ sub handle_vesta_edit ($self, $event) {
       ),
     },
   );
-
-  return;
 }
 
 sub _validate_secret_for ($self, $user, $secret) {
@@ -891,16 +868,14 @@ sub handle_vesta_post ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I'm not going to do that.");
-    return;
+    return $event->error_reply("I don't know who you are, so I'm not going to do that.");
   }
 
   my ($name) = $event->text =~ /\Avesta post\s+(\S+)\z/i;
   my $design = $self->_get_user_design_named($user, $name);
 
   unless ($design) {
-    $event->error_reply("Sorry, I couldn't find a design with that name.");
-    return;
+    return $event->error_reply("Sorry, I couldn't find a design with that name.");
   }
 
   $self->_pay_to_post_payload(
@@ -918,8 +893,7 @@ sub handle_vesta_post_text ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I'm not going to do that.");
-    return;
+    return $event->error_reply("I don't know who you are, so I'm not going to do that.");
   }
 
   my ($text) = $event->text =~ /\Avesta post text:? (.+)\z/i;
@@ -928,8 +902,7 @@ sub handle_vesta_post_text ($self, $event) {
 
   unless ($board) {
     $error //= "Something went wrong.";
-    $event->error_reply("Sorry, I can't post that to the board.  $error");
-    return;
+    return $event->error_reply("Sorry, I can't post that to the board.  $error");
   }
 
   $self->_pay_to_post_payload(
@@ -947,8 +920,7 @@ sub handle_vesta_random_colors ($self, $event) {
   my $user = $event->from_user;
 
   unless ($user) {
-    $event->error_reply("I don't know who you are, so I'm not going to do that.");
-    return;
+    return $event->error_reply("I don't know who you are, so I'm not going to do that.");
   }
 
   # color codes for black + 7 blocks
