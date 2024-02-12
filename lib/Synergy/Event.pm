@@ -78,6 +78,14 @@ around mark_handled => sub ($orig, $self, @rest) {
   return Future->done;
 };
 
+has completeness => (
+  is    => 'ro',
+  lazy  => 1,
+  default => sub {
+    Future->new;
+  }
+);
+
 sub event_uri ($self) {
   return undef unless $self->from_channel->can('_uri_from_event');
   return $self->from_channel->_uri_from_event($self);

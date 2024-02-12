@@ -24,4 +24,11 @@ command 'diag-die-x' => {
   Synergy::X->throw_public("This exception was caused on purpose via a Synergy::X thrown by diag-die-x.");
 };
 
+command 'diag-reply-slow' => {
+  help => '*diag-reply-slow*: replies after five seconds of delay',
+} => async sub ($self, $event, $rest) {
+  await $self->loop->delay_future(after => 5);
+  await $event->reply("This reply was sent after a 5s delay.");
+};
+
 1;

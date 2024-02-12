@@ -1,4 +1,5 @@
 [test]
 -I lib
+-I t/lib
 -j8
--P Synergy::Hub
+-P Synergy::Tester

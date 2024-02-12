@@ -6,8 +6,6 @@ use experimental 'signatures';
 use Test::More;
 use Test::Deep;
 
-use lib 't/lib';
-
 use Synergy::Test::CommandPost;
 
 subtest "the absolute basics" => sub {

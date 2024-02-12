@@ -11,7 +11,12 @@ use Moose;
 use experimental qw(signatures);
 use utf8;
 
+use Digest::SHA ();
 use Term::ANSIColor qw(colored);
+
+my sub plainlength ($str) {
+  length Term::ANSIColor::colorstrip($str);
+}
 
 my %THEME = (
   cyan    => { decoration_color =>   75,  text_color => 117 },
@@ -91,9 +96,14 @@ sub _format_generic_box ($self, $text, $closed, $title) {
   for my $line (split /\n/, $text) {
     $new_text .= "$line_C$B_ver $text_C";
 
-    if ($closed && length $line <= 76) {
-      $new_text .= sprintf '%-76s', $line;
-      $new_text .= "$line_C$B_ver" if length $line <= 76;
+    state $CLEAR = Term::ANSIColor::color('reset');
+    $line =~ s/\Q$CLEAR/$text_C/g;
+
+    my $plainlength = plainlength($line);
+
+    if ($closed && $plainlength <= 76) {
+      $new_text .= $line . (q{ } x (76 - $plainlength));
+      $new_text .= "$line_C$B_ver";
     } else {
       $new_text .= $line;
     }
@@ -205,6 +215,37 @@ sub _format ($self, $what) {
 
   my $method = "_format_$what->[0]";
   $self->$method($what->@[ 1 .. $what->$#* ]);
+}
+
+sub deterministic_color ($self, $str) {
+  state $typ = ($ENV{COLORTERM}//'') eq 'truecolor' ? 256 : 6;
+  state $mod = $typ == 256 ?  16 : 6;
+  state $mul = $typ == 256 ?   8 : 1;
+  state $min = $typ == 256 ? 512 : 6;
+  state $inc = $typ == 256 ?  16 : 1;
+  state $fmt = $typ == 256 ? 'r%ug%ub%u' : 'rgb%u%u%u';
+
+  my $sha1 = Digest::SHA::sha1($str);
+  my ($r, $g, $b, $i) = unpack 'SSSN', $sha1;
+  $r = ($r % $mod) * $mul;
+  $g = ($g % $mod) * $mul;
+  $b = ($b % $mod) * $mul;
+
+  while ($r + $g + $b < $min) {
+    my $j = $i % 3;
+    $i >>= 2;
+    $r += $inc unless $j == 0 or $r >= $typ - $inc;
+    $g += $inc unless $j == 1 or $g >= $typ - $inc;
+    $b += $inc unless $j == 2 or $b >= $typ - $inc;
+  }
+
+  return sprintf $fmt, $r, $g, $b;
+}
+
+sub deterministic_colored ($self, $str, $as = undef) {
+  require Term::ANSIColor;
+  my $color = $self->deterministic_color($as // $str);
+  return Term::ANSIColor::colored([ $color ], $str);
 }
 
 1;

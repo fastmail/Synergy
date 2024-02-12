@@ -1,9 +1,6 @@
 #!perl
-
 use v5.32.0;
 use warnings;
-
-use lib 'lib';
 
 use Test::More;
 
@@ -15,33 +12,17 @@ use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
 use Plack::Response;
-use Synergy::Hub;
+use Synergy::Tester;
 
-my $port = empty_port();
+my $synergy = Synergy::Tester->new_tester;
 
-note "will use port $port for test HTTP server";
-
-# Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
-    server_port => $port,
-    user_directory => "t/data/users.yaml",
-    channels => {
-      'test-channel' => {
-        class     => 'Synergy::Channel::Test',
-      }
-    },
-  }
-);
+my $port = $synergy->server_port;
 
 $synergy->server->register_path(
   '/ok',
   sub { return Plack::Response->new(200)->finalize; },
   'test file',
 );
-
-# Tests begin here.
-testing_loop($synergy->loop);
 
 my $http = Net::Async::HTTP->new(timeout => 2);
 $synergy->loop->add($http);
@@ -57,4 +38,3 @@ $synergy->loop->add($http);
 }
 
 done_testing;
-

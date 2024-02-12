@@ -1,8 +1,7 @@
+#!perl
 use v5.32.0;
 use warnings;
 use experimental 'signatures';
-
-use lib 'lib', 't/lib';
 
 use Future;
 use IO::Async::Test;
@@ -12,15 +11,12 @@ use Sub::Override;
 use Storable qw(dclone);
 use Test::More;
 use Test::Deep;
-use Time::HiRes ();
 
 use Synergy::Logger::Test '$Logger';
 use Synergy::Reactor::InABox;
 use Synergy::Tester;
 
-# I'm not actually using this to do any testing, but it's convenient to set up
-# users.
-my $result = Synergy::Tester->testergize({
+my $synergy = Synergy::Tester->new_tester({
   reactors => {
     inabox => {
       class                  => 'Synergy::Reactor::InABox',
@@ -29,6 +25,8 @@ my $result = Synergy::Tester->testergize({
       digitalocean_api_token => '1234',
       default_box_version    => 'bullseye',
       box_datacentres        => ['nyc3', 'sfo3'],
+
+      post_creation_delay    => 0.01,
     },
   },
   default_from => 'alice',
@@ -36,18 +34,15 @@ my $result = Synergy::Tester->testergize({
     alice   => undef,
     bob => undef,
   },
-  todo => [],
 });
 
 # Set up a bunch of nonsense
-local $Logger = $result->logger;
-my $s = $result->synergy;
-my $channel = $s->channel_named('test-channel');
+my $channel = $synergy->test_channel;
 
 # Fake up responses from VO.
 my @DO_RESPONSES;
 my $DO_RESPONSE = gen_response(200, {});
-$s->server->register_path(
+$synergy->server->register_path(
   '/digital-ocean',
   sub {
     return shift @DO_RESPONSES if @DO_RESPONSES;
@@ -56,7 +51,7 @@ $s->server->register_path(
   'test file',
 );
 
-my $url = sprintf("http://localhost:%s/digital-ocean", $s->server->server_port);
+my $url = sprintf("http://localhost:%s/digital-ocean", $synergy->server->server_port);
 
 # Muck with the guts of Dobby to catch our fakes.
 my $endpoint = Sub::Override->new(
@@ -70,41 +65,25 @@ sub gen_response ($code, $data) {
   return Plack::Response->new($code, [], $json)->finalize;
 }
 
-sub send_message ($text, $from = $channel->default_from, $wait_arg = {}) {
-  $channel->queue_todo([ send => { text => $text, from => $from }  ]);
-  $channel->queue_todo([ wait => $wait_arg ]);
-  wait_for { $channel->is_exhausted; };
+sub cmp_replies ($text, $want, $desc = "got expected replies", $arg = {}) {
+  my $result = $synergy->run_test_program([[
+    send => {
+      text => $text,
+      from => $arg->{from} // $channel->default_from,
+    },
+  ]]);
 
-  # This is sort of idiotic, by which I mean a few things:
-  # * This code is doing something stupid because that's how to make it work.
-  # * I am (only a little bit) an idiot for making this necessary.
-  # * This is stupidly unoptimized because optimizing something like this is
-  #   stupid.
-  #
-  # The above *should* work, but it only measures that every event has been
-  # sent through the queue.  Instead, we should make exhaustion on the test
-  # channel mean that every fired reaction handler has fully completed.  This
-  # is probably doable, but it will need some real thinking.  Instead, we are
-  # going to just let the loop run for one quarter second.
-  #
-  # Annoyingly, this code was not needed on Rik's laptop, either because it's
-  # very fast or because the loop behavior is somewhat different there.
-  #
-  # Deleting this code later will be a delight. -- rjbs, 2024-02-07
-  my $now = Time::HiRes::time();
-  until (Time::HiRes::time() - $now > 0.25) {
-    $channel->hub->loop->loop_once(1);
-  }
-}
-
-sub single_message_text {
-  my @texts = map {; $_->{text} } $channel->sent_messages;
-  fail("expected only one message, but got " . @texts) if @texts > 1;
+  my @reply_texts = map {; $_->{text} } $channel->sent_messages;
   $channel->clear_messages;
-  return $texts[0];
-}
 
-# ok, let's test.
+  local $Test::Builder::Level = $Test::Builder::Level + 1;
+
+  cmp_deeply(
+    \@reply_texts,
+    $want,
+    $desc,
+  )
+}
 
 # minimal data for _format_droplet
 my $alice_droplet = {
@@ -129,19 +108,17 @@ my $alice_droplet = {
 subtest 'status' => sub {
   $DO_RESPONSE = gen_response(200, { droplets => [ $alice_droplet ] });
 
-  send_message('synergy: box status');
-  like(
-    single_message_text(),
-    qr{Your boxes:\s+name: \Qalice-bullseye.box.fm.local\E},
+  cmp_replies(
+    'synergy: box status',
+    [ re(qr{Your boxes:\s+name: \Qalice-bullseye.box.fm.local\E}) ],
     'alice has a box and synergy says so'
   );
 
   $DO_RESPONSE = gen_response(200, { droplets => [ ] });
 
-  send_message('synergy: box status');
-  is(
-    single_message_text(),
-    "You don't seem to have any boxes.",
+  cmp_replies(
+    'synergy: box status',
+    [ "You don't seem to have any boxes." ],
     'bob has no box and synergy says so'
   );
 };
@@ -155,10 +132,9 @@ our $droplet_guard = Sub::Override->new(
 
 subtest 'poweron' => sub {
   # already on
-  send_message('synergy: box poweron');
-  is(
-    single_message_text(),
-    'That box is already powered on!',
+  cmp_replies(
+    'synergy: box poweron',
+    [ 'That box is already powered on!' ],
     'if the box is already on, synergy says so'
   );
 
@@ -169,15 +145,15 @@ subtest 'poweron' => sub {
     gen_response(200, { action => { status => 'completed'   } }),
   );
 
-  send_message('synergy: box poweron');
-
-  my @texts = map {; $_->{text} } $channel->sent_messages;
-  is(@texts, 3, 'sent three messages (reactji on/off, and message)')
-    or diag explain \@texts;
-
-  is($texts[2], 'That box has been powered on.', 'successfully turned on');
-
-  $channel->clear_messages;
+  cmp_replies(
+    'synergy: box poweron',
+    [
+      ignore(),
+      ignore(),
+      'That box has been powered on.',
+    ],
+    "expected reply sequence from poweron",
+  );
 };
 
 for my $method (qw(poweroff shutdown)) {
@@ -187,45 +163,47 @@ for my $method (qw(poweroff shutdown)) {
       gen_response(200, { action => { status => 'completed' } }),
     );
 
-    send_message("synergy: box $method");
-
-    my @texts = map {; $_->{text} } $channel->sent_messages;
-    is(@texts, 3, 'sent three messages (reactji on/off, and message)')
-      or diag explain \@texts;
-
-    like(
-      $texts[2],
-      qr{That box has been (powered off|shut down)},
+    cmp_replies(
+      "synergy: box $method",
+      [
+        ignore(),
+        ignore(),
+        re(qr{That box has been (powered off|shut down)}),
+      ],
       'successfully turned off',
     );
 
-    $channel->clear_messages;
-
     # already off
     local $alice_droplet->{status} = 'off';
-    send_message("synergy: box $method");
-    like(
-      single_message_text(),
-      qr{That box is already (powered off|shut down)!},
+
+    cmp_replies(
+      "synergy: box $method",
+      [ re(qr{That box is already (powered off|shut down)!}) ],
       'if the box is already off, synergy says so'
     );
   };
 }
 
 subtest 'destroy' => sub {
-  send_message('synergy: box destroy');
-  like(
-    single_message_text(),
-    qr{powered on.*use /force to destroy it},
+  cmp_replies(
+    'synergy: box destroy',
+    [ re(qr{powered on.*use /force to destroy it}) ],
     'box is on, synergy suggests /force'
   );
 
-  send_message('synergy: box destroy /force');
-  like(single_message_text(), qr{^Box destroyed}, 'successfully force destroyed');
+  cmp_replies(
+    'synergy: box destroy /force',
+    [ re(qr{^Box destroyed}) ],
+    'successfully force destroyed',
+  );
 
   local $alice_droplet->{status} = 'off';
-  send_message('synergy: box destroy');
-  like(single_message_text(), qr{^Box destroyed}, 'already off: successfully destroyed');
+
+  cmp_replies(
+    'synergy: box destroy',
+    [ re(qr{^Box destroyed}) ],
+    'already off: successfully destroyed'
+  );
 };
 
 my %CREATE_RESPONSES = (
@@ -271,52 +249,47 @@ subtest 'create' => sub {
 
   my $box_name_re = qr{[-a-z0-9.]+}i;
 
-  my $do_create = sub (%override) {
-    my $wait = delete $override{wait} // 0;
-    my $resp_for = sub ($key) { $override{$key} // $CREATE_RESPONSES{$key} };
-    my $msg = $override{message} // "box create";
+  my sub cmp_create_replies ($override, $want, $desc = "got expected replies") {
+    my sub resp_for ($key) { $override->{$key} // $CREATE_RESPONSES{$key} }
+    my $msg = $override->{message} // "box create";
 
     @DO_RESPONSES = (
-      $resp_for->('first_droplet_fetch'),
-      $resp_for->('snapshot_fetch'),
-      $resp_for->('ssh_key_fetch'),
-      $resp_for->('droplet_create'),
-      $resp_for->('action_fetch'),
-      $resp_for->('last_droplet_fetch'),
-      $resp_for->('dns_fetch'),
-      $resp_for->('dns_post'),
+      resp_for('first_droplet_fetch'),
+      resp_for('snapshot_fetch'),
+      resp_for('ssh_key_fetch'),
+      resp_for('droplet_create'),
+      resp_for('action_fetch'),
+      resp_for('last_droplet_fetch'),
+      resp_for('dns_fetch'),
+      resp_for('dns_post'),
     );
 
-    send_message(
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
+
+    cmp_replies(
       "synergy: $msg",
-      $channel->default_from,
-      ($wait ? { seconds => $wait } : ()),
+      $want,
+      $desc,
     );
-
-    my @texts = map {; $_->{text} } $channel->sent_messages;
-    $channel->clear_messages;
-    return @texts;
-  };
+  }
 
   subtest 'already have a box' => sub {
-    my @texts = $do_create->(
-      first_droplet_fetch => $CREATE_RESPONSES{last_droplet_fetch},
+    cmp_create_replies(
+      {
+        first_droplet_fetch => $CREATE_RESPONSES{last_droplet_fetch}
+      },
+      [ re(qr{This box already exists}) ],
     );
-
-    is(@texts, 1, 'sent a single failure message');
-    like($texts[0], qr{This box already exists}, 'message seems ok');
   };
 
   subtest 'good create' => sub {
-    my @texts = $do_create->(wait => 6);
-    is(@texts, 2, 'sent two messages: please hold, then completion');
-    cmp_deeply(
-      \@texts,
+    cmp_create_replies(
+      {},
       [
         re(qr{Creating $box_name_re in nyc3}i),
         re(qr{Box created: name: \Qalice-bullseye.box.fm.local\E}),
       ],
-      'normal create with defaults seems fine'
+      'normal create with defaults seems fine',
     );
   };
 
@@ -325,12 +298,10 @@ subtest 'create' => sub {
     # failure, and depending on what order the reactor decides to fire off the
     # requests in, it might get one before the other. That's fine, I think,
     # because all we care about is that there's some useful message.
-    my @texts = $do_create->(
-      snapshot_fetch => gen_response(200 => { snapshots => [] }),
-    );
-
-    cmp_deeply(
-      \@texts,
+    cmp_create_replies(
+      {
+        snapshot_fetch => gen_response(200 => { snapshots => [] }),
+      },
       [
         re(qr{Creating $box_name_re in nyc3}i),
         re(qr{no snapshot found}),
@@ -338,12 +309,10 @@ subtest 'create' => sub {
       'no snapshot, messages ok'
     );
 
-    @texts = $do_create->(
-      ssh_key_fetch => gen_response(200 => { ssh_keys => [] }),
-    );
-
-    cmp_deeply(
-      \@texts,
+    cmp_create_replies(
+      {
+        ssh_key_fetch => gen_response(200 => { ssh_keys => [] }),
+      },
       [
         re(qr{Creating $box_name_re in nyc3}i),
         re(qr{find a DO ssh key}),
@@ -353,10 +322,10 @@ subtest 'create' => sub {
   };
 
   subtest 'failed create' => sub {
-    my @texts = $do_create->(droplet_create => gen_response(200 => {}));
-    is(@texts, 2, 'sent two messages');
-    cmp_deeply(
-      \@texts,
+    cmp_create_replies(
+      {
+        droplet_create => gen_response(200 => {})
+      },
       [
         re(qr{Creating $box_name_re}),
         re(qr{Something weird happened and I've logged it}),
@@ -366,14 +335,12 @@ subtest 'create' => sub {
   };
 
   subtest 'failed action fetch' => sub {
-    my @texts = $do_create->(
-      action_fetch => gen_response(200 => {
-        action => { status => 'errored' },
-      }),
-      wait => 6,
-    );
-    cmp_deeply(
-      \@texts,
+    cmp_create_replies(
+      {
+        action_fetch => gen_response(200 => {
+          action => { status => 'errored' },
+        }),
+      },
       [
         re(qr{Creating $box_name_re}),
         re(qr{Something weird happened and I've logged it}),
@@ -386,22 +353,19 @@ subtest 'create' => sub {
     my $foo_droplet = dclone($alice_droplet);
     $foo_droplet->{name} =~ s/bullseye/foo/;
 
-    my @texts = $do_create->(
-      message => 'box create /version foo',
-      snapshot_fetch => gen_response(200, {
-        snapshots => [{
-          id => 42,
-          name => 'fminabox-foo-20201004',
-        }]
-      }),
-      last_droplet_fetch => gen_response(200, {
-        droplets => [ $foo_droplet ],
-      }),
-      wait => 6,
-    );
-
-    cmp_deeply(
-      \@texts,
+    cmp_create_replies(
+      {
+        message => 'box create /version foo',
+        snapshot_fetch => gen_response(200, {
+          snapshots => [{
+            id => 42,
+            name => 'fminabox-foo-20201004',
+          }]
+        }),
+        last_droplet_fetch => gen_response(200, {
+          droplets => [ $foo_droplet ],
+        }),
+      },
       [
         re(qr{Creating $box_name_re in nyc3}),
         re(qr{Box created: name: \Qalice-foo.box.fm.local\E}),

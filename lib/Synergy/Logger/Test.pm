@@ -10,7 +10,8 @@ use Synergy::Logger '$Logger' => {
     to_self   => 1,
     facility  => undef,
     log_pid   => 0,
-    to_stderr => !! Synergy::Logger->default_logger_class->env_value('STDERR')
+    to_stderr => !! Synergy::Logger->default_logger_class->env_value('STDERR'),
+    to_tap    => !! Synergy::Logger->default_logger_class->env_value('TAP'),
   },
 };
 

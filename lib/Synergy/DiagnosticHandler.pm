@@ -29,6 +29,7 @@ use Synergy::TextThemer;
 
 use List::Util qw(max);
 
+use String::Truncate qw(elide);
 use Term::ANSIColor qw(colored);
 
 has color_scheme => (
@@ -82,6 +83,8 @@ Help topics:
   diag    - commands for inspecting the Synergy configuration
   nlist   - print a list of all notifiers, counted by name/class
   ntree   - print a tree of all notifiers
+  events  - print a list of all events in flight
+  prom    - print the current Prometheus metrics
 
 EOH
 
@@ -120,6 +123,14 @@ $HELP{ntree} = <<'EOH';
 Prints a tree of every notifier attached to the event loop.
 
 See also /help nlist
+EOH
+
+$HELP{events} = <<'EOH';
+Prints a list of every event still in flight.
+EOH
+
+$HELP{prom} = <<'EOH';
+Prints the current Prometheus metrics.
 EOH
 
 sub _help_for ($self, $arg) {
@@ -304,6 +315,46 @@ sub _diagnostic_cmd_ntree ($self, $rest) {
   my $msg = nlist(\@roots);
 
   return [ box => $msg ];
+}
+
+sub _diagnostic_cmd_events ($self, $rest) {
+  my @eif = $self->hub->_events_in_flight;
+
+  my $msg = q{};
+  for my $entry (@eif) {
+    $msg .= sprintf "event id=%s channel=%s age=%i text=%s\n",
+      Scalar::Util::refaddr($entry->{event}),
+      $entry->{event}->from_channel->name,
+      time - $entry->{event}->time,
+      elide($entry->{event}->text, 40);
+
+    for my $reaction_entry ($entry->{reactions}->@*) {
+      my $state = $reaction_entry->{result}->state;
+      $state  = $state eq 'done'      ? colored(['bright_green'], $state)
+              : $state eq 'cancelled' ? colored(['bright_black'], $state)
+              : $state eq 'pending'   ? colored(['ansi214'], $state)
+              : $state eq 'failed'    ? colored(['bright_red'], $state)
+              :                         $state;
+
+      $msg .= sprintf "- reaction %s=%s %s=%s\n",
+        colored([ 'bright_white' ], 'desc'),
+        $reaction_entry->{hit}->description,
+        colored([ 'bright_white' ], 'state'),
+        $state;
+    }
+  }
+
+  unless (@eif) {
+    $msg = "(no events in flight)";
+  }
+
+  return [ box => $msg ];
+}
+
+sub _diagnostic_cmd_prom ($self, $rest) {
+  $self->hub->_update_prom;
+  my $prom = $self->hub->prom;
+  return [ box => $prom->format ];
 }
 
 sub _do_diagnostic_command ($self, $text) {

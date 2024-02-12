@@ -2,8 +2,6 @@
 use v5.32.0;
 use warnings;
 
-use lib 'lib';
-
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';
@@ -14,54 +12,51 @@ use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
 use Path::Tiny ();
-use Synergy::Hub;
+use Synergy::Tester;
 
 my $PAGE = "Hello\n\nfriend.";
 
-my $tmpfile = Path::Tiny->tempfile;
-
-# Initialize Synergy.
-my $synergy = Synergy::Hub->synergize(
-  {
-    user_directory => "t/data/users-page.yaml",
-    channels => {
-      'test-1' => {
-        class     => 'Synergy::Channel::Test',
-        todo      => [
-          [ send    => { text => "synergy: page roxy: $PAGE" }  ],
-          [ wait    => { seconds => 0.1  }  ],
-        ],
+my $synergy = Synergy::Tester->new_tester({
+  users => {
+    roxy => {
+      extra_identities => {
+        'test-1' => 'Rone',
+        'test-2' => 'Rtwo',
       },
-      'test-2' => {
-        class     => 'Synergy::Channel::Test',
-        prefix    => q{synergy},
-      },
-      'test-3' => {
-        class     => 'Synergy::Channel::Test',
-        prefix    => q{synergy},
+    },
+    stormer => {
+      extra_identities => {
+        'test-1' => 'Mone',
+        'test-2' => 'Mtwo',
       }
     },
-    reactors => {
-      page => {
-        class => 'Synergy::Reactor::Page',
-        page_channel_name => 'test-2',
-        pushover_channel_name => 'test-3',
-      },
+  },
+  extra_channels => {
+    'test-2' => {
+      class     => 'Synergy::Channel::Test',
+      prefix    => q{synergy},
     },
-    state_dbfile => "$tmpfile",
-    server_port => empty_port(),
-  }
-);
+    'test-3' => {
+      class     => 'Synergy::Channel::Test',
+      prefix    => q{synergy},
+    }
+  },
+  reactors => {
+    page => {
+      class => 'Synergy::Reactor::Page',
+      page_channel_name => 'test-2',
+      pushover_channel_name => 'test-3',
+    },
+  },
+});
 
-# Tests begin here.
-testing_loop($synergy->loop);
-
-wait_for {
-  $synergy->channel_named('test-1')->is_exhausted;
-};
+my $result = $synergy->run_test_program([
+  [ send    => { text => "synergy: page roxy: $PAGE" }  ],
+  [ wait    => { seconds => 0.1  }  ],
+]);
 
 is_deeply(
-  [ $synergy->channel_named('test-1')->sent_messages ],
+  [ $synergy->channel_named('test-channel')->sent_messages ],
   [
     { address => 'public', text => 'Page sent to roxy!' },
   ],

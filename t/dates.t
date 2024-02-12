@@ -5,8 +5,6 @@ use utf8;
 
 use experimental qw( signatures );
 
-use lib 'lib';
-
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';
@@ -18,7 +16,6 @@ use Net::Async::HTTP;
 use Net::EmptyPort qw(empty_port);
 use Synergy::Hub;
 
-# Initialize Synergy.
 my $synergy = Synergy::Hub->synergize(
   {
     user_directory  => "t/data/users.yaml",
