@@ -11,7 +11,7 @@ use Test::More;
 use IO::Async::Test;
 use Synergy::Tester;
 
-my $result = Synergy::Tester->testergize({
+my $synergy = Synergy::Tester->new_tester({
   reactors => {
     pref      => { class => 'Synergy::Reactor::Preferences' },
     preftest  => { class => 'Synergy::Test::Reactor::PreferenceTest' },
@@ -21,15 +21,17 @@ my $result = Synergy::Tester->testergize({
     stormer => undef,
     roxy    => undef,
   },
-  todo => [
-    [ send  => { text => "synergy: dump my prefs" }  ],
-    [ wait  => { seconds => 0.1  }  ],
-    [ send  => { text => "synergy: set my preftest.bool-pref to true"} ],
-    [ wait  => { seconds => 0.1  }  ],
-    [ send  => { text => "synergy: dump my prefs" }  ],
-    [ wait  => { seconds => 0.1  }  ],
-  ],
 });
+
+
+my $result = $synergy->run_test_program([
+  [ send  => { text => "synergy: dump my prefs" }  ],
+  [ wait  => { seconds => 0.1  }  ],
+  [ send  => { text => "synergy: set my preftest.bool-pref to true"} ],
+  [ wait  => { seconds => 0.1  }  ],
+  [ send  => { text => "synergy: dump my prefs" }  ],
+  [ wait  => { seconds => 0.1  }  ],
+]);
 
 my @sent = $result->synergy->channel_named('test-channel')->sent_messages;
 
@@ -51,6 +53,7 @@ cmp_deeply(
       text  => re(qr{\bpreftest\.bool-pref: 1\b}m),
     })
   ],
+  "all replies are what we expect",
 );
 
 done_testing;
