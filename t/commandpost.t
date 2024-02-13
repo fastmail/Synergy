@@ -78,4 +78,65 @@ subtest "matchers and parsers" => sub {
   );
 };
 
+subtest "multi-word commands" => sub {
+  my $outpost = create_outpost(
+    [ command => "eat pie"      => {} => sub ($r, $c, @rest) { [ "3.14", @rest ] } ],
+    [ command => "eat scrapple" => {} => sub { [ "oink" ] } ],
+  );
+
+  {
+    my $plan = $outpost->consider_targeted("eat scrapple");
+
+    $plan->cmp_potential(
+      methods(name => 'command-eat_scrapple', is_exclusive => 1),
+      "command eat_scrapple handles 'eat scrapple'",
+    );
+
+    $plan->cmp_results(
+      {
+        name    => 'command-eat_scrapple',
+        result  => [ 'oink' ],
+      },
+    );
+  }
+
+  {
+    my $plan = $outpost->consider_targeted("eat pie");
+
+    $plan->cmp_potential(
+      methods(name => 'command-eat_pie', is_exclusive => 1),
+      "command eat_pie handles 'eat pie'",
+    );
+
+    $plan->cmp_results(
+      {
+        name    => 'command-eat_pie',
+        result  => [ '3.14', undef ],
+      },
+    );
+  }
+
+  {
+    my $plan = $outpost->consider_targeted("eat pie or else");
+
+    $plan->cmp_potential(
+      methods(name => 'command-eat_pie', is_exclusive => 1),
+      "command eat_pie handles 'eat pie or else'",
+    );
+
+    $plan->cmp_results(
+      {
+        name    => 'command-eat_pie',
+        result  => [ '3.14', 'or else' ],
+      },
+    );
+  }
+
+  {
+    my $plan = $outpost->consider_targeted("eat cake");
+
+    $plan->cmp_potential("nothing handles 'eat cake'");
+  }
+};
+
 done_testing;
