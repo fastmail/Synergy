@@ -171,6 +171,7 @@ sub _generate_command_system ($class, $, $arg, $) {
     command => sub ($name, $arg, $code) {
       my $object = $get_cmdpost->();
       $object->add_command($name, $arg, $code);
+      $object->_set_has_multi_word_commands(1) if $name =~ /\s/;
 
       if ($arg->{help}) {
         $object->add_help($name, {}, $arg->{help});
@@ -183,6 +184,7 @@ sub _generate_command_system ($class, $, $arg, $) {
       if ($arg->{aliases}) {
         for my $alias ($arg->{aliases}->@*) {
           $object->add_command($alias, $arg, $code);
+          $object->_set_has_multi_word_commands(1) if $alias =~ /\s/;
 
           if ($arg->{help}) {
             $object->add_help(
@@ -253,7 +255,14 @@ package Synergy::CommandPost::Object {
       _command_named    => 'get',
       _register_command => 'set',
       _command_names    => 'keys',
+      _commands         => 'elements',
     },
+  );
+
+  has _has_multi_word_commands => (
+    is => 'ro',
+    writer  => '_set_has_multi_word_commands',
+    default => 0,
   );
 
   has listeners => (
@@ -352,57 +361,91 @@ package Synergy::CommandPost::Object {
     return;
   }
 
+  sub _all_command_reactions ($self, $reactor, $event, $text) {
+    my ($first, $rest) = split /\s+/, $text, 2;
+    $first = lc $first;
+
+    my @reactions;
+
+    if (my $command = $self->_command_named($first)) {
+      push @reactions, $self->_one_command_reaction(
+        $reactor,
+        $event,
+        $command,
+        $first,
+        $rest
+      );
+    }
+
+    if ($self->_has_multi_word_commands) {
+      my %commands = $self->_commands;
+      for my $command_name (grep {; /\s/ } keys %commands) {
+        if ($text =~ /\A\Q$command_name\E(?:\s+(.*))?\z/) {
+          my $rest = $1;
+          push @reactions, $self->_one_command_reaction(
+            $reactor,
+            $event,
+            $commands{$command_name},
+            $command_name =~ s/\s/_/gr,
+            $rest,
+          );
+        }
+      }
+    }
+
+    return @reactions;
+  }
+
+  sub _one_command_reaction ($self, $reactor, $event, $command, $cmd_name, $rest) {
+    my $args;
+
+    eval {
+      $args = $command->{parser}
+            ? ($command->{parser}->($reactor, $rest, $event) || [])
+            : [ $rest ];
+    };
+
+    unless ($args) {
+      my $error = $@;
+      if ($error isa Synergy::X && $error->is_public) {
+        return Synergy::PotentialReaction->new({
+          reactor => $reactor,
+          name    => "command-$cmd_name",
+          is_exclusive  => 1,
+          event_handler => sub {
+            $event->mark_handled;
+            $event->error_reply($error->message);
+          },
+        });
+      } else {
+        die $error;
+      }
+    }
+
+    # If we already have something in @reactions, it's got to be the
+    # error handler above, so don't call the method!
+    my $method = $command->{method};
+
+    return Synergy::PotentialReaction->new({
+      reactor => $reactor,
+      name    => "command-$cmd_name",
+      is_exclusive  => 1,
+      event_handler => sub {
+        $event->mark_handled;
+        $reactor->$method($event, @$args)
+      },
+    });
+  }
+
   sub potential_reactions_to ($self, $reactor, $event) {
     my @reactions;
     my $event_was_targeted = $event->was_targeted;
 
+    my $text = $event->text;
+
     ### First, is there a command to match the first word of the message?
     if ($event_was_targeted) {
-      my ($first, $rest) = split /\s+/, $event->text, 2;
-      $first = lc $first;
-
-      if (my $command = $self->_command_named($first)) {
-        my $args;
-
-        eval {
-          $args = $command->{parser}
-                ? ($command->{parser}->($reactor, $rest, $event) || [])
-                : [ $rest ];
-        };
-
-        unless ($args) {
-          my $error = $@;
-          if ($error isa Synergy::X && $error->is_public) {
-            push @reactions, Synergy::PotentialReaction->new({
-              reactor => $reactor,
-              name    => "command-$first",
-              is_exclusive  => 1,
-              event_handler => sub {
-                $event->mark_handled;
-                $event->error_reply($error->message);
-              },
-            });
-          } else {
-            die $error;
-          }
-        }
-
-        unless (@reactions) {
-          # If we already have something in @reactions, it's got to be the
-          # error handler above, so don't call the method!
-          my $method = $command->{method};
-
-          push @reactions, Synergy::PotentialReaction->new({
-            reactor => $reactor,
-            name    => "command-$first",
-            is_exclusive  => 1,
-            event_handler => sub {
-              $event->mark_handled;
-              $reactor->$method($event, @$args)
-            },
-          });
-        }
-      }
+      push @reactions, $self->_all_command_reactions($reactor, $event, $text);
     }
 
     ### Next, allow all the listeners to have a crack at the event.
