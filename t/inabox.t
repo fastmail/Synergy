@@ -215,6 +215,7 @@ my %CREATE_RESPONSES = (
     snapshots => [{
       id => 42,
       name => 'fminabox-bullseye-20200202',
+      regions => [ 'nyc3', 'sfo3'],
     }]
   }),
 
@@ -293,6 +294,42 @@ subtest 'create' => sub {
     );
   };
 
+  subtest 'bad snapshot region' => sub {
+    cmp_create_replies(
+      {
+        snapshot_fetch => gen_response(200 => {
+          snapshots => [{
+            id => 42,
+            name => 'fminabox-bullseye-20200202',
+            regions => [ 'zzz', 'aaa'],
+          }]
+        }),
+      },
+      [
+        re(qr{Creating $box_name_re in nyc3}i),
+        re(qr{I'm unable to create snapshot in region 'nyc3'.  Unfortunately this snapshot is not available in any of my configured regions}),
+      ],
+      'bad snapshot region, messages ok'
+    );
+
+    cmp_create_replies(
+      {
+        snapshot_fetch => gen_response(200 => {
+          snapshots => [{
+            id => 42,
+            name => 'fminabox-bullseye-20200202',
+            regions => [ 'syd1', 'sfo3'],
+          }]
+        }),
+      },
+      [
+        re(qr{Creating $box_name_re in nyc3}i),
+        re(qr{I'm unable to create snapshot in region 'nyc3'.  Available compatible regions are sfo3.}),
+      ],
+      'bad snapshot region, messages ok'
+    );
+  };
+
   subtest 'bad snapshot / ssh key' => sub {
     # This is racy, because Future->needs_all fails immediately with the first
     # failure, and depending on what order the reactor decides to fire off the
@@ -360,6 +397,7 @@ subtest 'create' => sub {
           snapshots => [{
             id => 42,
             name => 'fminabox-foo-20201004',
+            regions => [ 'nyc3', 'sf03' ],
           }]
         }),
         last_droplet_fetch => gen_response(200, {

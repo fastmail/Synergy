@@ -253,6 +253,24 @@ async sub handle_create ($self, $event, $switches) {
   # the other does not, so here we'll just admit defeat and do them in
   # sequence. -- michael, 2020-04-02
   my $snapshot = await $self->_get_snapshot($version);
+  my %snapshot_regions = map {; $_ => 1 } $snapshot->{regions}->@*;
+
+  unless ($snapshot_regions{$region}) {
+    my $compatible_regions =
+      join ', ',
+      grep { $snapshot_regions{$_} } $self->box_datacentres->@*;
+
+    if ($compatible_regions) {
+      return await $event->reply(
+        "I'm unable to create snapshot in region '$region'.  Available compatible regions are $compatible_regions."
+      );
+    }
+
+    return await $event->reply(
+      "I'm unable to create snapshot in region '$region'.  Unfortunately this snapshot is not available in any of my configured regions"
+    );
+  }
+
   my $ssh_key  = await $self->_get_ssh_key;
 
   my $username = $user->username;
