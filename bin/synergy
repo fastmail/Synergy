@@ -23,6 +23,15 @@ use Getopt::Long::Descriptive;
 use Synergy::Hub;
 use Term::ANSIColor qw(colored);
 
+{
+  # THIS BLOCK IS NONSENSE
+  # It is here to avoid a weird problem where Future->isa does not work.  Not
+  # yet diagnosed.  Found 2024-02-15, ask alh or rjbs. -- rjbs, 2024-02-15
+  use Future;
+  no warnings 'once';
+  *Future::isa = \&UNIVERSAL::isa;
+}
+
 my $prefix = -t *STDOUT
            ? (colored(['ansi226'], "LOG") . colored(['ansi255'], " | "))
            : "LOG | ";
