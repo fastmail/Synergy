@@ -11,7 +11,20 @@ package Synergy::DiagnosticHandler::Compartment {
   use experimental qw(signatures);
 
   sub _evaluate ($S, $code) {
+    my sub C ($name) {
+      $S->channel_named($name) // die "no channel named $name\n";
+    }
+
+    my sub R ($name) {
+      $S->reactor_named($name) // die "no reactor named $name\n";
+    }
+
+    my sub U ($name) {
+      $S->user_directory->user_named($name) // die "no user named $name\n";
+    }
+
     my $result = eval $code;
+
     if ($@) {
       return (undef, $@);
     }
@@ -106,6 +119,12 @@ $HELP{eval} = <<'EOH';
 If enabled, the /eval command will evaluate its argument as a string of Perl
 code.  The variable $S will refer to the active Synergy hub.  The result (or
 the exception thrown) will be pretty-printed.
+
+Also, these functions are available:
+
+C($name) - get the channel with the given name
+R($name) - get the reactor with the given name
+U($name) - get the user with the given name
 
 Obviously: caveat evaluator!
 EOH
