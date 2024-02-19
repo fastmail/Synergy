@@ -33,6 +33,7 @@ requires "IO::Async::Timer::Periodic" => "0";
 requires "JMAP::Tester" => "0";
 requires "JSON" => "0";
 requires "JSON::MaybeXS" => "0";
+requires "LWP::Protocol::https" => "0";
 requires "Lingua::EN::Inflect" => "0";
 requires "List::AllUtils" => "0";
 requires "List::Util" => "0";
