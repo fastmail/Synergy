@@ -214,6 +214,7 @@ sub listener_specs {
       exclusive => 1,
       targeted  => 1,
       predicate => sub ($, $e) { $e->text =~ /\Avesta grant/i },
+      allow_empty_help => 1, # unlisted admin command (for now)
     },
   );
 }
