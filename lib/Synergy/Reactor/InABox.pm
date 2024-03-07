@@ -154,6 +154,7 @@ command box => {
     return await $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
   }
 
+  $args = lc($args) if $args;
   my ($switches, $error) = parse_switches($args);
   return await $event->error_reply("couldn't parse switches: $error") if $error;
 
