@@ -191,6 +191,8 @@ sub _determine_version_and_tag ($self, $event, $switches) {
                      // $self->default_box_version;
 
   my ($version, $tag) = $switches->@{qw(version tag)};
+  $version = lc $version if $version;
+  $tag = lc $tag if $tag;
   my $is_default_box = !($version || $tag);
   $version //= $default_version;
   $tag //= $version;
