@@ -142,6 +142,60 @@ async sub delete_url ($self, $path) {
   return;
 }
 
+async sub transfer_image_to_regions ($self, $image, $regions) {
+
+  my $image_id = $image->{id};
+
+  for my $region ($regions->@*) {
+    next if grep { $_ eq $region } $image->{regions}->@*;
+
+    my $res = await $self->http->do_request(
+      method => 'POST',
+      uri    => $self->api_base . "/images/$image_id/actions",
+      headers => {
+        'Authorization' => "Bearer " . $self->bearer_token,
+      },
+
+      content_type => 'application/json',
+      content      => encode_json({
+        type => 'transfer',
+        region => $region,
+      }),
+    );
+
+    next if $res->is_success;
+    
+    # # # notes
+    # # # if an image has already been transferred we get a 422 code and this reply
+    # # # {
+    # # #   "id": "unprocessable_entity",
+    # # #   "message": "This image has already been transferred to this region."
+    # # # }
+    # # # If an image transfer is in progress we get a 422 and this reply
+    # # # {
+    # # #   "id": "unprocessable_entity",
+    # # #   "message": "The image is already being transferred to that region."
+    # # # }
+    # # # We shouldn't encounter the former (well small race between the last time we checked and the upcoming post) because we check in the for loop
+    # # # But we will definitely encounter cases where someone might try to spin up a box after the transfer has been requested but it isn't there yet
+    # # # we need to handle that case, ideally we should just handle both
+    
+    # Handle errors we expect
+    # 1. We've already requested the transfer and it is still in progress
+    # 2. We've raced and the transfer has completed since we got $image
+    if (! $res->is_success && $res->code == 422) {
+      my $json = $res->decoded_content(charset => undef);
+      my $data = decode_json($json);
+      # transfer already in progress
+      next if $data->{message} eq "The image is already being transferred to that region.";
+      # race!
+      next if $data->{message} eq "This image has already been transferred to this region.";
+    }
+    
+    die "error replication image $image_id to $region: " . $res->as_string;
+  }
+}
+
 async sub create_droplet ($self, $arg) {
   state @required_keys = qw( name region size tags image ssh_keys );
 
