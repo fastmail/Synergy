@@ -273,12 +273,12 @@ async sub handle_create ($self, $event, $switches) {
 
     if ($compatible_regions) {
       return await $event->reply(
-        "I'm unable to create snapshot in region '$region'.  Available compatible regions are $compatible_regions.  You can use /datacentre switch to specify a compatible one"
+        "I'm unable to create an fminabox in region '$region'.  Available compatible regions are $compatible_regions.  You can use /datacentre switch to specify a compatible one"
       );
     }
 
     return await $event->reply(
-      "I'm unable to create snapshot in region '$region'.  Unfortunately this snapshot is not available in any of my configured regions"
+      "I'm unable to create an fminabox in region '$region'.  Unfortunately this snapshot is not available in any of my configured regions"
     );
   }
 
