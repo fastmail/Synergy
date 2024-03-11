@@ -307,7 +307,7 @@ subtest 'create' => sub {
       },
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{I'm unable to create snapshot in region 'nyc3'.  Unfortunately this snapshot is not available in any of my configured regions}),
+        re(qr{I'm unable to create an fminabox in region 'nyc3'.  Unfortunately this snapshot is not available in any of my configured regions}),
       ],
       'bad snapshot region, messages ok'
     );
@@ -324,7 +324,7 @@ subtest 'create' => sub {
       },
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{I'm unable to create snapshot in region 'nyc3'.  Available compatible regions are sfo3.}),
+        re(qr{I'm unable to create an fminabox in region 'nyc3'.  Available compatible regions are sfo3.  You can use /datacentre switch to specify a compatible one}),
       ],
       'bad snapshot region, messages ok'
     );
