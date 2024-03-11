@@ -161,7 +161,16 @@ command box => {
 
   # This should be simplified into a more generic "validate and normalize
   # switches" call. -- rjbs, 2023-10-20
-  for my $k (qw( version tag size )) {
+  # Normalize datacentre
+  if (exists $switches{datacentre} && exists $switches{datacenter}) {
+    return await $event->error_reply("You can't use /datacentre and /datacenter at the same time!");
+  }
+
+  if (exists $switches{datacenter}) {
+    $switches{datacentre} = delete $switches{datacenter};
+  }
+
+  for my $k (qw( version tag size datacentre )) {
     next unless $switches{$k};
     $switches{$k} = $switches{$k}[0];
   }
@@ -247,7 +256,7 @@ async sub handle_create ($self, $event, $switches) {
   }
 
   my $name = $self->_box_name_for($user, $tag);
-  my $region = $self->_region_for_user($user);
+  my $region = $switches->{datacentre} // $self->_region_for_user($user);
   $event->reply("Creating $name in $region, this will take a minute or two.");
 
   # It would be nice to do these in parallel, but in testing that causes
@@ -264,7 +273,7 @@ async sub handle_create ($self, $event, $switches) {
 
     if ($compatible_regions) {
       return await $event->reply(
-        "I'm unable to create snapshot in region '$region'.  Available compatible regions are $compatible_regions."
+        "I'm unable to create snapshot in region '$region'.  Available compatible regions are $compatible_regions.  You can use /datacentre switch to specify a compatible one"
       );
     }
 
