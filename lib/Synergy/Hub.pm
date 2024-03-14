@@ -43,6 +43,7 @@ has env => (
   handles => [qw(
     name
     server_port
+    server_ip
     format_friendly_date
     user_directory
   )],
@@ -75,6 +76,7 @@ has server => (
   default => sub ($self) {
     my $s = Synergy::HTTPServer->new({
       name          => '_http_server',
+      server_ip     => $self->env->server_ip,
       server_port   => $self->env->server_port,
       tls_cert_file => $self->env->tls_cert_file,
       tls_key_file  => $self->env->tls_key_file,

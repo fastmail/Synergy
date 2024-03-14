@@ -39,6 +39,12 @@ has server_port => (
   required => 1,
 );
 
+has server_ip => (
+  is => 'ro',
+  isa => 'Str',
+  required => 1,
+);
+
 has tls_cert_file => (
   is => 'ro',
   isa => 'Str',
@@ -112,13 +118,14 @@ sub register_path ($self, $path, $app, $by) {
 async sub start ($self) {
   $self->loop->add($self->http_server);
 
-  $Logger->log([ "listening on port %s", $self->server_port ]);
+  $Logger->log([ "listening on ip:port %s:%s", $self->server_ip, $self->server_port ]);
 
   my %opts = (
     addr => {
       family => "inet",
       socktype => "stream",
       port => $self->server_port,
+      ip => $self->server_ip,
     },
     on_listen_error => sub { die "Cannot listen - $_[-1]\n" },
   );
