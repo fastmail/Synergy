@@ -41,7 +41,11 @@ async sub start ($self) {
 
     $$text_ref = uc $$text_ref;
 
-    if (exists $alts->{slack} && defined $alts->{slack}) {
+    # We skip doing this rewrite if the slack alt text is a reference, which is
+    # what happens when it's using BlockKit.  Later, we could run a visitor
+    # across the structure and only affect the "text" properties.
+    # -- rjbs, 2024-03-21
+    if (exists $alts->{slack} && defined $alts->{slack} && ! ref $alts->{slack}) {
       my @hunks = split /(<[^>]+?>)/, $alts->{slack};
       $alts->{slack} = join '', map {; /^</ ? $_ : uc } @hunks;
     }
