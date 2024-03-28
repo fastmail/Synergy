@@ -271,6 +271,8 @@ async sub handle_create ($self, $event, $switches) {
       join ', ',
       grep { $snapshot_regions{$_} } $self->box_datacentres->@*;
 
+    await $self->dobby->transfer_image_to_regions($snapshot, $self->box_datacentres);
+
     if ($compatible_regions) {
       return await $event->reply(
         "I'm unable to create an fminabox in region '$region'.  Available compatible regions are $compatible_regions.  You can use /datacentre switch to specify a compatible one"
