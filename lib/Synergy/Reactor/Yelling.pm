@@ -33,6 +33,10 @@ sub _slack_channel_name_from_event ($self, $event) {
 }
 
 async sub start ($self) {
+  $self->_register_responder_munger;
+};
+
+sub _register_responder_munger ($self) {
   my $slack_channel = $self->hub->channel_named( $self->slack_synergy_channel_name );
 
   $slack_channel->register_pre_message_hook(sub ($event, $text_ref, $alts) {
@@ -54,12 +58,18 @@ async sub start ($self) {
   return;
 }
 
+sub _is_from_correct_slack_channel ($self, $event) {
+  return unless $event->from_channel isa Synergy::Channel::Slack;
+
+  my $channel = $self->_slack_channel_name_from_event($event);
+  return unless $channel eq $self->yelling_channel_name;
+
+  return 1;
+}
+
 responder mumbling => {
   matcher => sub ($self, $text, $event) {
-    return unless $event->from_channel isa Synergy::Channel::Slack;
-
-    my $channel = $self->_slack_channel_name_from_event($event);
-    return unless $channel eq $self->yelling_channel_name;
+    return unless $self->_is_from_correct_slack_channel($event);
 
     my @words = split /\s+/, $event->text;
     for (@words) {
