@@ -66,7 +66,7 @@ responder mumbling => {
       next if m/^[#@]/; # don't complain about @rjbs
 
       # or :smile: or :-1::skin-tone-4:
-      next if m/^:[-_a-z0-9]+(?::skin-tone-[2-6]:)?:$/;
+      next if m/^:[+-_a-z0-9]+(?::skin-tone-[2-6]:)?:$/;
 
       next if URI->new($_)->has_recognized_scheme;  # or URLS
 
