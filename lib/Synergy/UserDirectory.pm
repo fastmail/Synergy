@@ -280,7 +280,7 @@ __PACKAGE__->add_preference(
     return $known if $known;
     return (undef, "alphabet must be one of $Alphabets");
   },
-  default     => 'English',
+  default     => 'Latin',
 );
 
 __PACKAGE__->add_preference(
