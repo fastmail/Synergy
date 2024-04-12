@@ -23,6 +23,12 @@ has page_channel_name => (
   required => 1,
 );
 
+has page_cc_channel_name => (
+  is => 'ro',
+  isa => 'Str',
+  default => 'slack',
+);
+
 has pushover_channel_name => (
   is => 'ro',
   isa => 'Str',
@@ -116,6 +122,15 @@ async sub _do_page($self, $event, $who, $what) {
     );
 
     $paged = 1;
+  }
+
+  if ($user->has_identity_for($self->page_cc_channel_name)) {
+    my $to_channel = $self->hub->channel_named($self->page_cc_channel_name);
+
+    my $from = $event->from_user ? $event->from_user->username
+                                 : $event->from_address;
+
+    $to_channel->send_message_to_user($user, "You are being paged by $from, who says: $what" );
   }
 
   if ($self->has_pushover_channel) {
