@@ -17,8 +17,11 @@ command transliterate => {
 } => async sub ($self, $event, $rest) {
   my ($alphabet, $text) = $rest =~ /\Ato (\S+): (.+)\z/i;
 
-  return await $event->error_reply("Sorry, I don't know that alphabet.")
-    unless defined $alphabet;
+  unless (defined $alphabet) {
+    return await $event->error_reply(
+      "Sorry, I didn't understand that.  It's: *transliterate to `SCRIPT`: `MESSAGE`*"
+    );
+  }
 
   return await $event->error_reply("Sorry, I don't know that alphabet.")
     unless grep {; lc $_ eq lc $alphabet } known_alphabets;
