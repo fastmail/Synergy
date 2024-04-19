@@ -446,7 +446,18 @@ sub check_for_shift_changes ($self) {
           Future->done;
         })
         ->then(sub ($text, $alts) {
-          return Future->done unless defined $text; # !? -- rjbs, 2019-10-29
+          unless (defined $text) {
+            # I don't know anymore whether this is odd.  Rather than audit, I'm
+            # going to add this log line and then either drop it when I realize
+            # it happens all the time on purpose *or* fix things where it shows
+            # up. -- rjbs, 2024-04-19
+            $Logger->log([
+              "no text returned by %s report for %s",
+              $which,
+              $user->username,
+            ]);
+            return Future->done;
+          }
 
           $Logger->log([ "sending %s report for %s", $which, $user->username ]);
           $channel->send_message_to_user($user, $text, $alts);
