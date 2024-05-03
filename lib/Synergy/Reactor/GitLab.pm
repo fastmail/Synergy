@@ -1062,15 +1062,14 @@ async sub mr_report ($self, $who, $arg = {}) {
 }
 
 async sub post_gitlab_snippet ($self, $payload) {
-  my $res = await $self->hub->http_client->do_request(
-    method => 'POST',
-    uri    => $self->api_uri . '/v4/snippets',
+  my $res = await $self->hub->http_post(
+    $self->api_uri . '/v4/snippets',
     headers => {
       'PRIVATE-TOKEN' => $self->api_token,
     },
 
-    content_type => 'application/json',
-    content      => encode_json($payload),
+    Content_Type => 'application/json',
+    Content      => encode_json($payload),
   );
 
   unless ($res->is_success) {
