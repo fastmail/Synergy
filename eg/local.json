@@ -1,5 +1,5 @@
 {
-  "user_directory": "users.yaml",
+  "user_directory": "eg/users.yaml",
   "time_zone_names": {
     "America/New_York": "🇺🇸",
     "Australia/Sydney": "🇦🇺",
@@ -11,7 +11,6 @@
     "twilio" : { "class": "Synergy::Channel::Console", "send_only": true }
   },
   "reactors": {
-    "linear"  : { "class": "Synergy::Reactor::Linear" },
     "prefs"   : { "class": "Synergy::Reactor::Preferences" },
 
     "clox"    : { "class": "Synergy::Reactor::Clox" },
