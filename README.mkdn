@@ -16,7 +16,7 @@ You need to set up a configuration file in YAML or JSON format.  Look at the
 example file to see what config options are expected, because they're not
 documented yet.  Run the program like this, more or less:
 
-    $ carton exec perl synergy -c /path/to/config/file.json
+    $ carton exec perl bin/synergy -c /path/to/config/file.json
 
 ### Slack permissions
 
