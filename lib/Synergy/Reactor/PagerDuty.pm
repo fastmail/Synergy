@@ -999,22 +999,7 @@ sub _active_incidents_summary ($self) {
         PL_N('incident', $count)
       );
 
-      my (@text, @slack);
-
-      for my $incident (@incidents) {
-        my $created = $ISO8601->parse_datetime($incident->{created_at});
-        my $ago = ago(time - $created->epoch);
-
-        push @text, "  - $incident->{description} (fired $ago)";
-        push @slack, sprintf("• <%s|#%s> (fired %s): %s",
-          $incident->{html_url},
-          $incident->{incident_number},
-          $ago,
-          $incident->{description},
-        );
-      }
-
-      my $text = join qq{\n}, $title, @text;
+      my @text;
 
       my $blocks = [
         {
@@ -1024,14 +1009,31 @@ sub _active_incidents_summary ($self) {
             text => "*$title*",
           }
         },
-        {
+      ];
+
+      for my $incident (@incidents) {
+        my $created = $ISO8601->parse_datetime($incident->{created_at});
+        my $ago = ago(time - $created->epoch);
+
+        push @text, "  - $incident->{description} (fired $ago)";
+
+        my $slack_text = sprintf("• <%s|#%s> (fired %s): %s",
+          $incident->{html_url},
+          $incident->{incident_number},
+          $ago,
+          $incident->{description},
+        );
+
+        push @$blocks, {
           type => "section",
           text => {
             type => "mrkdwn",
-            text => join qq{\n}, @slack,
+            text => $slack_text,
           }
-        },
-      ];
+        };
+      }
+
+      my $text = join qq{\n}, $title, @text;
 
       my $slack = {
         blocks => $blocks,
