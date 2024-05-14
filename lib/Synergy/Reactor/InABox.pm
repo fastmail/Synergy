@@ -389,8 +389,6 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
     $args = [];
   }
 
-  $event->reply("I will now set up your Fastmail In-a-Box! :fminabox:");
-
   my $success;
   my $max_tries = 20;
   TRY: for my $try (1..$max_tries) {
