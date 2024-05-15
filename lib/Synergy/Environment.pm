@@ -40,6 +40,12 @@ has server_port => (
   default => 8118,
 );
 
+has server_ip => (
+  is => 'ro',
+  isa => 'Str',
+  default => '0.0.0.0',
+);
+
 has metrics_path => (
   is => 'ro',
   isa => 'Str',
