@@ -246,6 +246,30 @@ responder cat_pic => {
   });
 };
 
+responder capybara_pic => {
+  exclusive => 1,
+  targeted  => 1,
+  help_titles => [ 'capybara pic' ],
+  help      => '*capybara pic*: get a picture of a capybara',
+  matcher   => sub ($self, $text, @) {
+    # TODO: make this an error instead of a give-up?
+    return unless $text =~ /\Acapybara(?:\s+(pic|jpg|gif|png))?\z/i;
+    return [];
+  },
+}, async sub ($self, $event) {
+  $event->mark_handled;
+
+  my $res = await $self->hub->http_client->GET(
+    "https://api.capy.lol/v1/capybara?json=true",
+    max_redirects => 0,
+  );
+
+  my $data = eval { JSON::MaybeXS->new->decode( $res->decoded_content ) };
+  my $url  = $data->{data}{url};
+
+  $event->reply($url);
+};
+
 listener misc_pic => async sub ($self, $event) {
   my $text = $event->text;
   my $from_channel = $event->from_channel;
