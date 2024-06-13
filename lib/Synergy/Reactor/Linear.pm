@@ -960,7 +960,7 @@ command comment => {
     \s+
     (.*)
     \z
-  /ix;
+  /six;
 
   unless ($issue_ident && $comment) {
     return await $event->error_reply("I don't know what you want me to comment on.");
