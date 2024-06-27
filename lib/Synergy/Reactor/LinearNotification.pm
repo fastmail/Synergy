@@ -150,25 +150,29 @@ sub http_app ($self, $env) {
           my $app = $was_create ? 'Zendesk' : 'Linear';
           $who = 'someone' unless $was_create;
 
-          my $text = sprintf
-            "%s %s escalation by %s in %s: %s (%s)",
+          my $base_text = sprintf
+            "%s %s escalation by %s in %s: %s",
             $ESCALATION_EMOJI,
             $desc,
             $who,
             $app,
-            $payload->{data}{title},
-            $payload->{url};
+            $payload->{data}{title};
+
+          my ($identifier) = $payload->{url} =~ m{/linear\.app/fastmail/issue/([A-Z]+-[0-9]+)/};
+          $identifier //= $payload->{url};
+          my $text  = "$base_text ($payload->{url})";
+          my $slack = "$base_text (<$payload->{url}|$identifier>)";
 
           if (my $rototron = $self->_rototron) {
             my $roto_reactor = $self->hub->reactor_named('rototron');
 
             for my $officer ($roto_reactor->current_triage_officers) {
               $Logger->log(["notifying %s of new escalation task", $officer->username ]);
-              $channel->send_message_to_user($officer, $text);
+              $channel->send_message_to_user($officer, $text, { slack => $slack });
             }
           }
 
-          return $channel->send_message($self->escalation_address, $text);
+          return $channel->send_message($self->escalation_address, $text, { slack => $slack });
         })->catch(sub {
           $Logger->log("failed to tell escalation about a ticket create in linear: @_");
 
