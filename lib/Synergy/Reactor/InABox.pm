@@ -159,15 +159,23 @@ command box => {
 
   my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
 
-  # This should be simplified into a more generic "validate and normalize
-  # switches" call. -- rjbs, 2023-10-20
-  # Normalize datacentre
-  if (exists $switches{datacentre} && exists $switches{datacenter}) {
-    return await $event->error_reply("You can't use /datacentre and /datacenter at the same time!");
+  if (!exists $switches{datacentre}) {
+    if (exists $switches{datacenter}) {
+      $switches{datacentre} = delete $switches{datacenter};
+    }
+    elsif (exists $switches{region}) {
+      $switches{datacentre} = delete $switches{region};
+    }
   }
 
-  if (exists $switches{datacenter}) {
-    $switches{datacentre} = delete $switches{datacenter};
+  # This should be simplified into a more generic "validate and normalize
+  # switches" call. -- rjbs, 2023-10-20
+  # I've made this not more generic but more clever: We first normalize to
+  # datacentre above and then check if one of the aliases is still hanging
+  # around which means a duplicate alias was passed. -- lerlacher, 2024-07-27
+  # Normalize datacentre
+  if (exists $switches{datacenter} || exists $switches{region}) {
+    return await $event->error_reply("Please pass only one of /datacenter or /datacentre or /region!");
   }
 
   for my $k (qw( version tag size datacentre )) {
