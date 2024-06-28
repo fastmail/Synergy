@@ -3,6 +3,8 @@ use v5.32.0;
 use warnings;
 use experimental 'signatures';
 
+use lib 't/lib';
+
 use Future;
 use IO::Async::Test;
 use JSON::MaybeXS qw(encode_json);

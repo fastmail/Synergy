@@ -4,7 +4,7 @@ use warnings;
 
 use experimental 'signatures';
 
-use lib 'lib';
+use lib 't/lib';
 
 use Test::More;
 

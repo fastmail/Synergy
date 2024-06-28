@@ -2,6 +2,8 @@
 use v5.32.0;
 use warnings;
 
+use lib 't/lib';
+
 use Test::More;
 
 use Synergy::Logger::Test '$Logger';

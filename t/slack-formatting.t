@@ -2,11 +2,13 @@
 use v5.32.0;
 use warnings;
 
+use lib 't/lib';
+
 use Test::More;
 
 use Synergy::Channel::Slack;
 
-subtest "Url formatting" => sub {
+subtest "url formatting" => sub {
   for my $pair (
     [
       "<http://test.com> <http://bar.com|bar.com>",

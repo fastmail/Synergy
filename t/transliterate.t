@@ -5,6 +5,8 @@ use experimental 'signatures';
 
 use utf8;
 
+use lib 't/lib';
+
 use Test::More;
 
 use IO::Async::Test;

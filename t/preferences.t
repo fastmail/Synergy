@@ -3,7 +3,7 @@ use v5.32.0;
 use warnings;
 use experimental 'signatures';
 
-use lib 'lib', 't/lib';
+use lib 't/lib';
 
 use Test::Deep;
 use Test::More;
