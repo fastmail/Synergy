@@ -3,7 +3,7 @@ use warnings;
 package Synergy::DiagnosticUplink;
 
 use Moose;
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 use utf8;
 
 use Future::AsyncAwait;
@@ -23,7 +23,7 @@ package Synergy::DiagnosticUplink::Connection {
 
   use parent 'IO::Async::Stream';
 
-  use experimental qw(lexical_subs signatures);
+  use experimental qw(signatures);
 
   use Synergy::DiagnosticHandler;
 

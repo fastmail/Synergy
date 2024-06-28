@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Util;
 
 use utf8;
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 
 use charnames ();
 use Carp;

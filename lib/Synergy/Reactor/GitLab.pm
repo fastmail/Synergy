@@ -10,7 +10,7 @@ with 'Synergy::Role::Reactor::CommandPost',
        expandos => [qw( mr commit )],
      };
 
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 use namespace::clean;
 use DateTime::Format::ISO8601;
 use Digest::MD5 qw(md5_hex);

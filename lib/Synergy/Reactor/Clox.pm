@@ -9,7 +9,7 @@ with 'Synergy::Role::Reactor::CommandPost',
 
 use Synergy::CommandPost;
 
-use experimental qw(signatures lexical_subs);
+use experimental qw(signatures);
 
 use DateTime;
 use Future::AsyncAwait;

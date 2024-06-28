@@ -4,7 +4,7 @@ package Synergy::Role::ManagesState;
 
 use Moose::Role;
 
-use experimental qw(signatures lexical_subs);
+use experimental qw(signatures);
 use namespace::clean;
 
 use JSON::MaybeXS;

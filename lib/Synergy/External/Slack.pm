@@ -3,7 +3,7 @@ use warnings;
 package Synergy::External::Slack;
 
 use Moose;
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 use namespace::autoclean;
 use utf8;
 

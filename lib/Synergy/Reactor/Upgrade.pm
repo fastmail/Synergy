@@ -5,7 +5,7 @@ package Synergy::Reactor::Upgrade;
 use Moose;
 with 'Synergy::Role::Reactor::CommandPost';
 
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 use namespace::clean;
 
 use File::pushd;

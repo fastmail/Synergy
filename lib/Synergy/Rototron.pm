@@ -3,7 +3,7 @@ use warnings;
 package Synergy::Rototron;
 
 use Moose;
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 
 use charnames qw( :full );
 
@@ -331,7 +331,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
 package Synergy::Rototron::Rotor {
 
   use Moose;
-  use experimental qw(lexical_subs signatures);
+  use experimental qw(signatures);
 
   use Synergy::Logger '$Logger';
 
@@ -472,7 +472,7 @@ package Synergy::Rototron::Rotor {
 package Synergy::Rototron::AvailabilityChecker {
 
   use Moose;
-  use experimental qw(lexical_subs signatures);
+  use experimental qw(signatures);
 
   use DBD::SQLite;
 
@@ -711,7 +711,7 @@ package Synergy::Rototron::AvailabilityChecker {
 package Synergy::Rototron::JMAPClient {
 
   use Moose;
-  use experimental qw(lexical_subs signatures);
+  use experimental qw(signatures);
 
   extends 'JMAP::Tester';
   has [ qw(api_token) ] => (is => 'ro', isa => 'Str', required => 1);

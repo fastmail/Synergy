@@ -10,7 +10,7 @@ with 'Synergy::Role::Reactor::CommandPost',
        expandos => [ 'issue' ],
      };
 
-use experimental qw(signatures lexical_subs);
+use experimental qw(signatures);
 use namespace::clean;
 use Feature::Compat::Defer;
 

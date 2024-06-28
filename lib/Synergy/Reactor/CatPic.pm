@@ -13,7 +13,7 @@ use Synergy::CommandPost;
 
 use Synergy::Logger '$Logger';
 
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 
 my $EMOJI_CONFIG = <<'END_EMOJI';
 🐀 rat

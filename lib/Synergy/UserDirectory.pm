@@ -11,7 +11,7 @@ with (
   },
 );
 
-use experimental qw(signatures lexical_subs);
+use experimental qw(signatures);
 use namespace::autoclean;
 
 use Future::AsyncAwait;

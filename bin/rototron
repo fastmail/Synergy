@@ -5,7 +5,7 @@ use warnings;
 use utf8;
 
 use charnames qw( :full );
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 
 use DateTime;
 

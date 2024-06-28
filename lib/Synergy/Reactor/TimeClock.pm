@@ -7,7 +7,7 @@ with 'Synergy::Role::Reactor::EasyListening',
      'Synergy::Role::HasPreferences',
      ;
 
-use experimental qw(signatures lexical_subs);
+use experimental qw(signatures);
 use namespace::clean;
 
 use Synergy::Logger '$Logger';

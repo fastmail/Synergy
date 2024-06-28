@@ -5,7 +5,7 @@ package Synergy::Reactor::OfficePoll;
 use Moose;
 with 'Synergy::Role::Reactor';
 
-use experimental qw(signatures lexical_subs);
+use experimental qw(signatures);
 use namespace::clean;
 use utf8;
 

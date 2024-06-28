@@ -7,7 +7,7 @@ use DateTime;
 with 'Synergy::Role::Reactor::CommandPost';
 
 use utf8;
-use experimental qw(lexical_subs signatures);
+use experimental qw(signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;
