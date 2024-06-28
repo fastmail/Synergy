@@ -7,7 +7,7 @@ use utf8;
 use Moose;
 with 'Synergy::Role::Reactor::CommandPost';
 
-use experimental qw(isa signatures);
+use experimental qw(signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;
@@ -20,7 +20,7 @@ use Synergy::CommandPost;
 
 command 'dd-message' => {
 } => async sub ($self, $event, $rest) {
-  unless ($event->from_channel isa Synergy::Channel::Discord) {
+  unless ($event->from_channel->isa('Synergy::Channel::Discord')) {
     return await $event->error_reply("Sorry, you can't use *dd-message* outside Discord");
   }
 
@@ -33,7 +33,7 @@ command 'dd-message' => {
 
 command 'dd-guild' => {
 } => async sub ($self, $event, $rest) {
-  unless ($event->from_channel isa Synergy::Channel::Discord) {
+  unless ($event->from_channel->isa('Synergy::Channel::Discord')) {
     return await $event->error_reply("Sorry, you can't use *dd-guild* outside Discord");
   }
 
@@ -57,7 +57,7 @@ command 'dd-guild' => {
 
 command 'dd-channel' => {
 } => async sub ($self, $event, $rest) {
-  unless ($event->from_channel isa Synergy::Channel::Discord) {
+  unless ($event->from_channel->isa('Synergy::Channel::Discord')) {
     return await $event->error_reply("Sorry, you can't use *dd-guild* outside Discord");
   }
 

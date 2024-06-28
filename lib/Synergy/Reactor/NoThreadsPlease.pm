@@ -5,7 +5,7 @@ package Synergy::Reactor::NoThreadsPlease;
 use Moose;
 with 'Synergy::Role::Reactor::CommandPost';
 
-use experimental qw(isa signatures);
+use experimental qw(signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;
@@ -40,7 +40,7 @@ has recent_threads => (
 );
 
 listener no_threads_please => async sub ($self, $event) {
-  return unless $event->from_channel isa Synergy::Channel::Slack;
+  return unless $event->from_channel->isa('Synergy::Channel::Slack');
 
   my $transport_data = $event->transport_data;
 

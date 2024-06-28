@@ -8,7 +8,7 @@ use Moose;
 with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
-use experimental qw( isa signatures );
+use experimental qw(signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;
@@ -180,7 +180,7 @@ command box => {
   };
 
   if (my $error = $@) {
-    if ($error isa Synergy::X && $error->is_public) {
+    if ($error->isa('Synergy::X') && $error->is_public) {
       await $event->error_reply($error->message);
     } else {
       $Logger->log([ "error from %s handler: %s", $cmd, $error ]);
@@ -484,7 +484,7 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
     return await $event->reply($message);
   }
 
-  if ($event->from_channel isa Synergy::Channel::Slack) {
+  if ($event->from_channel->isa('Synergy::Channel::Slack')) {
     $message .= " Here's the output from setup:";
 
     return await $event->from_channel->slack->api_call(

@@ -5,7 +5,7 @@ package Synergy::Channel::Console;
 use utf8;
 
 use Moose;
-use experimental qw(isa signatures);
+use experimental qw(signatures);
 use JSON::MaybeXS;
 
 use Future::AsyncAwait;
@@ -256,7 +256,7 @@ EOH
     $channel //= $self->channel->name;
 
     my @channels = grep {; $channel eq '*' || $_->name eq $channel }
-                   grep {; $_ isa Synergy::Channel::Console }
+                   grep {; $_->isa('Synergy::Channel::Console') }
                    $self->hub->channels;
 
     unless (@channels) {

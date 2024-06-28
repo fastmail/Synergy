@@ -6,7 +6,7 @@ package Synergy::Hub;
 use Moose;
 use MooseX::StrictConstructor;
 
-use experimental qw(isa signatures);
+use experimental qw(signatures);
 use namespace::clean;
 
 with (
@@ -199,7 +199,7 @@ sub handle_event ($self, $event) {
 
       # This should probably be fatal, but before we make it fatal, let's find
       # out where it might still be happening. -- rjbs, 2024-02-09
-      unless ($result isa Future) {
+      unless ($result && $result->isa('Future')) {
         $Logger->log([
           "non-Future result from %s: %s",
           $hit->description,
@@ -221,7 +221,7 @@ sub handle_event ($self, $event) {
           "@args", # stupid, but avoids json serialization guff
         ]);
 
-        if ($args[0] isa Synergy::X && $args[0]->is_public) {
+        if ($args[0]->isa('Synergy::X') && $args[0]->is_public) {
           return $event->reply($args[0]->message);
         }
 
@@ -230,7 +230,7 @@ sub handle_event ($self, $event) {
     } catch {
       my $error = $_;
 
-      if ($error isa Synergy::X && $error->is_public) {
+      if ($error->isa('Synergy::X') && $error->is_public) {
         $event->reply($error->message);
         return;
       }

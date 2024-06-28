@@ -3,7 +3,7 @@ use warnings;
 package Synergy::External::Slack;
 
 use Moose;
-use experimental qw(isa lexical_subs signatures);
+use experimental qw(lexical_subs signatures);
 use namespace::autoclean;
 use utf8;
 
@@ -261,7 +261,7 @@ sub send_message ($self, $channel, $text, $alts = {}) {
     my $e = $r->{event};
 
     if ( $e
-      && $e->from_channel isa Synergy::Channel::Slack
+      && $e->from_channel->isa('Synergy::Channel::Slack')
       && $e->from_channel->slack == $self # O_O -- rjbs, 2018-06-13
     ) {
       return $self->send_reaction($r->{reaction}, {

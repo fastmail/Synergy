@@ -2,7 +2,7 @@ use v5.32.0;
 use warnings;
 package Synergy::CommandPost;
 
-use experimental qw(isa signatures);
+use experimental qw(signatures);
 use Synergy::PotentialReaction;
 
 =head1 OVERVIEW
@@ -242,7 +242,7 @@ package Synergy::CommandPost::Object {
 
   use Moose;
 
-  use experimental qw(isa signatures);
+  use experimental qw(signatures);
 
   has commands => (
     isa => 'HashRef',
@@ -372,7 +372,7 @@ package Synergy::CommandPost::Object {
 
         unless ($args) {
           my $error = $@;
-          if ($error isa Synergy::X && $error->is_public) {
+          if ($error->isa('Synergy::X') && $error->is_public) {
             push @reactions, Synergy::PotentialReaction->new({
               reactor => $reactor,
               name    => "command-$first",
