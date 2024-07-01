@@ -159,16 +159,16 @@ command box => {
 
   my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
 
-  # This should be simplified into a more generic "validate and normalize
-  # switches" call. -- rjbs, 2023-10-20
-  # Normalize datacentre
-  if (exists $switches{datacentre} && exists $switches{datacenter}) {
-    return await $event->error_reply("You can't use /datacentre and /datacenter at the same time!");
+  # Special handling for aliased datacenter / datacentre / region switch
+  my @got = grep { exists $switches{$_} } qw(datacenter datacentre region);
+
+  if (@got > 1) {
+    return await $event->error_reply("The following options are mutually exclusive: @got\n");
+  }
+  elsif (@got > 0) {
+    $switches{datacentre} = delete $switches{$got[0]};
   }
 
-  if (exists $switches{datacenter}) {
-    $switches{datacentre} = delete $switches{datacenter};
-  }
 
   for my $k (qw( version tag size datacentre )) {
     next unless $switches{$k};
