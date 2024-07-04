@@ -315,7 +315,7 @@ async sub _handle_search ($self, $event, $arg) {
     }
 
     my $text   = q{};
-    my @blocks = bk_richsection(bk_bold("$header"));
+    my @blocks = bk_richsection(bk_bold($header));
 
     for my $node ($page->payload->{nodes}->@*) {
       my $icon = $want_plain ? '' : $self->_icon_for_issue($node);
@@ -480,7 +480,9 @@ command search => {
       }
     }
 
-    my $text = my $slack = "*Your results for «$terms»*\n";
+    my $header = "*Your results for «$terms»";
+    my $text   = $header;
+    my @blocks = bk_richsection(bk_bold($header));
 
     for my $node ($query_result->payload->{nodes}->@*) {
       my $id = $node->{identifier};
@@ -538,27 +540,23 @@ command search => {
       }
 
       if ($is_title) {
-        $title =~ s/$_/*$_*/g for @$highlights;
-        $title =~ s/\*@|@\*/*/g;
-        $title =~ s/`//g;
+        # $title =~ s/$_/*$_*/g for @$highlights;
+        # $title =~ s/\*@|@\*/*/g;
+        # $title =~ s/`//g;
 
-        $slack .= sprintf "<%s|%s> $icon %s (_assignee_: %s)\n",
-          $url,
-          $id,
-          $title,
-          $assignee,
+        push @blocks, bk_richsection(
+          bk_link($url, $id),
+          " $icon $title (", bk_italic("assignee"), ": $assignee)",
+        );
       } else {
-        $snippet =~ s/$_/*$_*/g for @$highlights;
-        $snippet =~ s/\n/ /g;
-        $snippet =~ s/\*@|@\*/*/g;
-        $snippet =~ s/`//g;
+        # $snippet =~ s/$_/*$_*/g for @$highlights;
+        $snippet =~ s/\n/¬/g; # Replace newlines with EOL marker
 
-        $slack .= sprintf "<%s|%s> $icon %s (_assignee_: %s)\n>%s\n",
-          $url,
-          $id,
-          $title,
-          $assignee,
-          $snippet;
+        push @blocks, bk_richsection(
+          bk_link($url, $id),
+          " $icon $title (", bk_italic("assignee"), ": $assignee)",
+          "\n$snippet", # TODO: fix highlighting,
+        );
       }
     }
 
@@ -568,11 +566,12 @@ command search => {
     # Apparently 500 means "We gave up counting". UI adds the "+" too
     $total .= "+" if $total == 500;
 
-    $text  .= "*[Page $cpage/$pages ($total issues)]*\n";
-    $slack .= "*[Page $cpage of $pages ($total issues)]*\n";
+    my $footer = "[Page $cpage/$pages ($total issues)]";
+    $text .= "*$footer*\n";
+
+    push @blocks, bk_richsection(bk_bold($footer));
 
     chomp $text;
-    chomp $slack;
 
     my $method = 'reply';
 
@@ -584,7 +583,11 @@ command search => {
 
     return await $event->$method(
       "$text",
-      { slack => "$slack" },
+      {
+        slack => {
+          blocks => bk_blocks(bk_richblock(@blocks))->as_struct
+        },
+      }
     );
   });
 };
