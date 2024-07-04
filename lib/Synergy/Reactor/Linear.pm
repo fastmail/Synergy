@@ -386,7 +386,7 @@ command search => {
         $count = $val;
 
         if ($count > 250) {
-          await $event->reply("You asked for $count. Giving you 250 instead, (or Linear gets grumpy))");
+          await $event->reply("You asked for $count. Giving you 250 instead (otherwise Linear gets grumpy).");
 
           $count = 250;
         }
@@ -411,7 +411,7 @@ command search => {
 
     my $linear = $self->_linear_client_for_user($event->from_user);
     unless ($linear) {
-      return await $event->reply("You don't have a linear token...");
+      return await $event->reply("You don't have a Linear token...");
     }
 
     my $orig_lc;
