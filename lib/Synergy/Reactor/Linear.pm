@@ -539,23 +539,31 @@ command search => {
         $text .= "found [ @$highlights ] in $snippet\n";
       }
 
-      if ($is_title) {
-        # $title =~ s/$_/*$_*/g for @$highlights;
-        # $title =~ s/\*@|@\*/*/g;
-        # $title =~ s/`//g;
+      my $mk_highlighted_blocks = do {
+        # Given a hunk of text, return a list of BlockKit RichText objects,
+        # bold if the object's text is a highlight string, not bold otherwise.
+        my %is_highlight = map {; $_ => 1 } @$highlights;
+        my $pattern = join q{|}, map {; "\Q$_\E" } @$highlights;
+        sub ($text) {
+          map {; $is_highlight{$_} ? bk_bold($_) : bk_richtext($_) }
+          split /($pattern)/, $text;
+        }
+      };
 
+      if ($is_title) {
         push @blocks, bk_richsection(
           bk_link($url, $id),
-          " $icon $title (", bk_italic("assignee"), ": $assignee)",
+          " $icon ",
+          $mk_highlighted_blocks->($title),
+          " (", bk_italic("assignee"), ": $assignee)",
         );
       } else {
-        # $snippet =~ s/$_/*$_*/g for @$highlights;
         $snippet =~ s/\n/¬/g; # Replace newlines with EOL marker
 
         push @blocks, bk_richsection(
           bk_link($url, $id),
-          " $icon $title (", bk_italic("assignee"), ": $assignee)",
-          "\n$snippet", # TODO: fix highlighting,
+          " $icon $title (", bk_italic("assignee"), ": $assignee)\n",
+          $mk_highlighted_blocks->($snippet),
         );
       }
     }
