@@ -18,6 +18,7 @@ use Future::AsyncAwait;
 use Linear::Client;
 use Lingua::EN::Inflect qw(PL_N);
 use POSIX qw(ceil);
+use Slack::BlockKit::Sugar -all => { -prefix => 'bk_' };
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
@@ -313,24 +314,28 @@ async sub _handle_search ($self, $event, $arg) {
       return await $event->reply($zero);
     }
 
-    my $text  = q{};
-    my $slack = q{};
+    my $text   = q{};
+    my @blocks = bk_richsection(bk_bold("$header"));
 
     for my $node ($page->payload->{nodes}->@*) {
       my $icon = $want_plain ? '' : $self->_icon_for_issue($node);
       $text  .= "$node->{identifier} $icon $node->{title}\n";
-      $slack .= sprintf "<%s|%s> $icon %s\n",
-        $node->{url},
-        $node->{identifier},
-        $node->{title};
+      push @blocks, bk_richsection(
+        bk_link($node->{url}, $node->{identifier}),
+        " $icon ",
+        $node->{title},
+      );
     }
 
     chomp $text;
-    chomp $slack;
 
     return await $event->reply(
       "$header:\n$text",
-      { slack => "*$header:*\n$slack" },
+      {
+        slack => {
+          blocks => bk_blocks(bk_richblock(@blocks))->as_struct
+        },
+      }
     );
   };
 
@@ -381,7 +386,7 @@ command search => {
         $count = $val;
 
         if ($count > 250) {
-          await $event->reply("You asked for $count. Giving you 250 instead, (or linear gets grumpy))");
+          await $event->reply("You asked for $count. Giving you 250 instead, (or Linear gets grumpy))");
 
           $count = 250;
         }
