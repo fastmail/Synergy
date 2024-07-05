@@ -20,6 +20,7 @@ use IO::Async::Timer::Periodic;
 use JSON::MaybeXS qw(decode_json encode_json);
 use Lingua::EN::Inflect qw(PL_N PL_V);
 use List::Util qw(first uniq);
+use Slack::BlockKit::Sugar -all => { -prefix => 'bk_' };
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
@@ -941,13 +942,13 @@ sub _announce_oncall_change ($self, $before, $after) {
   if (@leaving) {
     my $verb = @leaving > 1 ? 'have' : 'has';
     my $removed = join ', ', sort @leaving;
-    push @lines, "$removed $verb been removed from the oncall group";
+    push @lines, "$removed $verb been removed from the oncall group.";
   }
 
   if (@joining) {
     my $verb = @joining > 1 ? 'have' : 'has';
     my $added = join ', ', sort @joining;
-    push @lines, "$added $verb been added to the oncall group";
+    push @lines, "$added $verb been added to the oncall group.";
   }
 
   my $oncall = join ', ', sort keys %after;
@@ -955,15 +956,7 @@ sub _announce_oncall_change ($self, $before, $after) {
 
   my $text = join qq{\n}, @lines;
 
-  my $blocks = [
-    {
-      type => "section",
-      text => {
-        type => "mrkdwn",
-        text => "$text",
-      }
-    },
-  ];
+  my @blocks = bk_richsection(bk_richtext($text))->as_struct;
 
   $self->_active_incidents_summary->then(sub ($summary = {}) {
     if (my $summary_text = delete $summary->{text}) {
@@ -971,8 +964,8 @@ sub _announce_oncall_change ($self, $before, $after) {
     }
 
     if (my $slack = delete $summary->{slack}) {
-      push @$blocks, { type => 'divider' };
-      push @$blocks, $slack->{blocks}->@*;
+      push @blocks, { type => 'divider' };
+      push @blocks, $slack->{blocks}->@*;
     }
 
     $self->oncall_channel->send_message(
@@ -980,7 +973,7 @@ sub _announce_oncall_change ($self, $before, $after) {
       $text,
       {
         slack => {
-          blocks => $blocks,
+          blocks => \@blocks,
         }
       }
     );
@@ -1001,15 +994,7 @@ sub _active_incidents_summary ($self) {
 
       my @text;
 
-      my $blocks = [
-        {
-          type => "section",
-          text => {
-            type => "mrkdwn",
-            text => "*$title*",
-          }
-        },
-      ];
+      my @bk_items;
 
       for my $incident (@incidents) {
         my $created = $ISO8601->parse_datetime($incident->{created_at});
@@ -1017,26 +1002,21 @@ sub _active_incidents_summary ($self) {
 
         push @text, "  - $incident->{description} (fired $ago)";
 
-        my $slack_text = sprintf("• <%s|#%s> (fired %s): %s",
-          $incident->{html_url},
-          $incident->{incident_number},
-          $ago,
-          $incident->{description},
+        push @bk_items, bk_richsection(
+          bk_link($incident->{html_url}, "#$incident->{incident_number}"),
+          " (fired $ago): $incident->{description}",
         );
-
-        push @$blocks, {
-          type => "section",
-          text => {
-            type => "mrkdwn",
-            text => $slack_text,
-          }
-        };
       }
 
       my $text = join qq{\n}, $title, @text;
 
       my $slack = {
-        blocks => $blocks,
+        blocks => bk_blocks(
+          bk_richblock(
+            bk_richsection(bk_bold($title)),
+            bk_ulist(@bk_items),
+          )
+        )->as_struct,
       };
 
       return Future->done({ text => $text, slack => $slack });
