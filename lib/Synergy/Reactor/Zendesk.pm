@@ -16,6 +16,7 @@ use Date::Parse qw(str2time);
 use Future;
 use Future::AsyncAwait;
 use Lingua::EN::Inflect qw(WORDLIST);
+use Slack::BlockKit::Sugar -all => { -prefix => 'bk_' };
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Time::Duration qw(ago);
@@ -185,12 +186,6 @@ async sub _output_ticket ($self, $event, $id) {
 
   my $text = "#$id: $subject (status: $status)";
 
-  my $link = sprintf("<https://%s/agent/tickets/%s|#%s>",
-    $self->domain,
-    $id,
-    $id,
-  );
-
   my $assignee = $ticket->assignee;
   my @assignee = $assignee ?  [ "Assigned to" => $assignee->name ] : ();
 
@@ -205,13 +200,11 @@ async sub _output_ticket ($self, $event, $id) {
     @old_ptn = [ "Old PTN" => $ticket->external_id ];
   }
 
-  # slack block syntax is silly.
-  my @fields = map {;
-    +{
-       type => 'mrkdwn',
-       text => "*$_->[0]:* $_->[1]",
-     }
-  } (
+  # It would be nicer to use rich text, because *...* can be ambiguous if the
+  # enclosed thing has mrkdwn -- but we know this won't!  And also, you can't
+  # use anything but plain_text or mrkdwn in the "fields" of a section, and we
+  # want that for the two-column display. -- rjbs, 2024-07-05
+  my @fields = map {; bk_mrkdwn("*$_->[0]:* $_->[1]") } (
     @brand,
     @old_ptn,
     [ "Status"  => ucfirst($status) ],
@@ -220,25 +213,26 @@ async sub _output_ticket ($self, $event, $id) {
     @assignee,
   );
 
-  my $blocks = [
-    {
-      type => "section",
-      text => {
-        type => "mrkdwn",
-        text => "\N{MEMO} $link - $subject",
-      }
-    },
-    {
-      type => "section",
-      fields => \@fields,
-    },
-  ];
+  my $blocks = bk_blocks(
+    bk_richblock(
+      bk_richsection(
+        bk_emoji('memo'),
+        " ",
+        bk_link(
+          sprintf("<https://%s/agent/tickets/%s", $self->domain, $id),
+          "PTN $id",
+        ),
+        " - $subject",
+      ),
+    ),
+    bk_section({ fields => \@fields }),
+  );
 
   $self->note_ticket_expansion($event, $ticket->id);
 
   return await $event->reply($text, {
     slack => {
-      blocks => $blocks,
+      blocks => $blocks->as_struct,
       text => $text,
     },
   });
