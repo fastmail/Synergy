@@ -125,8 +125,10 @@ sub _business_hours_status ($self, $event, $user) {
   my $today_hrs = $hours->{$dow};
 
   unless ($today_hrs) {
-    return sprintf "%s doesn't work on %ss.",
-      $user->they, $now->day_name;
+    return sprintf "%s %sn't work on %ss.",
+      $user->they,
+      $user->they eq 'they' ? 'do' : 'does',
+      $now->day_name;
   }
 
   my $shift = $user->shift_for_day($self->hub, $now);
