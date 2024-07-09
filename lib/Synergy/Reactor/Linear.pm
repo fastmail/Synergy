@@ -545,6 +545,11 @@ command search => {
         my %is_highlight = map {; $_ => 1 } @$highlights;
         my $pattern = join q{|}, map {; "\Q$_\E" } @$highlights;
         sub ($text) {
+          # If we have a 0-length pattern, we'd be splitting on //, which would
+          # split on every byte, and we'd have 69,105 rich text elements, and
+          # Slack will think this is too many. -- rjbs, 2024-07-09
+          return bk_richtext($text) unless length $pattern;
+
           map {; $is_highlight{$_} ? bk_bold($_) : bk_richtext($_) }
           split /($pattern)/, $text;
         }
