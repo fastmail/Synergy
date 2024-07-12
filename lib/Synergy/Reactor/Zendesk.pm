@@ -219,7 +219,7 @@ async sub _output_ticket ($self, $event, $id) {
         bk_emoji('memo'),
         " ",
         bk_link(
-          sprintf("<https://%s/agent/tickets/%s", $self->domain, $id),
+          sprintf("https://%s/agent/tickets/%s", $self->domain, $id),
           "PTN $id",
         ),
         " - $subject",
