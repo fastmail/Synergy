@@ -973,8 +973,8 @@ sub _announce_oncall_change ($self, $before, $after) {
       $text,
       {
         slack => {
-          blocks => \@blocks,
-        }
+          blocks => [ { type => 'rich_text', elements => \@blocks } ],
+        },
       }
     );
   })->retain;
