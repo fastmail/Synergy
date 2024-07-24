@@ -550,8 +550,10 @@ command search => {
           # Slack will think this is too many. -- rjbs, 2024-07-09
           return bk_richtext($text) unless length $pattern;
 
-          map {; $is_highlight{$_} ? bk_bold($_) : bk_richtext($_) }
-          split /($pattern)/, $text;
+          map {;  !length $_        ? ()
+               :  $is_highlight{$_} ? bk_bold($_)
+               :                      bk_richtext($_)
+          } split /($pattern)/, $text;
         }
       };
 
