@@ -515,7 +515,13 @@ async sub handle_destroy ($self, $event, $switches) {
     );
   }
 
-  if ($droplet->{status} eq 'active' && !$switches->{force}) {
+  my $can_destroy
+    = $self->get_user_preference($event->from_user, 'destroy-always-force') ? 1
+    : $switches->{force}                                                    ? 1
+    : $droplet->{status} eq 'active'                                        ? 0
+    :                                                                         1;
+
+  unless ($can_destroy) {
     Synergy::X->throw_public(
       "That box is powered on. Shut it down first, or use /force to destroy it anyway."
     );
@@ -780,6 +786,13 @@ __PACKAGE__->add_preference(
   validator => async sub ($self, $value, @) { return bool_from_text($value) },
   default   => 0,
   description => 'should box creation run setup by default?',
+);
+
+__PACKAGE__->add_preference(
+  name      => 'destroy-always-force',
+  validator => async sub ($self, $value, @) { return bool_from_text($value) },
+  default   => 0,
+  description => 'When destroying an active box, always act as if /force was passed',
 );
 
 1;
