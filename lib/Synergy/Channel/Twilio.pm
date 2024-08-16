@@ -179,7 +179,9 @@ sub send_message ($self, $target, $text, $alts = {}) {
   }
 
   return $res_f->then(sub ($res) {
-    unless ($res->is_success) {
+    if ($res->is_success) {
+      $Logger->log("sent sms to $target: " . $res->as_string);
+    } else {
       $Logger->log("failed to send sms to $target: " . $res->as_string);
     }
   })->retain;
