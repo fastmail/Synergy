@@ -180,7 +180,9 @@ sub send_message ($self, $target, $text, $alts = {}) {
 
   return $res_f->then(sub ($res) {
     if ($res->is_success) {
-      $Logger->log("sent sms to $target: " . $res->as_string);
+      my $req_id   = $res->header('Twilio-Request-Id');
+      my $res_json = $res->decoded_content;
+      $Logger->log("sent sms to $target as req $req_id; response JSON: $res_json");
     } else {
       $Logger->log("failed to send sms to $target: " . $res->as_string);
     }
