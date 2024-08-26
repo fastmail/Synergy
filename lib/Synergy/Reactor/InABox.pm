@@ -88,7 +88,7 @@ has box_datacentres => (
 has default_box_version => (
   is => 'ro',
   isa => 'Str',
-  default => 'bullseye',
+  default => 'bookworm',
 );
 
 has default_box_size => (
