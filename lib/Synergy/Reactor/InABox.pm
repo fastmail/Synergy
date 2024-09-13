@@ -629,7 +629,7 @@ sub handle_poweron ($self, $event, $switches) {
 }
 
 sub handle_vpn ($self, $event, $switches) {
-  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
+  my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
 
   my $template = Text::Template->new(
     TYPE       => 'FILE',
@@ -638,7 +638,7 @@ sub handle_vpn ($self, $event, $switches) {
   );
 
   my $config = $template->fill_in(HASH => {
-    droplet_host => $self->_box_name_for($event->from_user, $tag),
+    droplet_host => $self->_box_name_for($event->from_user, ($is_default_box ? () : $tag)),
   });
 
   $event->from_channel->send_file_to_user($event->from_user, 'fminabox.conf', $config);
