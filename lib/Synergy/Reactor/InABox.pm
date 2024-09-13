@@ -199,7 +199,7 @@ sub _determine_version_and_tag ($self, $event, $switches) {
   my $default_version = $self->get_user_preference($event->from_user, 'version')
                      // $self->default_box_version;
 
-  my ($version, $tag) = $switches->@{qw(version tag)};
+  my ($version, $tag) = delete $switches->@{qw(version tag)};
   $version = lc $version if $version;
   $tag = lc $tag if $tag;
   my $is_default_box = !($version || $tag);
@@ -507,6 +507,22 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
 async sub handle_destroy ($self, $event, $switches) {
   my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
 
+  my $force = delete $switches->{force};
+
+  if (%$switches) {
+    my $unrecognized = "";
+
+    for my $k (keys %$switches) {
+      $unrecognized .= "/$k $switches->{$k}->@* ";
+    }
+
+    $unrecognized =~ s/\s*$//;
+
+    Synergy::X->throw_public(
+      "Unrecognized switches ($unrecognized), refusing to take a destructive action"
+    );
+  }
+
   my $droplet = await $self->_get_droplet_for($event->from_user, $tag);
 
   unless ($droplet) {
@@ -517,7 +533,7 @@ async sub handle_destroy ($self, $event, $switches) {
 
   my $can_destroy
     = $self->get_user_preference($event->from_user, 'destroy-always-force') ? 1
-    : $switches->{force}                                                    ? 1
+    : $force                                                                ? 1
     : $droplet->{status} eq 'active'                                        ? 0
     :                                                                         1;
 

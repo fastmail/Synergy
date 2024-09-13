@@ -194,9 +194,21 @@ subtest 'destroy' => sub {
   );
 
   cmp_replies(
+    'synergy: box destroy /tagg',
+    [ re(qr{Unrecognized switches \(/tagg\)}) ],
+    'An attempt to destroy with an unknown argument gives an error'
+  );
+
+  cmp_replies(
     'synergy: box destroy /force',
     [ re(qr{^Box destroyed}) ],
     'successfully force destroyed',
+  );
+
+  cmp_replies(
+    'synergy: box destroy /force /tagg bar',
+    [ re(qr{Unrecognized switches \(/tagg bar\)}) ],
+    'An attempt to force destroy with an unknown argument gives an error'
   );
 
   local $alice_droplet->{status} = 'off';
