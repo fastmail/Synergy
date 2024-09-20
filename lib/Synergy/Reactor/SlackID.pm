@@ -89,16 +89,8 @@ command slacksnippet => {
 
   my $text = join q{}, ("$text\n") x 25;
 
-  my $res = await $channel->slack->api_call(
-    'files.upload',
-    {
-      form_encoded => 1, # Sigh.
-
-      content => $text,
-      channels => $event->conversation_address,
-      initial_comment => "Here's what you said, as a snippet.",
-    },
-  );
+  await $channel->slack->send_file($event->conversation_address, 'snippet', $text);
+  $event->reply("Here's what you said, as a snippet.");
 
   return;
 };
