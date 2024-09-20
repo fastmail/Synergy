@@ -487,16 +487,8 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
   if ($event->from_channel->isa('Synergy::Channel::Slack')) {
     $message .= " Here's the output from setup:";
 
-    return await $event->from_channel->slack->api_call(
-      'files.upload',
-      {
-        form_encoded => 1, # Sigh.
-
-        content => "$stderr\n----(stdout)----\n$stdout",
-        channels => $event->conversation_address,
-        initial_comment => $message,
-      },
-    );
+    my $content = "$stderr\n----(stdout)----\n$stdout";
+    await $event->from_channel->slack->send_file($event->conversation_address, 'setup.log', $content);
   } else {
     $Logger->log("we ran ssh, but not via Slack, so stdout/stderr discarded");
   }
