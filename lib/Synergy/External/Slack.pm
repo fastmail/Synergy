@@ -13,6 +13,7 @@ use IO::Async::Timer::Periodic;
 use Net::Async::HTTP;
 use Net::Async::WebSocket::Client;
 use Data::Dumper::Concise;
+use Defined::KV;
 
 use Synergy::Logger '$Logger';
 
@@ -355,32 +356,63 @@ sub _send_rich_text ($self, $channel, $rich) {
   return $f;
 }
 
-sub send_file ($self, $channel, $filename, $content) {
-  my $post_args = [ # arrayref for form data
-    channels => [$channel],
-    filename => $filename,
-    content  => $content,
-  ];
+async sub send_file ($self, $channel, $filename, $content, $title = undef) {
+  # Sending a file is a three step process:
+  # 1. GET an upload url (files.getUploadURLExternal)
+  # 2. POST the file to the upload url ($uploadurl)
+  # 3. POST to complete the upload (files.completeUploadExternal)
 
-  my $http_future = Future->wrap($self->hub->http_client->POST(
-    URI->new($self->_api_url('files.upload')),
-    $post_args,
+  # step 1:
+  my $u = URI->new($self->_api_url('files.getUploadURLExternal'));
+  $u->query_param(filename => $filename);
+  $u->query_param(length => (length $content));
+
+  my $get_upload_res = await $self->hub->http_client->GET(
+    $u,
     content_type => 'application/x-www-form-urlencoded',
     headers => [
       $self->_api_auth_header,
     ],
-  ));
+  );
 
-  my $f = $self->loop->new_future;
-  $http_future->on_done(sub ($http_res) {
-    my $res = decode_json($http_res->decoded_content(charset => undef));
-    $f->done({
-      type => 'slack',
-      transport_data => $res
-    });
+  my $json = decode_json($get_upload_res->content);
+  die "Could get upload url to send file to slack: " . $json->{error}
+    unless $json->{ok};
+
+  my $post_content_res = await $self->hub->http_client->POST(
+    $json->{upload_url},
+    $content,
+    content_type => 'application/x-www-form-urlencoded',
+  );
+
+  die "Could not send file to slack: " . $post_content_res->content
+    unless $post_content_res->is_success;
+
+  # step 3:
+  my $json_args = encode_json({
+    channel_id => $channel,
+    files      => [{
+      id => $json->{file_id},
+      defined_kv(title => $title),
+    }],
   });
 
-  return $f;
+  # The docs say application/x-www-form-urlencoded
+  # OR application/json but the former does not work
+  my $post_complete_res = await $self->hub->http_client->POST(
+    URI->new($self->_api_url('files.completeUploadExternal')),
+    $json_args,
+    content_type => 'application/json; charset=utf-8',
+    headers => [
+      $self->_api_auth_header,
+    ],
+  );
+
+  $json = decode_json($post_complete_res->content);
+  die "Could not finalise upload file to slack: " . $json->{error}
+    unless $json->{ok};
+
+  return;
 }
 
 sub _api_url ($self, $method) {

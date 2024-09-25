@@ -456,9 +456,9 @@ sub maybe_delete_reply ($self, $slack_event) {
   $self->delete_reply($orig_ts, $_) for @error_ts;
 }
 
-sub send_file_to_user ($self, $user, $filename, $content) {
+async sub send_file_to_user ($self, $user, $filename, $content) {
   my $where = $self->slack->dm_channel_for_user($user, $self);
-  return $self->slack->send_file($where, $filename, $content);
+  return await $self->slack->send_file($where, $filename, $content);
 }
 
 sub _uri_from_event ($self, $event) {
