@@ -11,7 +11,20 @@ package Synergy::DiagnosticHandler::Compartment {
   use experimental qw(signatures);
 
   sub _evaluate ($S, $code) {
+    my sub C ($name) {
+      $S->channel_named($name) // die "no channel named $name\n";
+    }
+
+    my sub R ($name) {
+      $S->reactor_named($name) // die "no reactor named $name\n";
+    }
+
+    my sub U ($name) {
+      $S->user_directory->user_named($name) // die "no user named $name\n";
+    }
+
     my $result = eval $code;
+
     if ($@) {
       return (undef, $@);
     }
