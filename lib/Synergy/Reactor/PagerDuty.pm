@@ -462,6 +462,7 @@ command ack => {
 
 command incidents => {
   help => '*incidents*: list current active incidents',
+  aliases => [ 'alerts' ],
 } => async sub ($self, $event, $rest) {
   my $summary = await $self->_active_incidents_summary;
   my $text    = delete $summary->{text} // "The board is clear!";
