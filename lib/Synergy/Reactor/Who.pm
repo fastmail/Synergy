@@ -31,7 +31,7 @@ command who => {
   my $who = $self->resolve_name($rest, $event->from_user);
 
   unless ($who) {
-    return await $event->error_reply(qq!I don't know who "$rest" is!);
+    return await $event->error_reply(qq!I don't know who "$rest" is.!);
   }
 
   my $whois = sprintf "%s (%s)", $who->username, $who->realname;
