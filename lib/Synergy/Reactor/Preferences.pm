@@ -146,7 +146,8 @@ responder dump => {
   my $prefs = join "\n", @pref_strings;
   my $name = $for_user->username;
 
-  return await $event->reply("Preferences for $name: ```$prefs```");
+  $prefs = "```$prefs```" unless $event->from_channel->isa('Synergy::Channel::Console');
+  return await $event->reply("Preferences for $name:\n$prefs");
 };
 
 async sub _set_pref ($self, $event, $who, $full_name, $pref_value) {
