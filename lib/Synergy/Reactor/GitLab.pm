@@ -19,6 +19,7 @@ use Future::AsyncAwait;
 use JSON::MaybeXS;
 use Lingua::EN::Inflect qw(PL_N);
 use List::Util qw(all uniq);
+use Slack::BlockKit::Sugar -all => { -prefix => 'bk_' };
 use String::Switches;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
@@ -162,6 +163,14 @@ command 'r?' => {
     EOH
 } => async sub ($self, $event, $rest) {
   return await $self->_handle_mr_search_string("for:me backlogged:no", $event);
+};
+
+command 'pipelines' => {
+  help => reformat_help(<<~'EOH'),
+    Give a list of recent hm run-perl-test pipelines and their status
+    EOH
+} => async sub ($self, $event, $rest) {
+  return await $self->_get_pipelines($rest, $event);
 };
 
 listener merge_request_mention => async sub ($self, $event) {
@@ -903,6 +912,72 @@ async sub _page_for_search_string ($self, $text, $event, $arg = undef) {
       ($arg && $arg->{per_page} ? (per_page => $arg->{per_page}) : ()),
       %$query,
     },
+  );
+}
+
+async sub _get_pipelines ($self, $text, $event) {
+
+  my $project_name = 'hm';
+  my $url = sprintf(
+    "%s/v4/projects/%s/jobs?%s",
+    $self->api_uri,
+    uri_escape($self->project_named($project_name)),
+    '?pagination=keyset&per_page=100&order_by=id&sort=desc'
+  );
+
+  my $response = await $self->hub->http_get(
+    $url,
+    'PRIVATE-TOKEN' => $self->api_token,
+  );
+
+  my $content = $response->decoded_content();
+
+  my $jobs = decode_json($content);
+
+  my $reply = '';
+  my @reply_blocks = ();
+  for my $job ($jobs->@*) {
+    next unless $job->{name} eq 'run-testboxer-full';
+    my ($mr_url,$mr);
+    if ($job->{pipeline}->{source} eq 'merge_request_event') {
+      ($mr) = $job->{pipeline}->{ref} =~ m{refs/merge-requests/(\d+)/head};
+      if ($mr) {
+        $mr_url = sprintf(
+          "%s/fastmail/%s/-/merge_requests/%s",
+          $self->url_base,
+          uri_escape($project_name),
+          uri_escape($mr)
+        );
+      }
+    }
+    my $job_url = sprintf(
+      "%s/fastmail/%s/-/jobs/%s",
+      $self->url_base,
+      uri_escape($project_name),
+      uri_escape($job->{id})
+    );
+    $reply .= sprintf "\-26%s \%-8s \%-20s \%s \%s\n",
+      ($job->{finished_at} // ''),
+      $job->{status},
+      $job->{user}->{name}, $job_url, ($mr_url // 'no MR');
+    push @reply_blocks, sprintf(
+      "\n\%-26s \%-8s \%-20s ",
+      ($job->{finished_at} // ''),
+      $job->{status},
+      $job->{user}->{name}
+    ), bk_link($job_url,'job');
+    push @reply_blocks, '   ', bk_link($mr_url, $project_name . '!' . $mr)
+      if $mr;
+  }
+
+  return await $event->reply(
+    $reply,
+    {
+      slack => {
+        blocks => bk_blocks(bk_richblock(bk_preformatted(@reply_blocks)))
+          ->as_struct
+      },
+    }
   );
 }
 
