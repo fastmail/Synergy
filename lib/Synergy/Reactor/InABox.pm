@@ -22,6 +22,8 @@ use String::Switches qw(parse_switches);
 use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
+use Time::Duration qw(ago);
+use DateTime::Format::ISO8601;
 
 # This SSH key, if given and present, will be used to connect to boxes after
 # they're stood up to run commands. -- rjbs, 2023-10-20
@@ -114,6 +116,7 @@ my %command_handler = (
   shutdown => \&handle_shutdown,
   poweroff => \&handle_poweroff,
   poweron  => \&handle_poweron,
+  image    => \&handle_image,
   vpn      => \&handle_vpn,
 );
 
@@ -133,6 +136,7 @@ command box => {
     • shutdown: gracefully shut down and power off your box
     • poweroff: forcibly shut down and power off your box (like pulling the power)
     • poweron: start up your box
+    • image: Show what snapshot image the box would be created with
     • vpn: get an OpenVPN config file to connect to your box
 
     The following preferences exist:
@@ -151,7 +155,7 @@ command box => {
 
   my $handler = $cmd ? $command_handler{$cmd} : undef;
   unless ($handler) {
-    return await $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|vpn]");
+    return await $event->error_reply("usage: box [status|create|destroy|shutdown|poweroff|poweron|image|vpn]");
   }
 
   my ($switches, $error) = parse_switches($args);
@@ -230,6 +234,16 @@ has post_creation_delay => (
   is => 'ro',
   default => 5,
 );
+
+async sub handle_image ($self, $event, $switches) {
+  my ($version) = $self->_determine_version_and_tag($event, $switches);
+  my $snapshot = await $self->_get_snapshot($version);
+  return await $event->reply("Unable to find a snapshot for version $version") unless $snapshot;
+
+  my $created_at = DateTime::Format::ISO8601->parse_datetime($snapshot->{created_at})->epoch;
+  my $ago = ago(time - $created_at);
+  return await $event->reply("Would create box from image '$snapshot->{name}' (created $ago)");
+}
 
 async sub handle_create ($self, $event, $switches) {
   my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
