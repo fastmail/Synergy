@@ -916,7 +916,6 @@ async sub _page_for_search_string ($self, $text, $event, $arg = undef) {
 }
 
 async sub _get_pipelines ($self, $text, $event) {
-
   my $project_name = 'hm';
   my $url = sprintf(
     "%s/v4/projects/%s/jobs?%s",
@@ -938,7 +937,8 @@ async sub _get_pipelines ($self, $text, $event) {
   my @reply_blocks = ();
   for my $job ($jobs->@*) {
     next unless $job->{name} eq 'run-testboxer-full';
-    my ($mr_url,$mr);
+
+    my ($mr_url, $mr);
     if ($job->{pipeline}->{source} eq 'merge_request_event') {
       ($mr) = $job->{pipeline}->{ref} =~ m{refs/merge-requests/(\d+)/head};
       if ($mr) {
@@ -950,22 +950,26 @@ async sub _get_pipelines ($self, $text, $event) {
         );
       }
     }
+
     my $job_url = sprintf(
       "%s/fastmail/%s/-/jobs/%s",
       $self->url_base,
       uri_escape($project_name),
       uri_escape($job->{id})
     );
-    $reply .= sprintf "\-26%s \%-8s \%-20s \%s \%s\n",
+
+    $reply .= sprintf "%-26s %-8s %-20s %s %s\n",
       ($job->{finished_at} // ''),
       $job->{status},
       $job->{user}->{name}, $job_url, ($mr_url // 'no MR');
+
     push @reply_blocks, sprintf(
-      "\n\%-26s \%-8s \%-20s ",
+      "\n%-26s %-8s %-20s ",
       ($job->{finished_at} // ''),
       $job->{status},
       $job->{user}->{name}
     ), bk_link($job_url,'job');
+
     push @reply_blocks, '   ', bk_link($mr_url, $project_name . '!' . $mr)
       if $mr;
   }
