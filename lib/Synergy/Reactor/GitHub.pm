@@ -164,7 +164,7 @@ async sub pr_report ($self, $who, $arg = {}) {
 __PACKAGE__->add_preference(
   name      => 'username',
   validator => async sub ($self, $value, @) {
-    return $value if $value =~ /\A[_A-Za-z0-9]+\z/;
+    return $value if $value =~ /\A[\-_A-Za-z0-9]+\z/;
     return (undef, "Your username doesn't look like a GitHub username to me.")
   },
   default   => undef,
