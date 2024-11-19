@@ -149,6 +149,8 @@ async sub pr_report ($self, $who, $arg = {}) {
   my $url = URI->new("https://github.com/search");
   $url->query_form(q => $self->_query);
 
+  return unless $data->{mrs}->@*;
+
   return [
     "\N{PENCIL}\N{VARIATION SELECTOR-16} Pull requests awaiting review: " . $data->{mrs}->@*,
     {
