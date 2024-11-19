@@ -177,7 +177,10 @@ command report => {
     },
   );
 
-  return await $event->reply($text, $alt);
+  return await $event->reply($text, {
+    %$alt,
+    slack_postmessage_args => { unfurl_links => \0 },
+  });
 };
 
 async sub report_report ($self, $who, $arg = {}) {

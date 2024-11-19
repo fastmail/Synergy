@@ -272,7 +272,7 @@ sub send_message ($self, $channel, $text, $alts = {}) {
     }
   }
 
-  return $self->_send_rich_text($channel, $alts->{slack})
+  return $self->_send_rich_text($channel, $alts->{slack}, $alts)
     if $alts->{slack};
 
   return $self->_send_plain_text($channel, $text);
@@ -319,8 +319,14 @@ sub _send_plain_text ($self, $channel, $text) {
   return $f;
 }
 
-sub _send_rich_text ($self, $channel, $rich) {
+sub _send_rich_text ($self, $channel, $rich, $alts) {
+  my %extra_args = $alts->{slack_postmessage_args}
+                 ? $alts->{slack_postmessage_args}->%*
+                 : ();
+
   my $http_future = $self->api_call('chat.postMessage', {
+    %extra_args,
+
     (ref $rich ? (%$rich) : (text => $rich)),
     channel => $channel,
     as_user => \1,
