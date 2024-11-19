@@ -170,6 +170,7 @@ __PACKAGE__->add_preference(
 
 __PACKAGE__->add_preference(
   name      => 'api-token',
+  describer => async sub ($self, $value) { defined $value ? "<redacted>" : '<undef>' },
   validator => async sub ($self, $value, @) {
     return $value if $value =~ /\A[_A-Za-z0-9]+\z/;
     return (undef, "Your API token doesn't look like a GitHub API token to me.")
