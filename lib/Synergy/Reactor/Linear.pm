@@ -712,14 +712,31 @@ command triage => {
     *triage `[TEAM]`*: list unassigned issues in the Triage state
 
     This lists (the first page of) all unassigned issues in the Triage state in
-    Linear.  You can supply an argument, the name of a team, to see only issues
-    for that team.
+    Linear.
+    You can supply an argument, the name of a team, to see only issues for that
+    team.
+    You can supply a switch, /all, to also see assigned issues.
     EOH
-} => async sub ($self, $event, $team_name) {
+} => async sub ($self, $event, $text) {
   await $self->_with_linear_client($event, async sub ($linear) {
     my %extra_search;
 
-    if (length $team_name) {
+    # I've implemented half of a getopt parser here... sorry
+    my $opt_all = 0;
+    my @args;
+
+    my @words = split ' ', $text if length $text;
+
+    for my $arg (@words) {
+      if ($arg eq '/all') {
+        $opt_all = 1;
+      } else {
+        push @args, $arg;
+      }
+    }
+
+    if (length $args[0]) {
+      my $team_name = $args[0];
       my $team = await $linear->lookup_team($team_name);
 
       unless ($team) {
@@ -729,12 +746,15 @@ command triage => {
       %extra_search = (team => $team->{id});
     }
 
+    if (!$opt_all) {
+      $extra_search{assignee} = undef;
+    }
+
     return await $self->_handle_search(
       $event,
       {
         search => {
           state    => 'Triage',
-          assignee => undef,
           %extra_search,
         },
         zero   => "No unassigned issues in triage!  Great!",
