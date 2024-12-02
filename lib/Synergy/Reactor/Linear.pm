@@ -725,14 +725,21 @@ command triage => {
     my $opt_all = 0;
     my @args;
 
-    my @words = split ' ', $text if length $text;
+    my @words = length $text ? (split /\s+/, $text) : ();
 
     for my $arg (@words) {
       if ($arg eq '/all') {
         $opt_all = 1;
+      } elsif ($arg =~ /^\//) {
+        Synergy::X->throw_public("triage: Unrecognized switch: $arg");
       } else {
         push @args, $arg;
       }
+    }
+
+    if (@args > 1) {
+      my $all_args = join ' ', @args;
+      Synergy::X->throw_public("triage: too many args - please only pass a single arg for the team name (I got: $all_args)");
     }
 
     if (length $args[0]) {
