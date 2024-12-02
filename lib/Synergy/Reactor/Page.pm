@@ -130,7 +130,8 @@ async sub _do_page($self, $event, $who, $what) {
     my $from = $event->from_user ? $event->from_user->username
                                  : $event->from_address;
 
-    $to_channel->send_message_to_user($user, "You are being paged by $from, who says: $what" );
+    $to_channel->send_message_to_user($user, "You are being paged by $from, who says: $what")
+      unless $from eq $user->username;
   }
 
   if ($self->has_pushover_channel) {
