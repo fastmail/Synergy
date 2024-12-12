@@ -56,6 +56,15 @@ has escalation_policy_id => (
   required => 1,
 );
 
+has _suppressed_user_ids => (
+  is  => 'ro',
+  isa => 'ArrayRef',
+  traits   => ['Array'],
+  default  => sub {  []  },
+  handles  => { suppressed_user_ids => 'elements' },
+  init_arg => 'suppressed_user_ids',
+);
+
 has _pd_to_slack_map => (
   is => 'ro',
   isa => 'HashRef',
@@ -707,13 +716,14 @@ sub _check_long_maint ($self) {
 }
 
 sub _relevant_oncalls ($self) {
+  my %should_ignore = map {; $_ => 1 } $self->suppressed_user_ids;
+
   return $self->_pd_request(GET => '/oncalls')
     ->then(sub ($data) {
       my $policy_id = $self->escalation_policy_id;
       my @oncalls = grep {; $_->{escalation_policy}{id} eq $policy_id }
                     grep {; $_->{escalation_level} == 1}
-                    # PY6KUPM is the blank user
-                    grep {; $_->{id} ne 'PY6KUPM'}
+                    grep {; !$should_ignore{$_->{id}} }
                     $data->{oncalls}->@*;
 
       return Future->done(\@oncalls);
