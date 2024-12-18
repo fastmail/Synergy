@@ -723,7 +723,7 @@ sub _relevant_oncalls ($self) {
       my $policy_id = $self->escalation_policy_id;
       my @oncalls = grep {; $_->{escalation_policy}{id} eq $policy_id }
                     grep {; $_->{escalation_level} == 1}
-                    grep {; !$should_ignore{$_->{id}} }
+                    grep {; !$should_ignore{$_->{user}{id}} }
                     $data->{oncalls}->@*;
 
       return Future->done(\@oncalls);
