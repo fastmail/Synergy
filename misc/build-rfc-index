@@ -32,7 +32,7 @@ sub element_text {
 }
 
 my $xc = XML::LibXML::XPathContext->new;
-$xc->registerNs('rfc', 'http://www.rfc-editor.org/rfc-index');
+$xc->registerNs('rfc', 'https://www.rfc-editor.org/rfc-index');
 
 my $rfcs = $xc->findnodes('//rfc:rfc-entry', $doc);
 for my $rfc ($rfcs->get_nodelist) {
