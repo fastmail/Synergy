@@ -50,13 +50,38 @@ command page => {
 reserved for emergencies or at least "nobody is replying in chat!"
 
 • *page `WHO`: `MESSAGE`*: send this message to that person's phone or pager
+
+Special On-Call paging:
+
+• *page oncall: `MESSAGE`*: send this message to the current on-shift oncall
+• *page /all oncall: `MESSAGE`*: send this message to all oncall engineers
 END
 } => async sub ($self, $event, $rest) {
-  my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):?\s+(.*)/is;
+  #my ($who, $what) = $event->text =~ m/^page\s+@?([a-z]+):?\s+(.*)/is;
+  # I've implemented half of a getopt parser here... sorry
+  my $opt_all = 0;
+  my @args;
 
-  unless (length $who and length $what) {
+  my @words = length $event->text ? (split /\s+/, $event->text) : ();
+
+  shift @words; # get rid of the "page" command word
+
+  for my $arg (@words) {
+    if ($arg eq '/all') {
+      $opt_all = 1;
+    } elsif ($arg =~ /^\//) {
+      Synergy::X->throw_public("page: Unrecognized switch: $arg");
+    } else {
+      push @args, $arg;
+    }
+  }
+
+  unless (@args > 1) {
     return await $event->error_reply("usage: page USER: MESSAGE");
   }
+
+  my $who = $args[0] =~ s/:$//r;
+  my $what = join ' ', @args[1 .. $#args];
 
   my @to_page;
   if ($who eq 'oncall') {
@@ -67,7 +92,12 @@ END
       # eagerly enough.  That should probably be made into a lazily cached
       # attribute like we use for (for example) the Slack user list.  But we
       # can do that in the future. -- rjbs, 2023-10-18
-      my @oncall_ids = await $pd->_current_oncall_ids;
+      my @oncall_ids;
+      if ($opt_all) {
+        @oncall_ids = await $pd->_escalation_oncalls;
+      } else {
+        @oncall_ids = await $pd->_current_oncall_ids;
+      }
       @to_page = grep {; $_ } map {; $pd->username_from_pd($_) } @oncall_ids;
     } else {
       $Logger->log("Unable to find reactor 'pagerduty'") unless $pd;
