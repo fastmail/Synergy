@@ -739,7 +739,7 @@ sub _current_oncall_ids ($self) {
 
 # returns all the oncall users on the final escalation rule
 # used for "page all oncall engineers"
-sub _escalation_oncalls ($self) {
+sub _escalation_oncall_ids ($self) {
   my $policy_id = $self->escalation_policy_id;
 
   return $self->_pd_request(GET => '/escalation_policies/' . $policy_id)
