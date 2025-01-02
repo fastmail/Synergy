@@ -737,6 +737,23 @@ sub _current_oncall_ids ($self) {
   });
 }
 
+# returns all the oncall users on the final escalation rule
+# used for "page all oncall engineers"
+sub _escalation_oncall_ids ($self) {
+  my $policy_id = $self->escalation_policy_id;
+
+  return $self->_pd_request(GET => '/escalation_policies/' . $policy_id)
+    ->then(sub ($data){
+      my $final_escalation_rule = $data->{escalation_policy}{escalation_rules}[-1];
+
+      my @oncalls = map {; $_->{id} }
+                    grep {; $_->{type} eq 'user_reference' }
+                    $final_escalation_rule->{targets}->@*;
+
+      return Future->done(@oncalls);
+      });
+}
+
 # This returns a Future that, when done, gives a boolean as to whether or not
 # $who is oncall right now.
 sub _user_is_oncall ($self, $who) {
