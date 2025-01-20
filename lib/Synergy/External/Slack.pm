@@ -10,6 +10,7 @@ use utf8;
 use Future::AsyncAwait;
 use JSON::MaybeXS qw(decode_json encode_json);
 use IO::Async::Timer::Periodic;
+use List::Util ();
 use Net::Async::HTTP;
 use Net::Async::WebSocket::Client;
 use Data::Dumper::Concise;
@@ -151,8 +152,15 @@ async sub connect ($self) {
   $self->_set_own_id($json->{self}->{id});
   $self->_set_team_data($json->{team});
 
-  $self->loop->add($self->client);
-  $self->client->connect(
+  my $client = $self->client;
+
+  unless (List::Util::any {; $_ == $client } $self->loop->notifiers) {
+    # When we're re-connecting after a frame transmission timeout, we're
+    # already on the loop.  Just don't add it again.
+    $self->loop->add($client);
+  }
+
+  $client->connect(
     url => $json->{url},
     service => 'https',
     on_connected => sub {
