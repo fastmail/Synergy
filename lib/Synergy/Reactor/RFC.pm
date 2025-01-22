@@ -97,7 +97,7 @@ responder update_index => {
   }
 
   my $xc = XML::LibXML::XPathContext->new;
-  $xc->registerNs('rfc', 'http://www.rfc-editor.org/rfc-index');
+  $xc->registerNs('rfc', 'https://www.rfc-editor.org/rfc-index');
 
   $event->reply("Okay, I'm working on indexing the new RFC index.");
 
