@@ -528,10 +528,10 @@ command snooze => {
   my $seconds = eval { parse_duration($dur) };
 
   unless ($seconds) {
-    return $event->error_reply("Sorry, I couldn't parse '$dur' into a duration!");
+    return await $event->error_reply("Sorry, I couldn't parse '$dur' into a duration!");
   }
 
-  my @incidents = $self->_get_incidents(qw(triggered acknowledged));
+  my @incidents = await $self->_get_incidents(qw(triggered acknowledged));
 
   my ($relevant) = grep {; $_->{incident_number} == $num } @incidents;
   unless ($relevant) {
@@ -556,7 +556,7 @@ command snooze => {
 
   my $msg = $res->{message} // 'nothing useful';
 
-  return $event->reply(
+  return await $event->reply(
     "Something went wrong talking to PagerDuty; they said: $msg"
   );
 };
