@@ -147,9 +147,29 @@ responder update_index => {
     );
   }
 
+  my $old_numbers = $self->_dbh->selectcol_arrayref(
+    q{SELECT rfc_number FROM rfcs},
+  );
+
   $self->_dbh->sqlite_backup_from_dbh($new_dbh);
 
-  return await $event->reply("Indexing complete!");
+  my $extra = q{};
+
+  {
+    my $new_numbers = $self->_dbh->selectcol_arrayref(
+      q{SELECT rfc_number FROM rfcs},
+    );
+
+    my %is_known = map {; $_ => 1 } @$old_numbers;
+    my @new = grep {; !$is_known{$_} } @$new_numbers;
+
+    $extra = @new > 25          ? " Added " . @new . " new RFCs!"
+           : @new == 0          ? " No new RFCs."
+           : @$new_numbers == 0 ? " Now there are no RFCs.  Uh oh?"
+           : " New RFCs: " . join q{, }, sort { $a <=> $b } @new;
+  }
+
+  return await $event->reply("Indexing complete!$extra");
 };
 
 command rfcs => {
