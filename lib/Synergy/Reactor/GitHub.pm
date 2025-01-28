@@ -11,6 +11,7 @@ use experimental qw(signatures);
 use namespace::clean;
 use Future::AsyncAwait;
 use JSON::MaybeXS;
+use Slack::BlockKit::Sugar -all => { -prefix => 'bk_' };
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
@@ -33,11 +34,29 @@ command 'ghr?' => {
 } => async sub ($self, $event, $rest) {
   my $data = await $self->_get_prs_for_review($event->from_user);
 
-  my $list = q{};
-  $list .= "* $_->{title} / $_->{pull_request}{html_url}\n"
-    for $data->{mrs}->@*;
+  my $text = q{};
+  my @block_items;
 
-  return await $event->reply($list);
+  my $list = q{};
+
+  for my $pr ($data->{prs}->@*) {
+    $text .= "* $pr->{title} / $pr->{pull_request}{html_url}\n";
+
+    push @block_items, bk_richsection(bk_link(
+      $pr->{pull_request}{html_url},
+      $pr->{title},
+      { unsafe => 1 }, # Does this suppress preview??
+    ));
+  }
+
+  return await $event->reply(
+    $text,
+    {
+      slack => {
+        blocks => bk_blocks(bk_richblock(bk_ulist(@block_items)))->as_struct,
+      }
+    },
+  );
 };
 
 my sub _next_and_prev_uris ($http_response) {
@@ -85,10 +104,10 @@ async sub _get_prs_for_review ($self, $user) {
   my $url = URI->new("https://api.github.com/search/issues");
   $url->query_form(q => $self->_query);
 
-  my @mrs;
+  my @prs;
   my $saw_last_page;
 
-  PAGE: until (@mrs >= $display_page*$per_page) {
+  PAGE: until (@prs >= $display_page*$per_page) {
     $Logger->log_debug("GitHub GET: $url");
 
     my $res = await $self->hub->http_get(
@@ -118,19 +137,19 @@ async sub _get_prs_for_review ($self, $user) {
       return;
     }
 
-    push @mrs, @items;
+    push @prs, @items;
     last unless $next;
     $url = URI->new($next);
   }
 
   my $zero = ($display_page-1) * $per_page;
-  my @page = grep {; $_ } @mrs[ $zero .. $zero+$per_page-1 ];
+  my @page = grep {; $_ } @prs[ $zero .. $zero+$per_page-1 ];
 
   return {
     page_number => $display_page,
     first_index => $zero + 1,
     last_index  => $zero + @page,
-    mrs         => \@page,
+    prs         => \@page,
   };
 }
 
@@ -150,14 +169,14 @@ async sub pr_report ($self, $who, $arg = {}) {
   my $url = URI->new("https://github.com/search");
   $url->query_form(q => $self->_query);
 
-  return unless $data->{mrs}->@*;
+  return unless $data->{prs}->@*;
 
   return [
-    "\N{PENCIL}\N{VARIATION SELECTOR-16} Pull requests awaiting review: " . $data->{mrs}->@*,
+    "\N{PENCIL}\N{VARIATION SELECTOR-16} Pull requests awaiting review: " . $data->{prs}->@*,
     {
       slack => sprintf "\N{PENCIL}\N{VARIATION SELECTOR-16} Pull requests <%s|awaiting review>: %d",
         $url,
-        0+$data->{mrs}->@*,
+        0+$data->{prs}->@*,
     },
   ];
 }
