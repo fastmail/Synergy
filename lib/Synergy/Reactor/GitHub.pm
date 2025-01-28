@@ -19,9 +19,10 @@ use URI::Escape;
 
 my $JSON = JSON::MaybeXS->new->utf8->canonical;
 
-has github_org => (
-  is  => 'ro',
-  isa => 'Str',
+has github_orgs => (
+  isa => 'ArrayRef[Str]',
+  traits  => [ 'Array' ],
+  handles => { github_orgs => 'elements' },
   required => 1,
 );
 
@@ -63,9 +64,9 @@ my sub _next_and_prev_uris ($http_response) {
 }
 
 sub _query ($self) {
-  my $org_name = $self->github_org;
+  my $org_str = join q{ }, map {; "org:$_" } $self->github_orgs;
 
-  return "type:pr org:$org_name state:open review-requested:\@me";
+  return "type:pr $org_str state:open review-requested:\@me";
 }
 
 async sub _get_prs_for_review ($self, $user) {
