@@ -59,7 +59,7 @@ END
   my $opt_all = 0;
   my @args;
 
-  my @words = length $event->text ? (split /\s+/, $event->text) : ();
+  my @words = length $event->text ? (split /\h+/, $event->text) : ();
 
   shift @words; # get rid of the "page" command word
 
