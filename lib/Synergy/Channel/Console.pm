@@ -182,24 +182,22 @@ package Synergy::Channel::Console::DiagnosticHandler {
 
   It works like this:
 
-      /history $channel_name $message_number $format
+      /history $message_number $format? $channel_name?
 
   The message number is shown on (chonky-formatted) messages in a Console
-  channel, if it's logging history.  So, given this message box:
+  channel, if it's logging history.  $format defaults to "text" and
+  $channel_name defaults to the channel on which you're sending this command.
+  This can be useful for using the Console environment for debugging non-text
+  alternatives.
+
+  So, given this message box:
 
     ╭─────┤ term-rw!rjbs #6 ├──────────────────────────────╮
     │ I don't know how to search for that!
     ╰──────────────────────────────────────────────────────╯
 
-  You can enter:
-
-      /history term-rw 6
-
-  to see the message re-displayed.  $format is optional, and defaults to text,
-  the same thing normally displayed.  You can also use "alts", which will
-  display a YAML-formatted dump of all the alternate representations of the
-  message.  This is useful for using the Console environment for debugging
-  non-text alternatives.
+  You can enter "/history 6" to see the message re-displayed as text, or
+  "/history 6 alts" to see the non-text alternatives dumped.
   EOH
 
   $HELP{events} = <<~'EOH';
@@ -337,18 +335,25 @@ EOH
   }
 
   sub _diagnostic_cmd_history ($self, $rest) {
-    my ($channel_name, $number, $more) = split /\s+/, $rest, 3;
+    my ($number, $format, $channel_name) = split /\s+/, $rest, 3;
 
-    $more = 'text' unless length $more;
+    $format = 'text' unless length $format;
 
-    my $channel = $self->hub->channel_named($channel_name);
+    my $channel;
 
-    unless ($channel) {
-      return [ box => "Unknown channel: $channel_name" ];
-    }
+    if ($channel_name) {
+      $channel = $self->hub->channel_named($channel_name);
 
-    unless ($channel->DOES('Synergy::Channel::Console')) {
-      return [ box => "That isn't a Console channel, so this won't work.  $channel" ];
+      unless ($channel) {
+        return [ box => "Unknown channel: $channel_name" ];
+      }
+
+      unless ($channel->DOES('Synergy::Channel::Console')) {
+        return [ box => "That isn't a Console channel, so this won't work.  $channel" ];
+      }
+    } else {
+      $channel = $self->channel;
+      $channel_name = $channel->name;
     }
 
     unless ($channel->max_message_history > 0) {
@@ -379,15 +384,15 @@ EOH
     my %new_message = %$message;
 
     my $content
-      = $more eq 'text' ? $channel->_format_message_chonky(\%new_message)
-      : $more eq 'alts' ? YAML::XS::Dump($new_message{alts})
+      = $format eq 'text' ? $channel->_format_message_chonky(\%new_message)
+      : $format eq 'alts' ? YAML::XS::Dump($new_message{alts})
       : undef;
 
     unless ($content) {
-      return [ box => "I don't know how to format things this way: $more" ];
+      return [ box => "I don't know how to format things this way: $format" ];
     }
 
-    my $title = "history: channel=$channel_name item=$number format=$more";
+    my $title = "history: channel=$channel_name item=$number format=$format";
 
     return [ wide_box => $content, $title ];
   }
