@@ -18,7 +18,7 @@ use Time::HiRes ();
 
 use Synergy::Logger '$Logger';
 
-my $JSON = JSON->new;
+my $JSON = JSON::MaybeXS->new;
 
 with 'Synergy::Role::HubComponent';
 

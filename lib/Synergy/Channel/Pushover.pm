@@ -3,7 +3,6 @@ package Synergy::Channel::Pushover;
 
 use Moose;
 use Future::AsyncAwait;
-use JSON::MaybeXS qw(encode_json decode_json);
 
 use Synergy::Logger '$Logger';
 

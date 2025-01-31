@@ -17,7 +17,6 @@ use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
 use String::Switches qw(parse_switches);
-use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
 use Time::Duration qw(ago);

@@ -7,8 +7,8 @@ use utf8;
 use Future::AsyncAwait;
 use Synergy::Logger '$Logger';
 
-require JSON;
-my $JSON = JSON->new;
+require JSON::MaybeXS;
+my $JSON = JSON::MaybeXS->new;
 
 with 'Synergy::Role::HubComponent';
 
