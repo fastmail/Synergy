@@ -112,7 +112,7 @@ sub _build_stream {
   );
 
   unless ($channel->send_only) {
-    $arg{read_handle} = $cloned_stdin,
+    $arg{read_handle} = $cloned_stdin;
     $arg{on_read}     = sub {
       my ($self, $buffref, $eof) = @_;
 
