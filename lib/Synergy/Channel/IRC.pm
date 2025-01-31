@@ -7,8 +7,6 @@ use experimental qw(signatures);
 
 use Future::AsyncAwait;
 
-use JSON::MaybeXS;
-
 use Synergy::Event;
 use Synergy::Logger '$Logger';
 
