@@ -107,7 +107,7 @@ probably change over time.
 
   /channels - print the registered channels
   /reactors - print the registered reactors
-  /users    - print unknown users
+  /users    - print known users
 
   /config   - print a summary of top-level Synergy configuration
   /http     - print a summary of registered HTTP endpoints
