@@ -6,7 +6,6 @@ use utf8;
 
 use Moose;
 use experimental qw(signatures);
-use JSON::MaybeXS;
 
 use Future::AsyncAwait;
 use Synergy::Event;
