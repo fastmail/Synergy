@@ -448,32 +448,80 @@ async sub start ($self) {
   return;
 }
 
+has _next_message_number => (
+  is => 'rw',
+  init_arg => undef,
+  default  => 0,
+  traits   => [ 'Counter' ],
+  handles  => { get_next_message_number => 'inc' },
+);
+
+has _message_log => (
+  is => 'ro',
+  init_arg => undef,
+  default  => sub {  []  },
+);
+
+has max_message_history => (
+  is => 'ro',
+  default => 0,
+);
+
+sub _log_message ($self, $message) {
+  return undef unless $self->max_message_history > 0;
+
+  my $i = $self->get_next_message_number;
+
+  $message->{number} = $i;
+
+  my $log = $self->_message_log;
+  push @$log, $message;
+
+  if (@$log > $self->max_message_history) {
+    shift @$log;
+  }
+}
+
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
   $self->send_message($user->username, $text, $alts);
 }
 
-sub _format_message ($self, $name, $address, $text) {
+sub _format_message ($self, $message) {
   if ($self->message_format eq 'compact') {
-    return $self->_format_message_compact($name, $address, $text)
+    return $self->_format_message_compact($message);
   }
 
-  return $self->_format_message_chonky($name, $address, $text)
+  return $self->_format_message_chonky($message);
 }
 
 sub send_message ($self, $address, $text, $alts = {}) {
   my $name = $self->name;
 
-  $self->_stream->write(
-    $self->_format_message($name, $address, $text)
-  );
+  my $message = {
+    name    => $name,
+    address => $address,
+    text    => $text,
+    alts    => $alts,
+  };
+
+  $self->_log_message($message);
+
+  $self->_stream->write( $self->_format_message($message) );
 }
 
 sub send_ephemeral_message ($self, $conv_address, $to_address, $text) {
   my $name = $self->name;
 
-  $self->_stream->write(
-    $self->_format_message($name, $to_address, "[ephemeral] $text")
-  );
+  my $message = {
+    name    => $name,
+    address => $to_address,
+    text    => "[ephemeral] $text",
+    alts    => undef,
+  };
+
+  $self->_log_message($message);
+
+  $self->_stream->write( $self->_format_message($message) );
 }
 
 sub describe_event ($self, $event) {
