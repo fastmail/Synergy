@@ -4,7 +4,6 @@ package Synergy::Channel::Console;
 use utf8;
 
 use Moose;
-use JSON::MaybeXS;
 
 use Future::AsyncAwait;
 use Synergy::Event;
