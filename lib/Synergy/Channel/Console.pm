@@ -14,6 +14,7 @@ use namespace::autoclean;
 use List::Util qw(max);
 
 use Term::ANSIColor qw(colored);
+use YAML::XS ();
 
 with 'Synergy::Role::Channel';
 
@@ -305,6 +306,62 @@ EOH
     }
 
     return [ box => "Updated $var" ];
+  }
+
+  sub _diagnostic_cmd_history ($self, $rest) {
+    my ($channel_name, $number, $more) = split /\s+/, $rest, 3;
+
+    $more = 'text' unless length $more;
+
+    my $channel = $self->hub->channel_named($channel_name);
+
+    unless ($channel) {
+      return [ box => "Unknown channel: $channel_name" ];
+    }
+
+    unless ($channel->DOES('Synergy::Channel::Console')) {
+      return [ box => "That isn't a Console channel, so this won't work.  $channel" ];
+    }
+
+    unless ($channel->max_message_history > 0) {
+      return [ box => "That reactor does not store message history." ];
+    }
+
+    unless ($number =~ /\A[0-9]+\z/) {
+      return [ box => "That second argument doesn't look like a number." ];
+    }
+
+    my $message_log = $channel->_message_log;
+
+    unless (@$message_log) {
+      return [ box => "There's no history logged (yet?)." ];
+    }
+
+    my ($message) = grep {; $_->{number} == $number } @$message_log;
+
+    unless ($message) {
+      my $expired = $number < $message_log->[0]{number};
+      if ($expired) {
+        return [ box => "I can't find that message in history.  It probably expired." ];
+      }
+
+      return [ box => "There's no message in history with that number." ];
+    }
+
+    my %new_message = %$message;
+
+    my $content
+      = $more eq 'text' ? $channel->_format_message_chonky(\%new_message)
+      : $more eq 'alts' ? YAML::XS::Dump($new_message{alts})
+      : undef;
+
+    unless ($content) {
+      return [ box => "I don't know how to format things this way: $more" ];
+    }
+
+    my $title = "history: channel=$channel_name item=$number format=$more";
+
+    return [ wide_box => $content, $title ];
   }
 
   sub _display_notice ($self, $text) {
