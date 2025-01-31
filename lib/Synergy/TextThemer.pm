@@ -53,6 +53,10 @@ sub from_name ($class, $name) {
   return $class->new($THEME{$name});
 }
 
+sub _format_raw ($self, $thing) {
+  return $thing;
+}
+
 sub _format_box ($self, $text, $title = undef) {
   $self->_format_generic_box($text, 1, $title);
 }
