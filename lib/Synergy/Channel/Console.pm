@@ -147,6 +147,7 @@ package Synergy::Channel::Console::DiagnosticHandler {
 
     /console  - print Console channel configuration
     /format   - configure Console channel output (see "/help format")
+    /history  - inspect messages previously sent across this channel
 
     /set VAR VALUE  - change the default value for one of the following
 
@@ -172,6 +173,33 @@ package Synergy::Channel::Console::DiagnosticHandler {
 
   You can supply "*" as the channel name to set the format for all Console
   channels.
+  EOH
+
+  $HELP{history} = <<~'EOH';
+  The history command lets you see messages sent across a Console channel,
+  assuming you have history logging turned on.  Your Console channel will need
+  a max_message_history setting greater than 1.
+
+  It works like this:
+
+      /history $channel_name $message_number $format
+
+  The message number is shown on (chonky-formatted) messages in a Console
+  channel, if it's logging history.  So, given this message box:
+
+    ╭─────┤ term-rw!rjbs #6 ├──────────────────────────────╮
+    │ I don't know how to search for that!
+    ╰──────────────────────────────────────────────────────╯
+
+  You can enter:
+
+      /history term-rw 6
+
+  to see the message re-displayed.  $format is optional, and defaults to text,
+  the same thing normally displayed.  You can also use "alts", which will
+  display a YAML-formatted dump of all the alternate representations of the
+  message.  This is useful for using the Console environment for debugging
+  non-text alternatives.
   EOH
 
   $HELP{events} = <<~'EOH';
