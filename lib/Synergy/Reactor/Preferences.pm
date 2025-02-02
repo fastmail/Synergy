@@ -1,5 +1,4 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Reactor::Preferences;
 
 use Moose;
@@ -13,7 +12,6 @@ use Future::AsyncAwait;
 use Synergy::CommandPost;
 use Synergy::Util qw(reformat_help);
 
-use experimental qw(signatures);
 use namespace::clean;
 
 help preferences => reformat_help(<<~"EOH");

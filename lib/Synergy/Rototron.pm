@@ -1,9 +1,7 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Rototron;
 
 use Moose;
-use experimental qw(signatures);
 
 use charnames qw( :full );
 

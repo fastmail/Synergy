@@ -1,9 +1,7 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 
 package Synergy::VestaUtil;
 
-use experimental qw(signatures);
 use utf8;
 
 use List::Util qw(uniq);

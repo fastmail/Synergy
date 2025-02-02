@@ -1,5 +1,4 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Reactor::CatPic;
 
 use utf8;
@@ -12,8 +11,6 @@ use Future::AsyncAwait;
 use Synergy::CommandPost;
 
 use Synergy::Logger '$Logger';
-
-use experimental qw(signatures);
 
 my $EMOJI_CONFIG = <<'END_EMOJI';
 🐀 rat

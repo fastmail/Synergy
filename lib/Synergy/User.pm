@@ -1,12 +1,10 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::User;
 
 use Moose;
 # This comment-out should be temporary; just here to deal with unknown config
 # from gitlab.  -- michael, 2018-04-13
 # use MooseX::StrictConstructor;
-use experimental qw(signatures);
 use utf8;
 
 use DateTime;

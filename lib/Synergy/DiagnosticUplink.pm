@@ -1,9 +1,7 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::DiagnosticUplink;
 
 use Moose;
-use experimental qw(signatures);
 use utf8;
 
 use Future::AsyncAwait;
@@ -22,8 +20,6 @@ has color_scheme => (is => 'ro');
 package Synergy::DiagnosticUplink::Connection {
 
   use parent 'IO::Async::Stream';
-
-  use experimental qw(signatures);
 
   use Synergy::DiagnosticHandler;
 

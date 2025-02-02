@@ -1,12 +1,9 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::X;
 
 use Moose;
 with 'Throwable',
      'Role::Identifiable::HasIdent';
-
-use experimental qw(signatures);
 
 use overload
   q{""}     => '_stringify',

@@ -1,5 +1,4 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Role::DeduplicatesExpandos;
 
 use MooseX::Role::Parameterized;
@@ -9,7 +8,6 @@ use Synergy::Logger '$Logger';
 use Try::Tiny;
 use utf8;
 
-use experimental qw(signatures);
 use namespace::clean;
 
 parameter expandos => (

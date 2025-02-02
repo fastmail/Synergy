@@ -1,8 +1,7 @@
+use v5.36.0;
 package Synergy::Role::Reactor::CommandPost;
 
 use MooseX::Role::Parameterized;
-
-use experimental 'signatures';
 
 =head1 OVERVIEW
 

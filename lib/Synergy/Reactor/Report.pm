@@ -1,11 +1,9 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Reactor::Report;
 
 use Moose;
 with 'Synergy::Role::Reactor::CommandPost';
 
-use experimental qw(signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;

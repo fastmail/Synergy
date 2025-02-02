@@ -1,9 +1,7 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Environment;
 
 use Moose;
-use experimental qw(signatures);
 
 sub BUILD ($self, @) {
   $self->_maybe_create_state_tables;

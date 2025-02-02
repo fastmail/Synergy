@@ -1,4 +1,4 @@
-use v5.32.0;
+use v5.36.0;
 package Synergy::Reactor::Zendesk;
 
 use Moose;
@@ -8,7 +8,6 @@ with 'Synergy::Role::Reactor::CommandPost',
        expandos => [ 'ticket' ],
      };
 
-use experimental qw(postderef signatures);
 use namespace::clean;
 use utf8;
 

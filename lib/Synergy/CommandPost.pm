@@ -1,8 +1,6 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::CommandPost;
 
-use experimental qw(signatures);
 use Synergy::PotentialReaction;
 
 =head1 OVERVIEW

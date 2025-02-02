@@ -1,12 +1,10 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Hub;
 # ABSTRACT: synergy's brain
 
 use Moose;
 use MooseX::StrictConstructor;
 
-use experimental qw(signatures);
 use namespace::clean;
 
 with (

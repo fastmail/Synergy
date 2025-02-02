@@ -1,5 +1,4 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 use utf8;
 package Synergy::Reactor::PagerDuty;
 
@@ -7,7 +6,6 @@ use Moose;
 with 'Synergy::Role::Reactor::CommandPost',
      'Synergy::Role::HasPreferences';
 
-use experimental qw(signatures);
 use namespace::clean;
 
 use Carp ();

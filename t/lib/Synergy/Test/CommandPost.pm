@@ -1,12 +1,9 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Test::CommandPost;
 
 use Synergy::Event ();
 use Synergy::CommandPost ();
 use Synergy::Role::Reactor::CommandPost ();
-
-use experimental 'signatures';
 
 use Sub::Exporter -setup => {
   exports => [ qw(

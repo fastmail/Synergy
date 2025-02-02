@@ -1,5 +1,4 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Reactor::Linear;
 
 use Moose;
@@ -10,7 +9,6 @@ with 'Synergy::Role::Reactor::CommandPost',
        expandos => [ 'issue' ],
      };
 
-use experimental qw(signatures);
 use namespace::clean;
 use Feature::Compat::Defer;
 

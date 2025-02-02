@@ -1,5 +1,4 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::UserDirectory;
 
 use Moose;
@@ -11,7 +10,6 @@ with (
   },
 );
 
-use experimental qw(signatures);
 use namespace::autoclean;
 
 use Future::AsyncAwait;

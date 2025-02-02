@@ -1,7 +1,5 @@
 #!perl
-use v5.32.0;
-use warnings;
-use experimental 'signatures';
+use v5.36.0;
 
 use utf8;
 

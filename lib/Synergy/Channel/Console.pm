@@ -1,11 +1,9 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Channel::Console;
 
 use utf8;
 
 use Moose;
-use experimental qw(signatures);
 use JSON::MaybeXS;
 
 use Future::AsyncAwait;

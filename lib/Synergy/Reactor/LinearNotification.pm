@@ -1,12 +1,10 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 use utf8;
 package Synergy::Reactor::LinearNotification;
 
 use Moose;
 with 'Synergy::Role::Reactor', 'Synergy::Role::HTTPEndpoint';
 
-use experimental qw(signatures postderef);
 use namespace::clean;
 use Synergy::Logger '$Logger';
 

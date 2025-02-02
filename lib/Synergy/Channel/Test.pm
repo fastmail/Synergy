@@ -1,9 +1,7 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Channel::Test;
 
 use Moose;
-use experimental qw(signatures);
 
 use Future::AsyncAwait;
 use IO::Async::Timer::Countdown;

@@ -1,11 +1,9 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Role::HubComponent;
 
 use Moose::Role;
 use Moose::Util::TypeConstraints;
 
-use experimental qw(signatures);
 use namespace::clean;
 
 subtype 'IdentifierStr'

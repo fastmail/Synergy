@@ -1,15 +1,9 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::DiagnosticHandler;
 
 use utf8;
 
 package Synergy::DiagnosticHandler::Compartment {
-
-  use v5.32.0;
-  use warnings;
-  use experimental qw(signatures);
-
   sub _evaluate ($S, $code) {
     my sub C ($name) {
       $S->channel_named($name) // die "no channel named $name\n";
@@ -34,7 +28,6 @@ package Synergy::DiagnosticHandler::Compartment {
 }
 
 use Moose;
-use experimental qw(signatures);
 use JSON::MaybeXS;
 
 use Synergy::Logger '$Logger';

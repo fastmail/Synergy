@@ -1,10 +1,8 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Event;
 
 use Moose;
 
-use experimental qw(signatures);
 use utf8;
 
 use namespace::autoclean;

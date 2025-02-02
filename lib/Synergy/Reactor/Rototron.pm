@@ -1,5 +1,4 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Reactor::Rototron;
 
 use utf8;
@@ -8,7 +7,6 @@ use Moose;
 use DateTime;
 with 'Synergy::Role::Reactor::EasyListening';
 
-use experimental qw(signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;

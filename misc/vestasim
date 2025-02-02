@@ -1,6 +1,5 @@
 #!/usr/bin/env perl
-use 5.34.0;
-use warnings;
+use 5.36.0;
 
 use lib 'lib';
 

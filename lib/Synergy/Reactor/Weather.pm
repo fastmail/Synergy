@@ -1,4 +1,4 @@
-use v5.32.0;
+use v5.36.0;
 package Synergy::Reactor::Weather;
 
 use utf8;
@@ -6,7 +6,6 @@ use utf8;
 use Moose;
 with 'Synergy::Role::Reactor::CommandPost';
 
-use experimental qw(signatures);
 use namespace::clean;
 
 use Future::AsyncAwait;

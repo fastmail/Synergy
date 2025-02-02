@@ -1,9 +1,8 @@
 #!perl
-use v5.32.0;
-use warnings;
+use v5.36.0;
 use utf8;
 
-use experimental qw( signatures );
+use lib 'lib', 't/lib';
 
 use Test::More;
 

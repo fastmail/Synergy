@@ -1,4 +1,4 @@
-use v5.32.0;
+use v5.36.0;
 package Synergy::Test::Reactor::PreferenceTest;
 
 use utf8;
@@ -6,8 +6,6 @@ use utf8;
 use Moose;
 with 'Synergy::Role::Reactor',
      'Synergy::Role::HasPreferences';
-
-use experimental 'signatures';
 
 use Future::AsyncAwait;
 use Synergy::Util qw(bool_from_text);

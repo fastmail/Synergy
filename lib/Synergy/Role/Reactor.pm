@@ -1,10 +1,8 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Role::Reactor;
 
 use Moose::Role;
 
-use experimental qw(signatures);
 use namespace::clean;
 
 with 'Synergy::Role::HubComponent';

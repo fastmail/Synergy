@@ -1,5 +1,4 @@
 use strict;
-use warnings;
 package Synergy::Logger::Test;
 
 use parent 'Synergy::Logger';

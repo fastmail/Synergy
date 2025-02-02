@@ -1,5 +1,4 @@
-use strict;
-use warnings;
+use v5.36.0;
 package Synergy::Logger;
 
 use parent 'Log::Dispatchouli::Global';
@@ -25,8 +24,6 @@ sub default_logger_args {
   package
     Synergy::Logger::_Logger;
   use parent 'Log::Dispatchouli';
-
-  use experimental 'signatures';
 
   sub new ($self, $arg) {
     my $logger = $self->SUPER::new($arg);

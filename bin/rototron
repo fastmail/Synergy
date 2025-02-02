@@ -1,11 +1,9 @@
 #!perl
 # PODNAME: synergy
-use v5.32.0;
-use warnings;
+use v5.36.0;
 use utf8;
 
 use charnames qw( :full );
-use experimental qw(signatures);
 
 use DateTime;
 

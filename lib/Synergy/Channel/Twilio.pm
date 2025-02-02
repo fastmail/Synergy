@@ -1,9 +1,7 @@
-use v5.32.0;
-use warnings;
+use v5.36.0;
 package Synergy::Channel::Twilio;
 
 use Moose;
-use experimental qw(signatures);
 use JSON::MaybeXS qw(encode_json decode_json);
 
 use Synergy::Logger '$Logger';
