@@ -11,6 +11,7 @@ my @files = `find lib -type f -name '*.pm'`;
 chomp @files;
 
 my %only_if = (
+  'Synergy::Reactor::InABox'              => [ 'Dobby::Client' ],
   'Synergy::Reactor::Linear'              => [ 'Linear::Client' ],
   'Synergy::Reactor::LinearNotification'  => [ 'Linear::Client' ],
   'Synergy::Reactor::RememberTheMilk'     => [ 'WebService::RTM::CamelMilk' ],
