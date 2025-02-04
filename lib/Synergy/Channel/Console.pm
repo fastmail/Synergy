@@ -4,7 +4,6 @@ package Synergy::Channel::Console;
 use utf8;
 
 use Moose;
-use JSON::MaybeXS;
 
 use Future::AsyncAwait;
 use Synergy::Event;
@@ -14,6 +13,7 @@ use namespace::autoclean;
 use List::Util qw(max);
 
 use Term::ANSIColor qw(colored);
+use YAML::XS ();
 
 with 'Synergy::Role::Channel';
 
@@ -146,6 +146,7 @@ package Synergy::Channel::Console::DiagnosticHandler {
 
     /console  - print Console channel configuration
     /format   - configure Console channel output (see "/help format")
+    /history  - inspect messages previously sent across this channel
 
     /set VAR VALUE  - change the default value for one of the following
 
@@ -171,6 +172,31 @@ package Synergy::Channel::Console::DiagnosticHandler {
 
   You can supply "*" as the channel name to set the format for all Console
   channels.
+  EOH
+
+  $HELP{history} = <<~'EOH';
+  The history command lets you see messages sent across a Console channel,
+  assuming you have history logging turned on.  Your Console channel will need
+  a max_message_history setting greater than 1.
+
+  It works like this:
+
+      /history $message_number $format? $channel_name?
+
+  The message number is shown on (chonky-formatted) messages in a Console
+  channel, if it's logging history.  $format defaults to "text" and
+  $channel_name defaults to the channel on which you're sending this command.
+  This can be useful for using the Console environment for debugging non-text
+  alternatives.
+
+  So, given this message box:
+
+    ╭─────┤ term-rw!rjbs #6 ├──────────────────────────────╮
+    │ I don't know how to search for that!
+    ╰──────────────────────────────────────────────────────╯
+
+  You can enter "/history 6" to see the message re-displayed as text, or
+  "/history 6 alts" to see the non-text alternatives dumped.
   EOH
 
   $HELP{events} = <<~'EOH';
@@ -305,6 +331,69 @@ EOH
     }
 
     return [ box => "Updated $var" ];
+  }
+
+  sub _diagnostic_cmd_history ($self, $rest) {
+    my ($number, $format, $channel_name) = split /\s+/, $rest, 3;
+
+    $format = 'text' unless length $format;
+
+    my $channel;
+
+    if ($channel_name) {
+      $channel = $self->hub->channel_named($channel_name);
+
+      unless ($channel) {
+        return [ box => "Unknown channel: $channel_name" ];
+      }
+
+      unless ($channel->DOES('Synergy::Channel::Console')) {
+        return [ box => "That isn't a Console channel, so this won't work.  $channel" ];
+      }
+    } else {
+      $channel = $self->channel;
+      $channel_name = $channel->name;
+    }
+
+    unless ($channel->max_message_history > 0) {
+      return [ box => "That reactor does not store message history." ];
+    }
+
+    unless ($number =~ /\A[0-9]+\z/) {
+      return [ box => "That second argument doesn't look like a number." ];
+    }
+
+    my $message_log = $channel->_message_log;
+
+    unless (@$message_log) {
+      return [ box => "There's no history logged (yet?)." ];
+    }
+
+    my ($message) = grep {; $_->{number} == $number } @$message_log;
+
+    unless ($message) {
+      my $expired = $number < $message_log->[0]{number};
+      if ($expired) {
+        return [ box => "I can't find that message in history.  It probably expired." ];
+      }
+
+      return [ box => "There's no message in history with that number." ];
+    }
+
+    my %new_message = %$message;
+
+    my $content
+      = $format eq 'text' ? $channel->_format_message_chonky(\%new_message)
+      : $format eq 'alts' ? YAML::XS::Dump($new_message{alts})
+      : undef;
+
+    unless ($content) {
+      return [ box => "I don't know how to format things this way: $format" ];
+    }
+
+    my $title = "history: channel=$channel_name item=$number format=$format";
+
+    return [ wide_box => $content, $title ];
   }
 
   sub _display_notice ($self, $text) {
@@ -448,32 +537,80 @@ async sub start ($self) {
   return;
 }
 
+has _next_message_number => (
+  is => 'rw',
+  init_arg => undef,
+  default  => 0,
+  traits   => [ 'Counter' ],
+  handles  => { get_next_message_number => 'inc' },
+);
+
+has _message_log => (
+  is => 'ro',
+  init_arg => undef,
+  default  => sub {  []  },
+);
+
+has max_message_history => (
+  is => 'ro',
+  default => 0,
+);
+
+sub _log_message ($self, $message) {
+  return undef unless $self->max_message_history > 0;
+
+  my $i = $self->get_next_message_number;
+
+  $message->{number} = $i;
+
+  my $log = $self->_message_log;
+  push @$log, $message;
+
+  if (@$log > $self->max_message_history) {
+    shift @$log;
+  }
+}
+
 sub send_message_to_user ($self, $user, $text, $alts = {}) {
   $self->send_message($user->username, $text, $alts);
 }
 
-sub _format_message ($self, $name, $address, $text) {
+sub _format_message ($self, $message) {
   if ($self->message_format eq 'compact') {
-    return $self->_format_message_compact($name, $address, $text)
+    return $self->_format_message_compact($message);
   }
 
-  return $self->_format_message_chonky($name, $address, $text)
+  return $self->_format_message_chonky($message);
 }
 
 sub send_message ($self, $address, $text, $alts = {}) {
   my $name = $self->name;
 
-  $self->_stream->write(
-    $self->_format_message($name, $address, $text)
-  );
+  my $message = {
+    name    => $name,
+    address => $address,
+    text    => $text,
+    alts    => $alts,
+  };
+
+  $self->_log_message($message);
+
+  $self->_stream->write( $self->_format_message($message) );
 }
 
 sub send_ephemeral_message ($self, $conv_address, $to_address, $text) {
   my $name = $self->name;
 
-  $self->_stream->write(
-    $self->_format_message($name, $to_address, "[ephemeral] $text")
-  );
+  my $message = {
+    name    => $name,
+    address => $to_address,
+    text    => "[ephemeral] $text",
+    alts    => undef,
+  };
+
+  $self->_log_message($message);
+
+  $self->_stream->write( $self->_format_message($message) );
 }
 
 sub describe_event ($self, $event) {

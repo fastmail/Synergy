@@ -13,7 +13,7 @@ use Synergy::Logger '$Logger';
 
 use namespace::autoclean;
 
-my $JSON = JSON->new->canonical;
+my $JSON = JSON::MaybeXS->new->canonical;
 
 with 'Synergy::Role::Channel';
 

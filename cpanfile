@@ -30,7 +30,6 @@ requires "IO::Async::Timer::Absolute" => "0";
 requires "IO::Async::Timer::Countdown" => "0";
 requires "IO::Async::Timer::Periodic" => "0";
 requires "JMAP::Tester" => "0";
-requires "JSON" => "0";
 requires "JSON::MaybeXS" => "0";
 requires "LWP::Protocol::https" => "0";
 requires "Lingua::EN::Inflect" => "0";

@@ -53,6 +53,10 @@ sub from_name ($class, $name) {
   return $class->new($THEME{$name});
 }
 
+sub _format_raw ($self, $thing) {
+  return $thing;
+}
+
 sub _format_box ($self, $text, $title = undef) {
   $self->_format_generic_box($text, 1, $title);
 }
@@ -132,7 +136,11 @@ sub _format_notice ($self, $from, $text) {
   return $message;
 }
 
-sub _format_message_compact ($self, $name, $address, $text) {
+sub _format_message_compact ($self, $message) {
+  my $address = $message->{address};
+  my $name    = $message->{name};
+  my $text    = $message->{text};
+
   return "❱❱ $name!$address ❱❱ $text\n" if $self->is_null;
 
   my $c0 = $self->decoration_color;
@@ -147,7 +155,11 @@ sub _format_message_compact ($self, $name, $address, $text) {
        . "\n";
 }
 
-sub _format_message_chonky ($self, $name, $address, $text) {
+sub _format_message_chonky ($self, $message) {
+  my $address = $message->{address};
+  my $name    = $message->{name};
+  my $text    = $message->{text};
+
   state $B_TL  = q{╭};
   state $B_BL  = q{╰};
   state $B_TR  = q{╮};
@@ -164,9 +176,13 @@ sub _format_message_chonky ($self, $name, $address, $text) {
   my $line_C = $themed ? $self->decoration_color_code    : q{};
   my $null_C = $themed ? Term::ANSIColor::color('reset') : q{};
 
-  my $dest_width = length "$name/$address";
-
   my $dest = "$text_C$name$line_C!$text_C$address$line_C";
+
+  if (defined $message->{number}) {
+    $dest .= " ${line_C}#$text_C$message->{number}";
+  }
+
+  my $dest_width = plainlength($dest);
 
   my $header = "$line_C$B_TL"
              . ($B_hor x 5)

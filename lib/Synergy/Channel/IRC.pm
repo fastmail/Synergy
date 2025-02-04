@@ -5,8 +5,6 @@ use Moose;
 
 use Future::AsyncAwait;
 
-use JSON::MaybeXS;
-
 use Synergy::Event;
 use Synergy::Logger '$Logger';
 
