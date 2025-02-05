@@ -753,7 +753,7 @@ command triage => {
       $extra_search{assignee} = undef;
     }
 
-    my $adj = $opt_all : q{} ? ' unassigned';
+    my $adj = $opt_all ? q{} : ' unassigned';
 
     return await $self->_handle_search(
       $event,
