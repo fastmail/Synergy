@@ -141,11 +141,12 @@ has last_maint_warning_time => (
 );
 
 has oncall_list => (
-  is => 'ro',
   isa => 'ArrayRef',
+  traits => [ 'Array' ],
   writer => '_set_oncall_list',
   lazy => 1,
   default => sub { [] },
+  handles => { oncall_list => 'elements' },
 );
 
 around '_set_oncall_list' => sub ($orig, $self, @rest) {
@@ -561,7 +562,7 @@ command snooze => {
 
 sub state ($self) {
   return {
-    oncall_list => $self->oncall_list,
+    oncall_list => [ $self->oncall_list ],
     last_maint_warning_time => $self->last_maint_warning_time,
   };
 }
@@ -908,7 +909,7 @@ sub _check_at_oncall ($self) {
   return $self->_current_oncall_ids
     ->then(sub (@ids) {
       my @new = sort @ids;
-      my @have = sort $self->oncall_list->@*;
+      my @have = sort $self->oncall_list;
 
       if (join(',', @have) eq join(',', @new)) {
         $Logger->log("no changes in oncall list detected");

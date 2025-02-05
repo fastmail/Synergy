@@ -60,7 +60,6 @@ after note_ask_for_tz => sub ($self, @) {
   $self->save_state;
 };
 
-
 sub state ($self) {
   return {
     last_asked_times => $self->_last_asked_times,
