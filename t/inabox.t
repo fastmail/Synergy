@@ -6,11 +6,19 @@ use lib 't/lib';
 use Future;
 use IO::Async::Test;
 use JSON::MaybeXS qw(encode_json);
+use Module::Runtime qw(require_module);
 use Plack::Response;
 use Sub::Override;
 use Storable qw(dclone);
 use Test::More;
 use Test::Deep;
+
+BEGIN {
+  my $has_dobby_client = eval { require_module('Dobby::Client') } ? 1 : 0;
+  unless ($has_dobby_client) {
+    plan skip_all => "test requires Dobby::Client";
+  }
+}
 
 use Synergy::Logger::Test '$Logger';
 use Synergy::Reactor::InABox;
