@@ -89,7 +89,7 @@ requires "namespace::autoclean" => "0";
 requires "namespace::clean" => "0";
 requires "overload" => "0";
 requires "parent" => "0";
-requires "perl" => "v5.32.0";
+requires "perl" => "v5.36.0";
 requires "strict" => "0";
 requires "utf8" => "0";
 requires "warnings" => "0";
@@ -109,6 +109,7 @@ on 'test' => sub {
   requires "Sub::Override" => "0";
   requires "Test::Deep" => "0";
   requires "Test::More" => "0.96";
+  requires "Test::Requires" => "0";
 };
 
 on 'test' => sub {

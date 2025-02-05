@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 
-use 5.032000;
+use 5.036000;
 
 use ExtUtils::MakeMaker 6.78;
 
@@ -25,7 +25,7 @@ my %WriteMakefileArgs = (
     "bin/synergy"
   ],
   "LICENSE" => "perl",
-  "MIN_PERL_VERSION" => "5.032000",
+  "MIN_PERL_VERSION" => "5.036000",
   "NAME" => "Synergy",
   "PREREQ_PM" => {
     "Carp" => 0,
@@ -127,7 +127,8 @@ my %WriteMakefileArgs = (
     "Net::EmptyPort" => 0,
     "Sub::Override" => 0,
     "Test::Deep" => 0,
-    "Test::More" => "0.96"
+    "Test::More" => "0.96",
+    "Test::Requires" => 0
   },
   "VERSION" => "0.001",
   "test" => {
@@ -213,6 +214,7 @@ my %FallbackPrereqs = (
   "Term::ANSIColor" => 0,
   "Test::Deep" => 0,
   "Test::More" => "0.96",
+  "Test::Requires" => 0,
   "Text::Template" => 0,
   "Throwable" => 0,
   "Time::Duration" => 0,

@@ -3,6 +3,10 @@ use v5.36.0;
 
 use lib 't/lib';
 
+use Test::Requires {
+  'Dobby::Client' => 0, # skip all if Dobby::Client isn't installed
+};
+
 use Future;
 use IO::Async::Test;
 use JSON::MaybeXS qw(encode_json);
