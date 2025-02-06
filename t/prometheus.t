@@ -5,10 +5,6 @@ use lib 't/lib';
 
 use Test::More;
 
-if ($ENV{GITHUB_ACTION}) {
-  plan skip_all => "test fails under GitHub Actions at present";
-}
-
 use Synergy::Logger::Test '$Logger';
 
 use IO::Async::Loop;
