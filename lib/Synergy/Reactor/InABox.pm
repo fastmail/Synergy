@@ -21,12 +21,13 @@ use Future::Utils qw(repeat);
 use Text::Template;
 use Time::Duration qw(ago);
 use DateTime::Format::ISO8601;
+use Path::Tiny;
 
-# This SSH key, if given and present, will be used to connect to boxes after
-# they're stood up to run commands. -- rjbs, 2023-10-20
+# This SSH key will be used to connect to boxes after they're stood up to run commands.
 has ssh_key_id => (
   is  => 'ro',
   isa => 'Str',
+  required => 1,
 );
 
 has digitalocean_ssh_key_name => (
@@ -293,6 +294,17 @@ async sub handle_create ($self, $event, $switches) {
     );
   }
 
+  my $key_file = $self->ssh_key_id
+               ? path($self->ssh_key_id)->absolute("$ENV{HOME}/.ssh/")
+               : undef;
+
+  unless ($key_file && -r $key_file) {
+    $Logger->log(["Cannot read SSH key for inabox setup (from %s)", $self->ssh_key_id]);
+    return await $event->reply(
+      "No SSH credentials for running box setup. This is a problem - aborting."
+    );
+  }
+
   my $ssh_key  = await $self->_get_ssh_key;
 
   my $username = $user->username;
@@ -359,40 +371,26 @@ async sub handle_create ($self, $event, $switches) {
     );
   }
 
-  if ($should_run_setup) {
-    my $key_file = $self->ssh_key_id
-                 ? ("$ENV{HOME}/.ssh/" . $self->ssh_key_id)
-                 : undef;
+  await $event->reply(
+    "Box created, will now run setup. Your box is: "
+    . $self->_format_droplet($droplet)
+  );
 
-    if ($key_file && -r $key_file) {
-      await $event->reply(
-        "Box created, will now run setup. Your box is: "
-        . $self->_format_droplet($droplet)
-      );
+  return await $self->_setup_droplet(
+    $event,
+    $droplet,
+    $key_file,
+    $should_run_setup,
+    $switches->{setup} // [], # might be undef if setting up by default
+  );
 
-      return await $self->_setup_droplet(
-        $event,
-        $droplet,
-        $key_file,
-        $switches->{setup} // [], # might be undef if setting up by default
-      );
-    }
-
-    return await $event->reply(
-      "Box created.  I can't run setup because I have no SSH credentials. "
-      . $self->_format_droplet($droplet)
-    );
-  }
-
-  # We only get here if we shouldn't run setup.
-  await $event->reply("Box created: " . $self->_format_droplet($droplet));
 }
 
 sub _validate_setup_args ($self, $args) {
   return !! (@$args == grep {; /\A[-.a-zA-Z0-9]+\z/ } @$args);
 }
 
-async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
+async sub _setup_droplet ($self, $event, $droplet, $key_file, $custom_setup, $args = []) {
   my $ip_address = $self->_ip_address_for_droplet($droplet);
 
   unless ($self->_validate_setup_args($args)) {
@@ -452,6 +450,8 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
   # ssh to the box and touch a file for proof of life
   $Logger->log("about to run ssh!");
 
+  my @setup_args = $custom_setup ? () : ('--no-custom');
+
   my ($exitcode, $stdout, $stderr) = await $self->hub->loop->run_process(
     capture => [ qw( exitcode stdout stderr ) ],
     command => [
@@ -466,6 +466,7 @@ async sub _setup_droplet ($self, $event, $droplet, $key_file, $args = []) {
       (
         qw( fmdev mysetup ),
         '--user', $event->from_user->username,
+        @setup_args,
         '--',
         @$args
       ),
