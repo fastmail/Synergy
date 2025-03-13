@@ -243,8 +243,15 @@ async sub handle_image ($self, $event, $switches) {
   return await $event->reply("Would create box from image '$snapshot->{name}' (created $ago)");
 }
 
+my %IS_CREATE_SWITCH = map {; $_ => 1 } qw( datacentre setup size nosetup );
+
 async sub handle_create ($self, $event, $switches) {
   my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
+
+  my @unknown = sort grep {; !$IS_CREATE_SWITCH{$_} } keys %$switches;
+  if (@unknown) {
+    Synergy::X->throw_public(qq{I don't know these switches you gave to "box create": @unknown});
+  }
 
   # XXX call /v2/sizes API to validate
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
