@@ -16,7 +16,8 @@ use Process::Status;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
-use String::Switches qw(parse_switches);
+use String::Switches qw(parse_switches canonicalize_names);
+use JSON::MaybeXS;
 use Future::Utils qw(repeat);
 use Text::Template;
 use Time::Duration qw(ago);
@@ -159,18 +160,12 @@ command box => {
   my ($switches, $error) = parse_switches($args);
   return await $event->error_reply("couldn't parse switches: $error") if $error;
 
+  canonicalize_names($switches, {
+    datacenter => 'datacentre',
+    region => 'datacentre'
+  });
+
   my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
-
-  # This should be simplified into a more generic "validate and normalize
-  # switches" call. -- rjbs, 2023-10-20
-  # Normalize datacentre
-  if (exists $switches{datacentre} && exists $switches{datacenter}) {
-    return await $event->error_reply("You can't use /datacentre and /datacenter at the same time!");
-  }
-
-  if (exists $switches{datacenter}) {
-    $switches{datacentre} = delete $switches{datacenter};
-  }
 
   for my $k (qw( version tag size datacentre )) {
     next unless $switches{$k};
