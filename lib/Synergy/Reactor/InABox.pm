@@ -296,16 +296,7 @@ async sub handle_create ($self, $event, $switches) {
     );
   }
 
-  my $key_file = $self->ssh_key_id
-               ? path($self->ssh_key_id)->absolute("$ENV{HOME}/.ssh/")
-               : undef;
-
-  unless ($key_file && -r $key_file) {
-    $Logger->log(["Cannot read SSH key for inabox setup (from %s)", $self->ssh_key_id]);
-    return await $event->reply(
-      "No SSH credentials for running box setup. This is a problem - aborting."
-    );
-  }
+  my $key_file = $self->_get_my_ssh_key_file;
 
   my $ssh_key  = await $self->_get_ssh_key;
 
@@ -386,6 +377,21 @@ async sub handle_create ($self, $event, $switches) {
     $switches->{setup} // [], # might be undef if setting up by default
   );
 
+}
+
+sub _get_my_ssh_key_file ($self) {
+  my $key_file = $self->ssh_key_id
+               ? path($self->ssh_key_id)->absolute("$ENV{HOME}/.ssh/")
+               : undef;
+
+  unless ($key_file && -r $key_file) {
+    $Logger->log(["Cannot read SSH key for inabox setup (from %s)", $self->ssh_key_id]);
+    Synergy::X->throw_public(
+      "No SSH credentials for running box setup. This is a problem - aborting."
+    );
+  }
+
+  return $key_file;
 }
 
 sub _validate_setup_args ($self, $args) {

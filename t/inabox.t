@@ -30,6 +30,9 @@ my $synergy = Synergy::Tester->new_tester({
       default_box_version    => 'bullseye',
       box_datacentres        => ['nyc3', 'sfo3'],
 
+      ssh_key_id => 'id_bogus',
+      digitalocean_ssh_key_name => 'synergy',
+
       post_creation_delay    => 0.01,
     },
   },
@@ -61,6 +64,18 @@ my $url = sprintf("http://localhost:%s/digital-ocean", $synergy->server->server_
 my $endpoint = Sub::Override->new(
   'Dobby::Client::api_base',
   sub { return $url },
+);
+
+# We assert that we have a key file in real use, but we nerf it in testing.
+my $ssh_guard = Sub::Override->new(
+  'Synergy::Reactor::InABox::_get_my_ssh_key_file',
+  sub { return '/dev/null' },
+);
+
+# We can't ssh to the box, so calling setup is pointless.
+my $ssh_guard = Sub::Override->new(
+  'Synergy::Reactor::InABox::_setup_droplet',
+  sub { return Future->done },
 );
 
 # dumb convenience methods
@@ -304,7 +319,7 @@ subtest 'create' => sub {
       {},
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{Box created: name: \Qalice-bullseye.box.fm.local\E}),
+        re(qr{Box created, will now run setup\. Your box is: name: \Qalice-bullseye.box.fm.local\E}),
       ],
       'normal create with defaults seems fine',
     );
@@ -422,7 +437,7 @@ subtest 'create' => sub {
       },
       [
         re(qr{Creating $box_name_re in nyc3}),
-        re(qr{Box created: name: \Qalice-foo.box.fm.local\E}),
+        re(qr{Box created, will now run setup\. Your box is: name: \Qalice-foo.box.fm.local\E}),
       ],
       'got our two normal messages'
     );
