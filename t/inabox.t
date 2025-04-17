@@ -73,7 +73,7 @@ my $ssh_guard = Sub::Override->new(
 );
 
 # We can't ssh to the box, so calling setup is pointless.
-my $ssh_guard = Sub::Override->new(
+my $setup_guard = Sub::Override->new(
   'Synergy::Reactor::InABox::_setup_droplet',
   sub { return Future->done },
 );
