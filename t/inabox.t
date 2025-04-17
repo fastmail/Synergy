@@ -24,16 +24,17 @@ my $synergy = Synergy::Tester->new_tester({
   reactors => {
     inabox => {
       class                  => 'Synergy::Reactor::InABox',
-      box_domain             => 'fm.local',
-      vpn_config_file        => '',
-      digitalocean_api_token => '1234',
-      default_box_version    => 'bullseye',
       box_datacentres        => ['nyc3', 'sfo3'],
-
+      default_box_version    => 'bullseye',
+      digitalocean_api_token => '1234',
+      vpn_config_file        => '',
       ssh_key_id => 'id_bogus',
       digitalocean_ssh_key_name => 'synergy',
 
-      post_creation_delay    => 0.01,
+      box_manager_config => {
+        box_domain             => 'fm.local',
+        post_creation_delay    => 0.01,
+      },
     },
   },
   default_from => 'alice',
@@ -68,13 +69,13 @@ my $endpoint = Sub::Override->new(
 
 # We assert that we have a key file in real use, but we nerf it in testing.
 my $ssh_guard = Sub::Override->new(
-  'Synergy::Reactor::InABox::_get_my_ssh_key_file',
+  'Synergy::BoxManager::_get_my_ssh_key_file',
   sub { return '/dev/null' },
 );
 
 # We can't ssh to the box, so calling setup is pointless.
 my $setup_guard = Sub::Override->new(
-  'Synergy::Reactor::InABox::_setup_droplet',
+  'Synergy::BoxManager::_setup_droplet',
   sub { return Future->done },
 );
 
@@ -145,7 +146,7 @@ subtest 'status' => sub {
 # the above has confirmed that we can talk to DO and get the box, so now we'll
 # just fake that method up.
 our $droplet_guard = Sub::Override->new(
-  'Synergy::Reactor::InABox::_get_droplet_for',
+  'Synergy::BoxManager::_get_droplet_for',
   sub { return Future->done($alice_droplet) },
 );
 
@@ -167,9 +168,8 @@ subtest 'poweron' => sub {
   cmp_replies(
     'synergy: box poweron',
     [
-      ignore(),
-      ignore(),
-      'That box has been powered on.',
+      "I've started powering on that box…",
+      "That box has been powered on.",
     ],
     "expected reply sequence from poweron",
   );
@@ -185,8 +185,7 @@ for my $method (qw(poweroff shutdown)) {
     cmp_replies(
       "synergy: box $method",
       [
-        ignore(),
-        ignore(),
+        re(qr{I've started (powering off|shutting down) that box…}),
         re(qr{That box has been (powered off|shut down)}),
       ],
       'successfully turned off',
@@ -206,7 +205,7 @@ for my $method (qw(poweroff shutdown)) {
 subtest 'destroy' => sub {
   cmp_replies(
     'synergy: box destroy',
-    [ re(qr{powered on.*use /force to destroy it}) ],
+    [ re(qr{powered on.*use force to destroy it}) ],
     'box is on, synergy suggests /force'
   );
 
@@ -338,24 +337,7 @@ subtest 'create' => sub {
       },
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{I'm unable to create an fminabox in region 'nyc3'.  Unfortunately this snapshot is not available in any of my configured regions}),
-      ],
-      'bad snapshot region, messages ok'
-    );
-
-    cmp_create_replies(
-      {
-        snapshot_fetch => gen_response(200 => {
-          snapshots => [{
-            id => 42,
-            name => 'fminabox-bullseye-20200202',
-            regions => [ 'syd1', 'sfo3'],
-          }]
-        }),
-      },
-      [
-        re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{I'm unable to create an fminabox in region 'nyc3'.  Available compatible regions are sfo3.  You can use /datacentre switch to specify a compatible one}),
+        re(qr{I'm unable to create an fminabox in the region 'nyc3'\.}),
       ],
       'bad snapshot region, messages ok'
     );
