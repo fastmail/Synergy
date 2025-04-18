@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+cd /tmp
+git clone https://github.com/fastmail/Dobby
+cd Dobby
+perl Makefile.PL
+make
+make install
