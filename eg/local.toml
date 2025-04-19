@@ -1,0 +1,55 @@
+user_directory = "eg/users.yaml"
+server_port = 8118
+
+[time_zone_names]
+"America/New_York" = "🇺🇸"
+"Australia/Sydney" = "🇦🇺"
+"Europe/Rome" = "🇻🇦"
+
+[channels.term-rw]
+class = "Synergy::Channel::Console"
+send_only = false
+
+[channels.term-wo]
+class = "Synergy::Channel::Console"
+send_only = true
+
+[channels.twilio]
+class = "Synergy::Channel::Console"
+send_only = true
+
+[reactors.prefs]
+class = "Synergy::Reactor::Preferences"
+
+[reactors.clox]
+class = "Synergy::Reactor::Clox"
+
+[reactors.help]
+class = "Synergy::Reactor::Help"
+
+[reactors.uptime]
+class = "Synergy::Reactor::Uptime"
+
+[reactors.who]
+class = "Synergy::Reactor::Who"
+
+[reactors.page]
+class = "Synergy::Reactor::Page"
+page_channel_name = "twilio"
+
+[reactors.reminder]
+class = "Synergy::Reactor::Reminder"
+page_channel_name = "twilio"
+
+[reactors.rfc]
+class = "Synergy::Reactor::RFC"
+rfc_index_file = "rfc-index.sqlite"
+
+[reactors.status]
+class = "Synergy::Reactor::Status"
+monitored_channel_name = "term-rw"
+
+[reactors.announce]
+class = "Synergy::Reactor::Announce"
+to_channel_name = "term-wo"
+to_address = "announce"
