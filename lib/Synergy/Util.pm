@@ -13,7 +13,7 @@ use Path::Tiny ();
 use Synergy::Logger '$Logger';
 use Time::Duration::Parse;
 use Time::Duration;
-use TOML;
+use TOML::Parser;
 use YAML::XS;
 
 use Sub::Exporter -setup => [ qw(
@@ -55,10 +55,16 @@ sub _slurp_toml_file ($filename) {
   my $file = Path::Tiny::path($filename);
   confess "config file does not exist" unless -e $file;
   my $toml = $file->slurp_utf8;
-  my ($data, $err) = from_toml($toml);
-  unless ($data) {
-    die "Error parsing toml file $filename: $err\n";
-  }
+
+  my $parser = TOML::Parser->new(
+    inflate_boolean  => sub {
+        $_[0] eq 'true'   ? JSON::MaybeXS::true()
+      : $_[0] eq 'false'  ? JSON::MaybeXS::false()
+      : confess "Unexpected value passed to inflate_boolean: $_[0]"
+    }
+  );
+
+  my $data = $parser->parse($toml);
   return $data;
 }
 
