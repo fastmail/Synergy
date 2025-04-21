@@ -53,6 +53,10 @@ after "handle_error" => sub ($self, $error_str, @) {
 package Synergy::BoxManager::ProvisionRequest {
   use Moose;
 
+  # This is here for sort of easy last minute validation.  It doesn't check
+  # things like "what if the user said to run custom setup but not standard
+  # setup".  At some point, you'll get weird results if you do weird things.
+
   has region      => (is => 'ro', isa => 'Str',     required => 1);
   has size        => (is => 'ro', isa => 'Str',     required => 1);
   has username    => (is => 'ro', isa => 'Str',     required => 1);
@@ -64,6 +68,8 @@ package Synergy::BoxManager::ProvisionRequest {
   has is_default_box   => (is => 'ro', isa => 'Bool', default => 0);
   has run_custom_setup => (is => 'ro', isa => 'Bool', default => 0);
   has setup_switches   => (is => 'ro', isa => 'Maybe[ArrayRef]');
+
+  has run_standard_setup => (is => 'ro', isa => 'Bool', default => 1);
 
   has ssh_key_id => (is  => 'ro', isa => 'Str', required => 1);
   has digitalocean_ssh_key_name => (is  => 'ro', isa => 'Str', default => 'synergy');
@@ -164,16 +170,25 @@ async sub create_droplet ($self, $spec) {
     );
   }
 
+  if ($spec->run_standard_setup or $spec->run_custom_setup) {
+    $self->handle_message(
+      "Box created, will now run setup. Your box is: "
+      . $self->_format_droplet($droplet)
+    );
+
+    return await $self->_setup_droplet(
+      $spec,
+      $droplet,
+      $key_file,
+    );
+  }
+
+  # We didn't have to run any setup!
   $self->handle_message(
-    "Box created, will now run setup. Your box is: "
-    . $self->_format_droplet($droplet)
+    "Box created. Your box is: " . $self->_format_droplet($droplet)
   );
 
-  return await $self->_setup_droplet(
-    $spec,
-    $droplet,
-    $key_file,
-  );
+  return;
 }
 
 sub _get_my_ssh_key_file ($self, $spec) {
