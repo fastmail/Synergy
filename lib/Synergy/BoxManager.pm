@@ -62,6 +62,8 @@ package Synergy::BoxManager::ProvisionRequest {
   has username    => (is => 'ro', isa => 'Str',     required => 1);
   has version     => (is => 'ro', isa => 'Str',     required => 1);
 
+  has image_id    => (is => 'ro', isa => 'Str',     required => 0);
+
   has tag         => (is => 'ro', isa => 'Maybe[Str]');
   has project_id  => (is => 'ro', isa => 'Maybe[Str]');
 
@@ -96,21 +98,18 @@ async sub create_droplet ($self, $spec) {
   # *super* strange errors deep down in IO::Async if one of the calls fails and
   # the other does not, so here we'll just admit defeat and do them in
   # sequence. -- michael, 2020-04-02
-  my $snapshot = await $self->get_snapshot_for_version($spec->version);
-  my %snapshot_regions = map {; $_ => 1 } $snapshot->{regions}->@*;
-
-  unless ($snapshot_regions{$region}) {
-    $self->handle_error("I'm unable to create an fminabox in the region '$region'.");
-  }
-
-  my $key_file = $self->_get_my_ssh_key_file($spec);
+  my $snapshot_id = await $self->_get_snapshot_id($spec);
   my $ssh_key  = await $self->_get_ssh_key($spec);
+
+  # We get this early so that we don't bother creating the Droplet if weren't
+  # not going to be able to authenticate to it.
+  my $key_file = $self->_get_my_ssh_key_file($spec);
 
   my %droplet_create_args = (
     name     => $name,
     region   => $spec->region,
     size     => $spec->size,
-    image    => $snapshot->{id},
+    image    => $snapshot_id,
     ssh_keys => [ $ssh_key->{id} ],
     tags     => [ 'fminabox', "owner:" . $spec->username ],
   );
@@ -189,6 +188,23 @@ async sub create_droplet ($self, $spec) {
   );
 
   return;
+}
+
+async sub _get_snapshot_id ($self, $spec) {
+  if (defined $spec->image_id) {
+    return $spec->image_id;
+  }
+
+  my $region = $spec->region;
+
+  my $snapshot = await $self->get_snapshot_for_version($spec->version);
+  my %snapshot_regions = map {; $_ => 1 } $snapshot->{regions}->@*;
+
+  unless ($snapshot_regions{$region}) {
+    $self->handle_error("I'm unable to create an fminabox in the region '$region'.");
+  }
+
+  return $snapshot->{id};
 }
 
 sub _get_my_ssh_key_file ($self, $spec) {
