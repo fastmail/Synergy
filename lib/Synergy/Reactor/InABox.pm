@@ -139,7 +139,7 @@ command box => {
   help => reformat_help(<<~"EOH"),
     box is a tool for managing cloud-based fminabox instances
 
-    All subcommands can take /version and /tag can be used to target a specific box. If not provided, defaults will be used.
+    All subcommands can take /version and /ident can be used to target a specific box. If not provided, defaults will be used.
 
     • status: show some info about your boxes, including IP address, fminabox build it was built from, and its current power status
     • create: create a new box
@@ -173,13 +173,14 @@ command box => {
   return await $event->error_reply("couldn't parse switches: $error") if $error;
 
   canonicalize_names($switches, {
-    datacenter => 'datacentre',
-    region => 'datacentre'
+    datacenter  => 'datacentre',
+    region      => 'datacentre',
+    tag         => 'ident',
   });
 
   my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
 
-  for my $k (qw( version tag size datacentre )) {
+  for my $k (qw( version ident size datacentre )) {
     next unless $switches{$k};
     $switches{$k} = $switches{$k}[0];
   }
@@ -200,24 +201,24 @@ command box => {
   return;
 };
 
-sub _determine_version_and_tag ($self, $event, $switches) {
+sub _determine_version_and_ident ($self, $event, $switches) {
   # this convoluted mess is about figuring out:
   # - the version, by request or from prefs or implied
-  # - the tag, by request or from the version
+  # - the ident, by request or from the version
   # - if this is the "default" box, which sets the "$username.box" DNS name
   my $default_version = $self->get_user_preference($event->from_user, 'version')
                      // $self->default_box_version;
 
-  my ($version, $tag) = delete $switches->@{qw(version tag)};
+  my ($version, $ident) = delete $switches->@{qw(version ident)};
   $version = lc $version if $version;
-  $tag = lc $tag if $tag;
-  my $is_default_box = !($version || $tag);
+  $ident = lc $ident if $ident;
+  my $is_default_box = !($version || $ident);
   $version //= $default_version;
-  $tag //= $version;
+  $ident //= $version;
 
-  # XXX check version and tag valid
+  # XXX check version and ident valid
 
-  return ($version, $tag, $is_default_box);
+  return ($version, $ident, $is_default_box);
 }
 
 async sub handle_status ($self, $event, $switches) {
@@ -235,7 +236,7 @@ async sub handle_status ($self, $event, $switches) {
 }
 
 async sub handle_image ($self, $event, $switches) {
-  my ($version) = $self->_determine_version_and_tag($event, $switches);
+  my ($version) = $self->_determine_version_and_ident($event, $switches);
   my $boxman   = $self->box_manager_for_event($event);
 
   my $snapshot = await $boxman->get_snapshot_for_version($version);
@@ -250,7 +251,7 @@ async sub handle_image ($self, $event, $switches) {
 my %IS_CREATE_SWITCH = map {; $_ => 1 } qw( datacentre setup size nosetup );
 
 async sub handle_create ($self, $event, $switches) {
-  my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
+  my ($version, $ident, $is_default_box) = $self->_determine_version_and_ident($event, $switches);
 
   my @unknown = sort grep {; !$IS_CREATE_SWITCH{$_} } keys %$switches;
   if (@unknown) {
@@ -274,7 +275,7 @@ async sub handle_create ($self, $event, $switches) {
 
   my $spec = Synergy::BoxManager::ProvisionRequest->new({
     version   => $version,
-    tag       => $tag,
+    ident     => $ident,
     size      => $size,
     username  => $user->username,
     region    => $region,
@@ -309,7 +310,7 @@ sub _mk_snippet_cb ($self, $event) {
 }
 
 async sub handle_destroy ($self, $event, $switches) {
-  my ($version, $tag) = $self->_determine_version_and_tag($event, $switches);
+  my ($version, $ident) = $self->_determine_version_and_ident($event, $switches);
 
   my $force = delete $switches->{force};
   $force //= $self->get_user_preference($event->from_user, 'destroy-always-force');
@@ -333,7 +334,7 @@ async sub handle_destroy ($self, $event, $switches) {
 
   await $boxman->find_and_destroy_droplet({
     username => $username,
-    tag      => $tag,
+    ident    => $ident,
     force    => $force,
   });
 
@@ -341,31 +342,31 @@ async sub handle_destroy ($self, $event, $switches) {
 }
 
 async sub handle_shutdown ($self, $event, $switches) {
-  my (undef, $tag) = $self->_determine_version_and_tag($event, $switches);
+  my (undef, $ident) = $self->_determine_version_and_ident($event, $switches);
 
   my $username = $event->from_user->username;
   my $boxman   = $self->box_manager_for_event($event);
-  await $boxman->take_droplet_action($username, $tag, 'shutdown');
+  await $boxman->take_droplet_action($username, $ident, 'shutdown');
 }
 
 async sub handle_poweroff ($self, $event, $switches) {
-  my (undef, $tag) = $self->_determine_version_and_tag($event, $switches);
+  my (undef, $ident) = $self->_determine_version_and_ident($event, $switches);
 
   my $username = $event->from_user->username;
   my $boxman   = $self->box_manager_for_event($event);
-  await $boxman->take_droplet_action($username, $tag, 'off');
+  await $boxman->take_droplet_action($username, $ident, 'off');
 }
 
 async sub handle_poweron ($self, $event, $switches) {
-  my (undef, $tag) = $self->_determine_version_and_tag($event, $switches);
+  my (undef, $ident) = $self->_determine_version_and_ident($event, $switches);
 
   my $username = $event->from_user->username;
   my $boxman   = $self->box_manager_for_event($event);
-  await $boxman->take_droplet_action($username, $tag, 'on');
+  await $boxman->take_droplet_action($username, $ident, 'on');
 }
 
 async sub handle_vpn ($self, $event, $switches) {
-  my ($version, $tag, $is_default_box) = $self->_determine_version_and_tag($event, $switches);
+  my ($version, $ident, $is_default_box) = $self->_determine_version_and_ident($event, $switches);
 
   my $template = Text::Template->new(
     TYPE       => 'FILE',
@@ -377,7 +378,7 @@ async sub handle_vpn ($self, $event, $switches) {
   my $config = $template->fill_in(HASH => {
     droplet_host => $boxman->box_name_for(
       $event->from_user->username,
-      ($is_default_box ? () : $tag)
+      ($is_default_box ? () : $ident)
     ),
   });
 

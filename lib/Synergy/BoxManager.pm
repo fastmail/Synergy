@@ -64,7 +64,7 @@ package Synergy::BoxManager::ProvisionRequest {
 
   has image_id    => (is => 'ro', isa => 'Str',     required => 0);
 
-  has tag         => (is => 'ro', isa => 'Maybe[Str]');
+  has ident       => (is => 'ro', isa => 'Str',     required => 1);
 
   has extra_tags  => (is => 'ro', isa => 'ArrayRef[Str]', default => sub { [] });
   has project_id  => (is => 'ro', isa => 'Maybe[Str]');
@@ -83,7 +83,7 @@ package Synergy::BoxManager::ProvisionRequest {
 }
 
 async sub create_droplet ($self, $spec) {
-  my $maybe_droplet = await $self->_get_droplet_for($spec->username, $spec->tag);
+  my $maybe_droplet = await $self->_get_droplet_for($spec->username, $spec->ident);
 
   if ($maybe_droplet) {
     $self->handle_error(
@@ -91,7 +91,7 @@ async sub create_droplet ($self, $spec) {
     );
   }
 
-  my $name = $self->box_name_for($spec->username, $spec->tag);
+  my $name = $self->box_name_for($spec->username, $spec->ident);
 
   my $region = $spec->region;
   $self->handle_message("Creating $name in $region, this will take a minute or two.");
@@ -130,7 +130,7 @@ async sub create_droplet ($self, $spec) {
   # lightning-fast anyway. -- michael, 2021-04-16
   await $self->dobby->loop->delay_future(after => $self->post_creation_delay);
 
-  $droplet = await $self->_get_droplet_for($spec->username, $spec->tag);
+  $droplet = await $self->_get_droplet_for($spec->username, $spec->ident);
 
   if ($droplet) {
     $self->handle_log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
@@ -157,7 +157,7 @@ async sub create_droplet ($self, $spec) {
   my $is_default_box = $spec->is_default_box;
 
   my @names = (
-    $self->_dns_name_for($spec->username, $spec->tag),
+    $self->_dns_name_for($spec->username, $spec->ident),
     ($is_default_box ? $self->_dns_name_for($spec->username) : ())
   );
 
@@ -340,14 +340,14 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
 
 async sub find_and_destroy_droplet ($self, $arg) {
   my $username = $arg->{username};
-  my $tag      = $arg->{tag};
+  my $ident    = $arg->{ident};
   my $force    = $arg->{force};
 
-  my $droplet = await $self->_get_droplet_for($username, $tag);
+  my $droplet = await $self->_get_droplet_for($username, $ident);
 
   unless ($droplet) {
     $self->handle_error(
-      "That box doesn't exist: " . $self->box_name_for($username, $tag)
+      "That box doesn't exist: " . $self->box_name_for($username, $ident)
     );
   }
 
@@ -380,7 +380,7 @@ async sub destroy_droplet ($self, $droplet, $arg) {
   return;
 }
 
-async sub take_droplet_action ($self, $username, $tag, $action) {
+async sub take_droplet_action ($self, $username, $ident, $action) {
   my $gerund = $action eq 'on'       ? 'powering on'
              : $action eq 'off'      ? 'powering off'
              : $action eq 'shutdown' ? 'shutting down'
@@ -388,7 +388,7 @@ async sub take_droplet_action ($self, $username, $tag, $action) {
 
   my $past_tense = $action eq 'shutdown' ? 'shut down' : "powered $action";
 
-  my $droplet = await $self->_get_droplet_for($username, $tag);
+  my $droplet = await $self->_get_droplet_for($username, $ident);
 
   unless ($droplet) {
     $self->handle_error("I can't find a box to do that to!");
@@ -446,17 +446,17 @@ async sub _get_ssh_key ($self, $spec) {
 }
 
 
-sub _dns_name_for ($self, $username, $tag = undef) {
-  my $name = join '-', $username, ($tag ? $tag : ());
+sub _dns_name_for ($self, $username, $ident = undef) {
+  my $name = join '-', $username, ($ident ? $ident : ());
   return join '.', $name, 'box';
 }
 
-sub box_name_for ($self, $username, $tag = undef) {
-  return join '.', $self->_dns_name_for($username, $tag), $self->box_domain;
+sub box_name_for ($self, $username, $ident = undef) {
+  return join '.', $self->_dns_name_for($username, $ident), $self->box_domain;
 }
 
-async sub _get_droplet_for ($self, $username, $tag) {
-  my $name = $self->box_name_for($username, $tag);
+async sub _get_droplet_for ($self, $username, $ident) {
+  my $name = $self->box_name_for($username, $ident);
 
   my $droplets = await $self->get_droplets_for($username);
 
