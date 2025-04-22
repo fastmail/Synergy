@@ -119,13 +119,6 @@ has known_box_versions => (
   },
 );
 
-# This is not here so we can set it to zero and get rate limited or see bugs in
-# production.  It's here so we can make the tests run fast. -- rjbs, 2024-02-09
-has post_creation_delay => (
-  is => 'ro',
-  default => 5,
-);
-
 my %command_handler = (
   info     => \&handle_status,
   status   => \&handle_status,
