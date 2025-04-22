@@ -65,6 +65,8 @@ package Synergy::BoxManager::ProvisionRequest {
   has image_id    => (is => 'ro', isa => 'Str',     required => 0);
 
   has tag         => (is => 'ro', isa => 'Maybe[Str]');
+
+  has extra_tags  => (is => 'ro', isa => 'ArrayRef[Str]', default => sub { [] });
   has project_id  => (is => 'ro', isa => 'Maybe[Str]');
 
   has is_default_box   => (is => 'ro', isa => 'Bool', default => 0);
@@ -101,8 +103,8 @@ async sub create_droplet ($self, $spec) {
   my $snapshot_id = await $self->_get_snapshot_id($spec);
   my $ssh_key  = await $self->_get_ssh_key($spec);
 
-  # We get this early so that we don't bother creating the Droplet if weren't
-  # not going to be able to authenticate to it.
+  # We get this early so that we don't bother creating the Droplet if we're not
+  # going to be able to authenticate to it.
   my $key_file = $self->_get_my_ssh_key_file($spec);
 
   my %droplet_create_args = (
@@ -111,7 +113,7 @@ async sub create_droplet ($self, $spec) {
     size     => $spec->size,
     image    => $snapshot_id,
     ssh_keys => [ $ssh_key->{id} ],
-    tags     => [ 'fminabox', "owner:" . $spec->username ],
+    tags     => [ "owner:" . $spec->username, $spec->extra_tags->@* ],
   );
 
   $self->handle_log([ "Creating droplet: %s", \%droplet_create_args ]);

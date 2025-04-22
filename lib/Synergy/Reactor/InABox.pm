@@ -289,6 +289,7 @@ async sub handle_create ($self, $event, $switches) {
     project_id       => $self->box_project_id,
     run_custom_setup => $should_run_setup,
     setup_switches   => $switches->{setup},
+    extra_tags       => [ 'fminabox' ],
 
     ssh_key_id => $self->ssh_key_id,
     digitalocean_ssh_key_name => $self->digitalocean_ssh_key_name
