@@ -355,8 +355,8 @@ async sub handle_obliterate ($self, $event, $switches) {
     Synergy::X->throw_public("The /ident provided needs to end in `.box.fastmaildev.com`.");
   }
 
-  my $droplets = await $self->dobby->get_all_droplets;
-  my ($droplet) = grep {; $_->{name} eq $ident } @$droplets;
+  my @droplets = await $self->dobby->get_all_droplets;
+  my ($droplet) = grep {; $_->{name} eq $ident } @droplets;
 
   unless ($droplet) {
     Synergy::X->throw_public("I couldn't find that box.");
