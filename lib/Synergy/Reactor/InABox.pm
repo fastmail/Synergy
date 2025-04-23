@@ -367,7 +367,8 @@ async sub handle_obliterate ($self, $event, $switches) {
     return await $event->reply("Would destroy this droplet, if you use /force:\n$message");
   }
 
-  await $self->destroy_droplet($droplet, { force => 1 });
+  my $boxman = $self->box_manager_for_event($event);
+  await $boxman->destroy_droplet($droplet, { force => 1 });
 
   return;
 }
