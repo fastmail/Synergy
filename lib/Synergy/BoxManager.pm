@@ -150,25 +150,27 @@ async sub create_droplet ($self, $spec) {
     );
   }
 
-  # update the DNS name. we will assume this succeeds; if it fails the box
-  # is still good and there's not really much else we can do.
-  my $ip_address = $self->_ip_address_for_droplet($droplet);
+  {
+    # update the DNS name. we will assume this succeeds; if it fails the box is
+    # still good and there's not really much else we can do.
+    my $box_domain = $self->box_domain;
 
-  my $is_default_box = $spec->is_default_box;
+    my $ip_addr = $self->_ip_address_for_droplet($droplet);
 
-  my @names = (
-    $self->_dns_name_for($spec->username, $spec->ident),
-    ($is_default_box ? $self->_dns_name_for($spec->username) : ())
-  );
+    my $name = $self->_dns_name_for($spec->username, $spec->ident);
+    $self->handle_log("setting up A records for $name.$box_domain");
 
-  for my $name (@names) {
-    $self->handle_log("updating DNS names for $name");
+    await $self->dobby->point_domain_record_at_ip($box_domain, $name, $ip_addr);
 
-    await $self->dobby->point_domain_record_at_ip(
-      $self->box_domain,
-      $name,
-      $ip_address,
-    );
+    if ($spec->is_default_box) {
+      my $cname = $spec->username;
+      $self->handle_log("setting up CNAME records for $cname.$box_domain");
+
+      # You *must* provide the trailing dot when *creating* the record, but
+      # *not* when destroying it.  I suppose there's a way in which this is
+      # defensible, but it bugs me. -- rjbs, 2025-04-22
+      await $self->dobby->point_domain_record_at_name($box_domain, $cname, "$name.$box_domain.");
+    }
   }
 
   if ($spec->run_standard_setup or $spec->run_custom_setup) {
@@ -363,12 +365,18 @@ async sub destroy_droplet ($self, $droplet, $arg) {
     );
   }
 
-  $self->handle_log([ "Destroying dns entries of: %s", $droplet->{name} ]);
-
+  my $ip_addr = $self->_ip_address_for_droplet($droplet);
+  $self->handle_log([ "Destroying DNS records pointing to %s", $ip_addr ]);
   await $self->dobby->remove_domain_records_for_ip(
     $self->box_domain,
     $self->_ip_address_for_droplet($droplet),
   );
+
+  # Is it safe to assume $droplet->{name} is the target name?  I think so,
+  # given the create code. -- rjbs, 2025-04-22
+  my $dns_name = $droplet->{name};
+  $self->handle_log([ "Destroying CNAME records pointing to %s", $dns_name ]);
+  await $self->dobby->remove_domain_records_cname_targeting($self->box_domain, $dns_name);
 
   $self->handle_log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
 
@@ -445,14 +453,19 @@ async sub _get_ssh_key ($self, $spec) {
   $self->handle_error("Hmm, I couldn't find a DO ssh key to use for fminabox!");
 }
 
+sub _dns_name_for ($self, $username, $ident) {
+  length $username
+    || Carp::confess("username was undef or empty in call to _dns_name_for");
 
-sub _dns_name_for ($self, $username, $ident = undef) {
-  my $name = join '-', $username, ($ident ? $ident : ());
-  return join '.', $name, 'box';
+  length $ident
+    || Carp::confess("ident was undef or empty in call to _dns_name_for");
+
+  return join '.', $ident, $username;
 }
 
 sub box_name_for ($self, $username, $ident = undef) {
-  return join '.', $self->_dns_name_for($username, $ident), $self->box_domain;
+  my $stub = length $ident ? $self->_dns_name_for($username, $ident) : $username;
+  return join '.', $stub, $self->box_domain;
 }
 
 async sub _get_droplet_for ($self, $username, $ident) {
