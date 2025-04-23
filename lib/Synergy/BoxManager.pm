@@ -150,25 +150,34 @@ async sub create_droplet ($self, $spec) {
     );
   }
 
-  # update the DNS name. we will assume this succeeds; if it fails the box
-  # is still good and there's not really much else we can do.
-  my $ip_address = $self->_ip_address_for_droplet($droplet);
+  {
+    # update the DNS name. we will assume this succeeds; if it fails the box is
+    # still good and there's not really much else we can do.
 
-  my $is_default_box = $spec->is_default_box;
+    my $ip_address = $self->_ip_address_for_droplet($droplet);
 
-  my @names = (
-    $self->_dns_name_for($spec->username, $spec->ident),
-    ($is_default_box ? $self->_dns_name_for($spec->username) : ())
-  );
-
-  for my $name (@names) {
-    $self->handle_log("updating DNS names for $name");
+    my $name = $self->_dns_name_for($spec->username, $spec->ident);
+    $self->handle_log("setting up A records for $name");
 
     await $self->dobby->point_domain_record_at_ip(
       $self->box_domain,
       $name,
       $ip_address,
     );
+
+    if ($spec->is_default_box) {
+      my $cname = $self->_dns_name_for($spec->username);
+      $self->handle_log("setting up CNAME records for $cname");
+
+      # Very irritatingly, it seems you *must* provide the trailing dot when
+      # *creating* the record, but *not* when destroying it.  I suppose there's
+      # a way in which this is defensible, but it bugs me. -- rjbs, 2025-04-22
+      await $self->dobby->point_domain_record_at_name(
+        $self->box_domain,
+        $cname,
+        join(q{.}, $name, $self->box_domain, ''), # trailing dot
+      );
+    }
   }
 
   if ($spec->run_standard_setup or $spec->run_custom_setup) {
@@ -363,12 +372,18 @@ async sub destroy_droplet ($self, $droplet, $arg) {
     );
   }
 
-  $self->handle_log([ "Destroying dns entries of: %s", $droplet->{name} ]);
-
+  my $ip_addr = $self->_ip_address_for_droplet($droplet);
+  $self->handle_log([ "Destroying DNS records pointing to %s", $ip_addr ]);
   await $self->dobby->remove_domain_records_for_ip(
     $self->box_domain,
     $self->_ip_address_for_droplet($droplet),
   );
+
+  # Is it safe to assume $droplet->{name} is the target name?  I think so,
+  # given the create code. -- rjbs, 2025-04-22
+  my $dns_name = $droplet->{name};
+  $self->handle_log([ "Destroying CNAME records pointing to %s", $dns_name ]);
+  await $self->dobby->remove_domain_records_cname_targeting($self->box_domain, $dns_name);
 
   $self->handle_log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
 
