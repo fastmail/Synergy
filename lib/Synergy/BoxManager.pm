@@ -153,30 +153,23 @@ async sub create_droplet ($self, $spec) {
   {
     # update the DNS name. we will assume this succeeds; if it fails the box is
     # still good and there's not really much else we can do.
+    my $box_domain = $self->box_domain;
 
-    my $ip_address = $self->_ip_address_for_droplet($droplet);
+    my $ip_addr = $self->_ip_address_for_droplet($droplet);
 
     my $name = $self->_dns_name_for($spec->username, $spec->ident);
-    $self->handle_log("setting up A records for $name");
+    $self->handle_log("setting up A records for $name.$box_domain");
 
-    await $self->dobby->point_domain_record_at_ip(
-      $self->box_domain,
-      $name,
-      $ip_address,
-    );
+    await $self->dobby->point_domain_record_at_ip($box_domain, $name, $ip_addr);
 
     if ($spec->is_default_box) {
-      my $cname = $self->_dns_name_for($spec->username);
-      $self->handle_log("setting up CNAME records for $cname");
+      my $cname = $spec->username;
+      $self->handle_log("setting up CNAME records for $cname.$box_domain");
 
-      # Very irritatingly, it seems you *must* provide the trailing dot when
-      # *creating* the record, but *not* when destroying it.  I suppose there's
-      # a way in which this is defensible, but it bugs me. -- rjbs, 2025-04-22
-      await $self->dobby->point_domain_record_at_name(
-        $self->box_domain,
-        $cname,
-        join(q{.}, $name, $self->box_domain, ''), # trailing dot
-      );
+      # You *must* provide the trailing dot when *creating* the record, but
+      # *not* when destroying it.  I suppose there's a way in which this is
+      # defensible, but it bugs me. -- rjbs, 2025-04-22
+      await $self->dobby->point_domain_record_at_name($box_domain, $cname, "$name.$box_domain.");
     }
   }
 
@@ -460,14 +453,19 @@ async sub _get_ssh_key ($self, $spec) {
   $self->handle_error("Hmm, I couldn't find a DO ssh key to use for fminabox!");
 }
 
+sub _dns_name_for ($self, $username, $ident) {
+  length $username
+    || Carp::confess("username was undef or empty in call to _dns_name_for");
 
-sub _dns_name_for ($self, $username, $ident = undef) {
-  my $name = join '-', $username, ($ident ? $ident : ());
-  return join '.', $name, 'box';
+  length $ident
+    || Carp::confess("ident was undef or empty in call to _dns_name_for");
+
+  return join '.', $ident, $username;
 }
 
 sub box_name_for ($self, $username, $ident = undef) {
-  return join '.', $self->_dns_name_for($username, $ident), $self->box_domain;
+  my $stub = length $ident ? $self->_dns_name_for($username, $ident) : $username;
+  return join '.', $stub, $self->box_domain;
 }
 
 async sub _get_droplet_for ($self, $username, $ident) {

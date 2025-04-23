@@ -108,7 +108,7 @@ sub cmp_replies ($text, $want, $desc = "got expected replies", $arg = {}) {
 # minimal data for _format_droplet
 my $alice_droplet = {
   id     => 123,
-  name   => 'alice-bullseye.box.fm.local',
+  name   => 'bullseye.alice.fm.local',
   status => 'active',
   image  => {
     name => 'fminabox-bullseye-20200202'
@@ -130,7 +130,7 @@ subtest 'status' => sub {
 
   cmp_replies(
     'synergy: box status',
-    [ re(qr{Your boxes:\s+name: \Qalice-bullseye.box.fm.local\E}) ],
+    [ re(qr{Your boxes:\s+name: \Qbullseye.alice.fm.local\E}) ],
     'alice has a box and synergy says so'
   );
 
@@ -318,7 +318,7 @@ subtest 'create' => sub {
       {},
       [
         re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{Box created, will now run setup\. Your box is: name: \Qalice-bullseye.box.fm.local\E}),
+        re(qr{Box created, will now run setup\. Your box is: name: \Qbullseye.alice.fm.local\E}),
       ],
       'normal create with defaults seems fine',
     );
@@ -419,7 +419,7 @@ subtest 'create' => sub {
       },
       [
         re(qr{Creating $box_name_re in nyc3}),
-        re(qr{Box created, will now run setup\. Your box is: name: \Qalice-foo.box.fm.local\E}),
+        re(qr{Box created, will now run setup\. Your box is: name: \Qfoo.alice.fm.local\E}),
       ],
       'got our two normal messages'
     );
