@@ -179,6 +179,7 @@ command box => {
     datacenter  => 'datacentre',
     region      => 'datacentre',
     tag         => 'ident',
+    label       => 'ident',
   });
 
   my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
