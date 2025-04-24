@@ -116,7 +116,7 @@ async sub create_droplet ($self, $spec) {
     tags     => [ "owner:" . $spec->username, $spec->extra_tags->@* ],
   );
 
-  $self->handle_log([ "Creating droplet: %s", \%droplet_create_args ]);
+  $self->handle_log([ "creating droplet: %s", \%droplet_create_args ]);
 
   my $droplet = await $self->dobby->create_droplet(\%droplet_create_args);
 
@@ -133,7 +133,7 @@ async sub create_droplet ($self, $spec) {
   $droplet = await $self->_get_droplet_for($spec->username, $spec->ident);
 
   if ($droplet) {
-    $self->handle_log([ "Created droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+    $self->handle_log([ "created droplet %s (%s)", $droplet->{id}, $droplet->{name} ]);
   } else {
     # We don't fail here, because we want to try to update DNS regardless.
     $self->handle_message(
@@ -271,8 +271,13 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
       ]);
     }
 
+    if ($try == $max_tries) {
+      $self->handle_log([ "ssh on %s is not up", $ip_address ]);
+      last TRY;
+    }
+
     $self->handle_log([
-      "ssh on %s is not up, maybe wait and try again; %s tries remain",
+      "ssh on %s is not up, will wait and try again; %s tries remain",
       $ip_address,
       $max_tries - $try,
     ]);
@@ -316,16 +321,16 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
     command => [ @ssh_command ],
   );
 
-  $self->handle_log([ "we ran ssh: %s", Process::Status->new($exitcode)->as_struct ]);
+  $self->handle_log([ "result of ssh: %s", Process::Status->new($exitcode)->as_string ]);
 
   if ($exitcode == 0) {
-    $self->handle_message("In-a-Box ($droplet->{name}) is now set up!");
+    $self->handle_message("Box ($droplet->{name}) is now set up!");
     return;
   }
 
   my %snippet = (
-    title     => "In-a-Box setup failure ($droplet->{name})",
-    file_name => "In-a-Box-setup-failure-$droplet->{name}.txt",
+    title     => "Box setup failure ($droplet->{name})",
+    file_name => "Box-setup-failure-$droplet->{name}.txt",
     content   => "$stderr\n----(stdout)----\n$stdout",
   );
 
@@ -366,7 +371,7 @@ async sub destroy_droplet ($self, $droplet, $arg) {
   }
 
   my $ip_addr = $self->_ip_address_for_droplet($droplet);
-  $self->handle_log([ "Destroying DNS records pointing to %s", $ip_addr ]);
+  $self->handle_log([ "destroying DNS records pointing to %s", $ip_addr ]);
   await $self->dobby->remove_domain_records_for_ip(
     $self->box_domain,
     $self->_ip_address_for_droplet($droplet),
@@ -375,14 +380,14 @@ async sub destroy_droplet ($self, $droplet, $arg) {
   # Is it safe to assume $droplet->{name} is the target name?  I think so,
   # given the create code. -- rjbs, 2025-04-22
   my $dns_name = $droplet->{name};
-  $self->handle_log([ "Destroying CNAME records pointing to %s", $dns_name ]);
+  $self->handle_log([ "destroying CNAME records pointing to %s", $dns_name ]);
   await $self->dobby->remove_domain_records_cname_targeting($self->box_domain, $dns_name);
 
-  $self->handle_log([ "Destroying droplet: %s (%s)", $droplet->{id}, $droplet->{name} ]);
+  $self->handle_log([ "destroying droplet %s (%s)", $droplet->{id}, $droplet->{name} ]);
 
   await $self->dobby->destroy_droplet($droplet->{id});
 
-  $self->handle_log([ "Destroyed droplet: %s", $droplet->{id} ]);
+  $self->handle_log([ "destroyed droplet: %s", $droplet->{id} ]);
 
   $self->handle_message("Box destroyed: " . $droplet->{name});
   return;
@@ -445,7 +450,7 @@ async sub _get_ssh_key ($self, $spec) {
   my ($ssh_key) = grep {; $_->{name} eq $want_key } @$keys;
 
   if ($ssh_key) {
-    $self->handle_log([ "Found SSH key: %s (%s)", $ssh_key->@{ qw(id name) } ]);
+    $self->handle_log([ "found SSH key %s (%s)", $ssh_key->@{ qw(id name) } ]);
     return $ssh_key;
   }
 
