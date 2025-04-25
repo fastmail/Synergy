@@ -302,6 +302,7 @@ async sub _setup_droplet ($self, $spec, $droplet, $key_file) {
       '-l', 'root',
       '-o', 'UserKnownHostsFile=/dev/null',
       '-o', 'StrictHostKeyChecking=no',
+      '-o', 'ControlMaster=no',
 
     $ip_address,
     (
