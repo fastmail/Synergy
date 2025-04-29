@@ -11,9 +11,8 @@ use namespace::clean;
 
 use Future::AsyncAwait;
 
-use Dobby::Client;
+use Dobby::BoxManager;
 use Process::Status;
-use Synergy::BoxManager;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
@@ -31,7 +30,7 @@ has box_manager_config => (
 );
 
 sub box_manager_for_event ($self, $event) {
-  return Synergy::BoxManager->new({
+  return Dobby::BoxManager->new({
     $self->box_manager_config->%*,
 
     dobby       => $self->dobby,
@@ -276,7 +275,7 @@ async sub handle_create ($self, $event, $switches) {
 
   my $region = $switches->{datacentre} // $self->_region_for_user($user);
 
-  my $spec = Synergy::BoxManager::ProvisionRequest->new({
+  my $spec = Dobby::BoxManager::ProvisionRequest->new({
     version   => $version,
     ident     => $ident,
     size      => $size,
