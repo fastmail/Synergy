@@ -69,13 +69,13 @@ my $endpoint = Sub::Override->new(
 
 # We assert that we have a key file in real use, but we nerf it in testing.
 my $ssh_guard = Sub::Override->new(
-  'Synergy::BoxManager::_get_my_ssh_key_file',
+  'Dobby::BoxManager::_get_my_ssh_key_file',
   sub { return '/dev/null' },
 );
 
 # We can't ssh to the box, so calling setup is pointless.
 my $setup_guard = Sub::Override->new(
-  'Synergy::BoxManager::_setup_droplet',
+  'Dobby::BoxManager::_setup_droplet',
   sub { return Future->done },
 );
 
@@ -146,7 +146,7 @@ subtest 'status' => sub {
 # the above has confirmed that we can talk to DO and get the box, so now we'll
 # just fake that method up.
 our $droplet_guard = Sub::Override->new(
-  'Synergy::BoxManager::_get_droplet_for',
+  'Dobby::BoxManager::_get_droplet_for',
   sub { return Future->done($alice_droplet) },
 );
 
