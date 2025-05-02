@@ -223,9 +223,16 @@ sub _determine_version_and_ident ($self, $event, $switches) {
   return ($version, $ident, $is_default_box);
 }
 
+sub _username_for ($self, $user) {
+  my $pref = $self->get_user_preference($user, 'username');
+  return $pref ? $pref : $user->username;
+}
+
 async sub handle_status ($self, $event, $switches) {
   my $boxman   = $self->box_manager_for_event($event);
-  my $droplets = await $boxman->get_droplets_for($event->from_user->username);
+  my $droplets = await $boxman->get_droplets_for(
+    $self->_username_for($event->from_user)
+  );
 
   if (@$droplets) {
     return await $event->reply(join "\n",
@@ -264,6 +271,7 @@ async sub handle_create ($self, $event, $switches) {
   # https://developers.digitalocean.com/documentation/changelog/api-v2/new-size-slugs-for-droplet-plan-changes/
   my $size = $switches->{size} // $self->default_box_size;
   my $user = $event->from_user;
+  my $username = $self->_username_for($user);
 
   if ($switches->{setup} && $switches->{nosetup}) {
     Synergy::X->throw_public("Passing /setup and /nosetup together is too weird for me to handle.");
@@ -279,7 +287,7 @@ async sub handle_create ($self, $event, $switches) {
     version   => $version,
     ident     => $ident,
     size      => $size,
-    username  => $user->username,
+    username  => $username,
     region    => $region,
     is_default_box   => $is_default_box,
     project_id       => $self->box_project_id,
@@ -331,8 +339,8 @@ async sub handle_destroy ($self, $event, $switches) {
     );
   }
 
-  my $username = $event->from_user->username;
-  my $boxman  = $self->box_manager_for_event($event);
+  my $username = $self->_username_for($event->from_user);
+  my $boxman   = $self->box_manager_for_event($event);
 
   await $boxman->find_and_destroy_droplet({
     username => $username,
@@ -375,7 +383,7 @@ async sub handle_obliterate ($self, $event, $switches) {
 async sub handle_shutdown ($self, $event, $switches) {
   my (undef, $ident) = $self->_determine_version_and_ident($event, $switches);
 
-  my $username = $event->from_user->username;
+  my $username = $self->_username_for($event->from_user);
   my $boxman   = $self->box_manager_for_event($event);
   await $boxman->take_droplet_action($username, $ident, 'shutdown');
 }
@@ -383,7 +391,7 @@ async sub handle_shutdown ($self, $event, $switches) {
 async sub handle_poweroff ($self, $event, $switches) {
   my (undef, $ident) = $self->_determine_version_and_ident($event, $switches);
 
-  my $username = $event->from_user->username;
+  my $username = $self->_username_for($event->from_user);
   my $boxman   = $self->box_manager_for_event($event);
   await $boxman->take_droplet_action($username, $ident, 'off');
 }
@@ -391,7 +399,7 @@ async sub handle_poweroff ($self, $event, $switches) {
 async sub handle_poweron ($self, $event, $switches) {
   my (undef, $ident) = $self->_determine_version_and_ident($event, $switches);
 
-  my $username = $event->from_user->username;
+  my $username = $self->_username_for($event->from_user);
   my $boxman   = $self->box_manager_for_event($event);
   await $boxman->take_droplet_action($username, $ident, 'on');
 }
@@ -408,7 +416,7 @@ async sub handle_vpn ($self, $event, $switches) {
   my $boxman = $self->box_manager_for_event($event);
   my $config = $template->fill_in(HASH => {
     droplet_host => $boxman->box_name_for(
-      $event->from_user->username,
+      $self->_username_for($event->from_user),
       ($is_default_box ? () : $ident)
     ),
   });
@@ -505,6 +513,15 @@ __PACKAGE__->add_preference(
   validator => async sub ($self, $value, @) { return bool_from_text($value) },
   default   => 0,
   description => 'When destroying an active box, always act as if /force was passed',
+);
+
+__PACKAGE__->add_preference(
+  name      => 'username',
+  validator => async sub ($self, $value, @) {
+    $value =~ /\A[a-z]+\z/ && return $value;
+    return (undef, "That isn't a valid unix username.");
+  },
+  description => 'This is your unix username for managed boxes.',
 );
 
 1;
