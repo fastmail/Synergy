@@ -128,9 +128,6 @@ my %command_handler = (
   poweron  => \&handle_poweron,
   image    => \&handle_image,
   vpn      => \&handle_vpn,
-
-  # XXX Temporary
-  obliterate => \&handle_obliterate,
 );
 
 after register_with_hub => sub ($self, @) {
@@ -347,35 +344,6 @@ async sub handle_destroy ($self, $event, $switches) {
     ident    => $ident,
     force    => $force,
   });
-
-  return;
-}
-
-async sub handle_obliterate ($self, $event, $switches) {
-  my $ident = $switches->{ident};
-
-  unless ($ident) {
-    Synergy::X->throw_public("You need to provide `/ident xyz-abc.box.fastmaildev.com`.");
-  }
-
-  unless ($ident =~ qr{\.box\.fastmaildev\.com\z}) {
-    Synergy::X->throw_public("The /ident provided needs to end in `.box.fastmaildev.com`.");
-  }
-
-  my @droplets = await $self->dobby->get_all_droplets;
-  my ($droplet) = grep {; $_->{name} eq $ident } @droplets;
-
-  unless ($droplet) {
-    Synergy::X->throw_public("I couldn't find that box.");
-  }
-
-  unless ($switches->{force}) {
-    my $message = $self->_format_droplet($droplet);
-    return await $event->reply("Would destroy this droplet, if you use /force:\n$message");
-  }
-
-  my $boxman = $self->box_manager_for_event($event);
-  await $boxman->destroy_droplet($droplet, { force => 1 });
 
   return;
 }
