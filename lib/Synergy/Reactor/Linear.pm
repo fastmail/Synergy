@@ -970,7 +970,7 @@ async sub _handle_creation_event ($self, $event, $arg = {}) {
         url   => $event->event_uri,
         title => "Created via $type message",
         ($icon ? (iconUrl => $icon) : ()),
-      });
+      })->retain;
     }
 
     if ($id) {
