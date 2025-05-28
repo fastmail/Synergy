@@ -225,7 +225,7 @@ responder 'maint-start' => {
   targeted  => 1,
   skip_help => 1, # provided by "help maint"
   matcher => sub ($self, $text, $event) {
-    return [ $1 ? 1 : 0 ] if $text =~ m{\Amaint\s+start(?:\s+/force)?\s*\z}ni;
+    return [ $1 ? 1 : 0 ] if $text =~ m{\Amaint\s+start(\s+/force)?\s*\z}i;
     return;
   },
 } => async sub ($self, $event, $force) {
