@@ -346,7 +346,7 @@ async sub handle_destroy ($self, $event, $switches) {
     Synergy::X->throw("I can't find a box called $name!");
   }
 
-  unless ($force) {
+  unless (0 and $force) {
     my $status = await $boxman->mollyguard_status_for($droplet);
 
     unless ($status->{ok}) {
