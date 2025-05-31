@@ -323,7 +323,7 @@ subtest 'create' => sub {
     cmp_create_replies(
       {},
       [
-        re(qr{Creating $box_name_re in nyc3}i),
+        re(qr{Creating $box_name_re in NYC3}i),
         re(qr{Box created, will now run setup\. Your box is: name: \Qbullseye.alice.fm.local\E}),
       ],
       'normal create with defaults seems fine',
@@ -342,8 +342,8 @@ subtest 'create' => sub {
         }),
       },
       [
-        re(qr{Creating $box_name_re in nyc3}i),
-        re(qr{I'm unable to create an fminabox in the region 'nyc3'\.}),
+        re(qr{Creating $box_name_re in NYC3}i),
+        "The snapshot you want (fminabox-bullseye-20200202) isn't available in NYC3.  You could create it in any of these regions: AAA, ZZZ"
       ],
       'bad snapshot region, messages ok'
     );
@@ -359,7 +359,7 @@ subtest 'create' => sub {
         snapshot_fetch => gen_response(200 => { snapshots => [] }),
       },
       [
-        re(qr{Creating $box_name_re in nyc3}i),
+        re(qr{Creating $box_name_re in NYC3}i),
         re(qr{no snapshot found}),
       ],
       'no snapshot, messages ok'
@@ -370,7 +370,7 @@ subtest 'create' => sub {
         ssh_key_fetch => gen_response(200 => { ssh_keys => [] }),
       },
       [
-        re(qr{Creating $box_name_re in nyc3}i),
+        re(qr{Creating $box_name_re in NYC3}i),
         re(qr{find a DO ssh key}),
       ],
       'no ssh key, messages ok'
@@ -424,7 +424,7 @@ subtest 'create' => sub {
         }),
       },
       [
-        re(qr{Creating $box_name_re in nyc3}),
+        re(qr{Creating $box_name_re in NYC3}),
         re(qr{Box created, will now run setup\. Your box is: name: \Qfoo.alice.fm.local\E}),
       ],
       'got our two normal messages'
