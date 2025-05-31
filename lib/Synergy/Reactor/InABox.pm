@@ -337,14 +337,29 @@ async sub handle_destroy ($self, $event, $switches) {
     );
   }
 
-  my $username = $self->_username_for($event->from_user);
   my $boxman   = $self->box_manager_for_event($event);
+  my $username = $self->_username_for($event->from_user);
+  my $droplet  = await $boxman->_get_droplet_for($username, $label);
 
-  await $boxman->find_and_destroy_droplet({
-    username => $username,
-    label    => $label,
-    force    => $force,
-  });
+  unless ($droplet) {
+    my $name = $self->box_name_for($username, $label);
+    Synergy::X->throw("I can't find a box called $name!");
+  }
+
+  unless ($force) {
+    my $status = await $boxman->mollyguard_status_for($droplet);
+
+    unless ($status->{ok}) {
+      my $message = "Sorry, `fmdev mollyguard` objected, so I'm not destroying that box.";
+
+      return await $event->error_reply(
+        $message,
+        { slack => "$message\n\n```$status->{report}\n```\n" },
+      );
+    }
+  }
+
+  await $boxman->destroy_droplet($droplet, { force => $force });
 
   return;
 }

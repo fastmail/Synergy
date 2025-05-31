@@ -79,6 +79,12 @@ my $setup_guard = Sub::Override->new(
   sub { return Future->done },
 );
 
+# We can't ssh to the box, so checking mollyguard is pointless.
+my $mg_guard = Sub::Override->new(
+  'Dobby::BoxManager::mollyguard_status_for',
+  sub { return Future->done({ ok => 1 }) },
+);
+
 # dumb convenience methods
 sub gen_response ($code, $data) {
   my $json = encode_json($data);
