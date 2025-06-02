@@ -346,7 +346,9 @@ async sub handle_destroy ($self, $event, $switches) {
     Synergy::X->throw("I can't find a box called $name!");
   }
 
-  unless (0 and $force) {
+  # TODO: This has been disabled until we sort out the "ssh to box after setup"
+  # problem for it. -- rjbs, 2025-06-02
+  unless (1 or $force) {
     my $status = await $boxman->mollyguard_status_for($droplet);
 
     unless ($status->{ok}) {
