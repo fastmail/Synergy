@@ -127,14 +127,24 @@ has pending_timeouts => (
 async sub connect ($self) {
   $self->connected(0);
 
-  my $res = await $self->hub->http_client->GET(
-    "https://slack.com/api/rtm.connect?token=" . $self->api_key
-  );
+  my $json;
 
-  my $json = decode_json($res->content);
+  until ($json) {
+    my $res = await $self->hub->http_client->GET(
+      "https://slack.com/api/rtm.connect?token=" . $self->api_key
+    );
 
-  die "Could not connect to Slack RTM: $json->{error}"
-    unless $json->{ok};
+    if ($res->code == 429) {
+      $Logger->log('received 429 while connecting to Slack; will try again in 120s');
+      await $self->loop->delay_future(after => 120);
+      next;
+    }
+
+    $json = decode_json($res->content);
+
+    die "Could not connect to Slack RTM: $json->{error}"
+      unless $json->{ok};
+  }
 
   # This is a dumb hack: when I converted synergy to a Slack app, I gave her
   # perms to add a user with the name "synergee" because I thought "synergy"
