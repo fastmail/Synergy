@@ -395,6 +395,13 @@ responder 'give-oncall' => {
   # of error checking up front here.
   $event->mark_handled;
 
+  if ($who eq 'escalation') {
+    my $escalations = await $self->_relevant_oncalls(2);
+
+    $who = $self->username_from_pd($escalations->[0]{user}{id});
+    $who ||= $escalations->[0]{user}{id}; # fallback mainly for debugging if we don't have a full user directory
+  }
+
   my $target = $self->resolve_name($who, $event->from_user);
   unless ($target) {
     return await $event->error_reply("Sorry, I can't figure out who '$who' is.");
