@@ -396,19 +396,27 @@ responder 'give-oncall' => {
   # of error checking up front here.
   $event->mark_handled;
 
+  my $target_id;
+  my $target;
+
   if ($who eq 'escalation') {
     my $escalations = await $self->_relevant_oncalls(2);
 
     $who = $self->username_from_pd($escalations->[0]{user}{id});
     $who ||= $escalations->[0]{user}{id}; # fallback mainly for debugging if we don't have a full user directory
+
+    $target_id = $escalations->[0]{user}{id};
   }
 
-  my $target = $self->resolve_name($who, $event->from_user);
-  unless ($target) {
-    return await $event->error_reply("Sorry, I can't figure out who '$who' is.");
+  unless ($target_id) {
+    $target = $self->resolve_name($who, $event->from_user);
+    unless ($target) {
+      return await $event->error_reply("Sorry, I can't figure out who '$who' is.");
+    }
+
+    $target_id = $self->get_user_preference($target, 'user-id');
   }
 
-  my $target_id = $self->get_user_preference($target, 'user-id');
   unless ($target_id) {
     my $they = $target->username;
     return await $event->error_reply("Hmm, $they doesn't seem to be a PagerDuty user.");
@@ -498,10 +506,11 @@ responder 'give-oncall' => {
     );
   }
 
-  my $duration = duration($seconds);
+  my $target_str = $target ? $target->username : $target_id;
+
   return await $event->reply(
     sprintf("Okay! %s is now oncall for %s.",
-      $target->username,
+      $target_str,
       duration($seconds),
     )
   );
