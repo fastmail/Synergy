@@ -386,8 +386,9 @@ responder 'give-oncall' => {
   targeted  => 1,
   skip_help => 1, # provided by "help give oncall"
   matcher => sub ($self, $text, $event) {
-    my ($who, $dur) = $text =~ /\Agive\s+oncall\s+to\s+(\S+)\s+for\s+(.*)\s*$/i;
-    return [ $who, $dur ] if $who;
+    my ($who, $for, $dur) = $text =~ /\Agive\s+oncall\s+to\s+(\S+)(\s+for\s+(.*))?\s*$/i;
+    return [ $who, $dur ] if $who && $for;
+    return [ $who, undef ] if $who;
     return;
   },
 } => async sub ($self, $event, $who, $dur) {
@@ -413,26 +414,59 @@ responder 'give-oncall' => {
     return await $event->error_reply("Hmm, $they doesn't seem to be a PagerDuty user.");
   }
 
-  my $seconds = eval { parse_duration($dur) };
-  unless ($seconds) {
-    return await $event->error_reply("Hmm, I can't figure out how long you mean by '$dur'.");
-  }
-
-  if ($seconds > 60 * 60 * 8) {
-    return await $event->error_reply("Sorry, I can only give oncall for 8 hours max.");
-  }
-
-  if ($seconds < 60 ) {
-    return await $event->error_reply("That's less than a minute; did you forget a unit?");
-  }
-
   my $oncalls = await $self->_relevant_oncalls;
+  my $from_oncall;
 
-  if (@$oncalls > 1) {
+  if (@$oncalls == 1) {
+    $from_oncall = $oncalls->[0];
+  } else {
+    for my $oncall (@$oncalls) {
+      if ($self->username_from_pd($oncall->{user}{id}) eq $event->from_user->{username}) {
+        $from_oncall = $oncall;
+        last;
+      }
+    }
+  }
+
+  if (!$from_oncall) {
     return await $event->error_reply(
-      "Sorry; there's more than one person oncall right now, so I can't help you!"
+      "Sorry; there's more than one person oncall right now and you're not one of them, so I can't help you!"
     );
   }
+
+
+  my $start    = DateTime->now->add(seconds => 15);
+  my $seconds;
+
+  if ($dur) {
+    $seconds = eval { parse_duration($dur) };
+    unless ($seconds) {
+      return await $event->error_reply("Hmm, I can't figure out how long you mean by '$dur'.");
+    }
+
+    if ($seconds > 60 * 60 * 8) {
+      return await $event->error_reply("Sorry, I can only give oncall for 8 hours max.");
+    }
+
+    if ($seconds < 60 ) {
+      return await $event->error_reply("That's less than a minute; did you forget a unit?");
+    }
+  } else {
+    if ($from_oncall->{end}) {
+      # FIXME: This is a weird epicycle, because we need to convert the seconds
+      # into the end time against when we submit it to the API.
+      # We only really need the seconds for the reply at the end, so this should
+      # be rejiggered
+      my $end = $ISO8601->parse_datetime($from_oncall->{end});
+      $seconds = $end->clone->subtract_datetime_absolute($start)->seconds;
+    } else {
+      return await $event->error_reply(
+        "There's no shift end for the shift you're trying to override so I cannot " .
+        "figure out from context how long to override for. Please specify duration."
+      );
+    }
+  }
+
 
   my $schedule = $oncalls->[0]{schedule};
   unless ($schedule) {
@@ -440,7 +474,6 @@ responder 'give-oncall' => {
   }
 
   my $sched_id = $schedule->{id};
-  my $start    = DateTime->now->add(seconds => 15);
   my $end      = $start->clone->add(seconds => $seconds);
 
   my $overrides = await  $self->_pd_request_for_user(
