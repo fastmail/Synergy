@@ -42,12 +42,18 @@ subtest 'run_process' => sub {
   my $done;
 
   my $hub = $synergy;
-  my $f = $hub->run_process([ '/usr/bin/uptime' ]);
+
+  my $date = -x '/bin/date'     ? '/bin/date'
+           : -x '/usr/bin/date' ? '/usr/bin/date'
+           : die "This test requires either /bin/date or /usr/bin/date exist.";
+
+  my $f = $hub->run_process([ $date ]);
 
   $f->on_done(sub ($ec, $stdout, $stderr) {
     $done = 1;
     is($ec, 0, 'process exited successfully');
-    like($stdout, qr{load average}, 'got a reasonable stdout');
+    my $re = qr{\A[A-Z][a-z]+ \V+ 20[0-9]{2}\Z};
+    like($stdout, $re, 'got a reasonable stdout');
     is($stderr, '', 'empty stdout');
   });
 
