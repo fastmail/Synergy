@@ -342,10 +342,26 @@ command oncall => {
     return await $event->reply_error(q{It's just "oncall".  Did you want "give oncall"?});
   }
 
-  my @ids = await $self->_current_oncall_ids;
+  my $reply = "";
+  my $oncall_tree = await $self->_oncall_tree;
 
-  my @users = uniq map {; $self->username_from_pd($_) // $_ } @ids;
-  return await $event->reply('current oncall: ' . join(', ', sort @users));
+  my @levels = sort { $a <=> $b } keys %$oncall_tree;
+  my $max_level = $levels[-1];
+
+  for my $level (@levels) {
+    my @users = uniq map {; $self->username_from_pd($_->{user}{id}) // $_->{user}{id} } $oncall_tree->{$level}->@*;
+
+    my $extra = $level == 1          ? " (primary oncall)"
+              : $level == 2          ? " (primary escalation)"
+              : $level == $max_level ? " (final escalation)"
+              :                        "";
+
+    $reply .= "Level $level$extra: " . join(', ', sort @users);
+
+    $reply .= "\n" if ($level != $max_level);
+  }
+
+  return await $event->reply($reply);
 };
 
 help "give oncall" => reformat_help(<<~'EOH'),
@@ -370,8 +386,9 @@ responder 'give-oncall' => {
   targeted  => 1,
   skip_help => 1, # provided by "help give oncall"
   matcher => sub ($self, $text, $event) {
-    my ($who, $dur) = $text =~ /\Agive\s+oncall\s+to\s+(\S+)\s+for\s+(.*)\s*$/i;
-    return [ $who, $dur ] if $who;
+    my ($who, $for, $dur) = $text =~ /\Agive\s+oncall\s+to\s+(\S+)(\s+for\s+(.*))?\s*$/i;
+    return [ $who, $dur ] if $who && $for;
+    return [ $who, undef ] if $who;
     return;
   },
 } => async sub ($self, $event, $who, $dur) {
@@ -379,37 +396,85 @@ responder 'give-oncall' => {
   # of error checking up front here.
   $event->mark_handled;
 
-  my $target = $self->resolve_name($who, $event->from_user);
-  unless ($target) {
-    return await $event->error_reply("Sorry, I can't figure out who '$who' is.");
+  my $target_id;
+  my $target;
+
+  if ($who eq 'escalation') {
+    my $escalations = await $self->_relevant_oncalls(2);
+
+    $who = $self->username_from_pd($escalations->[0]{user}{id});
+    $who ||= $escalations->[0]{user}{id}; # fallback mainly for debugging if we don't have a full user directory
+
+    $target_id = $escalations->[0]{user}{id};
   }
 
-  my $target_id = $self->get_user_preference($target, 'user-id');
+  unless ($target_id) {
+    $target = $self->resolve_name($who, $event->from_user);
+    unless ($target) {
+      return await $event->error_reply("Sorry, I can't figure out who '$who' is.");
+    }
+
+    $target_id = $self->get_user_preference($target, 'user-id');
+  }
+
   unless ($target_id) {
     my $they = $target->username;
     return await $event->error_reply("Hmm, $they doesn't seem to be a PagerDuty user.");
   }
 
-  my $seconds = eval { parse_duration($dur) };
-  unless ($seconds) {
-    return await $event->error_reply("Hmm, I can't figure out how long you mean by '$dur'.");
-  }
-
-  if ($seconds > 60 * 60 * 8) {
-    return await $event->error_reply("Sorry, I can only give oncall for 8 hours max.");
-  }
-
-  if ($seconds < 60 ) {
-    return await $event->error_reply("That's less than a minute; did you forget a unit?");
-  }
-
   my $oncalls = await $self->_relevant_oncalls;
+  my $from_oncall;
 
-  if (@$oncalls > 1) {
+  if (@$oncalls == 1) {
+    $from_oncall = $oncalls->[0];
+  } else {
+    for my $oncall (@$oncalls) {
+      if ($self->username_from_pd($oncall->{user}{id}) eq $event->from_user->{username}) {
+        $from_oncall = $oncall;
+        last;
+      }
+    }
+  }
+
+  if (!$from_oncall) {
     return await $event->error_reply(
-      "Sorry; there's more than one person oncall right now, so I can't help you!"
+      "Sorry; there's more than one person oncall right now and you're not one of them, so I can't help you!"
     );
   }
+
+
+  my $start    = DateTime->now->add(seconds => 15);
+  my $seconds;
+
+  if ($dur) {
+    $seconds = eval { parse_duration($dur) };
+    unless ($seconds) {
+      return await $event->error_reply("Hmm, I can't figure out how long you mean by '$dur'.");
+    }
+
+    if ($seconds > 60 * 60 * 8) {
+      return await $event->error_reply("Sorry, I can only give oncall for 8 hours max.");
+    }
+
+    if ($seconds < 60 ) {
+      return await $event->error_reply("That's less than a minute; did you forget a unit?");
+    }
+  } else {
+    if ($from_oncall->{end}) {
+      # FIXME: This is a weird epicycle, because we need to convert the seconds
+      # into the end time against when we submit it to the API.
+      # We only really need the seconds for the reply at the end, so this should
+      # be rejiggered
+      my $end = $ISO8601->parse_datetime($from_oncall->{end});
+      $seconds = $end->clone->subtract_datetime_absolute($start)->seconds;
+    } else {
+      return await $event->error_reply(
+        "There's no shift end for the shift you're trying to override so I cannot " .
+        "figure out from context how long to override for. Please specify duration."
+      );
+    }
+  }
+
 
   my $schedule = $oncalls->[0]{schedule};
   unless ($schedule) {
@@ -417,7 +482,6 @@ responder 'give-oncall' => {
   }
 
   my $sched_id = $schedule->{id};
-  my $start    = DateTime->now->add(seconds => 15);
   my $end      = $start->clone->add(seconds => $seconds);
 
   my $overrides = await  $self->_pd_request_for_user(
@@ -442,10 +506,11 @@ responder 'give-oncall' => {
     );
   }
 
-  my $duration = duration($seconds);
+  my $target_str = $target ? $target->username : $target_id;
+
   return await $event->reply(
     sprintf("Okay! %s is now oncall for %s.",
-      $target->username,
+      $target_str,
       duration($seconds),
     )
   );
@@ -714,43 +779,59 @@ sub _check_long_maint ($self) {
     })->retain;
 }
 
-sub _relevant_oncalls ($self) {
+sub _oncall_tree($self) {
+
   my %should_ignore = map {; $_ => 1 } $self->suppressed_user_ids;
 
-  return $self->_pd_request(GET => '/oncalls')
+  return $self->_pd_request(GET => '/oncalls?escalation_policy_ids[]=' . $self->escalation_policy_id)
     ->then(sub ($data) {
-      my $policy_id = $self->escalation_policy_id;
-      my @oncalls = grep {; $_->{escalation_policy}{id} eq $policy_id }
-                    grep {; $_->{escalation_level} == 1}
-                    grep {; !$should_ignore{$_->{user}{id}} }
-                    $data->{oncalls}->@*;
 
-      return Future->done(\@oncalls);
+      my %oncall_tree;
+
+      my @oncalls = grep {; !$should_ignore{$_->{user}{id}} } $data->{oncalls}->@*;
+
+      for my $oncall (@oncalls) {
+        my $level = $oncall->{escalation_level};
+
+        if (!$oncall_tree{$level}) {
+          $oncall_tree{$level} = [];
+        }
+
+        push $oncall_tree{$level}->@*, $oncall;
+      }
+
+      return Future->done(\%oncall_tree);
     });
+
 }
 
-sub _current_oncall_ids ($self) {
-  $self->_relevant_oncalls->then(sub ($oncalls) {
-    my @ids = map  {; $_->{user}{id} } @$oncalls;
-    return Future->done(@ids);
-  });
+# gets all currently on call users and filters for the appropriate escalation level.
+# level 1 == primary oncall
+# level 2 == primary escalation
+# final level == all hands on deck
+async sub _relevant_oncalls ($self, $level = 1) {
+  my $oncall_tree = await $self->_oncall_tree;
+  return $oncall_tree->{$level};
+}
+
+async sub _current_oncall_ids ($self) {
+  my $oncalls = await $self->_relevant_oncalls;
+  my @ids = map {; $_->{user}{id} } @$oncalls;
+  return @ids;
 }
 
 # returns all the oncall users on the final escalation rule
 # used for "page all oncall engineers"
-sub _escalation_oncall_ids ($self) {
-  my $policy_id = $self->escalation_policy_id;
+async sub _escalation_oncall_ids ($self) {
 
-  return $self->_pd_request(GET => '/escalation_policies/' . $policy_id)
-    ->then(sub ($data){
-      my $final_escalation_rule = $data->{escalation_policy}{escalation_rules}[-1];
+  my $oncall_tree = await $self->_oncall_tree;
 
-      my @oncalls = map {; $_->{id} }
-                    grep {; $_->{type} eq 'user_reference' }
-                    $final_escalation_rule->{targets}->@*;
+  my @levels = sort { $a <=> $b } keys %$oncall_tree;
+  my $max_level = $levels[-1];
 
-      return Future->done(@oncalls);
-      });
+  my @ids = map {; $_->{user}{id} } $oncall_tree->{$max_level}->@*;
+
+  return @ids;
 }
 
 # This returns a Future that, when done, gives a boolean as to whether or not
