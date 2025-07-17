@@ -399,7 +399,9 @@ responder 'give-oncall' => {
   my $target_id;
   my $target;
 
-  if ($who eq 'escalation') {
+  my $is_escalation = $who eq 'escalation';
+
+  if ($is_escalation) {
     my $escalations = await $self->_relevant_oncalls(2);
 
     $who = $self->username_from_pd($escalations->[0]{user}{id});
@@ -504,6 +506,13 @@ responder 'give-oncall' => {
     return await $event->reply(
       "Sorry, something went wrong talking to PagerDuty. \N{DISAPPOINTED FACE}"
     );
+  }
+
+  if ($is_escalation) {
+    await $self->_resolve_incidents($event, {
+      whose => 'own',
+      only_pending => 1,
+    });
   }
 
   my $target_str = $target ? $target->username : $target_id;
@@ -929,10 +938,13 @@ sub _ack_all ($self, $event) {
 
 sub _resolve_incidents($self, $event, $arg) {
   my $whose = $arg->{whose};
+  my $only_pending = $arg->{only_pending};
   Carp::confess("_resolve_incidents called with bogus args")
     unless $whose && ($whose eq 'all' || $whose eq 'own');
 
   my $only_acked = $arg->{only_acked} // ($whose eq 'own' ? 1 : 0);
+
+  my $pending_cutoff = DateTime->now->add(minutes => 30);
 
   # XXX pagination?
   return $self->_get_incidents(qw(triggered acknowledged))
@@ -943,6 +955,15 @@ sub _resolve_incidents($self, $event, $arg) {
       for my $incident (@incidents) {
         # skip unacked incidents unless we've asked for all
         next if $only_acked && $incident->{status} eq 'triggered';
+
+        # skip snoozed incidents (incidents with more than 30 minutes to unack)
+        # if set
+        if ($only_pending) {
+          my ($unack_action) = grep {; $_->{type} eq "unacknowledge"} $incident->{pending_actions}->@*;
+          my $unack_time = $ISO8601->parse_datetime($unack_action->{at});
+
+          next if $unack_time > $pending_cutoff;
+        }
 
         # 'resolve own' is 'resolve all the alerts I have acked'
         if ($whose eq 'own') {
@@ -958,7 +979,7 @@ sub _resolve_incidents($self, $event, $arg) {
         return Future->done;
       }
 
-      $Logger->log([ "PagerDuty: acking incidents: %s", \@unresolved ]);
+      $Logger->log([ "PagerDuty: resolving incidents: %s", \@unresolved ]);
 
       return $self->_update_status_for_incidents(
         $event->from_user,
