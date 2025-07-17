@@ -367,18 +367,27 @@ command oncall => {
 help "give oncall" => reformat_help(<<~'EOH'),
   Give the oncall conch to someone for a while.
 
-  • `give oncall to WHO for DURATION`
-  • `oncall override WHO DURATION`
+  • `give oncall to WHO [for DURATION]`
 
   `WHO` is the person you want to take the conch, and `DURATION` is how long
   they should keep it. The duration is parsed, so you can say something like
   "30m" or "2h".
 
-  This command is (for now?) very limited, and intended for the case where
-  you're oncall and need to step away to for a while. It won't let you give
-  oncall to someone for more than 8 hours, and won't work if there is already
-  more than one person oncall. To set up extended overrides, you should use the
-  PagerDuty website.
+  Instead of a username, `WHO` may be the special word "escalation", which will
+  figure out who is currently the fallback oncall and give oncall to them.
+  In this case, it will also close (resolve) any unsnoozed alerts you had
+  acknowledge, so that they can retrigger for them.
+
+  The `DURATION` is optional if you are giving oncall to escalation, and will
+  then just override for the entire rest of your shift. Otherwise, the maximum
+  duration is 8 hours.
+
+  This command is intended for the case where you're oncall and need to step
+  away for a while due to personal matters or travel.
+  You cannot give oncall to someone for more than 8 hours with the `DURATION`
+  argument, and if there is more than one person oncall, it cannot determine
+  whose oncall to override, unless the oncall person is you.
+  To set up extended overrides, you should use the PagerDuty website.
   EOH
 
 responder 'give-oncall' => {
