@@ -286,7 +286,7 @@ async sub handle_create ($self, $event, $switches) {
     label     => $label,
     size      => $size,
     username  => $username,
-    region    => $region,
+    region    => lc $region,
     is_default_box   => $is_default_box,
     project_id       => $self->box_project_id,
     run_custom_setup => $should_run_setup,
