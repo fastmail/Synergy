@@ -1120,47 +1120,45 @@ sub _announce_oncall_change ($self, $before, $after) {
   })->retain;
 }
 
-sub _active_incidents_summary ($self) {
-  return $self->_get_incidents(qw(triggered acknowledged))
-    ->then(sub (@incidents) {
-      return Future->done() unless @incidents;
+async sub _active_incidents_summary ($self) {
+  my @incidents = await $self->_get_incidents(qw(triggered acknowledged));
+  return unless @incidents;
 
-      my $count = @incidents;
-      my $title = sprintf("🚨 There %s %d %s on the board: 🚨",
-        PL_V('is', $count),
-        $count,
-        PL_N('incident', $count)
-      );
+  my $count = @incidents;
+  my $title = sprintf("🚨 There %s %d %s on the board: 🚨",
+    PL_V('is', $count),
+    $count,
+    PL_N('incident', $count)
+  );
 
-      my @text;
+  my @text;
 
-      my @bk_items;
+  my @bk_items;
 
-      for my $incident (@incidents) {
-        my $created = $ISO8601->parse_datetime($incident->{created_at});
-        my $ago = ago(time - $created->epoch);
+  for my $incident (@incidents) {
+    my $created = $ISO8601->parse_datetime($incident->{created_at});
+    my $ago = ago(time - $created->epoch);
 
-        push @text, "  - $incident->{description} (fired $ago)";
+    push @text, "  - $incident->{description} (fired $ago)";
 
-        push @bk_items, bk_richsection(
-          bk_link($incident->{html_url}, "#$incident->{incident_number}"),
-          " (fired $ago): $incident->{description}",
-        );
-      }
+    push @bk_items, bk_richsection(
+      bk_link($incident->{html_url}, "#$incident->{incident_number}"),
+      " (fired $ago): $incident->{description}",
+    );
+  }
 
-      my $text = join qq{\n}, $title, @text;
+  my $text = join qq{\n}, $title, @text;
 
-      my $slack = {
-        blocks => bk_blocks(
-          bk_richblock(
-            bk_richsection(bk_bold($title)),
-            bk_ulist(@bk_items),
-          )
-        )->as_struct,
-      };
+  my $slack = {
+    blocks => bk_blocks(
+      bk_richblock(
+        bk_richsection(bk_bold($title)),
+        bk_ulist(@bk_items),
+      )
+    )->as_struct,
+  };
 
-      return Future->done({ text => $text, slack => $slack });
-  });
+  return { text => $text, slack => $slack };
 }
 
 sub _get_pd_account ($self, $token) {
