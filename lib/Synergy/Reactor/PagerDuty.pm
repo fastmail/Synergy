@@ -898,6 +898,13 @@ sub _get_incidents ($self, @statuses) {
   return Future->done(@results);
 }
 
+async sub _get_incident_notes ($self, $incident_id) {
+  my $url = "/incidents/$incident_id/notes";
+  my $notes_data = await $self->_pd_request(GET => $url);
+
+  return $notes_data->{notes};
+}
+
 sub _update_status_for_incidents ($self, $who, $status, $incident_ids) {
   # This just prevents some special-casing elsewhere
   return Future->done unless @$incident_ids;
@@ -1139,12 +1146,26 @@ async sub _active_incidents_summary ($self) {
     my $created = $ISO8601->parse_datetime($incident->{created_at});
     my $ago = ago(time - $created->epoch);
 
-    push @text, "  - $incident->{description} (fired $ago)";
+    my $notes = await $self->_get_incident_notes($incident->{id});
+
+    my @notes_texts = map { $_->{content} } $notes->@*;
+
+    push @text, " - #$incident->{incident_number} $incident->{description} (fired $ago)";
+
+    my @notes_blocks;
+    if (@notes_texts) {
+      push @text, "   #$incident->{incident_number} notes: ";
+      push @text, "   * " . join("\n   * ", @notes_texts);
+
+      @notes_blocks = ("\nnotes: \n", "- ", join("\n- ", @notes_texts));
+    }
 
     push @bk_items, bk_richsection(
       bk_link($incident->{html_url}, "#$incident->{incident_number}"),
       " (fired $ago): $incident->{description}",
+      @notes_blocks,
     );
+
   }
 
   my $text = join qq{\n}, $title, @text;
