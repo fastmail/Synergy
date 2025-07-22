@@ -898,6 +898,13 @@ sub _get_incidents ($self, @statuses) {
   return Future->done(@results);
 }
 
+async sub _get_incident_notes ($self, $incident_id) {
+  my $url = "/incidents/$incident_id/notes";
+  my $notes_data = await $self->_pd_request(GET => $url);
+
+  return $notes_data->{notes};
+}
+
 sub _update_status_for_incidents ($self, $who, $status, $incident_ids) {
   # This just prevents some special-casing elsewhere
   return Future->done unless @$incident_ids;
@@ -1120,47 +1127,59 @@ sub _announce_oncall_change ($self, $before, $after) {
   })->retain;
 }
 
-sub _active_incidents_summary ($self) {
-  return $self->_get_incidents(qw(triggered acknowledged))
-    ->then(sub (@incidents) {
-      return Future->done() unless @incidents;
+async sub _active_incidents_summary ($self) {
+  my @incidents = await $self->_get_incidents(qw(triggered acknowledged));
+  return unless @incidents;
 
-      my $count = @incidents;
-      my $title = sprintf("🚨 There %s %d %s on the board: 🚨",
-        PL_V('is', $count),
-        $count,
-        PL_N('incident', $count)
-      );
+  my $count = @incidents;
+  my $title = sprintf("🚨 There %s %d %s on the board: 🚨",
+    PL_V('is', $count),
+    $count,
+    PL_N('incident', $count)
+  );
 
-      my @text;
+  my @text;
 
-      my @bk_items;
+  my @bk_items;
 
-      for my $incident (@incidents) {
-        my $created = $ISO8601->parse_datetime($incident->{created_at});
-        my $ago = ago(time - $created->epoch);
+  for my $incident (@incidents) {
+    my $created = $ISO8601->parse_datetime($incident->{created_at});
+    my $ago = ago(time - $created->epoch);
 
-        push @text, "  - $incident->{description} (fired $ago)";
+    my $notes = await $self->_get_incident_notes($incident->{id});
 
-        push @bk_items, bk_richsection(
-          bk_link($incident->{html_url}, "#$incident->{incident_number}"),
-          " (fired $ago): $incident->{description}",
-        );
-      }
+    my @notes_texts = map { $_->{content} } $notes->@*;
 
-      my $text = join qq{\n}, $title, @text;
+    push @text, " - #$incident->{incident_number} $incident->{description} (fired $ago)";
 
-      my $slack = {
-        blocks => bk_blocks(
-          bk_richblock(
-            bk_richsection(bk_bold($title)),
-            bk_ulist(@bk_items),
-          )
-        )->as_struct,
-      };
+    my @notes_blocks;
+    if (@notes_texts) {
+      push @text, "   #$incident->{incident_number} notes: ";
+      push @text, "   * " . join("\n   * ", @notes_texts);
 
-      return Future->done({ text => $text, slack => $slack });
-  });
+      @notes_blocks = ("\nnotes: \n", "- ", join("\n- ", @notes_texts));
+    }
+
+    push @bk_items, bk_richsection(
+      bk_link($incident->{html_url}, "#$incident->{incident_number}"),
+      " (fired $ago): $incident->{description}",
+      @notes_blocks,
+    );
+
+  }
+
+  my $text = join qq{\n}, $title, @text;
+
+  my $slack = {
+    blocks => bk_blocks(
+      bk_richblock(
+        bk_richsection(bk_bold($title)),
+        bk_ulist(@bk_items),
+      )
+    )->as_struct,
+  };
+
+  return { text => $text, slack => $slack };
 }
 
 sub _get_pd_account ($self, $token) {
