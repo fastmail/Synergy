@@ -336,17 +336,23 @@ sub _send_plain_text ($self, $channel, $text) {
 }
 
 sub _send_rich_text ($self, $channel, $rich, $alts) {
-  my %extra_args = $alts->{slack_postmessage_args}
-                 ? $alts->{slack_postmessage_args}->%*
-                 : ();
-
-  my $http_future = $self->api_call('chat.postMessage', {
-    %extra_args,
-
-    (ref $rich ? (%$rich) : (text => $rich)),
-    channel => $channel,
+  my %args = (
+    ($alts->{slack_postmessage_args} ? $alts->{slack_postmessage_args}->%* : ()),
+    channel => channel,
     as_user => \1,
-  });
+  );
+
+  if (ref $rich) {
+    unless (blessed $rich && $rich->isa('Slack::BlockKit::BlockCollection')) {
+      $Logger->log_fatal([ 'got non-BlockCollection: %s', $rich ]);
+    }
+
+    $args{blocks} = $rich->as_struct;
+  } else {
+    $args{text} = $rich;
+  }
+
+  my $http_future = $self->api_call('chat.postMessage', \%args);
 
   $http_future->on_fail(sub (@rest) {
     $Logger->log([ "error with chat.postMessage: %s", \@rest ]);

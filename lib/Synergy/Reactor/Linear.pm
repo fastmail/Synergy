@@ -330,9 +330,7 @@ async sub _handle_search ($self, $event, $arg) {
     return await $event->reply(
       "$header:\n$text",
       {
-        slack => {
-          blocks => bk_blocks(bk_richblock(@blocks))->as_struct
-        },
+        slack => bk_blocks(bk_richblock(@blocks)),
       }
     );
   };
@@ -597,9 +595,7 @@ command search => {
     return await $event->$method(
       "$text",
       {
-        slack => {
-          blocks => bk_blocks(bk_richblock(@blocks))->as_struct
-        },
+        slack => bk_blocks(bk_richblock(@blocks))
       }
     );
   });

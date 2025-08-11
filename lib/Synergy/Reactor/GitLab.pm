@@ -975,10 +975,7 @@ async sub _get_pipelines ($self, $text, $event) {
   return await $event->reply(
     $reply,
     {
-      slack => {
-        blocks => bk_blocks(bk_richblock(bk_preformatted(@reply_blocks)))
-          ->as_struct
-      },
+      slack => bk_blocks(bk_richblock(bk_preformatted(@reply_blocks)))
     }
   );
 }

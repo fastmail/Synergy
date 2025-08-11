@@ -384,7 +384,7 @@ EOH
 
     my $content
       = $format eq 'text' ? $channel->_format_message_chonky(\%new_message)
-      : $format eq 'alts' ? YAML::XS::Dump($new_message{alts})
+      : $format eq 'alts' ? JSON::MaybeXS->new->convert_blessed->canonical->encode($new_message{alts})
       : undef;
 
     unless ($content) {
