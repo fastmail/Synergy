@@ -96,7 +96,7 @@ async sub begin_report ($self, $report, $target) {
     $text .= "\n" . $hunk->[0];
 
     if (my $slack = $hunk->[1]{slack}) {
-      push @slack_blocks, ref $slack ? $slack->blocks : bk_mrkdwn($slack);
+      push @slack_blocks, ref $slack ? $slack->blocks : bk_section(bk_mrkdwn($slack));
     } else {
       push @slack_blocks, bk_text($hunk->[0]);
     }
