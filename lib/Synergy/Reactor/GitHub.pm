@@ -171,10 +171,17 @@ async sub pr_report ($self, $who, $arg = {}) {
   return [
     "\N{PENCIL}\N{VARIATION SELECTOR-16} Pull requests awaiting review: " . $data->{prs}->@*,
     {
-      slack => sprintf "\N{PENCIL}\N{VARIATION SELECTOR-16} Pull requests <%s|awaiting review>: %d",
-        $url,
-        0+$data->{prs}->@*,
-    },
+      slack => bk_blocks(
+        bk_richblock(
+          bk_richsection(
+            bk_emoji('pencil'),
+            "Pull requests ",
+            bk_link("$url", "awaiting review"),
+            0+$data->{prs}->@*,
+          ),
+        ),
+      ),
+    }
   ];
 }
 
