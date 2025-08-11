@@ -10,6 +10,8 @@ use Future::AsyncAwait;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 
+use Slack::BlockKit::Sugar -all => { -prefix => 'bk_' };
+
 has default_report => (
   is  => 'ro',
   isa => 'Str',
@@ -87,14 +89,20 @@ async sub begin_report ($self, $report, $target) {
 
   my $title = $report->{title};
   my $text  = qq{$title for } . $target->username . q{:};
-  my $slack = qq{*$text*};
+
+  my @slack_blocks = bk_richblock(bk_richsection(bk_bold($text)));
 
   while (my $hunk = shift @hunks) {
-    $text   .= "\n" . $hunk->[0];
-    $slack  .= "\n" . ($hunk->[1]{slack} // qq{`$hunk->[0]`});
+    $text .= "\n" . $hunk->[0];
+
+    if (my $slack = $hunk->[1]{slack}) {
+      push @slack_blocks, ref $slack ? $slack->blocks : bk_mrkdwn($slack);
+    } else {
+      push @slack_blocks, bk_text($hunk->[0]);
+    }
   }
 
-  return ($text, { slack => $slack });
+  return ($text, { slack => bk_blocks(@slack_blocks) });
 }
 
 command report => {
