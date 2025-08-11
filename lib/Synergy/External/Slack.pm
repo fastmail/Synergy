@@ -338,7 +338,7 @@ sub _send_plain_text ($self, $channel, $text) {
 sub _send_rich_text ($self, $channel, $rich, $alts) {
   my %args = (
     ($alts->{slack_postmessage_args} ? $alts->{slack_postmessage_args}->%* : ()),
-    channel => channel,
+    channel => $channel,
     as_user => \1,
   );
 
