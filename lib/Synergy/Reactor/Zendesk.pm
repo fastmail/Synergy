@@ -230,10 +230,7 @@ async sub _output_ticket ($self, $event, $id) {
   $self->note_ticket_expansion($event, $ticket->id);
 
   return await $event->reply($text, {
-    slack => {
-      blocks => $blocks->as_struct,
-      text => $text,
-    },
+    slack => $blocks,
   });
 }
 

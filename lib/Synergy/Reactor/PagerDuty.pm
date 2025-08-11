@@ -1103,7 +1103,7 @@ sub _announce_oncall_change ($self, $before, $after) {
 
   my $text = join qq{\n}, @lines;
 
-  my @blocks = bk_richsection(bk_richtext($text))->as_struct;
+  my @blocks = bk_richsection(bk_richtext($text));
 
   $self->_active_incidents_summary->then(sub ($summary = {}) {
     if (my $summary_text = delete $summary->{text}) {
@@ -1119,9 +1119,7 @@ sub _announce_oncall_change ($self, $before, $after) {
       $self->oncall_change_announce_address,
       $text,
       {
-        slack => {
-          blocks => [ { type => 'rich_text', elements => \@blocks } ],
-        },
+        slack => bk_blocks(@blocks),
       }
     );
   })->retain;
@@ -1170,14 +1168,12 @@ async sub _active_incidents_summary ($self) {
 
   my $text = join qq{\n}, $title, @text;
 
-  my $slack = {
-    blocks => bk_blocks(
-      bk_richblock(
-        bk_richsection(bk_bold($title)),
-        bk_ulist(@bk_items),
-      )
-    )->as_struct,
-  };
+  my $slack = bk_blocks(
+    bk_richblock(
+      bk_richsection(bk_bold($title)),
+      bk_ulist(@bk_items),
+    )
+  );
 
   return { text => $text, slack => $slack };
 }

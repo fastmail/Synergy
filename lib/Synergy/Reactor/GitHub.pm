@@ -51,9 +51,7 @@ command 'ghr?' => {
     $text,
     {
       slack_postmessage_args => { unfurl_links => \0 },
-      slack => {
-        blocks => bk_blocks(bk_richblock(bk_ulist(@block_items)))->as_struct,
-      }
+      slack => bk_blocks(bk_richblock(bk_ulist(@block_items))),
     },
   );
 };
