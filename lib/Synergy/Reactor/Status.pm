@@ -225,11 +225,7 @@ command status => {
   return await $event->reply(
     $plain,
     {
-      slack => {
-        text         => $slack,
-        unfurl_links => \0,
-        unfurl_media => \0,
-      }
+      slack => $slack,
     }
   );
 };
