@@ -13,7 +13,7 @@ use namespace::autoclean;
 use List::Util qw(max);
 
 use Term::ANSIColor qw(colored);
-use YAML::XS ();
+use JSON::MaybeXS ();
 
 with 'Synergy::Role::Channel';
 
