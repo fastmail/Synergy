@@ -342,14 +342,14 @@ sub _send_rich_text ($self, $channel, $rich, $alts) {
     as_user => \1,
   );
 
-  if (ref $rich) {
-    unless (blessed $rich && $rich->isa('Slack::BlockKit::BlockCollection')) {
-      $Logger->log_fatal([ 'got non-BlockCollection: %s', $rich ]);
-    }
-
+  if (blessed $rich && $rich->isa('Slack::BlockKit::BlockCollection')) {
     $args{blocks} = $rich->as_struct;
-  } else {
+  } elsif (!blessed $rich && ref $rich eq 'HASH') {
+    %args = (%$rich, %args);
+  } elsif (!ref $rich) {
     $args{text} = $rich;
+  } else {
+    $Logger->log_fatal([ 'got unexpected slack alt: %s', $rich ]);
   }
 
   my $http_future = $self->api_call('chat.postMessage', \%args);
