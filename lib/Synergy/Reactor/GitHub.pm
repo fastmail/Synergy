@@ -176,7 +176,7 @@ async sub pr_report ($self, $who, $arg = {}) {
           bk_richsection(
             bk_emoji('pencil'),
             "Pull requests ",
-            bk_link("$url", "awaiting review"),
+            bk_link("$url", "awaiting review: "),
             0+$data->{prs}->@*,
           ),
         ),
