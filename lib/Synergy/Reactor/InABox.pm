@@ -338,8 +338,8 @@ async sub handle_destroy ($self, $event, $switches) {
   my $droplet  = await $boxman->_get_droplet_for($username, $label);
 
   unless ($droplet) {
-    my $name = $self->box_name_for($username, $label);
-    Synergy::X->throw("I can't find a box called $name!");
+    my $name = $boxman->box_name_for($username, $label);
+    Synergy::X->throw_public("I can't find a box called $name!");
   }
 
   # TODO: This has been disabled until we sort out the "ssh to box after setup"
