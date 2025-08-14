@@ -12,17 +12,13 @@ use namespace::clean;
 use Future::AsyncAwait;
 
 use Dobby::BoxManager;
-use Process::Status;
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
 use String::Switches qw(parse_switches canonicalize_names);
-use JSON::MaybeXS;
-use Future::Utils qw(repeat);
 use Text::Template;
 use Time::Duration qw(ago);
 use DateTime::Format::ISO8601;
-use Path::Tiny;
 
 has box_manager_config => (
   is => 'ro',
