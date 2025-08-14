@@ -324,7 +324,7 @@ subtest 'create' => sub {
       {},
       [
         re(qr{Creating $box_name_re in NYC3}i),
-        re(qr{Box created, will now run setup\. Your box is: name: \Qbullseye.alice.fm.local\E}),
+        re(qr{Box created, will now unlock\.  Your box is: name: \Qbullseye.alice.fm.local\E}),
       ],
       'normal create with defaults seems fine',
     );
@@ -425,9 +425,25 @@ subtest 'create' => sub {
       },
       [
         re(qr{Creating $box_name_re in NYC3}),
-        re(qr{Box created, will now run setup\. Your box is: name: \Qfoo.alice.fm.local\E}),
+        re(qr{Box created, will now unlock\.  Your box is: name: \Qfoo.alice.fm.local\E}),
       ],
       'got our two normal messages'
+    );
+  };
+
+  subtest 'good create with /setup' => sub {
+    my $foo_droplet = dclone($alice_droplet);
+    $foo_droplet->{name} =~ s/bullseye/foo/;
+
+    cmp_create_replies(
+      {
+        message => 'box create /setup',
+      },
+      [
+        re(qr{Creating $box_name_re in NYC3}),
+        re(qr{Box created, will now run setup\. Your box is: name: \Qbullseye.alice.fm.local\E}),
+      ],
+      'good create with /setup'
     );
   };
 };
