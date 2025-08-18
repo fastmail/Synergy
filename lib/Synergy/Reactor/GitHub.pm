@@ -157,7 +157,18 @@ async sub pr_report ($self, $who, $arg = {}) {
   my $api_token = $self->get_user_preference($who, 'api-token');
   return unless $username && $api_token;
 
-  my $data = await $self->_get_prs_for_review($who);
+  my $get_prs = $self->_get_prs_for_review($who);
+  await Future->wait_all($get_prs);
+
+  if ($get_prs->is_failed) {
+    my $error = $get_prs->failure;
+
+    if (blessed $error && $error->isa('Synergy::X') && $error->is_public) {
+      return [ "❌ " . $error->message ];
+    }
+  }
+
+  my $data = $get_prs->get;
 
   return unless $data;
 
