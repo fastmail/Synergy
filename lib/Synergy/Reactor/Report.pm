@@ -1,4 +1,5 @@
 use v5.36.0;
+use utf8;
 package Synergy::Reactor::Report;
 
 use Moose;
@@ -87,7 +88,7 @@ async sub begin_report ($self, $report, $target) {
     }
 
     $f->is_done ? $f->get
-                : [ "[ internal error during $desc report ]" ]
+                : [ "❌ [ internal error during $desc report ]" ]
   } @sections;
 
   return unless @hunks;
