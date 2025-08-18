@@ -48,7 +48,7 @@ async sub fixed_text_report ($self, $who, $arg = {}) {
 async sub begin_report ($self, $report, $target) {
   my $hub = $self->hub;
 
-  my @results;
+  my @sections;
 
   for my $section ($report->{sections}->@*) {
     my ($reactor_name, $method, $arg) = @$section;
@@ -68,22 +68,27 @@ async sub begin_report ($self, $report, $target) {
     my $reactor = $hub->reactor_named($reactor_name);
 
     # I think this will need rejiggering later. -- rjbs, 2019-03-22
-    push @results, $reactor->$method(
-      $target,
-      ($arg ? $arg : ()),
-    );
+    push @sections, [
+      "$reactor_name/$method",
+      $reactor->$method(
+        $target,
+        ($arg ? $arg : ()),
+      ),
+    ];
   }
 
-  await Future->wait_all(@results);
+  await Future->wait_all(map {; $_->[1] } @sections);
 
   my @hunks = map {;
-    if ($_->is_failed) {
-      $Logger->log([ "Failure during report: %s", [ $_->failure ] ]);
+    my ($desc, $f) = @$_;
+
+    if ($f->is_failed) {
+      $Logger->log([ "Failure during report: %s", [ $f->failure ] ]);
     }
 
-    $_->is_done ? $_->get
-                : [ "[ internal error during report ]" ]
-  } @results;
+    $f->is_done ? $f->get
+                : [ "[ internal error during $desc report ]" ]
+  } @sections;
 
   return unless @hunks;
 
