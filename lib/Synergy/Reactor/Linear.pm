@@ -202,6 +202,9 @@ listener issue_mention => async sub ($self, $event) {
 
   return unless @matches;
 
+  # if there's more than 3 issues to unroll that's probably spam
+  return unless (@matches < 4);
+
   # Do not warn about missing tokens in public about in-passing mentions
   my $user = $event->from_user;
   if ( $event->is_public
