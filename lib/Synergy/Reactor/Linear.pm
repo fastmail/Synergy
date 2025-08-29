@@ -202,6 +202,11 @@ listener issue_mention => async sub ($self, $event) {
 
   return unless @matches;
 
+  # if there's more than 3 issues to unroll that's probably spam
+  my $max_matches =
+    $self->get_user_preference($event->from_user, 'expando-limit');
+  return unless @matches <= $max_matches;
+
   # Do not warn about missing tokens in public about in-passing mentions
   my $user = $event->from_user;
   if ( $event->is_public
@@ -1200,6 +1205,18 @@ __PACKAGE__->add_preference(
   help      => "Whether the agenda command shows assigned items or not (yes/no)",
   default   => 1,
   validator => async sub ($self, $value, @) { return bool_from_text($value) },
+);
+
+__PACKAGE__->add_preference(
+  name      => 'expando-limit',
+  help      => "Max number of Linear ticket mentions to expand in one post. Default is 999 i.e. never limit",
+  default   => 999,
+  validator => async sub ($self, $value, @) {
+    unless ($value =~ /\A[0-9][0-9]+\z/ && $value < 1000) {
+      return (undef, "Your expando limit has to be a number between 0 and 999, inclusive.");
+    }
+    return $value;
+  }
 );
 
 1;
