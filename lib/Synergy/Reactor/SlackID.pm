@@ -7,7 +7,9 @@ with 'Synergy::Role::Reactor::CommandPost';
 use namespace::clean;
 
 use Future::AsyncAwait;
+
 use List::Util qw(first);
+use Slack::BlockKit::Sugar -all => { -prefix => 'bk_' };
 use Synergy::CommandPost;
 
 command slackid => {
@@ -91,6 +93,22 @@ command slacksnippet => {
   $event->reply("Here's what you said, as a snippet.");
 
   return;
+};
+
+command slackmarkdown => {
+} => async sub ($self, $event, $text) {
+  my $channel = $event->from_channel;
+
+  unless ($channel->can('slack')) {
+    return await $event->error_reply("Sorry, you can't use *slackid* outside Slack");
+  }
+
+  return await $event->reply(
+    "...",
+    {
+      slack => bk_blocks(bk_markdown("## Good news\n\nI look *fabulous*.\n")),
+    }
+  );
 };
 
 1;
