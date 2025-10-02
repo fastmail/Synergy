@@ -1212,7 +1212,7 @@ __PACKAGE__->add_preference(
   help      => "Max number of Linear ticket mentions to expand in one post. Default is 999 i.e. never limit",
   default   => 999,
   validator => async sub ($self, $value, @) {
-    unless ($value =~ /\A[0-9][0-9]+\z/ && $value < 1000) {
+    unless ($value =~ /\A[0-9]+\z/ && $value < 1000) {
       return (undef, "Your expando limit has to be a number between 0 and 999, inclusive.");
     }
     return $value;
