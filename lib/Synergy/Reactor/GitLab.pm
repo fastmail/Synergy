@@ -635,6 +635,39 @@ sub _compile_search ($self, $conds, $event) {
       next COND;
     }
 
+    if ($name eq 'reviewer') {
+      $name = "$name\_id";
+
+      my $not;
+
+      if ($value eq '*' or $value eq '~') {
+        $value = $value eq '*' ? 'Any' : 'None';
+      } else {
+        $not = $value =~ s/\A!//;
+        my $who = $self->resolve_name($value, $event && $event->from_user);
+        unless ($who) {
+          $event->error_reply("I don't know who $value is.");
+          return;
+        }
+
+        my $user_id = $self->get_user_preference($who, 'user-id');
+        unless ($user_id) {
+          $event->error_reply("I don't know the GitLab user id for " .  $who->username . ".");
+          return;
+        }
+
+        $value = $user_id;
+      }
+
+      if ($not) {
+        $uri->query_param_append("not[$name]", $value);
+      } else {
+        $uri->query_param_append($name, $value);
+      }
+
+      next COND;
+    }
+
     if ($name eq 'maybefor') {
       # This is like "assignee" but will ALSO allow "no assignee", which stinks
       # because we have to do it client side, but it's still useful enough to
@@ -1053,39 +1086,35 @@ async sub mr_report ($self, $who, $arg = {}) {
   my @to_report = (
     [
       "awaiting your review",
-      "by:!$username for:$username backlogged:no",
+      "reviewer:$username approved:no backlogged:no",
       {
-        assignee_username => $username,
-        'not[author_username]' => $username,
+        reviewer_username => $username,
+        'not[approved_by_usernames][]' => $username,
         'not[label_name][]' => 'backlogged',
       },
     ],
     [
-      "you're still working on",
-      "by:$username maybefor:$username backlogged:no approved:no",
+      "still with you",
+      "by:$username maybefor:$username reviewer:~ approved:no backlogged:no",
       {
-        # We can't quite link to this correctly, because we need:
-        #
-        #   assignee is $username || assignee is None
-        #
-        # ...and GitLab doesn't have a mechanism to query that.
+        # Can't quite emulate "maybefor" in a URL, but this is close.
         'author_username' => $username,
         'not[label_name][]' => 'backlogged',
         'approved_by_usernames[]', 'None'
       },
     ],
     [
-      "awaiting review by someone else",
-      "by:$username for:!$username for:* backlogged:no",
+      "in review with someone else",
+      "by:$username maybefor:$username reviewer:* approved:no backlogged:no",
       {
-        'not[assignee_username]' => $username,
         'author_username' => $username,
-        'assignee_id' => 'Any',
+        'reviewer_id' => 'Any',
         'not[label_name][]' => 'backlogged',
+        'approved_by_usernames[]', 'None'
       },
     ],
     [
-      "approved and with you",
+      "by you approved",
       "by:$username maybefor:$username approved:yes backlogged:no",
       {
         author_username   => $username,
@@ -1117,9 +1146,10 @@ async sub mr_report ($self, $who, $arg = {}) {
     my $link = $uri->clone;
     $link->query_param($_ => $link_params->{$_}) for keys %$link_params;
 
-    push @text, sprintf "\N{LOWER LEFT CRAYON} Merge requests %s: %i",
+    push @text, sprintf "\N{LOWER LEFT CRAYON} Merge requests %s: %i (%s)",
       $desc,
-      $page->{last_index} == 26 ? '25+' : $page->{last_index};
+      $page->{last_index} == 26 ? '25+' : $page->{last_index},
+      $link;
 
     push @slack, sprintf "\N{LOWER LEFT CRAYON} Merge requests <%s|%s>: %i",
       $link,
