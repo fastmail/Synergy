@@ -12,6 +12,7 @@ use namespace::clean;
 use Future::AsyncAwait;
 
 use Dobby::BoxManager;
+use Lingua::EN::Inflect qw(PL_N);
 use Synergy::CommandPost;
 use Synergy::Logger '$Logger';
 use Synergy::Util qw(bool_from_text reformat_help);
@@ -24,6 +25,19 @@ has box_manager_config => (
   is => 'ro',
   required  => 1,
 );
+
+sub _headless_box_manager ($self) {
+  return Dobby::BoxManager->new({
+    $self->box_manager_config->%*,
+
+    dobby       => $self->dobby,
+
+    error_cb    => sub ($error) { die $error },
+    log_cb      => sub ($log)   { $Logger->log($log) },
+    message_cb  => sub { die "can't send message from headless boxman" },
+    snippet_cb  => sub { die "can't make snippet from headless boxman" },
+  });
+}
 
 sub box_manager_for_event ($self, $event) {
   return Dobby::BoxManager->new({
@@ -236,6 +250,19 @@ async sub handle_status ($self, $event, $switches) {
   }
 
   return await $event->reply("You don't seem to have any boxes.");
+}
+
+async sub box_report ($self, $who, $arg = {}) {
+  my $boxman   = $self->_headless_box_manager;
+  my $droplets = await $boxman->get_droplets_for(
+    $self->_username_for($who)
+  );
+
+  return unless @$droplets;
+
+  my $n = @$droplets;
+  my $text = "You have $n " . PL_N('droplet', $n) . " allocated.";
+  return [ $text, { slack => $text } ];
 }
 
 async sub handle_image ($self, $event, $switches) {
