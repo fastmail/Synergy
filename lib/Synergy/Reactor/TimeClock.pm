@@ -390,7 +390,7 @@ sub check_for_shift_changes ($self) {
 
   my %if = (
     morning => sub ($s, $e) { $s > $global_last       && $s <= $now },
-    # evening => sub ($s, $e) { $e > $global_last + 900 && $e <= $now + 900 },
+    evening => sub ($s, $e) { $e > $global_last + 900 && $e <= $now + 900 },
   );
 
   my %report = map {; $_ => $report_reactor->report_named($_) } keys %if;
