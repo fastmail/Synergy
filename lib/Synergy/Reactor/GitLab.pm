@@ -309,6 +309,15 @@ listener merge_request_mention => async sub ($self, $event) {
       short => \1
     };
 
+    my @reviewer_names = sort map {; $_->{name} }
+                         (($data->{reviewers} // [])->@*);
+    my $reviewer_str = @reviewer_names ? join(q{, }, @reviewer_names) : 'None';
+    push @fields, {
+      title => "Review assignment",
+      value => $reviewer_str,
+      short => \1
+    };
+
     if (my $pipeline = $data->{pipeline}) {
       my $status = ucfirst $pipeline->{status};
       $status =~ s/_/ /g;
