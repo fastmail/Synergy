@@ -1123,7 +1123,7 @@ async sub mr_report ($self, $who, $arg = {}) {
       },
     ],
     [
-      "by you approved",
+      "by you, approved",
       "by:$username maybefor:$username approved:yes backlogged:no",
       {
         author_username   => $username,
