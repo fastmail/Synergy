@@ -394,7 +394,7 @@ __PACKAGE__->add_preference(
     my @known = qw(mon tue wed thu fri sat sun);
     my %is_valid = map {; $_ => 1 } @known;
 
-    my @got = split /[,;]\s+/, lc $value;
+    my @got = split /[,;\s]+/, lc $value;
 
     return [] if @got == 1 and $got[0] eq 'none';
 
