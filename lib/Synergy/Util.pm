@@ -29,6 +29,7 @@ use Sub::Exporter -setup => [ qw(
   known_alphabets
   transliterate
 
+  validate_days_of_week
   validate_business_hours describe_business_hours
   day_name_from_abbr
 
@@ -376,6 +377,23 @@ sub transliterate ($alphabet, $str) {
   _load_alphabets();
   return $str unless exists $Trans{lc $alphabet};
   return $Trans{lc $alphabet}->($str);
+}
+
+sub validate_days_of_week ($value) {
+  my @known = qw(mon tue wed thu fri sat sun);
+  my %is_valid = map {; $_ => 1 } @known;
+
+  my @got = split /[,;\s]+/, lc $value;
+
+  return [] if @got == 1 and $got[0] eq 'none';
+
+  my @bad = grep {; ! $is_valid{$_} } @got;
+  if (@bad) {
+    my $err = q{use 3-letter day abbreviations, separated with commas, like "Wed, Fri" (or "none")};
+    return (undef, $err);
+  }
+
+  return \@got;
 }
 
 sub validate_business_hours ($value) {
