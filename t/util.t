@@ -30,6 +30,12 @@ deeply_ok(
 );
 
 deeply_ok(
+  [ validate_days_of_week("Mon Tue Mon") ],
+  [ qw(mon tue) ],
+  "two-day DOWs, dupes",
+);
+
+deeply_ok(
   [ validate_days_of_week("Tue, Mon") ],
   [ qw(mon tue) ],
   "two-day DOWs, commas, weird order",

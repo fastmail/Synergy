@@ -8,7 +8,7 @@ use Carp;
 use DateTime;
 use DateTime::Format::Natural;
 use JSON::MaybeXS;
-use List::Util qw(first any);
+use List::Util qw(first any uniq);
 use Path::Tiny ();
 use Synergy::Logger '$Logger';
 use Time::Duration::Parse;
@@ -392,7 +392,7 @@ sub validate_days_of_week ($value) {
     return (undef, $err);
   }
 
-  @got = sort {; $known{$a} <=> $known{$b} } @got;
+  @got = sort {; $known{$a} <=> $known{$b} } uniq @got;
 
   return \@got;
 }
