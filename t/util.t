@@ -3,15 +3,48 @@ use v5.36.0;
 use Test::Deep;
 use Test::More;
 
-use Synergy::Util qw(read_config_file);
+use Synergy::Util qw(validate_days_of_week validate_business_hours);
 
-my $toml_file = "eg/local.toml";
+sub deeply_ok ($have_arrayref, $want_ok, $desc) {
+  local $Test::Builder::Level = $Test::Builder::Level + 1;
+  cmp_deeply($have_arrayref->[0], $want_ok, "$desc: ok as expected");
+  is($have_arrayref->[1], undef, "$desc: no error");
+}
 
-my $config = read_config_file($toml_file);
+sub deeply_err ($have_arrayref, $want_err, $desc) {
+  local $Test::Builder::Level = $Test::Builder::Level + 1;
+  is($have_arrayref->[0], undef, "$desc: no 'ok' part");
+  cmp_deeply($have_arrayref->[1], $want_err, "$desc: error as expected");
+}
 
-# Without inflate_booleans, TOML::Parser turns the boolean values into the
-# strings "true" and "false" which is a bit goofy.
-ok(!$config->{channels}{'term-rw'}{send_only}, "we load TOML booleans as 1/0");
-ok( $config->{channels}{'term-wo'}{send_only}, "we load TOML booleans as 1/0");
+deeply_ok(
+  [ validate_days_of_week("Mon, Tue") ],
+  [ qw(mon tue) ],
+  "two-day DOWs, commas",
+);
+
+deeply_ok(
+  [ validate_days_of_week("Mon Tue") ],
+  [ qw(mon tue) ],
+  "two-day DOWs, spaces",
+);
+
+deeply_ok(
+  [ validate_days_of_week("Mon Tue Mon") ],
+  [ qw(mon tue) ],
+  "two-day DOWs, dupes",
+);
+
+deeply_ok(
+  [ validate_days_of_week("Tue, Mon") ],
+  [ qw(mon tue) ],
+  "two-day DOWs, commas, weird order",
+);
+
+deeply_err(
+  [ validate_days_of_week("Mon Gorf Tue") ],
+  re(qr/day abbrev/), # lousy error message, really
+  "bogus date in input",
+);
 
 done_testing;

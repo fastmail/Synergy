@@ -8,7 +8,7 @@ use Carp;
 use DateTime;
 use DateTime::Format::Natural;
 use JSON::MaybeXS;
-use List::Util qw(first any);
+use List::Util qw(first any uniq);
 use Path::Tiny ();
 use Synergy::Logger '$Logger';
 use Time::Duration::Parse;
@@ -29,6 +29,7 @@ use Sub::Exporter -setup => [ qw(
   known_alphabets
   transliterate
 
+  validate_days_of_week
   validate_business_hours describe_business_hours
   day_name_from_abbr
 
@@ -376,6 +377,24 @@ sub transliterate ($alphabet, $str) {
   _load_alphabets();
   return $str unless exists $Trans{lc $alphabet};
   return $Trans{lc $alphabet}->($str);
+}
+
+sub validate_days_of_week ($value) {
+  state %known = qw(sun 0 mon 1 tue 2 wed 3 thu 4 fri 5 sat 6);
+
+  my @got = split /[,;\s]+/, lc $value;
+
+  return [] if @got == 1 and $got[0] eq 'none';
+
+  my @bad = grep {; ! exists $known{$_} } @got;
+  if (@bad) {
+    my $err = q{use 3-letter day abbreviations, separated with commas, like "Wed, Fri" (or "none")};
+    return (undef, $err);
+  }
+
+  @got = sort {; $known{$a} <=> $known{$b} } uniq @got;
+
+  return \@got;
 }
 
 sub validate_business_hours ($value) {

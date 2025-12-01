@@ -391,20 +391,7 @@ __PACKAGE__->add_preference(
     return @all ? WORDLIST(@all) : '<none>';
   },
   validator => async sub ($self, $value, @) {
-    my @known = qw(mon tue wed thu fri sat sun);
-    my %is_valid = map {; $_ => 1 } @known;
-
-    my @got = split /[,;]\s+/, lc $value;
-
-    return [] if @got == 1 and $got[0] eq 'none';
-
-    my @bad = grep {; ! $is_valid{$_} } @got;
-    if (@bad) {
-      my $err = q{use 3-letter day abbreviations, separated with commas, like "Wed, Fri" (or "none")};
-      return (undef, $err);
-    }
-
-    return \@got;
+    return Synergy::Util::validate_days_of_week($value);
   },
 );
 
