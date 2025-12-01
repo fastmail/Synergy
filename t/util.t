@@ -29,6 +29,12 @@ deeply_ok(
   "two-day DOWs, spaces",
 );
 
+deeply_ok(
+  [ validate_days_of_week("Tue, Mon") ],
+  [ qw(mon tue) ],
+  "two-day DOWs, commas, weird order",
+);
+
 deeply_err(
   [ validate_days_of_week("Mon Gorf Tue") ],
   re(qr/day abbrev/), # lousy error message, really

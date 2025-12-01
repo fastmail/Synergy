@@ -380,18 +380,19 @@ sub transliterate ($alphabet, $str) {
 }
 
 sub validate_days_of_week ($value) {
-  my @known = qw(mon tue wed thu fri sat sun);
-  my %is_valid = map {; $_ => 1 } @known;
+  state %known = qw(sun 0 mon 1 tue 2 wed 3 thu 4 fri 5 sat 6);
 
   my @got = split /[,;\s]+/, lc $value;
 
   return [] if @got == 1 and $got[0] eq 'none';
 
-  my @bad = grep {; ! $is_valid{$_} } @got;
+  my @bad = grep {; ! exists $known{$_} } @got;
   if (@bad) {
     my $err = q{use 3-letter day abbreviations, separated with commas, like "Wed, Fri" (or "none")};
     return (undef, $err);
   }
+
+  @got = sort {; $known{$a} <=> $known{$b} } @got;
 
   return \@got;
 }
