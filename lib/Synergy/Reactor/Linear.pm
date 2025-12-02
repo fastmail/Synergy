@@ -103,6 +103,14 @@ has team_aliases => (
   }
 );
 
+has no_self_triage_teams => (
+  default => sub {  []  },
+  traits  => [ 'Array' ],
+  handles => {
+    no_self_triage_teams => 'elements',
+  },
+);
+
 has team_macros => (
   is => 'ro',
   traits  => [ 'Hash' ],
@@ -930,6 +938,28 @@ responder update_project => {
   });
 };
 
+async sub _maybe_populate_state ($self, $linear, $user, $plan) {
+  return if $plan->{stateId};
+
+  # if creator's default team is this team, if this team is set to
+  # noSelfTriage, populate state id
+  return unless $user; # Surely never happens? -- rjbs, 2025-12-02
+
+  my $linear_user = await $linear->lookup_user($user->username);
+  return unless $linear_user;
+  my %in_team = map {; $_->{id} => 1 } $linear_user->{teams}{nodes}->@*;
+
+  return unless $in_team{ $plan->{teamId} };
+
+  my $teams = await $linear->teams;
+  my ($team) = grep {; $_->{id} eq $plan->{teamId} } values %$teams;
+
+  if (grep {; fc $_ eq fc $team->{key} } $self->no_self_triage_teams) {
+    $plan->{stateId} = $team->{defaultIssueState}{id};
+    $plan->{assigneeId} //= $linear_user->{id};
+  }
+}
+
 async sub _handle_creation_event ($self, $event, $arg = {}) {
   $event->mark_handled;
 
@@ -956,6 +986,8 @@ async sub _handle_creation_event ($self, $event, $arg = {}) {
     };
 
     $plan_munger->($plan) if $plan_munger;
+
+    await $self->_maybe_populate_state($linear, $event->from_user, $plan);
 
     my $query_result = await $linear->create_issue($plan);
 
