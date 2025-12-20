@@ -912,9 +912,8 @@ sub _update_status_for_incidents ($self, $who, $status, $incident_ids) {
   my @todo = @$incident_ids;
   my @incidents;
 
-  # *Surely* we won't have more than 500 at a time, right? Right?! Anyway,
-  # 500 is the PagerDuty max for this endpoint.
-  while (my @ids = splice @todo, 0, 500) {
+  # The PagerDuty API will reject updates for over 250 items.
+  while (my @ids = splice @todo, 0, 250) {
     my @put = map {;
       +{
         id => $_,
