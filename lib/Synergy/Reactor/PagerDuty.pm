@@ -797,7 +797,7 @@ sub _check_long_maint ($self) {
     })->retain;
 }
 
-sub _oncall_tree($self) {
+sub _oncall_tree ($self) {
 
   my %should_ignore = map {; $_ => 1 } $self->suppressed_user_ids;
 
@@ -952,7 +952,7 @@ sub _ack_all ($self, $event) {
     });
 }
 
-sub _resolve_incidents($self, $event, $arg) {
+sub _resolve_incidents ($self, $event, $arg) {
   my $whose = $arg->{whose};
   my $only_pending = $arg->{only_pending};
   Carp::confess("_resolve_incidents called with bogus args")
