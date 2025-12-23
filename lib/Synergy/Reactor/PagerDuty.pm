@@ -797,7 +797,7 @@ sub _check_long_maint ($self) {
     })->retain;
 }
 
-sub _oncall_tree($self) {
+sub _oncall_tree ($self) {
 
   my %should_ignore = map {; $_ => 1 } $self->suppressed_user_ids;
 
@@ -912,9 +912,8 @@ sub _update_status_for_incidents ($self, $who, $status, $incident_ids) {
   my @todo = @$incident_ids;
   my @incidents;
 
-  # *Surely* we won't have more than 500 at a time, right? Right?! Anyway,
-  # 500 is the PagerDuty max for this endpoint.
-  while (my @ids = splice @todo, 0, 500) {
+  # The PagerDuty API will reject updates for over 250 items.
+  while (my @ids = splice @todo, 0, 250) {
     my @put = map {;
       +{
         id => $_,
@@ -952,7 +951,7 @@ sub _ack_all ($self, $event) {
     });
 }
 
-sub _resolve_incidents($self, $event, $arg) {
+sub _resolve_incidents ($self, $event, $arg) {
   my $whose = $arg->{whose};
   my $only_pending = $arg->{only_pending};
   Carp::confess("_resolve_incidents called with bogus args")
