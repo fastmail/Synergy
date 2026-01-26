@@ -313,6 +313,7 @@ command teams => {
 
 async sub _handle_search ($self, $event, $arg) {
   my $search = $arg->{search};
+  my $sort   = $arg->{sort};
   my $zero   = $arg->{zero};
   my $header = $arg->{header};
   my $linear = $arg->{linear};
@@ -328,7 +329,13 @@ async sub _handle_search ($self, $event, $arg) {
     my $text   = q{};
     my @blocks = bk_richsection(bk_bold($header));
 
-    for my $node ($page->payload->{nodes}->@*) {
+    my @nodes = $page->payload->{nodes}->@*;
+
+    if ($sort) {
+      @nodes = sort $sort @nodes;
+    }
+
+    for my $node (@nodes) {
       my $icon = $want_plain ? '' : $self->_icon_for_issue($node);
       $text  .= "$node->{identifier} $icon $node->{title}\n";
       push @blocks, bk_richsection(
@@ -681,6 +688,9 @@ command sb => {
         zero   => "No support blockers!  Great!",
         header => "Current support blockers",
         linear => $linear,
+        sort   => sub {  $a->{team}{name} cmp $b->{team}{name}
+                      || $a->{identifier} cmp $b->{identifier}
+                      }
       },
     );
   });
