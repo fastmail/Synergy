@@ -235,19 +235,6 @@ responder 'maint-start' => {
     return await $event->error_reply("I don't know you, so I'm ignoring that.");
   }
 
-  unless ($force) {
-    my $is_oncall = await $self->_user_is_oncall($event->from_user);
-
-    unless ($is_oncall) {
-      return await $event->error_reply(join(q{ },
-        "You don't seem to be on call right now.",
-        "Usually, the person oncall is getting the alerts, so they should be",
-        "the one to decide whether or not to shut them up.",
-        "If you really want to do this, try again with /force."
-      ));
-    }
-  }
-
   my @maints = await $self->_relevant_maint_windows;
 
   if (@maints) {
