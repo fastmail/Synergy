@@ -35,7 +35,7 @@ sub _headless_box_manager ($self) {
     error_cb    => sub ($error) { die $error },
     log_cb      => sub ($log)   { $Logger->log($log) },
     message_cb  => sub { die "can't send message from headless boxman" },
-    snippet_cb  => sub { die "can't make snippet from headless boxman" },
+    logsnippet_cb => sub { die "can't make snippet from headless boxman" },
   });
 }
 
@@ -48,7 +48,7 @@ sub box_manager_for_event ($self, $event) {
     error_cb    => sub ($error) { Synergy::X->throw_public($error) },
     log_cb      => sub ($log)   { $Logger->log($log) },
     message_cb  => sub ($msg)   { $event->reply($msg) },
-    snippet_cb  => $self->_mk_snippet_cb($event),
+    logsnippet_cb  => $self->_mk_logsnippet_cb($event),
   });
 }
 
@@ -325,13 +325,18 @@ async sub handle_create ($self, $event, $switches) {
   return;
 }
 
-sub _mk_snippet_cb ($self, $event) {
+sub _mk_logsnippet_cb ($self, $event) {
   # If there's a pastebin/snippet capable reactor, use that.
   # Otherwise, discard stdout/stderr and just provide an error message.
   if ($self->snippet_reactor_name && $self->hub->reactor_named($self->snippet_reactor_name)) {
     my $reactor = $self->hub->reactor_named($self->snippet_reactor_name);
-    return async sub ($snippet) {
-      return await $reactor->post_gitlab_snippet($snippet);
+    return async sub ($text_ref, $arg) {
+      return if $arg->{success};
+      return await $reactor->post_gitlab_snippet({
+        title     => "inabox setup failure report",
+        file_name => "inabox-setup-failure-report.txt",
+        content   => $$text_ref,
+      });
     };
   }
 
