@@ -332,11 +332,21 @@ sub _mk_logsnippet_cb ($self, $event) {
     my $reactor = $self->hub->reactor_named($self->snippet_reactor_name);
     return async sub ($text_ref, $arg) {
       return if $arg->{success};
-      return await $reactor->post_gitlab_snippet({
-        title     => "inabox setup failure report",
-        file_name => "inabox-setup-failure-report.txt",
-        content   => $$text_ref,
-      });
+      my $url = eval {
+        await $reactor->post_gitlab_snippet({
+          title     => "inabox setup failure report",
+          file_name => "inabox-setup-failure-report.txt",
+          content   => $$text_ref,
+        });
+      };
+
+      if ($url) {
+        return "You can find more details at: $url";
+      } else {
+        my $error = "$@";
+        $Logger->log("error producing snippet: $error");
+        return "Sadly, I couldn't log the details into a snippet.";
+      }
     };
   }
 
