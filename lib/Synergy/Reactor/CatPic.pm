@@ -212,6 +212,62 @@ sub _build_reactions ($self, @) {
   return $reactions;
 }
 
+responder llama_pic => {
+  exclusive => 1,
+  targeted  => 1,
+  help_titles => [ 'llama pic' ],
+  help      => '*llama pic*: get a picture of a llama',
+  matcher   => sub ($text, @) {
+    return unless $text =~ /\Allama\spic\z/i;
+    return [];
+  },
+}, sub ($self, $event) {
+  $event->mark_handled;
+
+  my $http_future = $self->hub->http_client->GET(
+    "https://llama-as-a-service.vercel.app/llama_url"
+  );
+
+  return $http_future->on_done(sub($res)  {
+    
+    if ($res->code == 200)  {
+      $event->reply($res->content);
+      return;
+    }
+    
+    $event->reply("Error while retrieving llama pictures!")
+  
+  });
+};
+
+responder llama_fax => {
+  exclusive => 1,
+  targeted  => 1,
+  help_titles => [ 'llama fax' ],
+  help      => '*llama fax*: get a fact about a llama',
+  matcher   => sub ($text, @) {
+    return unless $text =~ /\Allama\s(facts?|fax)\z/i;
+    return [];
+  },
+}, sub ($self, $event) {
+  $event->mark_handled;
+
+  my $http_future = $self->hub->http_client->GET(
+    "https://llama-as-a-service.vercel.app/llama_fax"
+  );
+
+  return $http_future->on_done(sub($res)  {
+    
+    if ($res->code == 200)  {
+      $event->reply($res->content);
+      return;
+    }
+
+    $event->reply("Error while retrieving llama fax!")
+  
+  });
+};
+
 responder cat_pic => {
   exclusive => 1,
   targeted  => 1,
