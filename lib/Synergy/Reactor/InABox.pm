@@ -10,7 +10,7 @@ with 'Synergy::Role::Reactor::CommandPost',
 use namespace::clean;
 
 use Future::AsyncAwait;
-
+use Defined::KV;
 use Dobby::BoxManager;
 use Lingua::EN::Inflect qw(PL_N);
 use Synergy::CommandPost;
@@ -186,11 +186,13 @@ command box => {
     region      => 'datacentre',
     tag         => 'label',
     ident       => 'label',
+    imageid     => 'image_id',
+    snapshotid  => 'image_id',
   });
 
   my %switches = map { my ($k, @rest) = @$_; $k => \@rest } @$switches;
 
-  for my $k (qw( version label size datacentre )) {
+  for my $k (qw( version label size datacentre image_id)) {
     next unless $switches{$k};
     $switches{$k} = $switches{$k}[0];
   }
@@ -278,7 +280,7 @@ async sub handle_image ($self, $event, $switches) {
   return await $event->reply("Would create box from image '$snapshot->{name}' (created $ago)");
 }
 
-my %IS_CREATE_SWITCH = map {; $_ => 1 } qw( datacentre setup size nosetup );
+my %IS_CREATE_SWITCH = map {; $_ => 1 } qw( datacentre setup size nosetup image_id );
 
 async sub handle_create ($self, $event, $switches) {
   my ($version, $label, $is_default_box) = $self->_determine_version_and_label($event, $switches);
@@ -317,7 +319,8 @@ async sub handle_create ($self, $event, $switches) {
     extra_tags       => [ 'fminabox' ],
 
     ssh_key_id => $self->ssh_key_id,
-    digitalocean_ssh_key_name => $self->digitalocean_ssh_key_name
+    digitalocean_ssh_key_name => $self->digitalocean_ssh_key_name,
+    defined_kv(image_id => $switches->{image_id}),
   });
 
   my $boxman  = $self->box_manager_for_event($event);
