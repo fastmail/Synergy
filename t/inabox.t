@@ -5,18 +5,18 @@ use utf8;
 use lib 't/lib';
 
 use Test::Requires {
-  'Dobby::Client' => 0, # skip all if Dobby::Client isn't installed
+  'Dobby::TestClient' => 0, # skip all if Dobby::TestClient isn't installed
 };
 
 use Future;
-use IO::Async::Test;
+use HTTP::Response;
 use JSON::MaybeXS qw(encode_json);
-use Plack::Response;
-use Sub::Override;
 use Storable qw(dclone);
+use Sub::Override;
 use Test::More;
 use Test::Deep;
 
+use Dobby::TestClient;
 use Synergy::Logger::Test '$Logger';
 use Synergy::Reactor::InABox;
 use Synergy::Tester;
@@ -40,32 +40,20 @@ my $synergy = Synergy::Tester->new_tester({
   },
   default_from => 'alice',
   users => {
-    alice   => undef,
-    bob => undef,
+    alice => undef,
+    bob   => undef,
   },
 });
 
-# Set up a bunch of nonsense
 my $channel = $synergy->test_channel;
 
-# Fake up responses from VO.
-my @DO_RESPONSES;
-my $DO_RESPONSE = gen_response(200, {});
-$synergy->server->register_path(
-  '/digital-ocean',
-  sub {
-    return shift @DO_RESPONSES if @DO_RESPONSES;
-    return $DO_RESPONSE;
-  },
-  'test file',
-);
-
-my $url = sprintf("http://localhost:%s/digital-ocean", $synergy->server->server_port);
-
-# Muck with the guts of Dobby to catch our fakes.
-my $endpoint = Sub::Override->new(
-  'Dobby::Client::api_base',
-  sub { return $url },
+# Create a Dobby::TestClient and inject it into the InABox reactor so all
+# Dobby API calls are intercepted without real network access.
+my $dobby = Dobby::TestClient->new(bearer_token => '1234');
+$synergy->loop->add($dobby);
+my $dobby_guard = Sub::Override->new(
+  'Synergy::Reactor::InABox::dobby',
+  sub { $dobby },
 );
 
 # We assert that we have a key file in real use, but we nerf it in testing.
@@ -86,12 +74,6 @@ my $mg_guard = Sub::Override->new(
   sub { return Future->done({ ok => 1 }) },
 );
 
-# dumb convenience methods
-sub gen_response ($code, $data) {
-  my $json = encode_json($data);
-  return Plack::Response->new($code, [], $json)->finalize;
-}
-
 sub cmp_replies ($text, $want, $desc = "got expected replies", $arg = {}) {
   my $result = $synergy->run_test_program([[
     send => {
@@ -110,6 +92,14 @@ sub cmp_replies ($text, $want, $desc = "got expected replies", $arg = {}) {
     $want,
     $desc,
   )
+}
+
+# Return an HTTP::Response with JSON body, for use in register_url_handler.
+sub json_res ($data, $code = 200) {
+  my $res = HTTP::Response->new($code, 'OK');
+  $res->header('Content-Type' => 'application/json');
+  $res->content(encode_json($data));
+  return $res;
 }
 
 # minimal data for _format_droplet
@@ -132,8 +122,20 @@ my $alice_droplet = {
   },
 };
 
+# A size available in our configured datacentres, matching default_box_size.
+my $test_size = {
+  slug         => 'g-4vcpu-16gb',
+  available    => 1,
+  regions      => ['nyc3', 'sfo3'],
+  price_hourly => 0.119,
+  vcpus        => 4,
+  memory       => 16384,
+  disk         => 100,
+  description  => 'General Purpose',
+};
+
 subtest 'status' => sub {
-  $DO_RESPONSE = gen_response(200, { droplets => [ $alice_droplet ] });
+  $dobby->register_url_json('/droplets', { droplets => [ $alice_droplet ] });
 
   cmp_replies(
     'synergy: box status',
@@ -141,7 +143,7 @@ subtest 'status' => sub {
     'alice has a box and synergy says so'
   );
 
-  $DO_RESPONSE = gen_response(200, { droplets => [ ] });
+  $dobby->register_url_json('/droplets', { droplets => [ ] });
 
   cmp_replies(
     'synergy: box status',
@@ -167,15 +169,14 @@ subtest 'poweron' => sub {
 
   # now off
   local $alice_droplet->{status} = 'off';
-  @DO_RESPONSES = (
-    gen_response(200, { action => { id => 987 } }),
-    gen_response(200, { action => { status => 'completed'   } }),
-  );
+
+  $dobby->register_url_json('/droplets/123/actions',     { action => { id => 987 } });
+  $dobby->register_url_json('/droplets/123/actions/987', { action => { status => 'completed' } });
 
   cmp_replies(
     'synergy: box poweron',
     [
-      "I've started powering on that box…",
+      "I've started powering on that box\x{2026}",
       "That box has been powered on.",
     ],
     "expected reply sequence from poweron",
@@ -184,15 +185,13 @@ subtest 'poweron' => sub {
 
 for my $method (qw(poweroff shutdown)) {
   subtest $method => sub {
-    @DO_RESPONSES = (
-      gen_response(200, { action => { id => 987 } }),
-      gen_response(200, { action => { status => 'completed' } }),
-    );
+    $dobby->register_url_json('/droplets/123/actions',     { action => { id => 987 } });
+    $dobby->register_url_json('/droplets/123/actions/987', { action => { status => 'completed' } });
 
     cmp_replies(
       "synergy: box $method",
       [
-        re(qr{I've started (powering off|shutting down) that box…}),
+        re(qr{I've started (powering off|shutting down) that box\x{2026}}),
         re(qr{That box has been (powered off|shut down)}),
       ],
       'successfully turned off',
@@ -210,6 +209,9 @@ for my $method (qw(poweroff shutdown)) {
 }
 
 subtest 'destroy' => sub {
+  $dobby->register_url_json('/domains/fm.local/records', { domain_records => [] });
+  $dobby->register_url_json('/droplets/123', {});
+
   cmp_replies(
     'synergy: box destroy',
     [ re(qr{powered on.*use force to destroy it}) ],
@@ -243,79 +245,64 @@ subtest 'destroy' => sub {
   );
 };
 
-my %CREATE_RESPONSES = (
-  first_droplet_fetch => gen_response(200, {
-    droplets => []
-  }),
-
-  snapshot_fetch => gen_response(200, {
-    snapshots => [{
-      id => 42,
-      name => 'fminabox-bullseye-20200202',
-      regions => [ 'nyc3', 'sfo3'],
-    }]
-  }),
-
-  ssh_key_fetch => gen_response(200, {
-    ssh_keys => [{
-      name => 'synergy',
-      id => 99,
-    }],
-  }),
-
-  droplet_create => gen_response(201, {
-    droplet => { id => 8675309 },
-    links => {
-      actions => [{ id => 215 }],
-    },
-  }),
-
-  action_fetch => gen_response(200, {
-    action => { status => 'completed' }
-  }),
-
-  last_droplet_fetch => gen_response(200, {
-    droplets => [ $alice_droplet ],
-  }),
-
-  dns_fetch => gen_response(200, {}),
-  dns_post  => gen_response(200, {}),
-);
-
 subtest 'create' => sub {
   undef $droplet_guard;
 
   my $box_name_re = qr{[-a-z0-9.]+}i;
 
+  my sub setup_create ($override) {
+    # /droplets is called as GET (check existence), POST (create), GET (fetch after create).
+    my @droplet_get_responses = (
+      $override->{first_droplet_fetch} // { droplets => [] },
+      $override->{last_droplet_fetch}  // { droplets => [ $alice_droplet ] },
+    );
+    my $droplet_post_response = $override->{droplet_create} // {
+      droplet => { id => 8675309 },
+      links   => { actions => [{ id => 215 }] },
+    };
+    $dobby->register_url_handler('/droplets', sub ($req) {
+      return json_res($req->method eq 'POST'
+        ? $droplet_post_response
+        : (shift @droplet_get_responses // { droplets => [] }));
+    });
+
+    $dobby->register_url_json('/snapshots',
+      $override->{snapshot_data} // {
+        snapshots => [{
+          id      => 42,
+          name    => 'fminabox-bullseye-20200202',
+          regions => ['nyc3', 'sfo3'],
+        }]
+      }
+    );
+
+    $dobby->register_url_json('/sizes', { sizes => [ $test_size ] });
+
+    $dobby->register_url_json('/account/keys',
+      $override->{ssh_key_data} // {
+        ssh_keys => [{ name => 'synergy', id => 99 }],
+      }
+    );
+
+    $dobby->register_url_json('/actions/215',
+      $override->{action_data} // { action => { status => 'completed' } }
+    );
+
+    # DNS: GET returns empty records; POST (create) returns empty object.
+    $dobby->register_url_handler('/domains/fm.local/records', sub ($req) {
+      return json_res($req->method eq 'POST' ? {} : { domain_records => [] });
+    });
+  }
+
   my sub cmp_create_replies ($override, $want, $desc = "got expected replies") {
-    my sub resp_for ($key) { $override->{$key} // $CREATE_RESPONSES{$key} }
-    my $msg = $override->{message} // "box create";
-
-    @DO_RESPONSES = (
-      resp_for('first_droplet_fetch'),
-      resp_for('snapshot_fetch'),
-      resp_for('ssh_key_fetch'),
-      resp_for('droplet_create'),
-      resp_for('action_fetch'),
-      resp_for('last_droplet_fetch'),
-      resp_for('dns_fetch'),
-      resp_for('dns_post'),
-    );
-
+    setup_create($override);
     local $Test::Builder::Level = $Test::Builder::Level + 1;
-
-    cmp_replies(
-      "synergy: $msg",
-      $want,
-      $desc,
-    );
+    cmp_replies("synergy: " . ($override->{message} // "box create"), $want, $desc);
   }
 
   subtest 'already have a box' => sub {
     cmp_create_replies(
-      {
-        first_droplet_fetch => $CREATE_RESPONSES{last_droplet_fetch}
-      },
+      { first_droplet_fetch => { droplets => [ $alice_droplet ] } },
       [ re(qr{This box already exists}) ],
     );
   };
@@ -332,44 +319,32 @@ subtest 'create' => sub {
   };
 
   subtest 'bad snapshot region' => sub {
+    # The snapshot is only in regions that don't overlap with any available
+    # size/region combination, so find_provisioning_candidates comes up empty.
     cmp_create_replies(
       {
-        snapshot_fetch => gen_response(200 => {
+        snapshot_data => {
           snapshots => [{
-            id => 42,
-            name => 'fminabox-bullseye-20200202',
-            regions => [ 'zzz', 'aaa'],
+            id      => 42,
+            name    => 'fminabox-bullseye-20200202',
+            regions => ['zzz', 'aaa'],
           }]
-        }),
+        },
       },
-      [
-        re(qr{Creating $box_name_re in NYC3}i),
-        "The snapshot you want (fminabox-bullseye-20200202) isn't available in NYC3.  You could create it in any of these regions: AAA, ZZZ"
-      ],
+      [ re(qr{No available combination}) ],
       'bad snapshot region, messages ok'
     );
   };
 
   subtest 'bad snapshot / ssh key' => sub {
-    # This is racy, because Future->needs_all fails immediately with the first
-    # failure, and depending on what order the reactor decides to fire off the
-    # requests in, it might get one before the other. That's fine, I think,
-    # because all we care about is that there's some useful message.
     cmp_create_replies(
-      {
-        snapshot_fetch => gen_response(200 => { snapshots => [] }),
-      },
-      [
-        re(qr{Creating $box_name_re in NYC3}i),
-        re(qr{no snapshot found}),
-      ],
+      { snapshot_data => { snapshots => [] } },
+      [ re(qr{no snapshot found}) ],
       'no snapshot, messages ok'
     );
 
     cmp_create_replies(
-      {
-        ssh_key_fetch => gen_response(200 => { ssh_keys => [] }),
-      },
+      { ssh_key_data => { ssh_keys => [] } },
       [
         re(qr{Creating $box_name_re in NYC3}i),
         re(qr{find a DO ssh key}),
@@ -380,9 +355,7 @@ subtest 'create' => sub {
 
   subtest 'failed create' => sub {
     cmp_create_replies(
-      {
-        droplet_create => gen_response(200 => {})
-      },
+      { droplet_create => {} },
       [
         re(qr{Creating $box_name_re}),
         re(qr{Something weird happened and I've logged it}),
@@ -393,11 +366,7 @@ subtest 'create' => sub {
 
   subtest 'failed action fetch' => sub {
     cmp_create_replies(
-      {
-        action_fetch => gen_response(200 => {
-          action => { status => 'errored' },
-        }),
-      },
+      { action_data => { action => { status => 'errored' } } },
       [
         re(qr{Creating $box_name_re}),
         re(qr{Something weird happened and I've logged it}),
@@ -412,17 +381,15 @@ subtest 'create' => sub {
 
     cmp_create_replies(
       {
-        message => 'box create /version foo',
-        snapshot_fetch => gen_response(200, {
+        message       => 'box create /version foo',
+        snapshot_data => {
           snapshots => [{
-            id => 42,
-            name => 'fminabox-foo-20201004',
-            regions => [ 'nyc3', 'sf03' ],
+            id      => 42,
+            name    => 'fminabox-foo-20201004',
+            regions => ['nyc3', 'sfo3'],
           }]
-        }),
-        last_droplet_fetch => gen_response(200, {
-          droplets => [ $foo_droplet ],
-        }),
+        },
+        last_droplet_fetch => { droplets => [ $foo_droplet ] },
       },
       [
         re(qr{Creating $box_name_re in NYC3}),
@@ -433,13 +400,8 @@ subtest 'create' => sub {
   };
 
   subtest 'good create with /setup' => sub {
-    my $foo_droplet = dclone($alice_droplet);
-    $foo_droplet->{name} =~ s/bullseye/foo/;
-
     cmp_create_replies(
-      {
-        message => 'box create /setup',
-      },
+      { message => 'box create /setup' },
       [
         re(qr{Creating $box_name_re in NYC3}),
         re(qr{Box created, will now run setup\. Your box is: name: \Qbullseye.alice.fm.local\E}),
