@@ -37,6 +37,10 @@ async sub start {}
 # Synergy::Channel::Slack for an example.)
 sub note_reply ($self, $event, $future, $args = {}) { }
 
+sub send_expando_message ($self, $event, $text, $alts = {}) {
+  return $self->send_message($event->conversation_address, $text, $alts);
+}
+
 has _pre_message_hooks => (
   is => 'ro',
   isa => 'ArrayRef[CodeRef]',

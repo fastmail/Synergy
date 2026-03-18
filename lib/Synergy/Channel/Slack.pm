@@ -306,6 +306,45 @@ sub send_message ($self, $target, $text, $alts = {}) {
   return $f;
 }
 
+has expando_thread_channels => (
+  is      => 'ro',
+  isa     => 'ArrayRef[Str]',
+  default => sub { [] },
+);
+
+has _expando_thread_channel_ids => (
+  is      => 'ro',
+  isa     => 'HashRef',
+  lazy    => 1,
+  default => sub ($self) {
+    my %ids;
+    for my $name ($self->expando_thread_channels->@*) {
+      (my $bare = $name) =~ s/^#//;
+      if (my $ch = $self->slack->channel_named($bare)) {
+        $ids{ $ch->{id} } = 1;
+      } else {
+        $Logger->log("expando_thread_channels: no channel named '$bare'");
+      }
+    }
+    return \%ids;
+  },
+);
+
+sub send_expando_message ($self, $event, $text, $alts = {}) {
+  my $target = $event->conversation_address;
+  if ($self->_expando_thread_channel_ids->{$target}) {
+    $alts = {
+      %$alts,
+      slack => ($alts->{slack} // $text),
+      slack_postmessage_args => {
+        ($alts->{slack_postmessage_args} ? $alts->{slack_postmessage_args}->%* : ()),
+        thread_ts => $event->transport_data->{ts},
+      },
+    };
+  }
+  return $self->send_message($target, $text, $alts);
+}
+
 # TODO: don't send ephemeral messages to the same user, in the same channel,
 # about the same thing. That requires more state than I'm willing to write
 # right now, because that state should properly go in the reactors. But since

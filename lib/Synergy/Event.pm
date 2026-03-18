@@ -140,7 +140,7 @@ sub reply_error ($self, $text, $alts = {}) {
   return $self->reply($text, $alts, { was_error => 1 });
 }
 
-sub reply ($self, $text, $alts = {}, $args = {}) {
+sub _generic_reply ($self, $send_cb, $text, $alts = {}, $args = {}) {
   $Logger->log_debug("sending $text to someone");
 
   my $prefix = $self->from_user && $self->is_public
@@ -155,14 +155,24 @@ sub reply ($self, $text, $alts = {}, $args = {}) {
 
   $self->from_channel->run_pre_message_hooks($self, \$text, $alts);
 
-  my $future = $self->from_channel->send_message(
-    $self->conversation_address,
-    $text,
-    $alts,
-  );
+  my $future = $send_cb->($text, $alts);
 
   $self->from_channel->note_reply($self, $future, $args);
   return $future;
+}
+
+sub reply ($self, $text, $alts = {}, $args = {}) {
+  return $self->_generic_reply(
+    sub ($t, $a) { $self->from_channel->send_message($self->conversation_address, $t, $a) },
+    $text, $alts, $args,
+  );
+}
+
+sub expando_reply ($self, $text, $alts = {}, $args = {}) {
+  return $self->_generic_reply(
+    sub ($t, $a) { $self->from_channel->send_expando_message($self, $t, $a) },
+    $text, $alts, $args,
+  );
 }
 
 sub private_reply ($self, $text, $alts = {}) {
