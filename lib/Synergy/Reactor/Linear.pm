@@ -284,7 +284,7 @@ listener issue_mention => async sub ($self, $event) {
 
       my $text = "$found $icon $issue->{title} • $issue->{url}";
       my $slack_link = $self->_slack_item_link($issue);
-      $event->reply($text, { slack => "$slack_link $icon $issue->{title}" });
+      $event->expando_reply($text, { slack => "$slack_link $icon $issue->{title}" });
     }
   });
 };

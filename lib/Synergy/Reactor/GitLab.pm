@@ -341,7 +341,7 @@ listener merge_request_mention => async sub ($self, $event) {
       }],
     };
 
-    $event->reply($reply, { slack => $slack });
+    $event->expando_reply($reply, { slack => $slack });
     $replied++;
   }
 
@@ -452,7 +452,7 @@ listener mention_commit => async sub ($self, $event) {
       }],
     };
 
-    $event->reply($reply, { slack => $slack });
+    $event->expando_reply($reply, { slack => $slack });
     $replied++;
   }
 
