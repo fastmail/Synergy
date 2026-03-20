@@ -126,7 +126,9 @@ has state_dbh => (
 );
 
 sub _maybe_create_state_tables ($self) {
-  $self->state_dbh->do(q{
+  my $dbh = $self->state_dbh;
+
+  $dbh->do(q{
     CREATE TABLE IF NOT EXISTS synergy_state (
       reactor_name TEXT PRIMARY KEY,
       stored_at INTEGER NOT NULL,
@@ -134,23 +136,24 @@ sub _maybe_create_state_tables ($self) {
     );
   });
 
-  $self->state_dbh->do(q{
+  $dbh->do(q{
     CREATE TABLE IF NOT EXISTS users (
-      username TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
       is_master INTEGER DEFAULT 0,
       is_virtual INTEGER DEFAULT 0,
       is_deleted INTEGER DEFAULT 0
     );
   });
 
-  $self->state_dbh->do(q{
+  $dbh->do(q{
     CREATE TABLE IF NOT EXISTS user_identities (
       id INTEGER PRIMARY KEY,
-      username TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
       identity_name TEXT NOT NULL,
       identity_value TEXT NOT NULL,
-      FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE,
-      CONSTRAINT constraint_username_identity UNIQUE (username, identity_name),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT constraint_user_identity UNIQUE (user_id, identity_name),
       UNIQUE (identity_name, identity_value)
     );
   });
