@@ -114,6 +114,10 @@ sub user_by_channel_and_address ($self, $channel_name, $address) {
   return undef;
 }
 
+sub user_by_id ($self, $id) {
+  return first { $_->id == $id } $self->all_users;
+}
+
 # NOTE: This is a hack. It's here because I want to make sure for reactors
 # with preferences, you never have to remember to call ->fetch_state on
 # startup to load the prefs (...because I never remember to do so). That means
@@ -128,25 +132,30 @@ sub register_with_hub {}
 sub load_users_from_database ($self) {
   my $dbh = $self->env->state_dbh;
   my %users;
-
-  # load prefs
-  $self->fetch_state($self->name);
+  my %users_by_id;
 
   my $user_sth = $dbh->prepare('SELECT * FROM users');
   $user_sth->execute;
 
   while (my $row = $user_sth->fetchrow_hashref) {
     my $username = $row->{username};
-    $users{$username} = Synergy::User->new({
+    my $user = Synergy::User->new({
       directory => $self,
+      defined_kv(id => $row->{id}),
       username  => $username,
       defined_kv(is_master  => $row->{is_master}),
       defined_kv(is_virtual => $row->{is_virtual}),
       defined_kv(deleted    => $row->{is_deleted}),
     });
+    $users{$username}       = $user;
+    $users_by_id{$row->{id}} = $user;
   }
 
-  my $identity_sth = $dbh->prepare('SELECT * FROM user_identities');
+  my $identity_sth = $dbh->prepare(
+    'SELECT u.username, ui.identity_name, ui.identity_value
+     FROM user_identities ui
+     JOIN users u ON ui.user_id = u.id'
+  );
   $identity_sth->execute;
 
   while (my $row = $identity_sth->fetchrow_hashref) {
@@ -161,7 +170,13 @@ sub load_users_from_database ($self) {
     $user->add_identity($row->{identity_name}, $row->{identity_value});
   }
 
+  # _set_users must come before fetch_state so HasPreferences can translate
+  # stored user ids back to usernames when loading preferences.
   $self->_set_users(\%users);
+
+  # load prefs
+  $self->fetch_state($self->name);
+
   return \%users;
 }
 
@@ -201,8 +216,14 @@ sub register_user ($self, $user) {
     q{VALUES (?,?,?,?)}
   ));
 
+  state $user_insert_with_id_sth = $dbh->prepare(join(q{ },
+    q{INSERT INTO users},
+    q{   (id, username, is_master, is_virtual, is_deleted)},
+    q{VALUES (?,?,?,?,?)}
+  ));
+
   state $identity_insert_sth = $dbh->prepare(join(q{ },
-    q{INSERT INTO user_identities (username, identity_name, identity_value)},
+    q{INSERT INTO user_identities (user_id, identity_name, identity_value)},
     q{VALUES (?,?,?)}
   ));
 
@@ -212,15 +233,29 @@ sub register_user ($self, $user) {
   my $ok = 0;
   $dbh->begin_work;
   try {
-    $user_insert_sth->execute(
-      $user->username,
-      $user->is_master,
-      $user->is_virtual,
-      $user->is_deleted,
-    );
+    my $user_id;
+    if ($user->id) {
+      $user_insert_with_id_sth->execute(
+        $user->id,
+        $user->username,
+        $user->is_master,
+        $user->is_virtual,
+        $user->is_deleted,
+      );
+      $user_id = $user->id;
+    } else {
+      $user_insert_sth->execute(
+        $user->username,
+        $user->is_master,
+        $user->is_virtual,
+        $user->is_deleted,
+      );
+      $user_id = $dbh->last_insert_id;
+      $user->_set_id($user_id);
+    }
 
     for my $pair ($user->identity_pairs) {
-      $identity_insert_sth->execute($user->username, $pair->[0], $pair->[1]);
+      $identity_insert_sth->execute($user_id, $pair->[0], $pair->[1]);
     }
 
     $self->_set_user($user->username, $user);
@@ -243,6 +278,7 @@ sub reload_user ($self, $username, $data) {
   my $new_user = Synergy::User->new({
     %$old,
     %$data,
+    id       => $old->id,
     username => $username,
   });
 
