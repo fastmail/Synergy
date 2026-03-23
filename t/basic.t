@@ -47,7 +47,7 @@ subtest 'run_process' => sub {
            : -x '/usr/bin/date' ? '/usr/bin/date'
            : die "This test requires either /bin/date or /usr/bin/date exist.";
 
-  my $f = $hub->run_process([ $date ]);
+  my $f = $hub->run_process([ $date, '+%a %b %e %I:%M:%S %p %Z %Y']);
 
   $f->on_done(sub ($ec, $stdout, $stderr) {
     $done = 1;
