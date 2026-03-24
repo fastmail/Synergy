@@ -278,7 +278,8 @@ sub handle_dispatch {
 sub handle_heartbeat {
   my ($self, $data) = @_;
 
-  $Logger->log("Discord: handle_heartbeat: unimplemented");
+  $Logger->log("Discord: server requested immediate heartbeat");
+  $self->send_heartbeat;
 }
 
 sub handle_reconnect {
