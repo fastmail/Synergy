@@ -272,7 +272,7 @@ listener rfc_mention => async sub ($self, $event) {
 
   chomp $slack;
 
-  return await $event->reply(
+  return await $event->expando_reply(
     ($title ? "RFC $num: $title\n$link" : "RFC $num - $link"),
     {
       slack => $slack,
