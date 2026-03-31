@@ -976,7 +976,7 @@ async sub _get_pipelines ($self, $text, $event) {
   my $reply = '';
   my @reply_blocks = ();
   for my $job ($jobs->@*) {
-    next unless $job->{name} eq 'run-testboxer-full';
+    next unless $job->{name} eq 'autonewt-ci';
 
     my ($mr_url, $mr);
     if ($job->{pipeline}->{source} eq 'merge_request_event') {
