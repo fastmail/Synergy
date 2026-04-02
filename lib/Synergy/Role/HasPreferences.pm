@@ -169,9 +169,28 @@ role {
     return $value;
   };
 
+  # Returns the user directory for preference key translation.  For reactors
+  # this is hub->user_directory; for UserDirectory itself, it is $self.
+  method _pref_user_directory => sub ($self) {
+    return $self->hub->user_directory if $self->can('hub');
+    return $self;
+  };
+
   around state => sub ($orig, $self, @rest) {
     my $state = $self->$orig(@rest);
-    $state->{preferences} = $self->user_preferences;
+
+    my $ud = $self->_pref_user_directory;
+    my %id_keyed;
+    for my $username (keys %all_user_prefs) {
+      my $user = $ud->user_named($username);
+      unless ($user) {
+        $Logger->log(["HasPreferences: skipping prefs for unknown user %s during save", $username]);
+        next;
+      }
+      $id_keyed{ $user->id } = $all_user_prefs{$username};
+    }
+
+    $state->{preferences} = \%id_keyed;
     return $state;
   };
 
@@ -186,7 +205,17 @@ role {
     my $state = $self->$orig(@rest);
 
     if (my $prefs = $state->{preferences}) {
-      $self->_load_preferences($prefs);
+      my $ud = $self->_pref_user_directory;
+      my %username_keyed;
+      for my $user_id (keys %$prefs) {
+        my $user = $ud->user_by_id($user_id);
+        unless ($user) {
+          $Logger->log(["HasPreferences: skipping prefs for unknown user id %s during load", $user_id]);
+          next;
+        }
+        $username_keyed{ $user->username } = $prefs->{$user_id};
+      }
+      $self->_load_preferences(\%username_keyed);
     }
 
     return $state;
