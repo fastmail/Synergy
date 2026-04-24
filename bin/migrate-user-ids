@@ -1,6 +1,8 @@
 #!/usr/bin/env perl
 use v5.36.0;
 
+# PODNAME: migrate-user-ids
+
 # Migration: convert users table to integer primary key, and remap all
 # username-keyed JSON state blobs to use integer user ids instead.
 #
