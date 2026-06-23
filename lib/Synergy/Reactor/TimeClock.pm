@@ -98,9 +98,15 @@ has clock_out_channel => (
 );
 
 sub state ($self) {
+  my $ud = $self->hub->user_directory;
+  my %times_by_id;
+  for my $username (keys %{ $self->user_last_report_times }) {
+    my $user = $ud->user_named($username) or next;
+    $times_by_id{ $user->id } = $self->user_last_report_times->{$username};
+  }
   return {
-    last_report_time => $self->last_report_time,
-    user_last_report_times => $self->user_last_report_times,
+    last_report_time       => $self->last_report_time,
+    user_last_report_times => \%times_by_id,
   };
 }
 
@@ -127,7 +133,13 @@ after register_with_hub => sub ($self, @) {
     }
 
     if (my $times = $state->{user_last_report_times}) {
-      $self->_set_user_last_report_times($times);
+      my $ud = $self->hub->user_directory;
+      my %times_by_username;
+      for my $user_id (keys %$times) {
+        my $user = $ud->user_by_id($user_id) or next;
+        $times_by_username{ $user->username } = $times->{$user_id};
+      }
+      $self->_set_user_last_report_times(\%times_by_username);
     }
   }
 };
