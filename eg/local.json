@@ -37,6 +37,14 @@
       "class": "Synergy::Reactor::Announce",
       "to_channel_name" : "term-wo",
       "to_address"      : "announce"
+    },
+    "office_weather": {
+      "class": "Synergy::Reactor::OfficeWeather",
+      "api_token": "your-govee-api-key-here",
+      "sensor_emoji": {
+        "Kitchen": "🍽️",
+        "Server Room": "🖥️"
+      }
     }
   },
   "server_port": 8118
