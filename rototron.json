@@ -1,0 +1,50 @@
+{
+  "rotors": {
+    "triage_au": {
+      "staff": { "region": "au", "team": "triage" },
+      "description": "AU Escalation",
+      "calendar_id": "bf2ba255-08d1-4c64-a46a-cb39da6706ae",
+      "time_zone"  : "Australia/Sydney",
+      "exclude_dow": [ 6, 7 ]
+    },
+    "triage_us": {
+      "staff": { "region": "us", "team": "triage" },
+      "description": "US Escalation",
+      "calendar_id": "bf2ba255-08d1-4c64-a46a-cb39da6706ae",
+      "time_zone"  : "America/New_York",
+      "exclude_dow": [ 6, 7 ]
+    },
+    "kitchen": {
+      "staff": { "team": "kitchen" },
+      "description": "Kitchen Patrol",
+      "calendar_id": "bf2ba255-08d1-4c64-a46a-cb39da6706ae",
+      "exclude_dow": [ 6, 7 ]
+    },
+    "bathroom": {
+      "staff": { "team": "bathroom" },
+      "description": "Bathroom Brigade",
+      "calendar_id": "bf2ba255-08d1-4c64-a46a-cb39da6706ae",
+      "exclude_dow": [ 6, 7 ]
+    }
+  },
+  "staff": [
+    { "username": "alice",  "name": "Alice Z.", "region": "au", "teams": [ "bathroom",            "triage" ] },
+    { "username": "bob",    "name": "Bob Y.",   "region": "us", "teams": [ "bathroom",            "triage" ] },
+    { "username": "chuck",  "name": "Chuck X.", "region": "au", "teams": [ "bathroom", "kitchen", "triage" ] },
+    { "username": "diane",  "name": "Diane W.", "region": "us", "teams": [ "bathroom", "kitchen"           ] },
+    { "username": "edna",   "name": "Edna V.",  "region": "au", "teams": [                                 ] },
+    { "username": "frank",  "name": "Frank U.", "region": "us", "teams": [                                 ] },
+    { "username": "gilda",  "name": "Gilda T.", "region": "au", "teams": [             "kitchen", "triage" ] },
+    { "username": "henry",  "name": "Henry S.", "region": "us", "teams": [             "kitchen", "triage" ] },
+    { "username": "igor",   "name": "Igor R.",  "region": "au", "teams": [ "bathroom",            "triage" ] },
+    { "username": "jenny",  "name": "Jenny Q.", "region": "us", "teams": [ "bathroom"                      ] },
+    { "username": "kate",   "name": "Kate P.",  "region": "au", "teams": [ "bathroom", "kitchen"           ] },
+    { "username": "lars",   "name": "Lars O.",  "region": "us", "teams": [ "bathroom", "kitchen"           ] },
+    { "username": "minh",   "name": "Minh N.",  "region": "au", "teams": [                        "triage" ] },
+    { "username": "ned",    "name": "Ned M.",   "region": "us", "teams": [                        "triage" ] },
+    { "username": "otto",   "name": "Otto L.",  "region": "au", "teams": [             "kitchen", "triage" ] },
+    { "username": "peg",    "name": "Peg K.",   "region": "us", "teams": [             "kitchen"           ] },
+    { "username": "quinn",  "name": "Quinn J.", "region": "au", "teams": [ "bathroom"                      ] }
+    { "username": "rusty",  "name": "Rusty I.", "region": "us", "teams": [ "bathroom"                      ] }
+  ]
+}
