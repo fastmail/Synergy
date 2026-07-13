@@ -18,7 +18,7 @@ use Synergy::User;
 use Synergy::Util qw(known_alphabets read_config_file day_name_from_abbr);
 use Synergy::Logger '$Logger';
 use Lingua::EN::Inflect qw(WORDLIST);
-use List::Util qw(first shuffle all);
+use List::Util qw(shuffle all);
 use DateTime;
 use Defined::KV;
 use Try::Tiny;
@@ -76,8 +76,32 @@ has _active_users => (
   },
 );
 
-after _set_user  => sub ($self, @) { $self->_clear_active_users };
-after _set_users => sub ($self, @) { $self->_clear_active_users };
+has _users_by_id => (
+  isa  => 'HashRef',
+  traits  => [ 'Hash' ],
+  handles => {
+    user_by_id => 'get',
+  },
+  lazy => 1,
+  clearer => '_clear_users_by_id',
+  default => sub ($self) {
+    my %by_id;
+    for my $user ($self->all_users) {
+      next unless defined $user->id;
+      $by_id{ $user->id } = $user;
+    }
+    return \%by_id;
+  },
+);
+
+after _set_user  => sub ($self, @) {
+  $self->_clear_active_users;
+  $self->_clear_users_by_id;
+};
+after _set_users => sub ($self, @) {
+  $self->_clear_active_users;
+  $self->_clear_users_by_id;
+};
 
 sub state ($self) { return {} }
 
@@ -129,24 +153,27 @@ sub load_users_from_database ($self) {
   my $dbh = $self->env->state_dbh;
   my %users;
 
-  # load prefs
-  $self->fetch_state($self->name);
-
   my $user_sth = $dbh->prepare('SELECT * FROM users');
   $user_sth->execute;
 
   while (my $row = $user_sth->fetchrow_hashref) {
     my $username = $row->{username};
-    $users{$username} = Synergy::User->new({
+    my $user = Synergy::User->new({
       directory => $self,
+      defined_kv(id => $row->{id}),
       username  => $username,
       defined_kv(is_master  => $row->{is_master}),
       defined_kv(is_virtual => $row->{is_virtual}),
       defined_kv(deleted    => $row->{is_deleted}),
     });
+    $users{$username} = $user;
   }
 
-  my $identity_sth = $dbh->prepare('SELECT * FROM user_identities');
+  my $identity_sth = $dbh->prepare(
+    'SELECT u.username, ui.identity_name, ui.identity_value
+     FROM user_identities ui
+     JOIN users u ON ui.user_id = u.id'
+  );
   $identity_sth->execute;
 
   while (my $row = $identity_sth->fetchrow_hashref) {
@@ -161,7 +188,13 @@ sub load_users_from_database ($self) {
     $user->add_identity($row->{identity_name}, $row->{identity_value});
   }
 
+  # _set_users must come before fetch_state so HasPreferences can translate
+  # stored user ids back to usernames when loading preferences.
   $self->_set_users(\%users);
+
+  # load prefs
+  $self->fetch_state($self->name);
+
   return \%users;
 }
 
@@ -201,8 +234,14 @@ sub register_user ($self, $user) {
     q{VALUES (?,?,?,?)}
   ));
 
+  state $user_insert_with_id_sth = $dbh->prepare(join(q{ },
+    q{INSERT INTO users},
+    q{   (id, username, is_master, is_virtual, is_deleted)},
+    q{VALUES (?,?,?,?,?)}
+  ));
+
   state $identity_insert_sth = $dbh->prepare(join(q{ },
-    q{INSERT INTO user_identities (username, identity_name, identity_value)},
+    q{INSERT INTO user_identities (user_id, identity_name, identity_value)},
     q{VALUES (?,?,?)}
   ));
 
@@ -212,15 +251,29 @@ sub register_user ($self, $user) {
   my $ok = 0;
   $dbh->begin_work;
   try {
-    $user_insert_sth->execute(
-      $user->username,
-      $user->is_master,
-      $user->is_virtual,
-      $user->is_deleted,
-    );
+    my $user_id;
+    if ($user->id) {
+      $user_insert_with_id_sth->execute(
+        $user->id,
+        $user->username,
+        $user->is_master,
+        $user->is_virtual,
+        $user->is_deleted,
+      );
+      $user_id = $user->id;
+    } else {
+      $user_insert_sth->execute(
+        $user->username,
+        $user->is_master,
+        $user->is_virtual,
+        $user->is_deleted,
+      );
+      $user_id = $dbh->last_insert_id;
+      $user->_set_id($user_id);
+    }
 
     for my $pair ($user->identity_pairs) {
-      $identity_insert_sth->execute($user->username, $pair->[0], $pair->[1]);
+      $identity_insert_sth->execute($user_id, $pair->[0], $pair->[1]);
     }
 
     $self->_set_user($user->username, $user);
@@ -243,6 +296,7 @@ sub reload_user ($self, $username, $data) {
   my $new_user = Synergy::User->new({
     %$old,
     %$data,
+    id       => $old->id,
     username => $username,
   });
 

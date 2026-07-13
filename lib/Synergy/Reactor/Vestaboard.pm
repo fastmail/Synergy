@@ -418,9 +418,15 @@ sub _validate_design ($self, $design) {
 #       secret: { expires_at: EPOCH-SEC, value: STRING }
 
 sub state ($self) {
+  my $ud = $self->hub->user_directory;
+  my %user_state_by_id;
+  for my $username (keys %{ $self->_user_state }) {
+    my $user = $ud->user_named($username) or next;
+    $user_state_by_id{ $user->id } = $self->_user_state->{$username};
+  }
   return {
-    user  => $self->_user_state,
-    lock  => $self->_lock_state,
+    user               => \%user_state_by_id,
+    lock               => $self->_lock_state,
     current_characters => $self->_current_characters,
   };
 }
@@ -477,7 +483,15 @@ after register_with_hub => sub ($self, @) {
   }
 
   if (my $state = $self->fetch_state) {
-    $self->_set_user_state($state->{user});
+    if (my $user_state = $state->{user}) {
+      my $ud = $self->hub->user_directory;
+      my %by_username;
+      for my $user_id (keys %$user_state) {
+        my $user = $ud->user_by_id($user_id) or next;
+        $by_username{ $user->username } = $user_state->{$user_id};
+      }
+      $self->_set_user_state(\%by_username);
+    }
     $self->_set_lock_state($state->{lock});
     $self->_set_current_characters($state->{current_characters})
       if $self->_current_characters;
