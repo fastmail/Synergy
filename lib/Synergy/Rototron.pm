@@ -243,6 +243,7 @@ sub compute_rotor_update ($self, $from_dt, $to_dt) {
       my $start = $day->ymd . "T00:00:00";
 
       $want{ $rotor->keyword }{ $start } = {
+        version   => '2.0',
         prodId    => "$PROGRAM_ID",
         title     => join(q{ - }, $rotor->description, $name),
         start     => $start,
