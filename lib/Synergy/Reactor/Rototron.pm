@@ -263,10 +263,13 @@ sub _replan_range ($self, $from_dt, $to_dt) {
     ],
   });
 
-  # This is terrible.  It just crashes on failure, so we get a "something went
-  # wrong".  But it's easy, and it's better than "We never look at $res so
-  # errors are unreported."
-  $res->assert_successful_set("CalendarEvent/set");
+  eval {
+    $res->assert_successful_set("CalendarEvent/set");
+  };
+
+  if ($@) {
+    $Logger->log(["Failed to CalendarEvent/set. Res: %s", $res->response_payload ]);
+  }
 
   $self->rototron->_duty_cache->%* = (); # should build this into Rototron
 
