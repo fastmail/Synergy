@@ -1,0 +1,314 @@
+#!perl
+# PODNAME: wfh-report
+use v5.36.0;
+use utf8;
+
+use charnames qw( :full );
+
+use DateTime;
+use DBI;
+use Getopt::Long::Descriptive;
+use JSON::MaybeXS;
+use List::Util qw(any max);
+
+binmode *STDOUT, 'encoding(:utf-8)';
+
+my @DOW = qw( mon tue wed thu fri sat sun );
+
+my $OFFICE = "\N{OFFICE BUILDING}";
+my $HOME   = "\N{HOUSE WITH GARDEN}";
+my $OFF    = "\N{MIDDLE DOT}";
+
+# These mirror the fallbacks in Synergy::User, for users who have never set the
+# relevant preference. -- rjbs, 2026-08-11
+my $DEFAULT_TIME_ZONE = 'America/New_York';
+my $DEFAULT_HOURS = {
+  map {; $_ => { start => '09:30', end => '17:00' } } qw( mon tue wed thu fri )
+};
+
+my ($opt, $usage) = describe_options(
+  '%c %o',
+  [ 'db|d=s', 'path to the synergy sqlite database',
+    { default => 'synergy.sqlite' } ],
+  [ 'time-zone|zone|z=s@',
+    'only report users in this time zone; repeatable' ],
+  [ 'wfh-only|w',       'only report users who have at least one WFH day' ],
+  [ 'include-deleted',  'include users who have been deleted'             ],
+  [ 'include-virtual',  'include virtual (non-human) users'               ],
+  [ 'list-zones|l',     'just list the time zones in use and their user counts' ],
+  [],
+  [ 'help', 'print this message and exit', { shortcircuit => 1 } ],
+);
+
+print($usage->text), exit if $opt->help;
+
+die "no such database: " . $opt->db . "\n" unless -e $opt->db;
+
+my $dbh = DBI->connect(
+  'dbi:SQLite:dbname=' . $opt->db,
+  undef,
+  undef,
+  { RaiseError => 1 },
+);
+
+my @users = users_from_db($dbh, $opt);
+
+if ($opt->list_zones) {
+  list_zones(\@users);
+  exit;
+}
+
+if (my $want = $opt->time_zone) {
+  @users = grep {; any { zone_matches($_, $want) } $_->{time_zone} } @users;
+}
+
+@users = grep {; $_->{wfh_days}->@* } @users if $opt->wfh_only;
+
+unless (@users) {
+  say "No matching users.  (Try --list-zones to see what's on offer.)";
+  exit 1;
+}
+
+report(\@users);
+
+#pod =head1 SUBROUTINES
+
+# Read every user out of the users table, decorated with the preferences we
+# care about, and filtered per the command line options.  Each returned hashref
+# has: username, realname, time_zone, hours (a hashref of the working days
+# only) and wfh_days (an arrayref, in week order).
+sub users_from_db ($dbh, $opt) {
+  my ($json) = $dbh->selectrow_array(
+    "SELECT json FROM synergy_state WHERE reactor_name = '_user_directory'",
+  );
+
+  die "the user directory has no saved state in this database\n" unless $json;
+
+  my $prefs = JSON::MaybeXS->new->utf8->decode($json)->{preferences} // {};
+
+  my $rows = $dbh->selectall_arrayref(
+    "SELECT username, is_deleted, is_virtual FROM users ORDER BY username",
+    { Slice => {} },
+  );
+
+  my @users;
+
+  for my $row (@$rows) {
+    next if $row->{is_deleted} && ! $opt->include_deleted;
+    next if $row->{is_virtual} && ! $opt->include_virtual;
+
+    my $pref = $prefs->{ $row->{username} } // {};
+    my $hours = $pref->{'business-hours'} // $DEFAULT_HOURS;
+
+    my %wfh = map {; $_ => 1 } ($pref->{'wfh-days'} // [])->@*;
+
+    push @users, {
+      username  => $row->{username},
+      realname  => $pref->{realname} // $row->{username},
+      time_zone => $pref->{'time-zone'} // $DEFAULT_TIME_ZONE,
+      hours     => {
+        map  {; $_ => $hours->{$_} }
+        grep {; $hours->{$_} && %{ $hours->{$_} } } @DOW
+      },
+      wfh_days  => [ grep {; $wfh{$_} } @DOW ],
+    };
+  }
+
+  return @users;
+}
+
+# Does this time zone name match any of the user's requested zones?  A request
+# matches if it's the whole zone name, or the region that the zone lives in, so
+# that -z Australia catches Australia/Melbourne and Australia/Sydney both.
+sub zone_matches ($zone, $wanted) {
+  for my $want (@$wanted) {
+    return 1 if lc $zone eq lc $want;
+    return 1 if index(lc $zone, lc($want) . '/') == 0;
+  }
+
+  return;
+}
+
+# The current UTC offset of a zone, as "UTC+10:00", used to sort and label the
+# per-zone sections.  Bogus zone names (a bad preference, say) sort last.
+sub zone_offset ($zone) {
+  my $dt = eval { DateTime->now(time_zone => $zone) };
+  return (99999, '???') unless $dt;
+
+  my $secs = $dt->offset;
+  my $sign = $secs < 0 ? '-' : '+';
+
+  return ($secs, sprintf 'UTC%s%02u:%02u', $sign, (abs($secs) / 60) / 60,
+                                                  (abs($secs) / 60) % 60);
+}
+
+sub list_zones ($users) {
+  my %count;
+  $count{ $_->{time_zone} }++ for @$users;
+
+  my $w = max map {; length } keys %count;
+
+  for my $zone (sort {; (zone_offset($a))[0] <=> (zone_offset($b))[0]
+                     || $a cmp $b } keys %count) {
+    printf "%-*s  %-9s  %2u user%s\n",
+      $w, $zone, (zone_offset($zone))[1],
+      $count{$zone}, ($count{$zone} == 1 ? '' : 's');
+  }
+
+  return;
+}
+
+# The one-line summary of a user's business hours: either the hours they keep
+# every working day, or undef if the days disagree, in which case the caller
+# will print the per-day breakdown instead.
+sub uniform_hours ($user) {
+  my %seen = map {; "$_->{start}-$_->{end}" => 1 } values $user->{hours}->%*;
+  return unless keys %seen == 1;
+  return (keys %seen)[0];
+}
+
+# How many terminal columns will this string occupy?  The emoji we use for the
+# day cells are twice as wide as a Latin letter, so we can't just take the
+# string's length in characters. -- rjbs, 2026-08-11
+sub display_width ($string) {
+  my $width = 0;
+  $width += (/[\p{East_Asian_Width=Wide}\p{East_Asian_Width=Fullwidth}]/ ? 2 : 1)
+    for split //, $string;
+
+  return $width;
+}
+
+# Lay seven values out in fixed-width day columns, without leaving trailing
+# whitespace on the end of the line.  We pad by hand, because sprintf's %-3s
+# counts characters rather than columns.
+sub day_columns (@values) {
+  my $line = join q{ },
+             map {; $_ . q{ } x (3 - display_width($_)) } @values;
+
+  $line =~ s/\s+\z//;
+  return $line;
+}
+
+sub report ($users) {
+  my %by_zone;
+  push $by_zone{ $_->{time_zone} }->@*, $_ for @$users;
+
+  my $user_w = max length 'USERNAME',  map {; length $_->{username} } @$users;
+  my $name_w = max length 'REAL NAME', map {; length $_->{realname} } @$users;
+
+  my $header = sprintf "%-*s  %-*s  %-11s  %s",
+    $user_w, 'USERNAME', $name_w, 'REAL NAME', 'HOURS',
+    day_columns(map {; uc } @DOW);
+
+  my $has_orphan_wfh = 0;
+
+  for my $zone (sort {; (zone_offset($a))[0] <=> (zone_offset($b))[0]
+                     || $a cmp $b } keys %by_zone) {
+    my @in_zone = $by_zone{$zone}->@*;
+
+    printf "\n%s (%s) — %u user%s\n\n",
+      $zone, (zone_offset($zone))[1],
+      scalar @in_zone, (@in_zone == 1 ? '' : 's');
+
+    say $header;
+
+    for my $user (sort {; $a->{username} cmp $b->{username} } @in_zone) {
+      my %wfh = map {; $_ => 1 } $user->{wfh_days}->@*;
+
+      my @cells;
+      for my $dow (@DOW) {
+        my $working = $user->{hours}{$dow};
+
+        push @cells, $working ? ($wfh{$dow} ? $HOME : $OFFICE)
+                   : $wfh{$dow} ? do { $has_orphan_wfh = 1; "$HOME?" }
+                   : $OFF;
+      }
+
+      printf "%-*s  %-*s  %-11s  %s\n",
+        $user_w, $user->{username},
+        $name_w, $user->{realname},
+        uniform_hours($user) // 'varies',
+        day_columns(@cells);
+
+      next if uniform_hours($user);
+
+      printf "%-*s  %s\n", $user_w + $name_w + 2, '',
+        join q{, },
+        map  {; "$_ $user->{hours}{$_}{start}-$user->{hours}{$_}{end}" }
+        grep {; $user->{hours}{$_} } @DOW;
+    }
+  }
+
+  say '';
+  say "$HOME = works from home    $OFFICE = works in the office"
+    . "    $OFF = does not work";
+  say "$HOME? = WFH day with no working hours set" if $has_orphan_wfh;
+
+  my %wfh_count;
+  for my $user (@$users) {
+    $wfh_count{$_}++ for $user->{wfh_days}->@*;
+  }
+
+  my $wfh_users = grep {; $_->{wfh_days}->@* } @$users;
+
+  printf "\n%u of %u users work from home at all: %s\n",
+    $wfh_users,
+    scalar @$users,
+    join q{, }, map {; sprintf '%s %u', $_, $wfh_count{$_} // 0 } @DOW;
+
+  return;
+}
+
+__END__
+
+=head1 NAME
+
+wfh-report - report on who works when, and from where
+
+=head1 SYNOPSIS
+
+  wfh-report [-d synergy.sqlite] [-z America/New_York] [-w]
+
+=head1 DESCRIPTION
+
+This reads a Synergy SQLite database and prints each user's working days,
+along with which of those days they work from home.  Users are grouped by time
+zone, ordered west to east.
+
+Everything comes out of the user directory's saved preferences.  A user who
+hasn't set F<business-hours> or F<time-zone> is reported with the same defaults
+that L<Synergy::User> would use for them: 09:30-17:00 on weekdays, in
+America/New_York.
+
+Deleted and virtual users are left out unless you ask for them.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--db>, B<-d>
+
+The database to read.  Defaults to F<synergy.sqlite> in the current directory.
+
+=item B<--time-zone>, B<-z>
+
+Only report users in this time zone.  You can give a whole zone name
+(C<America/New_York>) or just the region (C<America>), and you can give the
+option more than once.
+
+=item B<--wfh-only>, B<-w>
+
+Only report users who work from home on at least one day.
+
+=item B<--include-deleted>, B<--include-virtual>
+
+Report users who've been deleted, or who are virtual users rather than people.
+
+=item B<--list-zones>, B<-l>
+
+Instead of the report, print the time zones that users live in and how many
+users are in each.  Useful for working out what to pass to C<-z>.
+
+=back
+
+=cut
