@@ -615,24 +615,25 @@ command snooze => {
 
     my $id = $item->{id};
 
-    my $res = await $self->_pd_request_for_user(
+    my $res = eval { await $self->_pd_request_for_user(
       $event->from_user,
       POST => "/incidents/$id/snooze",
       { duration => $seconds }
-    );
+    ); };
+    my $error = $@;
 
     if (my $incident = $res->{incident}) {
       my $title = $incident->{title};
       push @snoozed, "#$id ($title)";
     } else {
-      push @errors, $res->{message};
+      push @errors, $error->message . ": " . $error->details->{http_res}->{message};
     }
   }
 
   my $reply = sprintf("Snoozed incidents for %s: \n%s", duration($seconds), join("\n", @snoozed));
 
   if (@errors) {
-    my $reply .= sprintf("\n\nUnfortunately we also received errors:\n%s", join("\n", @errors));
+    $reply .= sprintf("\n\nUnfortunately we also received errors:\n%s", join("\n", @errors));
   }
 
   return await $event->reply($reply);
@@ -695,7 +696,7 @@ sub _pd_request ($self, $method, $endpoint, $data = undef, $token = undef) {
     unless ($res->is_success) {
       my $code = $res->code;
       $Logger->log([ "error talking to PagerDuty: %s", $res->as_string ]);
-      return Future->fail('http', { http_res => $res });
+      return Future->fail($res->as_string, 'http', { http_res => $res });
     }
 
     my $data = decode_json($res->content);
