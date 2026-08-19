@@ -578,6 +578,50 @@ async sub _api_data ($self, $method, $arg = {}) {
   return $data;
 }
 
+# Every "list" method in the Slack API is paginated, and will hand us one page
+# and let us go on believing that was all of them.  Once the workspace outgrew
+# a single page, everyone we never fetched became someone we could never name.
+# -- rjbs, 2026-08-19
+async sub _api_data_pages ($self, $method, $arg, $key) {
+  my @items;
+  my $cursor;
+
+  # Slack shouldn't hand us cursors forever, but if it does, we would rather
+  # have a partial list than an infinite loop.
+  my $max_pages = 20;
+
+  for my $page (1 .. $max_pages) {
+    my $res = await $self->_api_data($method, {
+      limit => 200,
+      %$arg,
+      defined_kv(cursor => $cursor),
+      form_encoded => 1,
+    });
+
+    unless ($res->{$key}) {
+      die "$method failed: no '$key' in the response\n";
+    }
+
+    push @items, $res->{$key}->@*;
+
+    $cursor = $res->{response_metadata}{next_cursor};
+    undef $cursor unless defined $cursor && length $cursor;
+
+    unless ($cursor) {
+      $Logger->log_debug([ "%s: fetched %s %s in %s page(s)",
+        $method, 0+@items, $key, $page ]);
+      return @items;
+    }
+  }
+
+  $Logger->log([
+    "%s: giving up after %s pages, but Slack says there are more %s",
+    $method, $max_pages, $key,
+  ]);
+
+  return @items;
+}
+
 sub readiness ($self) {
   Future->needs_all(
     map {; my $m = "load_$_"; $self->$m }
@@ -595,9 +639,13 @@ async sub load_users ($self) {
 }
 
 async sub reload_users ($self) {
-  my $res = await $self->_api_data('users.list', { presence => 0 });
+  my @members = await $self->_api_data_pages(
+    'users.list',
+    { presence => 0 },
+    'members',
+  );
 
-  my %users = map { $_->{id} => $_ } $res->{members}->@*;
+  my %users = map { $_->{id} => $_ } @members;
 
   # An empty user list is not a thing that can happen in a workspace that
   # contains, at the very least, us.  If we get one, something has gone wrong
@@ -625,15 +673,14 @@ async sub load_channels ($self) {
 }
 
 async sub reload_channels ($self) {
-  my $res = await $self->_api_data('conversations.list', {
-    exclude_archived => 'true',
-    types => 'public_channel',
-    limit => 200,
-    form_encoded => 1,
-  });
+  my @channels = await $self->_api_data_pages(
+    'conversations.list',
+    { exclude_archived => 'true', types => 'public_channel' },
+    'channels',
+  );
 
   $self->_set_channels({
-    map { $_->{id}, $_ } $res->{channels}->@*
+    map { $_->{id}, $_ } @channels
   });
 
   $Logger->log("Slack channels loaded");
@@ -647,13 +694,14 @@ async sub load_group_conversations ($self) {
 }
 
 async sub reload_group_conversations ($self) {
-  my $res = await $self->_api_data('conversations.list', {
-    types => 'mpim,private_channel',
-    form_encoded => 1,
-  });
+  my @conversations = await $self->_api_data_pages(
+    'conversations.list',
+    { types => 'mpim,private_channel' },
+    'channels',
+  );
 
   $self->_set_group_conversations({
-    map { $_->{id},  $_ } $res->{channels}->@*
+    map { $_->{id},  $_ } @conversations
   });
 
   $Logger->log("Slack group conversations loaded");
@@ -684,14 +732,14 @@ async sub load_dm_channels ($self) {
 }
 
 async sub reload_dm_channels ($self) {
-  my $res = await $self->_api_data('conversations.list', {
-    exclude_archived => 'true',
-    types => 'im',
-    form_encoded => 1,
-  });
+  my @ims = await $self->_api_data_pages(
+    'conversations.list',
+    { exclude_archived => 'true', types => 'im' },
+    'channels',
+  );
 
   $self->_set_dm_channels({
-    map { $_->{user}, $_->{id} } $res->{ims}->@*
+    map { $_->{user}, $_->{id} } @ims
   });
 
   $Logger->log("Slack dm channels loaded");
