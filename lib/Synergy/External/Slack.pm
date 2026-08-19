@@ -234,6 +234,16 @@ sub send_frame ($self, $frame) {
 }
 
 sub handle_frame ($self, $slack_event) {
+  # These are the only way we'll ever hear about somebody who joined, or
+  # changed their name, after we started up.  Without them, we'd go on calling
+  # them "<unknown user U123ABC>" until the next restart. -- rjbs, 2026-08-19
+  my $type = $slack_event->{type} // '';
+
+  if ($type eq 'team_join' or $type eq 'user_change') {
+    $self->_update_user($slack_event->{user});
+    return;
+  }
+
   return unless my $reply_to = $slack_event->{reply_to};
 
   # Cancel the timeout, then mark the future done with the decoded frame
@@ -495,7 +505,63 @@ sub _form_encoded_api_call ($self, $url, $arg, %extra) {
   ));
 }
 
+has _unknown_user_ids => (
+  is      => 'ro',
+  isa     => 'HashRef',
+  lazy    => 1,
+  default => sub { {} },
+);
+
+# The user cache is a hash of what users.list told us, keyed on Slack user id,
+# with the same members Slack sends: id, name, profile, and so on.
+sub _update_user ($self, $user) {
+  return unless $user && $user->{id};
+
+  # If we haven't loaded the users yet, we'll get this one when we do.
+  return unless $self->_has_users;
+
+  # See the comment in reload_users about why we do this.
+  $user->{name} = $self->own_name
+    if $self->own_id && $user->{id} eq $self->own_id;
+
+  $self->users->{ $user->{id} } = $user;
+  delete $self->_unknown_user_ids->{ $user->{id} };
+
+  $Logger->log([ "updated Slack user %s (%s)", $user->{id}, ($user->{name} // "no name") ]);
+
+  return;
+}
+
+# We can't turn an unknown user id into a name without asking Slack, we can't
+# ask Slack without waiting, and ->username gets called from places that can't
+# wait, like an s///e over the text of a message.  So: ask in the background,
+# and be right the next time somebody asks us.  We only ask once per id,
+# because plenty of the ids we'll see -- apps, and people from other
+# workspaces we share a channel with -- are not users we can ever look up.
+# -- rjbs, 2026-08-19
+sub _start_learning_about_user ($self, $id) {
+  return if $self->_unknown_user_ids->{$id}++;
+
+  $Logger->log([ "asking Slack about unknown user %s", $id ]);
+
+  my $f = $self->_api_data('users.info', { user => $id, form_encoded => 1 })
+    ->then(sub ($res) {
+      $self->_update_user($res->{user});
+      return Future->done;
+    })
+    ->else(sub (@error) {
+      $Logger->log([ "couldn't look up Slack user %s: %s", $id, ($error[0] // "unknown error") ]);
+      return Future->done;
+    });
+
+  $f->retain;
+
+  return;
+}
+
 sub username ($self, $id) {
+  return '<nobody>' unless defined $id;
+
   my $users = $self->users;
 
   # This stinks!  Sometimes we try to decode an event before we have finished
@@ -509,7 +575,11 @@ sub username ($self, $id) {
   # asking about, and then we'd return undef, and warn.  Also, we must not
   # deref $users->{$id} without checking, or we autovivify a nameless user
   # into the cache on every miss. -- rjbs, 2026-08-19
-  return "<unknown user $id>" unless $users && $users->{$id};
+  unless ($users && $users->{$id}) {
+    $self->_start_learning_about_user($id) if $users;
+    return "<unknown user $id>";
+  }
+
   return $users->{$id}{name} // "<nameless user $id>";
 }
 
