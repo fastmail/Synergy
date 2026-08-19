@@ -71,12 +71,15 @@ has _channels_by_name => (
   },
 );
 
+# Unlike the other caches, this one starts out empty and fills in as we go:
+# dm_channel_for_address opens (and remembers) DM channels one at a time, as we
+# need them.  There's also reload_dm_channels, to get them all at once, but we
+# don't do that at startup, because we've never needed to. -- rjbs, 2026-08-19
 has dm_channels => (
   is      => 'ro',
   isa     => 'HashRef',
   traits  => [ 'Hash' ],
   writer  => '_set_dm_channels',
-  predicate => '_has_dm_channels',
   default => sub { {} },
   handles => {
     dm_channel_for      => 'get',
@@ -625,7 +628,7 @@ async sub _api_data_pages ($self, $method, $arg, $key) {
 sub readiness ($self) {
   Future->needs_all(
     map {; my $m = "load_$_"; $self->$m }
-      qw( users channels group_conversations dm_channels )
+      qw( users channels group_conversations )
   );
 }
 
@@ -724,11 +727,6 @@ sub group_conversation_name ($self, $id) {
   return 'group' unless $conversation;
 
   return $conversation->{name} || 'group';
-}
-
-async sub load_dm_channels ($self) {
-  return if $self->_has_dm_channels;
-  return await $self->reload_dm_channels;
 }
 
 async sub reload_dm_channels ($self) {
