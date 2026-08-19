@@ -500,8 +500,14 @@ sub username ($self, $id) {
   # recently flew very close to the sun.  In a perfect world, we'd make it
   # possible to sequence on this, but it isn't.  So we have this silly
   # fallback… -- rjbs, 2021-12-21
-  return $users->{$id}->{name} if $users;
-  return "<unknown user $id>";
+  #
+  # …and it wasn't enough, because it only fired when we had *no* users at
+  # all.  Much more often, we have a users hash that predates the user we're
+  # asking about, and then we'd return undef, and warn.  Also, we must not
+  # deref $users->{$id} without checking, or we autovivify a nameless user
+  # into the cache on every miss. -- rjbs, 2026-08-19
+  return "<unknown user $id>" unless $users && $users->{$id};
+  return $users->{$id}{name} // "<nameless user $id>";
 }
 
 sub dm_channel_for_user ($self, $user, $channel) {

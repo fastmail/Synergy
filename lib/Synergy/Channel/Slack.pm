@@ -509,7 +509,7 @@ sub _uri_from_event ($self, $event) {
 
 sub describe_event ($self, $event) {
   my $who = $event->from_user ? $event->from_user->username
-                              : $self->slack->users->{$event->from_address}{name};
+                              : $self->slack->username($event->from_address);
 
   my $channel_id = $event->transport_data->{channel};
 
@@ -535,7 +535,7 @@ sub describe_event_concise ($self, $event) {
 
 sub describe_conversation ($self, $event) {
   my $who = $event->from_user ? $event->from_user->username
-                              : $self->slack->users->{$event->from_address}{name};
+                              : $self->slack->username($event->from_address);
 
   my $slack_event = $event->transport_data;
 
