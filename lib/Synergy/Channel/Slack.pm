@@ -554,7 +554,12 @@ sub describe_conversation ($self, $event) {
 }
 
 sub user_status_for ($self, $event, $user) {
-  $self->slack->reload_users->get;
+  # We reload here because we want fresh status text, not because we doubt our
+  # user cache.  If the reload fails, the cache we already have is much better
+  # than an exception. -- rjbs, 2026-08-19
+  unless (eval { $self->slack->reload_users->get; 1 }) {
+    $Logger->log("error reloading Slack users: $@");
+  }
 
   my $ident = $user->identity_for($self->name);
   return unless $ident;

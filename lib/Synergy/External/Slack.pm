@@ -555,6 +555,29 @@ sub dm_channel_for_address ($self, $slack_id) {
   return $channel_id;
 }
 
+# Slack will tell us "no" in a bunch of different ways: an HTTP error, or a
+# 200 response with ok=false in it, or (when it's really unhappy) a body that
+# isn't JSON at all.  However it does it, the important thing is that we don't
+# install the resulting nonsense into one of our caches, because we'll then
+# believe it until we're restarted. -- rjbs, 2026-08-19
+async sub _api_data ($self, $method, $arg = {}) {
+  my $http_res = await $self->api_call($method, $arg);
+
+  my $data = eval { decode_json($http_res->decoded_content(charset => undef)) };
+
+  unless ($data) {
+    die sprintf "%s failed: couldn't decode response (HTTP status %s)\n",
+      $method, $http_res->code;
+  }
+
+  unless ($data->{ok}) {
+    die sprintf "%s failed: %s (HTTP status %s)\n",
+      $method, ($data->{error} // 'unknown error'), $http_res->code;
+  }
+
+  return $data;
+}
+
 sub readiness ($self) {
   Future->needs_all(
     map {; my $m = "load_$_"; $self->$m }
@@ -572,18 +595,24 @@ async sub load_users ($self) {
 }
 
 async sub reload_users ($self) {
-  my $http_res = await $self->api_call('users.list', {
-    presence => 0,
-  });
+  my $res = await $self->_api_data('users.list', { presence => 0 });
 
-  my $res = decode_json($http_res->decoded_content(charset => undef));
   my %users = map { $_->{id} => $_ } $res->{members}->@*;
+
+  # An empty user list is not a thing that can happen in a workspace that
+  # contains, at the very least, us.  If we get one, something has gone wrong
+  # in a way Slack didn't admit to, and installing it would leave us unable to
+  # name anybody at all. -- rjbs, 2026-08-19
+  die "users.list failed: no users in the response\n" unless %users;
 
   # See comment in _register_slack_rtm: here, we coerce our username to be
   # our ->own_name, because decode_slack_formatting converts @U12345 into
   # usernames. -- michael, 2019-06-04
-  my $me = $users{ $self->own_id };
-  $me->{name} = $self->own_name;
+  if (my $me = $users{ $self->own_id }) {
+    $me->{name} = $self->own_name;
+  } else {
+    $Logger->log([ "we're missing from our own users.list; own id is %s", $self->own_id ]);
+  }
 
   $self->_set_users(\%users);
   $Logger->log("Slack users loaded");
@@ -596,14 +625,13 @@ async sub load_channels ($self) {
 }
 
 async sub reload_channels ($self) {
-  my $http_res = await $self->api_call('conversations.list', {
+  my $res = await $self->_api_data('conversations.list', {
     exclude_archived => 'true',
     types => 'public_channel',
     limit => 200,
     form_encoded => 1,
   });
 
-  my $res = decode_json($http_res->decoded_content(charset => undef));
   $self->_set_channels({
     map { $_->{id}, $_ } $res->{channels}->@*
   });
@@ -619,12 +647,10 @@ async sub load_group_conversations ($self) {
 }
 
 async sub reload_group_conversations ($self) {
-  my $http_res = await $self->api_call('conversations.list', {
+  my $res = await $self->_api_data('conversations.list', {
     types => 'mpim,private_channel',
     form_encoded => 1,
   });
-
-  my $res = decode_json($http_res->decoded_content(charset => undef));
 
   $self->_set_group_conversations({
     map { $_->{id},  $_ } $res->{channels}->@*
@@ -640,7 +666,9 @@ sub group_conversation_name ($self, $id) {
 
   unless ($conversation = $self->group_conversations->{$id}) {
     # A new group chat materialized perhaps?
-    $self->reload_group_conversations->get();
+    unless (eval { $self->reload_group_conversations->get; 1 }) {
+      $Logger->log("error reloading Slack group conversations: $@");
+    }
 
     $conversation = $self->group_conversations->{$id};
   }
@@ -656,13 +684,11 @@ async sub load_dm_channels ($self) {
 }
 
 async sub reload_dm_channels ($self) {
-  my $http_res = await $self->api_call('conversations.list', {
+  my $res = await $self->_api_data('conversations.list', {
     exclude_archived => 'true',
     types => 'im',
     form_encoded => 1,
   });
-
-  my $res = decode_json($http_res->decoded_content(charset => undef));
 
   $self->_set_dm_channels({
     map { $_->{user}, $_->{id} } $res->{ims}->@*
