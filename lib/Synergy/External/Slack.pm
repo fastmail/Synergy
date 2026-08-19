@@ -562,9 +562,16 @@ sub readiness ($self) {
   );
 }
 
+# Each of these things has a load_X, meaning "make sure we have X", and a
+# reload_X, meaning "go get X again, right now".  Only the load_X form is
+# cheap to call over and over, and only the reload_X form will ever notice
+# that the Slack workspace has changed since we started up. -- rjbs, 2026-08-19
 async sub load_users ($self) {
   return if $self->_has_users;
+  return await $self->reload_users;
+}
 
+async sub reload_users ($self) {
   my $http_res = await $self->api_call('users.list', {
     presence => 0,
   });
@@ -585,7 +592,10 @@ async sub load_users ($self) {
 
 async sub load_channels ($self) {
   return if $self->_has_channels;
+  return await $self->reload_channels;
+}
 
+async sub reload_channels ($self) {
   my $http_res = await $self->api_call('conversations.list', {
     exclude_archived => 'true',
     types => 'public_channel',
@@ -605,7 +615,10 @@ async sub load_channels ($self) {
 
 async sub load_group_conversations ($self) {
   return if $self->_has_group_conversations;
+  return await $self->reload_group_conversations;
+}
 
+async sub reload_group_conversations ($self) {
   my $http_res = await $self->api_call('conversations.list', {
     types => 'mpim,private_channel',
     form_encoded => 1,
@@ -627,7 +640,7 @@ sub group_conversation_name ($self, $id) {
 
   unless ($conversation = $self->group_conversations->{$id}) {
     # A new group chat materialized perhaps?
-    $self->load_group_conversations->get();
+    $self->reload_group_conversations->get();
 
     $conversation = $self->group_conversations->{$id};
   }
@@ -639,7 +652,10 @@ sub group_conversation_name ($self, $id) {
 
 async sub load_dm_channels ($self) {
   return if $self->_has_dm_channels;
+  return await $self->reload_dm_channels;
+}
 
+async sub reload_dm_channels ($self) {
   my $http_res = await $self->api_call('conversations.list', {
     exclude_archived => 'true',
     types => 'im',

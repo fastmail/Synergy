@@ -554,7 +554,7 @@ sub describe_conversation ($self, $event) {
 }
 
 sub user_status_for ($self, $event, $user) {
-  $self->slack->load_users->get;
+  $self->slack->reload_users->get;
 
   my $ident = $user->identity_for($self->name);
   return unless $ident;
