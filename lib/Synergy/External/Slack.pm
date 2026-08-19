@@ -71,12 +71,15 @@ has _channels_by_name => (
   },
 );
 
+# Unlike the other caches, this one starts out empty and fills in as we go:
+# dm_channel_for_address opens (and remembers) DM channels one at a time, as we
+# need them.  There's also reload_dm_channels, to get them all at once, but we
+# don't do that at startup, because we've never needed to. -- rjbs, 2026-08-19
 has dm_channels => (
   is      => 'ro',
   isa     => 'HashRef',
   traits  => [ 'Hash' ],
   writer  => '_set_dm_channels',
-  predicate => '_has_dm_channels',
   default => sub { {} },
   handles => {
     dm_channel_for      => 'get',
@@ -231,6 +234,16 @@ sub send_frame ($self, $frame) {
 }
 
 sub handle_frame ($self, $slack_event) {
+  # These are the only way we'll ever hear about somebody who joined, or
+  # changed their name, after we started up.  Without them, we'd go on calling
+  # them "<unknown user U123ABC>" until the next restart. -- rjbs, 2026-08-19
+  my $type = $slack_event->{type} // '';
+
+  if ($type eq 'team_join' or $type eq 'user_change') {
+    $self->_update_user($slack_event->{user});
+    return;
+  }
+
   return unless my $reply_to = $slack_event->{reply_to};
 
   # Cancel the timeout, then mark the future done with the decoded frame
@@ -492,7 +505,63 @@ sub _form_encoded_api_call ($self, $url, $arg, %extra) {
   ));
 }
 
+has _unknown_user_ids => (
+  is      => 'ro',
+  isa     => 'HashRef',
+  lazy    => 1,
+  default => sub { {} },
+);
+
+# The user cache is a hash of what users.list told us, keyed on Slack user id,
+# with the same members Slack sends: id, name, profile, and so on.
+sub _update_user ($self, $user) {
+  return unless $user && $user->{id};
+
+  # If we haven't loaded the users yet, we'll get this one when we do.
+  return unless $self->_has_users;
+
+  # See the comment in reload_users about why we do this.
+  $user->{name} = $self->own_name
+    if $self->own_id && $user->{id} eq $self->own_id;
+
+  $self->users->{ $user->{id} } = $user;
+  delete $self->_unknown_user_ids->{ $user->{id} };
+
+  $Logger->log([ "updated Slack user %s (%s)", $user->{id}, ($user->{name} // "no name") ]);
+
+  return;
+}
+
+# We can't turn an unknown user id into a name without asking Slack, we can't
+# ask Slack without waiting, and ->username gets called from places that can't
+# wait, like an s///e over the text of a message.  So: ask in the background,
+# and be right the next time somebody asks us.  We only ask once per id,
+# because plenty of the ids we'll see -- apps, and people from other
+# workspaces we share a channel with -- are not users we can ever look up.
+# -- rjbs, 2026-08-19
+sub _start_learning_about_user ($self, $id) {
+  return if $self->_unknown_user_ids->{$id}++;
+
+  $Logger->log([ "asking Slack about unknown user %s", $id ]);
+
+  my $f = $self->_api_data('users.info', { user => $id, form_encoded => 1 })
+    ->then(sub ($res) {
+      $self->_update_user($res->{user});
+      return Future->done;
+    })
+    ->else(sub (@error) {
+      $Logger->log([ "couldn't look up Slack user %s: %s", $id, ($error[0] // "unknown error") ]);
+      return Future->done;
+    });
+
+  $f->retain;
+
+  return;
+}
+
 sub username ($self, $id) {
+  return '<nobody>' unless defined $id;
+
   my $users = $self->users;
 
   # This stinks!  Sometimes we try to decode an event before we have finished
@@ -500,8 +569,18 @@ sub username ($self, $id) {
   # recently flew very close to the sun.  In a perfect world, we'd make it
   # possible to sequence on this, but it isn't.  So we have this silly
   # fallback… -- rjbs, 2021-12-21
-  return $users->{$id}->{name} if $users;
-  return "<unknown user $id>";
+  #
+  # …and it wasn't enough, because it only fired when we had *no* users at
+  # all.  Much more often, we have a users hash that predates the user we're
+  # asking about, and then we'd return undef, and warn.  Also, we must not
+  # deref $users->{$id} without checking, or we autovivify a nameless user
+  # into the cache on every miss. -- rjbs, 2026-08-19
+  unless ($users && $users->{$id}) {
+    $self->_start_learning_about_user($id) if $users;
+    return "<unknown user $id>";
+  }
+
+  return $users->{$id}{name} // "<nameless user $id>";
 }
 
 sub dm_channel_for_user ($self, $user, $channel) {
@@ -549,28 +628,112 @@ sub dm_channel_for_address ($self, $slack_id) {
   return $channel_id;
 }
 
+# Slack will tell us "no" in a bunch of different ways: an HTTP error, or a
+# 200 response with ok=false in it, or (when it's really unhappy) a body that
+# isn't JSON at all.  However it does it, the important thing is that we don't
+# install the resulting nonsense into one of our caches, because we'll then
+# believe it until we're restarted. -- rjbs, 2026-08-19
+async sub _api_data ($self, $method, $arg = {}) {
+  my $http_res = await $self->api_call($method, $arg);
+
+  my $data = eval { decode_json($http_res->decoded_content(charset => undef)) };
+
+  unless ($data) {
+    die sprintf "%s failed: couldn't decode response (HTTP status %s)\n",
+      $method, $http_res->code;
+  }
+
+  unless ($data->{ok}) {
+    die sprintf "%s failed: %s (HTTP status %s)\n",
+      $method, ($data->{error} // 'unknown error'), $http_res->code;
+  }
+
+  return $data;
+}
+
+# Every "list" method in the Slack API is paginated, and will hand us one page
+# and let us go on believing that was all of them.  Once the workspace outgrew
+# a single page, everyone we never fetched became someone we could never name.
+# -- rjbs, 2026-08-19
+async sub _api_data_pages ($self, $method, $arg, $key) {
+  my @items;
+  my $cursor;
+
+  # Slack shouldn't hand us cursors forever, but if it does, we would rather
+  # have a partial list than an infinite loop.
+  my $max_pages = 20;
+
+  for my $page (1 .. $max_pages) {
+    my $res = await $self->_api_data($method, {
+      limit => 200,
+      %$arg,
+      defined_kv(cursor => $cursor),
+      form_encoded => 1,
+    });
+
+    unless ($res->{$key}) {
+      die "$method failed: no '$key' in the response\n";
+    }
+
+    push @items, $res->{$key}->@*;
+
+    $cursor = $res->{response_metadata}{next_cursor};
+    undef $cursor unless defined $cursor && length $cursor;
+
+    unless ($cursor) {
+      $Logger->log_debug([ "%s: fetched %s %s in %s page(s)",
+        $method, 0+@items, $key, $page ]);
+      return @items;
+    }
+  }
+
+  $Logger->log([
+    "%s: giving up after %s pages, but Slack says there are more %s",
+    $method, $max_pages, $key,
+  ]);
+
+  return @items;
+}
+
 sub readiness ($self) {
   Future->needs_all(
     map {; my $m = "load_$_"; $self->$m }
-      qw( users channels group_conversations dm_channels )
+      qw( users channels group_conversations )
   );
 }
 
+# Each of these things has a load_X, meaning "make sure we have X", and a
+# reload_X, meaning "go get X again, right now".  Only the load_X form is
+# cheap to call over and over, and only the reload_X form will ever notice
+# that the Slack workspace has changed since we started up. -- rjbs, 2026-08-19
 async sub load_users ($self) {
   return if $self->_has_users;
+  return await $self->reload_users;
+}
 
-  my $http_res = await $self->api_call('users.list', {
-    presence => 0,
-  });
+async sub reload_users ($self) {
+  my @members = await $self->_api_data_pages(
+    'users.list',
+    { presence => 0 },
+    'members',
+  );
 
-  my $res = decode_json($http_res->decoded_content(charset => undef));
-  my %users = map { $_->{id} => $_ } $res->{members}->@*;
+  my %users = map { $_->{id} => $_ } @members;
+
+  # An empty user list is not a thing that can happen in a workspace that
+  # contains, at the very least, us.  If we get one, something has gone wrong
+  # in a way Slack didn't admit to, and installing it would leave us unable to
+  # name anybody at all. -- rjbs, 2026-08-19
+  die "users.list failed: no users in the response\n" unless %users;
 
   # See comment in _register_slack_rtm: here, we coerce our username to be
   # our ->own_name, because decode_slack_formatting converts @U12345 into
   # usernames. -- michael, 2019-06-04
-  my $me = $users{ $self->own_id };
-  $me->{name} = $self->own_name;
+  if (my $me = $users{ $self->own_id }) {
+    $me->{name} = $self->own_name;
+  } else {
+    $Logger->log([ "we're missing from our own users.list; own id is %s", $self->own_id ]);
+  }
 
   $self->_set_users(\%users);
   $Logger->log("Slack users loaded");
@@ -579,17 +742,18 @@ async sub load_users ($self) {
 
 async sub load_channels ($self) {
   return if $self->_has_channels;
+  return await $self->reload_channels;
+}
 
-  my $http_res = await $self->api_call('conversations.list', {
-    exclude_archived => 'true',
-    types => 'public_channel',
-    limit => 200,
-    form_encoded => 1,
-  });
+async sub reload_channels ($self) {
+  my @channels = await $self->_api_data_pages(
+    'conversations.list',
+    { exclude_archived => 'true', types => 'public_channel' },
+    'channels',
+  );
 
-  my $res = decode_json($http_res->decoded_content(charset => undef));
   $self->_set_channels({
-    map { $_->{id}, $_ } $res->{channels}->@*
+    map { $_->{id}, $_ } @channels
   });
 
   $Logger->log("Slack channels loaded");
@@ -599,16 +763,18 @@ async sub load_channels ($self) {
 
 async sub load_group_conversations ($self) {
   return if $self->_has_group_conversations;
+  return await $self->reload_group_conversations;
+}
 
-  my $http_res = await $self->api_call('conversations.list', {
-    types => 'mpim,private_channel',
-    form_encoded => 1,
-  });
-
-  my $res = decode_json($http_res->decoded_content(charset => undef));
+async sub reload_group_conversations ($self) {
+  my @conversations = await $self->_api_data_pages(
+    'conversations.list',
+    { types => 'mpim,private_channel' },
+    'channels',
+  );
 
   $self->_set_group_conversations({
-    map { $_->{id},  $_ } $res->{channels}->@*
+    map { $_->{id},  $_ } @conversations
   });
 
   $Logger->log("Slack group conversations loaded");
@@ -621,7 +787,9 @@ sub group_conversation_name ($self, $id) {
 
   unless ($conversation = $self->group_conversations->{$id}) {
     # A new group chat materialized perhaps?
-    $self->load_group_conversations->get();
+    unless (eval { $self->reload_group_conversations->get; 1 }) {
+      $Logger->log("error reloading Slack group conversations: $@");
+    }
 
     $conversation = $self->group_conversations->{$id};
   }
@@ -631,19 +799,15 @@ sub group_conversation_name ($self, $id) {
   return $conversation->{name} || 'group';
 }
 
-async sub load_dm_channels ($self) {
-  return if $self->_has_dm_channels;
-
-  my $http_res = await $self->api_call('conversations.list', {
-    exclude_archived => 'true',
-    types => 'im',
-    form_encoded => 1,
-  });
-
-  my $res = decode_json($http_res->decoded_content(charset => undef));
+async sub reload_dm_channels ($self) {
+  my @ims = await $self->_api_data_pages(
+    'conversations.list',
+    { exclude_archived => 'true', types => 'im' },
+    'channels',
+  );
 
   $self->_set_dm_channels({
-    map { $_->{user}, $_->{id} } $res->{ims}->@*
+    map { $_->{user}, $_->{id} } @ims
   });
 
   $Logger->log("Slack dm channels loaded");

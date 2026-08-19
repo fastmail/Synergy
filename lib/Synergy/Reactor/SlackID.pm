@@ -66,14 +66,14 @@ responder reload_slack => {
   }
 
   if ($what eq 'users') {
-    $channel->slack->load_users;
-    $channel->slack->load_dm_channels;
-    return $event->reply('Slack users reloaded');
+    await $channel->slack->reload_users;
+    await $channel->slack->reload_dm_channels;
+    return await $event->reply('Slack users reloaded');
   }
 
   if ($what eq 'channels') {
-    $channel->slack->load_channels;
-    return $event->reply('Slack channels reloaded');
+    await $channel->slack->reload_channels;
+    return await $event->reply('Slack channels reloaded');
   }
 
   return $event->reply_error("Sorry, I didn't understand your reload command.");

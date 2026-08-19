@@ -509,7 +509,7 @@ sub _uri_from_event ($self, $event) {
 
 sub describe_event ($self, $event) {
   my $who = $event->from_user ? $event->from_user->username
-                              : $self->slack->users->{$event->from_address}{name};
+                              : $self->slack->username($event->from_address);
 
   my $channel_id = $event->transport_data->{channel};
 
@@ -535,7 +535,7 @@ sub describe_event_concise ($self, $event) {
 
 sub describe_conversation ($self, $event) {
   my $who = $event->from_user ? $event->from_user->username
-                              : $self->slack->users->{$event->from_address}{name};
+                              : $self->slack->username($event->from_address);
 
   my $slack_event = $event->transport_data;
 
@@ -554,7 +554,12 @@ sub describe_conversation ($self, $event) {
 }
 
 sub user_status_for ($self, $event, $user) {
-  $self->slack->load_users->get;
+  # We reload here because we want fresh status text, not because we doubt our
+  # user cache.  If the reload fails, the cache we already have is much better
+  # than an exception. -- rjbs, 2026-08-19
+  unless (eval { $self->slack->reload_users->get; 1 }) {
+    $Logger->log("error reloading Slack users: $@");
+  }
 
   my $ident = $user->identity_for($self->name);
   return unless $ident;
