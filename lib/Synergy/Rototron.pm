@@ -162,9 +162,16 @@ sub _get_duty_items_between ($self, $from_ymd, $to_ymd) {
           'CalendarEvent/query' => {
             accountId => $self->config->{jmap}{account_id},
             filter => {
-              inCalendars => [ keys %want_calendar_id ],
-              after       => $from_ymd,
-              before      => $to_ymd,
+              operator   => 'AND',
+              conditions => [
+                { after => $from_ymd, before => $to_ymd },
+                {
+                  operator   => 'OR',
+                  conditions => [
+                    map {; { inCalendar => $_ } } keys %want_calendar_id
+                  ],
+                },
+              ],
             },
           },
           'a',
@@ -532,8 +539,8 @@ package Synergy::Rototron::AvailabilityChecker {
               'CalendarEvent/query' => {
                 accountId   => $calendar->{accountId},
                 filter => {
-                  inCalendars => [ $calendar->{calendarId} ],
-                  after       => DateTime->now->ymd . "T00:00:00", # endAfter
+                  inCalendar => $calendar->{calendarId},
+                  after      => DateTime->now->ymd . "T00:00:00", # endAfter
                 },
               },
               'a',
