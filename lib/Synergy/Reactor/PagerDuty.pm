@@ -522,12 +522,8 @@ responder 'give-oncall' => {
 };
 
 command ack => {
-  help => '*ack all*: acknowledge all triggered alerts in PagerDuty',
+  help => '*ack*: acknowledge all triggered alerts in PagerDuty',
 } => async sub ($self, $event, $rest) {
-  unless ($rest && $rest eq 'all') {
-    return await $event->error_reply(q{The only thing you can "ack" is "all".});
-  }
-
   unless ($self->is_known_user($event)) {
     return await $event->error_reply("I don't know you, so I'm ignoring that.");
   }
@@ -584,11 +580,14 @@ command resolve => {
 };
 
 command snooze => {
-  help => 'Snooze a single PagerDuty incident. Usage: snooze ALERT-NUMBER for DURATION',
-} => async sub ($self, $event, $rest) {
-  my ($num, $dur) = $rest =~ /^#?(\d+)\s+for\s+(.*)/i;
+  help => 'Snooze a PagerDuty incidents. Usage:
 
-  unless ($num && $dur) {
+  snooze ALERT-NUMBER for DURATION
+  snooze all for DURATION',
+} => async sub ($self, $event, $rest) {
+  my ($incident, $dur) = $rest =~ /^#?(\S+)\s+for\s+(.*)/i;
+
+  unless ($incident && $dur) {
     return await $event->error_reply(
       "Sorry, I don't understand. Say 'snooze INCIDENT-NUM for DURATION'."
     );
@@ -602,32 +601,42 @@ command snooze => {
 
   my @incidents = await $self->_get_incidents(qw(triggered acknowledged));
 
-  my ($relevant) = grep {; $_->{incident_number} == $num } @incidents;
-  unless ($relevant) {
-    return await $event->error_reply("I couldn't find an active incident for #$num");
+  # select a single incident if we
+  my @relevant = ($incident =~ /\d+/) ? grep {; $_->{incident_number} == $incident } @incidents : @incidents;
+
+  unless (@relevant) {
+    return await $event->error_reply("I couldn't find an active incident for '$incident'");
   }
 
-  my $id = $relevant->{id};
+  my @snoozed;
+  my @errors;
 
-  my $res = await $self->_pd_request_for_user(
-    $event->from_user,
-    POST => "/incidents/$id/snooze",
-    { duration => $seconds }
-  );
+  for my $item (@relevant) {
 
-  if (my $incident = $res->{incident}) {
-    my $title = $incident->{title};
-    my $duration = duration($seconds);
-    return await $event->reply(
-      "#$num ($title) snoozed for $duration; enjoy the peace and quiet!"
-    );
+    my $id = $item->{id};
+
+    my $res = eval { await $self->_pd_request_for_user(
+      $event->from_user,
+      POST => "/incidents/$id/snooze",
+      { duration => $seconds }
+    ); };
+    my $error = $@;
+
+    if (my $incident = $res->{incident}) {
+      my $title = $incident->{title};
+      push @snoozed, "#$id ($title)";
+    } else {
+      push @errors, $error->message . ": " . $error->details->{http_res}->{message};
+    }
   }
 
-  my $msg = $res->{message} // 'nothing useful';
+  my $reply = sprintf("Snoozed incidents for %s: \n%s", duration($seconds), join("\n", @snoozed));
 
-  return await $event->reply(
-    "Something went wrong talking to PagerDuty; they said: $msg"
-  );
+  if (@errors) {
+    $reply .= sprintf("\n\nUnfortunately we also received errors:\n%s", join("\n", @errors));
+  }
+
+  return await $event->reply($reply);
 };
 
 sub state ($self) {
@@ -687,7 +696,7 @@ sub _pd_request ($self, $method, $endpoint, $data = undef, $token = undef) {
     unless ($res->is_success) {
       my $code = $res->code;
       $Logger->log([ "error talking to PagerDuty: %s", $res->as_string ]);
-      return Future->fail('http', { http_res => $res });
+      return Future->fail($res->as_string, 'http', { http_res => $res });
     }
 
     my $data = decode_json($res->content);
