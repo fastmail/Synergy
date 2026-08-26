@@ -31,6 +31,12 @@ has is_virtual => (
   default => 0,
 );
 
+has id => (
+  is     => 'ro',
+  isa    => 'Int',
+  writer => '_set_id',
+);
+
 has username => (
   is => 'ro',
   isa => 'Str',
