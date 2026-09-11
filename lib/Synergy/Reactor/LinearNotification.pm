@@ -13,7 +13,7 @@ use JSON::MaybeXS qw(encode_json decode_json);
 use Try::Tiny;
 use Synergy::Reactor::Linear;
 
-# Because we're a generic Reactor and not EasyListening or CommandPost:
+# Reactor requries this, but we don't ever react.
 sub potential_reactions_to {}
 
 my $ESCALATION_EMOJI = "\N{HELMET WITH WHITE CROSS}";
