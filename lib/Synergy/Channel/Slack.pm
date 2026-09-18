@@ -159,7 +159,7 @@ sub _mk_frame_handler ($self) {
     }
 
     # XXX dispatch these better
-    return unless $slack_event->{type} eq 'message';
+    return unless $slack_event->{type} eq 'message' || $slack_event->{type} eq 'app_mention';
 
     unless ($self->readiness->is_ready) {
       $Logger->log("ignoring message, we aren't ready yet");

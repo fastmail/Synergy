@@ -189,6 +189,18 @@ async sub connect ($self) {
     $self->loop->add($client);
   }
 
+  $client->{on_ping_frame} = sub($self, $bytes) {
+      $Logger->log("We got a ping!");
+      $self->send_pong_frame('pong');
+    };
+  $client->{on_pong_frame} = sub ($self, $bytes) {
+      $Logger->log("We got a pong!");
+    };
+  $client->{on_close_frame} = sub ($self, $bytes) {
+      $self->connected(0);
+      $Logger->log("We got closed!");
+    };
+
   $client->connect(
     url => $json->{url},
     service => 'https',
@@ -204,8 +216,8 @@ async sub connect ($self) {
         notifier_name => 'slack-ping',
         interval => 10,
         on_tick  => sub {
-          $Logger->log("we will not ping");
-          #$self->send_frame({ type => 'ping' });
+          $Logger->log("Sending ping");
+          $self->client->send_ping_frame('ping');
         }
       );
 
@@ -268,13 +280,12 @@ sub handle_frame ($self, $slack_event) {
   $Logger->log(['handle_frame: %s', $slack_event ]);
 
   my $type = $slack_event->{type} // '';
-  my $envelope = $slack_event->{envelope_id};
+  my $envelope_id = $slack_event->{envelope_id};
 
   # acknowledge frame
-  if ($envelope) {
+  if ($envelope_id) {
 	  $self->send_frame({
-		  type => $type,
-		  envelope_id => $slack_event->{envelope_id},
+		  envelope_id => $envelope_id,
 	  });
   }
 
