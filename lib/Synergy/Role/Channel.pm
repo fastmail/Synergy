@@ -41,6 +41,10 @@ sub send_expando_message ($self, $event, $text, $alts = {}) {
   return $self->send_message($event->conversation_address, $text, $alts);
 }
 
+sub conversation_name ($self, $event) {
+  return $event->conversation_address;
+}
+
 has _pre_message_hooks => (
   is => 'ro',
   isa => 'ArrayRef[CodeRef]',
@@ -75,5 +79,19 @@ sub text_without_target_prefix ($self, $text, $me) {
 
 A short (single-word) description for the conversation. For channels that don't
 support multiple channels, just the name of the channel is probably fine.
+
+=item conversation_name
+
+The name of the conversation an event arrived in, in a form suitable for
+comparing against configuration: for Slack, C<bikeshed> rather than C<C0BIKESHED>.
+
+This differs from C<describe_conversation>, which is for humans and may return
+a phrase like "an unknown channel". C<conversation_name> always returns
+something comparable, falling back to the conversation address when no better
+name is available.
+
+The default implementation returns the conversation address, which is already
+a name on most channels. Channels that address conversations by opaque id
+should override it.
 
 =back

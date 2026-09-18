@@ -549,6 +549,18 @@ sub describe_conversation ($self, $event) {
   }
 }
 
+sub conversation_name ($self, $event) {
+  my $channel_id = $event->conversation_address;
+
+  return $channel_id unless $self->readiness->is_ready;
+
+  my $channel = $self->slack->channels->{$channel_id};
+
+  return $channel_id unless $channel;
+
+  return $channel->{name} // $channel_id;
+}
+
 sub user_status_for ($self, $event, $user) {
   # We reload here because we want fresh status text, not because we doubt our
   # user cache.  If the reload fails, the cache we already have is much better
