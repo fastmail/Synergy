@@ -94,4 +94,50 @@ licit_exclamation(
   "WE ALSO ACCEPT :emoji::with-skin-tones:",
 );
 
+# The tests above stub out the responder munger, which needs a channel to
+# register itself on.  Here the real one runs against the test channel.
+subtest 'the responder munger yells for us' => sub {
+  my $synergy = Synergy::Tester->new_tester({
+    reactors => {
+      yelling => {
+        class => 'Synergy::Reactor::Yelling',
+        slack_synergy_channel_name => 'test-channel',
+      },
+      echo => { class => 'Synergy::Reactor::Echo' },
+    },
+    default_from => 'bob',
+    users => {
+      bob => undef,
+    },
+  });
+
+  my $test_channel = $synergy->channel_named('test-channel');
+
+  my sub echo_in ($conversation) {
+    $test_channel->clear_messages;
+
+    $synergy->run_test_program([
+      [ send => {
+        text => 'synergy: good morning',
+        conversation_address => $conversation,
+      } ],
+    ]);
+
+    my ($sent) = $test_channel->sent_messages;
+    return $sent->{text};
+  }
+
+  like(
+    echo_in('yelling'),
+    qr{I HEARD YOU},
+    "a reply in the yelling channel is uppercased",
+  );
+
+  like(
+    echo_in('elsewhere'),
+    qr{I heard you},
+    "a reply anywhere else is left alone",
+  );
+};
+
 done_testing;
