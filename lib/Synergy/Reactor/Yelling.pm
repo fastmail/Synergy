@@ -23,13 +23,6 @@ has yelling_channel_name => (
   default => 'yelling',
 );
 
-sub _slack_channel_name_from_event ($self, $event) {
-  my $channel_id = $event->conversation_address;
-  my $channel = $event->from_channel->slack->channels->{$channel_id}{name};
-
-  return $channel // '';
-}
-
 async sub start ($self) {
   $self->_register_responder_munger;
 };
@@ -38,7 +31,7 @@ sub _register_responder_munger ($self) {
   my $slack_channel = $self->hub->channel_named( $self->slack_synergy_channel_name );
 
   $slack_channel->register_pre_message_hook(sub ($event, $text_ref, $alts) {
-    my $chan = $self->_slack_channel_name_from_event($event);
+    my $chan = $event->from_channel->conversation_name($event);
     return unless $chan eq $self->yelling_channel_name;
 
     $$text_ref = uc $$text_ref;
@@ -59,7 +52,7 @@ sub _register_responder_munger ($self) {
 sub _is_from_correct_slack_channel ($self, $event) {
   return unless $event->from_channel->isa('Synergy::Channel::Slack');
 
-  my $channel = $self->_slack_channel_name_from_event($event);
+  my $channel = $event->from_channel->conversation_name($event);
   return unless $channel eq $self->yelling_channel_name;
 
   return 1;

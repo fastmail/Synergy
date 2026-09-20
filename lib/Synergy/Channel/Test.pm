@@ -80,7 +80,8 @@ sub _inject_event ($self, $arg) {
     ($from_user ? (from_user => $from_user) : ()),
     from_channel => $self,
     was_targeted => $had_prefix,
-    conversation_address => 'public',
+    conversation_address => $arg->{conversation_address} // 'public',
+    is_public => $arg->{public} // 0,
   });
 
   $self->hub->handle_event($event);
