@@ -18,6 +18,8 @@ use Synergy::Logger '$Logger';
 
 with 'Synergy::Role::HubComponent';
 
+has app_key => ( is => 'ro', required => 1 );
+
 has api_key => ( is => 'ro', required => 1 );
 
 has privileged_api_key => (
@@ -132,9 +134,29 @@ async sub connect ($self) {
 
   my $json;
 
+  my $user_info_res = await $self->hub->http_client->GET(
+      "https://slack.com/api/auth.test", content_type => 'application/x-www-form-urlencoded', headers => { Authorization => "Bearer " . $self->api_key}
+    );
+  $json = decode_json($user_info_res->content);
+  die "Could not connect to Slack RTM: $json->{error}"
+      unless $json->{ok};
+
+  $Logger->log($user_info_res->content);
+
+  my $our_name = $json->{user};
+  $our_name = 'synergy' if $our_name eq 'synergee';
+
+  $Logger->log("we have a name: $our_name");
+
+  $self->_set_own_name($our_name);
+  $self->_set_own_id($json->{user_id});
+  $self->_set_team_data({team => $json->{team}, team_id => $json->{team_id}});
+
+  $json = undef;
+
   until ($json) {
-    my $res = await $self->hub->http_client->GET(
-      "https://slack.com/api/rtm.connect?token=" . $self->api_key
+    my $res = await $self->hub->http_client->POST(
+      "https://slack.com/api/apps.connections.open", '', content_type => 'application/x-www-form-urlencoded', headers => { Authorization => "Bearer " . $self->app_key}
     );
 
     if ($res->code == 429) {
@@ -145,7 +167,9 @@ async sub connect ($self) {
 
     $json = decode_json($res->content);
 
-    die "Could not connect to Slack RTM: $json->{error}"
+    my $reqh = $res->request->header('Authorization');
+
+    die "Could not connect to Slack RTM: $json->{error} // $reqh"
       unless $json->{ok};
   }
 
@@ -156,12 +180,6 @@ async sub connect ($self) {
   # do. I *think* that reinstalling the app to our workspace would fix this,
   # but I'm not entirely sure and I don't want to make everyone open yet
   # another DM with synergy, so here we are. -- michael, 2019-06-03
-  my $our_name = $json->{self}->{name};
-  $our_name = 'synergy' if $our_name eq 'synergee';
-
-  $self->_set_own_name($our_name);
-  $self->_set_own_id($json->{self}->{id});
-  $self->_set_team_data($json->{team});
 
   my $client = $self->client;
 
@@ -170,6 +188,18 @@ async sub connect ($self) {
     # already on the loop.  Just don't add it again.
     $self->loop->add($client);
   }
+
+  $client->{on_ping_frame} = sub($self, $bytes) {
+      $Logger->log("We got a ping!");
+      $self->send_pong_frame('pong');
+    };
+  $client->{on_pong_frame} = sub ($self, $bytes) {
+      $Logger->log("We got a pong!");
+    };
+  $client->{on_close_frame} = sub ($self, $bytes) {
+      $self->connected(0);
+      $Logger->log("We got closed!");
+    };
 
   $client->connect(
     url => $json->{url},
@@ -186,7 +216,8 @@ async sub connect ($self) {
         notifier_name => 'slack-ping',
         interval => 10,
         on_tick  => sub {
-          $self->send_frame({ type => 'ping' });
+          $Logger->log("Sending ping");
+          $self->client->send_ping_frame('ping');
         }
       );
 
@@ -203,41 +234,60 @@ sub send_frame ($self, $frame) {
   my $frame_id = $i++;
   $frame->{id} = $frame_id;
 
+  $Logger->log(['send_frame: %s', Dumper $frame]);
+
   if ($self->connected) {
+    $Logger->log('sent frame');
     $self->client->send_frame(masked => 1, buffer => encode_json($frame));
   } else {
+    $Logger->log('queued frame');
     # Save it til after we've successfully reconnected
     $self->queue_frame($frame);
   }
 
-  my $f = $self->loop->new_future;
-  $self->pending_frames->{$frame_id} = $f;
+  unless ($frame->{envelope_id}) {
 
-  my $timeout = $self->loop->timeout_future(after => 3);
-  $timeout->on_fail(sub {
-    $Logger->log("failed to get response from slack; trying to reconnect");
+	  my $f = $self->loop->new_future;
+	  $self->pending_frames->{$frame_id} = $f;
 
-    # XXX Blocking here is crappy.  This is another place where we've pushed
-    # the "where is it async" around under the carpet, but haven't fully ironed
-    # out the lump yet. -- rjbs, 2023-10-10
-    $self->client->close;
-    $self->connect->get;
 
-    # Also fail any pending futures for this frame.
-    my $f = delete $self->pending_frames->{$frame_id};
-    $f->fail("timed out on connection to slack")  if $f;
-  });
+	  my $timeout = $self->loop->timeout_future(after => 10);
+	  $timeout->on_fail(sub {
+	    $Logger->log("failed to get response from slack; trying to reconnect");
 
-  $self->pending_timeouts->{$frame_id} = $timeout;
+	    # XXX Blocking here is crappy.  This is another place where we've pushed
+	    # the "where is it async" around under the carpet, but haven't fully ironed
+	    # out the lump yet. -- rjbs, 2023-10-10
+	    $self->client->close;
+	    $self->connect->get;
 
-  return $f;
+	    # Also fail any pending futures for this frame.
+	    my $f = delete $self->pending_frames->{$frame_id};
+	    $f->fail("timed out on connection to slack")  if $f;
+	  });
+
+	  $self->pending_timeouts->{$frame_id} = $timeout;
+
+	  return $f;
+  }
 }
 
 sub handle_frame ($self, $slack_event) {
   # These are the only way we'll ever hear about somebody who joined, or
   # changed their name, after we started up.  Without them, we'd go on calling
   # them "<unknown user U123ABC>" until the next restart. -- rjbs, 2026-08-19
+
+  $Logger->log(['handle_frame: %s', $slack_event ]);
+
   my $type = $slack_event->{type} // '';
+  my $envelope_id = $slack_event->{envelope_id};
+
+  # acknowledge frame
+  if ($envelope_id) {
+	  $self->send_frame({
+		  envelope_id => $envelope_id,
+	  });
+  }
 
   if ($type eq 'team_join' or $type eq 'user_change') {
     $self->_update_user($slack_event->{user});
@@ -334,13 +384,15 @@ sub _send_plain_text ($self, $channel, $text) {
     $channel = $self->dm_channel_for_address($channel);
   }
 
-  my $f = $self->send_frame({
-    type => 'message',
+  my %args = (
     channel => $channel,
+    as_user => \1,
     text    => $text,
-  });
+  );
 
-  return $f;
+  my $http_future = $self->api_call('chat.postMessage', \%args);
+
+  return $http_future;
 }
 
 async sub _send_rich_text ($self, $channel, $rich, $alts) {
