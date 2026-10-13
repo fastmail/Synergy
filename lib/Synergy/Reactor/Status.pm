@@ -50,23 +50,42 @@ listener chatter => async sub ($self, $event) {
   return;
 };
 
+sub _remap_to_user_ids ($self, $hashref) {
+  my $ud = $self->hub->user_directory;
+  my %id_keyed;
+  for my $username (keys %$hashref) {
+    my $user = $ud->user_named($username) or next;
+    $id_keyed{ $user->id } = $hashref->{$username};
+  }
+  return \%id_keyed;
+}
+
+sub _remap_from_user_ids ($self, $hashref) {
+  my $ud = $self->hub->user_directory;
+  my %username_keyed;
+  for my $user_id (keys %$hashref) {
+    my $user = $ud->user_by_id($user_id) or next;
+    $username_keyed{ $user->username } = $hashref->{$user_id};
+  }
+  return \%username_keyed;
+}
+
 sub state ($self) {
   return {
-    chatter => $self->_last_chatter,
-    doings  => $self->_user_doings,
+    chatter => $self->_remap_to_user_ids($self->_last_chatter),
+    doings  => $self->_remap_to_user_ids($self->_user_doings),
   };
 }
 
 after register_with_hub => sub ($self, @) {
   if (my $state = $self->fetch_state) {
     if ($state->{chatter}) {
-      $self->_last_chatter->%* = $state->{chatter}->%*;
+      $self->_last_chatter->%* = $self->_remap_from_user_ids($state->{chatter})->%*;
     }
 
     if ($state->{doings}) {
       my $doings = $self->_user_doings;
-
-      %$doings = $state->{doings}->%*;
+      %$doings = $self->_remap_from_user_ids($state->{doings})->%*;
     }
   }
 };
