@@ -249,6 +249,7 @@ sub doings_for_user ($self, $user) {
 }
 
 command doing => {
+  help_subcommand => 0,
   help  => <<'END'
 *doing* `SOMETHING`: set what you're doing; something can end with some options, like…
 • /for DURATION - only keep this status for a while

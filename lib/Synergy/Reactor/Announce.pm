@@ -32,6 +32,7 @@ async sub start ($self) {
 }
 
 command announce => {
+  help_subcommand => 0,
   help => '*announce MESSAGE*: send a message to the general announcement place',
 } => async sub ($self, $event, $rest) {
   if ($event->from_channel->name eq $self->to_channel_name) {

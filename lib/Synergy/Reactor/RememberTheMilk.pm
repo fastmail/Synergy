@@ -108,6 +108,7 @@ sub frob_for ($self, $user) {
 }
 
 command todo => {
+  help_subcommand => 0,
   help => '*todo `create-string`*: Given an RTM "quick create" string, this makes a new task.',
 } => async sub ($self, $event, $todo) {
   return await $event->error_reply("I don't have an RTM auth token for you.")
@@ -150,6 +151,7 @@ command todo => {
 };
 
 command milk => {
+  help_subcommand => 0,
   help => '*milk [`filter`]*: list all your tasks; default filter is "status:incomplete"'
 } => async sub ($self, $event, $filter) {
   return await $event->error_reply("I don't have an RTM auth token for you.")

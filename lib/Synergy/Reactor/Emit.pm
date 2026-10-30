@@ -11,6 +11,7 @@ use Future::AsyncAwait;
 use Synergy::CommandPost;
 
 command emit => {
+  help_subcommand => 0,
   help => "*emit `MESSAGE`*: repeat after me...",
 } => async sub ($self, $event, $rest) {
   await $event->reply("$rest", { slack => "$rest" });

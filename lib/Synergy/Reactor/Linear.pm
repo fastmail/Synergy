@@ -361,6 +361,7 @@ async sub _handle_search ($self, $event, $arg) {
 }
 
 command search => {
+  help_subcommand => 0,
   help => reformat_help(<<~'EOH'),
     *search* TEXT [page:N] [count:N] [all:1]
 
