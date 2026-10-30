@@ -54,6 +54,8 @@ The following options can be passed to the command declarator:
 * aliases - an arrayref of other names for the command; only the real name
   appears in the help index
 * parser - a coderef to parse the rest of the user input
+* help_subcommand - present and false, "COMMAND help" will not be answered with the
+  command's help text, but passed to the command like any other input
 
 If no C<parser> is provided, then the user's text after the initial command is
 passed as the third argument to the method.  In other words, with no parser,
@@ -81,6 +83,13 @@ To indicate a failure to parse, you can throw a public L<Synergy::X> exception.
 
 If you need to match only if the whole command can be matched, you should use a
 C<responder>, described below.
+
+If the command has help (filed under its own name), then "COMMAND help",
+"COMMAND --help", and "COMMAND /help" will reply with that help, just like
+"help COMMAND" would, without calling the parser or the command.  This works
+for aliases, too, but shows the help for the real command.  If "help" is
+meaningful input to your command, pass C<< help_subcommand => 0 >> to turn
+this off.
 
 =head2 Listeners
 
@@ -169,6 +178,10 @@ sub _generate_command_system ($class, $, $arg, $) {
   return {
     command => sub ($name, $arg, $code) {
       my $object = $get_cmdpost->();
+
+      # We record the name the command was declared with, so that "ALIAS help"
+      # can find the help for the real command.
+      $arg = { %$arg, _canonical_name => $name };
       $object->add_command($name, $arg, $code);
 
       if ($arg->{help}) {
@@ -351,6 +364,24 @@ package Synergy::CommandPost::Object {
     return;
   }
 
+  # If $rest is just "help" and the command has help, this returns the text
+  # that "help COMMAND" would give.  Otherwise, it returns nothing, and the
+  # command gets handled as usual.
+  sub _help_subcommand_text ($self, $command, $rest) {
+    return if exists $command->{help_subcommand}
+           && ! $command->{help_subcommand};
+
+    return unless defined $rest && $rest =~ /\A\s*(?:--|\/)?help\s*\z/i;
+
+    return unless length $command->{_canonical_name};
+    my $name = $command->{_canonical_name};
+    my @help = grep {; fc $_->{title} eq fc $name } $self->_help_entries;
+    return unless @help;
+
+    # This matches the formatting of the Help reactor.
+    return join qq{\n}, sort map {; $_->{text} } @help;
+  }
+
   sub potential_reactions_to ($self, $reactor, $event) {
     my @reactions;
     my $event_was_targeted = $event->was_targeted;
@@ -360,7 +391,22 @@ package Synergy::CommandPost::Object {
       my ($first, $rest) = split /\s+/, $event->text, 2;
       $first = lc $first;
 
-      if (my $command = $self->_command_named($first)) {
+      my $command = $self->_command_named($first);
+      my $help    = $command && $self->_help_subcommand_text($command, $rest);
+
+      if ($help) {
+        # "COMMAND help" is answered before the parser sees the input, because
+        # plenty of parsers would (reasonably!) reject "help".
+        push @reactions, Synergy::PotentialReaction->new({
+          reactor => $reactor,
+          name    => "command-$first-help",
+          is_exclusive  => 1,
+          event_handler => sub {
+            $event->mark_handled;
+            $event->reply($help);
+          },
+        });
+      } elsif ($command) {
         my $args;
 
         eval {
