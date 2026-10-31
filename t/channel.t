@@ -6,6 +6,7 @@ use lib 't/lib';
 use Test::More;
 
 use Sub::Override;
+use Synergy::Channel::Console;
 use Synergy::Channel::Slack;
 use Synergy::Event;
 use Synergy::Tester;
@@ -123,6 +124,50 @@ subtest 'Slack names conversations by channel name' => sub {
     $slack_channel->conversation_name(event_in('D0MONOLOG')),
     'D0MONOLOG',
     "an unknown address (like a DM) is returned as-is",
+  );
+};
+
+subtest 'Console describes conversations as Slack does' => sub {
+  my $console = Synergy::Channel::Console->new({
+    name      => 'console',
+    send_only => 1,
+  });
+
+  my sub event_in ($arg) {
+    return Synergy::Event->new({
+      type         => 'message',
+      text         => 'hello',
+      from_address => 'alice',
+      from_channel => $console,
+      $arg->%*,
+    });
+  }
+
+  is(
+    $console->describe_conversation(event_in({
+      is_public            => 1,
+      conversation_address => 'bikeshed',
+    })),
+    '#bikeshed',
+    "a public conversation is a #channel",
+  );
+
+  is(
+    $console->describe_conversation(event_in({
+      is_public            => 1,
+      conversation_address => '#public',
+    })),
+    '#public',
+    "without doubling a # the address already has",
+  );
+
+  is(
+    $console->describe_conversation(event_in({
+      is_public            => 0,
+      conversation_address => 'alice',
+    })),
+    '@alice',
+    "a private conversation is an \@user",
   );
 };
 
