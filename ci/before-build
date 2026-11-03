@@ -1,5 +1,9 @@
 #!/bin/sh
 set -e
+
+exit # Dobby is no longer public code, but this script is useful to
+     # demonstrate how we'd deal with testing it...
+
 cd /tmp
 git clone https://github.com/fastmail/Dobby
 cd Dobby
