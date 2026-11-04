@@ -38,6 +38,7 @@ command learn => {
 };
 
 command lookup => {
+  help_subcommand => 0,
   help => '*lookup `WHAT`*: look up a factoid in the knowledge base; see also learn, forget',
 } => async sub ($self, $event, $what) {
   my $facts = $self->get_facts;
@@ -50,6 +51,7 @@ command lookup => {
 };
 
 command forget => {
+  help_subcommand => 0,
   help => '*forget `WHAT`*: delete a factoid from the knowledge base; see also learn, lookup',
 } => async sub ($self, $event, $what) {
   my $facts = $self->get_facts;

@@ -118,6 +118,7 @@ my %MR_SHORTCUT = (
 );
 
 command "mrsearch" => {
+  help_subcommand => 0,
   aliases => [ "mrs" ],
   help    => reformat_help(<<~'EOH'),
     The *mrsearch* command searches merge requests in GitLab.  You can pass in

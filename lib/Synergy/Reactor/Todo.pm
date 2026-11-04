@@ -18,6 +18,7 @@ use Synergy::Logger '$Logger';
 use Synergy::Util qw(reformat_help);
 
 command todo => {
+  help_subcommand => 0,
   help => reformat_help(<<~"EOH"),
     *todo `TITLE`*: add something to your personal todo list
 

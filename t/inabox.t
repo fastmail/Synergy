@@ -37,6 +37,7 @@ my $synergy = Synergy::Tester->new_tester({
         post_creation_delay    => 0.01,
       },
     },
+    help => { class => 'Synergy::Reactor::Help' },
   },
   default_from => 'alice',
   users => {
@@ -132,6 +133,36 @@ my $test_size = {
   memory       => 16384,
   disk         => 100,
   description  => 'General Purpose',
+};
+
+subtest 'help subcommand' => sub {
+  # Any call out to DigitalOcean here would be a bug, so make it fatal.
+  my $no_dobby = Sub::Override->new(
+    'Dobby::TestClient::_do_request',
+    sub { die "box help should not talk to DigitalOcean\n" },
+  );
+
+  my sub replies_to ($text) {
+    $synergy->run_test_program([[
+      send => { text => $text, from => $channel->default_from },
+    ]]);
+
+    my @reply_texts = map {; $_->{text} } $channel->sent_messages;
+    $channel->clear_messages;
+    return \@reply_texts;
+  }
+
+  my $help_box = replies_to('synergy: help box');
+
+  cmp_deeply(
+    $help_box,
+    [ re(qr{\Abox is a tool for managing}) ],
+    '"help box" gives the box help text',
+  );
+
+  is_deeply(replies_to('synergy: box help'), $help_box, '"box help" is the same as "help box"');
+  is_deeply(replies_to('synergy: box --help'), $help_box, '"box --help" is too');
+  is_deeply(replies_to('synergy: box /help'), $help_box, '"box /help" is too');
 };
 
 subtest 'status' => sub {
