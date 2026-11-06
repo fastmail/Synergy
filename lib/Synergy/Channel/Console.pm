@@ -618,7 +618,14 @@ sub describe_event ($self, $event) {
 }
 
 sub describe_conversation ($self, $event) {
-  return "[console]";
+  unless ($event->is_public) {
+    my $who = $event->from_user ? $event->from_user->username
+                                : $event->from_address;
+    return "\@$who";
+  }
+
+  my $address = $event->conversation_address;
+  return $address =~ /\A#/ ? $address : "#$address";
 }
 
 1;
