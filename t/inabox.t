@@ -276,6 +276,33 @@ subtest 'destroy' => sub {
   );
 };
 
+subtest 'image' => sub {
+  my sub snapshots_in (@regions) {
+    $dobby->register_url_json('/snapshots', {
+      snapshots => [{
+        id         => 42,
+        name       => 'fminabox-bullseye-20200202',
+        created_at => '2020-02-02T00:00:00Z',
+        regions    => [ @regions ],
+      }],
+    });
+  }
+
+  snapshots_in(qw( sfo3 nyc3 ));
+  cmp_replies(
+    'synergy: box image',
+    [ re(qr{\AWould create box from image 'fminabox-bullseye-20200202' \(created .+ ago\)\.  Regions the image is available: nyc3, sfo3\z}) ],
+    'box image lists the regions the image is in',
+  );
+
+  snapshots_in();
+  cmp_replies(
+    'synergy: box image',
+    [ re(qr{\AWould create box from image 'fminabox-bullseye-20200202' \(created .+ ago\)\.  The image isn't available in any region yet\.\z}) ],
+    'box image with an image in no regions',
+  );
+};
+
 subtest 'create' => sub {
   undef $droplet_guard;
 
@@ -362,7 +389,7 @@ subtest 'create' => sub {
           }]
         },
       },
-      [ re(qr{No available combination}) ],
+      [ 'No available combination of preferred sizes and regions was found.  Regions the image is available: aaa, zzz' ],
       'bad snapshot region, messages ok'
     );
   };
