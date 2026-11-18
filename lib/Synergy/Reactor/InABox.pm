@@ -156,7 +156,7 @@ command box => {
     • shutdown: gracefully shut down and power off your box
     • poweroff: forcibly shut down and power off your box (like pulling the power)
     • poweron: start up your box
-    • image: Show what snapshot image the box would be created with
+    • image: Show what snapshot image the box would be created with, and which datacentres have it
     • vpn: get an OpenVPN config file to connect to your box
 
     The following preferences exist:
@@ -277,7 +277,12 @@ async sub handle_image ($self, $event, $switches) {
 
   my $created_at = DateTime::Format::ISO8601->parse_datetime($snapshot->{created_at})->epoch;
   my $ago = ago(time - $created_at);
-  return await $event->reply("Would create box from image '$snapshot->{name}' (created $ago)");
+  my @regions = sort $snapshot->{regions}->@*;
+  my $where = @regions
+            ? "Regions the image is available: " . join(q{, }, @regions)
+            : "The image isn't available in any region yet.";
+
+  return await $event->reply("Would create box from image '$snapshot->{name}' (created $ago).  $where");
 }
 
 my %IS_CREATE_SWITCH = map {; $_ => 1 } qw( datacentre setup size nosetup image_id );
